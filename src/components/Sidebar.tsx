@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { NavLink } from "@/components/NavLink";
 import { useAuth } from "@/contexts/AuthContext";
+import { useIndustry } from "@/hooks/useIndustry";
 import {
   LayoutDashboard,
   Wrench,
@@ -25,6 +26,10 @@ import {
   Building2,
   ChevronDown,
   AlertTriangle,
+  Truck,
+  Contact,
+  Route,
+  CircleDot,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { initials } from "@/lib/format";
@@ -40,12 +45,13 @@ type NavGroup = { id: string; label: string; items: NavItem[] };
 
 export function Sidebar() {
   const { profile, organisation, signOut } = useAuth();
+  const { isFleet } = useIndustry();
   const navigate = useNavigate();
   const { t } = useI18n();
 
   const isLite = (organisation?.plan ?? "standard") === "lite";
 
-  const groups: NavGroup[] = useMemo(
+  const manufacturingGroups: NavGroup[] = useMemo(
     () => [
       {
         id: "overview",
@@ -164,18 +170,102 @@ export function Sidebar() {
     [t, isLite],
   );
 
+  // Fleet & Logistics nav — pages not yet built (Phases 2-6) route to a
+  // shared "coming soon" placeholder so nothing 404s while it's rolled out.
+  const fleetGroups: NavGroup[] = useMemo(
+    () => [
+      {
+        id: "fleet-overview",
+        label: "Overview",
+        items: [
+          {
+            to: "/dashboard",
+            label: "Fleet Dashboard",
+            icon: LayoutDashboard,
+          },
+          { to: "/live", label: "Live TV", icon: Tv },
+          { to: "/notifications", label: t.nav.notifications, icon: Bell },
+        ],
+      },
+      {
+        id: "fleet",
+        label: "Fleet",
+        items: [
+          { to: "/fleet/vehicles", label: "Vehicles", icon: Truck },
+          { to: "/fleet/drivers", label: "Drivers", icon: Contact },
+          { to: "/fleet/trips", label: "Trips", icon: Route },
+          { to: "/fleet/documents", label: "Documents", icon: FileText },
+          { to: "/fleet/tyres", label: "Tyres", icon: CircleDot },
+          { to: "/fuel", label: t.nav.fuel, icon: Fuel },
+          { to: "/fleet/inspections", label: "Inspections", icon: CheckCircle2 },
+        ],
+      },
+      {
+        id: "maintenance",
+        label: "Maintenance",
+        items: [
+          { to: "/work-orders", label: t.nav.workOrders, icon: ClipboardList },
+          { to: "/fault-reports", label: "Fault reports", icon: AlertTriangle },
+          {
+            to: "/checklist-templates",
+            label: "Checklist templates",
+            icon: ClipboardList,
+          },
+          { to: "/inventory", label: t.nav.inventory, icon: Package },
+          { to: "/vendors", label: "Vendors", icon: Building2 },
+        ],
+      },
+      {
+        id: "fleet-insights",
+        label: "Insights",
+        items: [
+          {
+            to: "/fleet/insights",
+            label: "Fleet KPIs & Analytics",
+            icon: Gauge,
+          },
+          { to: "/reports", label: t.nav.reports, icon: FileBarChart },
+        ],
+      },
+      {
+        id: "fleet-people",
+        label: "People",
+        items: [
+          { to: "/team", label: t.nav.team, icon: Users },
+          {
+            to: "/induction/dashboard",
+            label: t.nav.induction,
+            icon: GraduationCap,
+          },
+        ],
+      },
+      {
+        id: "system",
+        label: "System",
+        items: [{ to: "/settings", label: t.nav.settings, icon: Settings }],
+      },
+    ],
+    [t],
+  );
+
+  const groups = isFleet ? fleetGroups : manufacturingGroups;
+
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>(() => {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
       if (raw) return JSON.parse(raw);
-    } catch {}
+    } catch {
+      // ignore malformed/unavailable storage
+    }
     return Object.fromEntries(groups.map((g) => [g.id, true]));
   });
 
   useEffect(() => {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(openGroups));
-    } catch {}
+    } catch {
+      // ignore unavailable storage
+    }
   }, [openGroups]);
 
   const toggle = (id: string) => setOpenGroups((s) => ({ ...s, [id]: !s[id] }));

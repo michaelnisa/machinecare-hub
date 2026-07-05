@@ -28,7 +28,9 @@ export function I18nProvider({ children }: { children: ReactNode }) {
     setLangState(l);
     try {
       window.localStorage.setItem(STORAGE_KEY, l);
-    } catch {}
+    } catch {
+      // ignore unavailable storage
+    }
   }, []);
 
   return (

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { useUserRole } from "@/hooks/useUserRole";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -24,6 +25,7 @@ function expiryStatus(expires_on?: string | null, reminder_days = 30): "ok" | "d
 
 export default function Documents() {
   const { profile } = useAuth();
+  const { isManager } = useUserRole();
   const [loading, setLoading] = useState(true);
   const [docs, setDocs] = useState<any[]>([]);
   const [machines, setMachines] = useState<{ id: string; name: string }[]>([]);
@@ -143,9 +145,11 @@ export default function Documents() {
                     <Button variant="ghost" size="icon" onClick={() => { setEditing(d); setOpen(true); }}>
                       <FileText className="h-4 w-4" />
                     </Button>
-                    <Button variant="ghost" size="icon" onClick={() => setConfirm(d.id)}>
-                      <Trash2 className="h-4 w-4 text-destructive" />
-                    </Button>
+                    {isManager && (
+                      <Button variant="ghost" size="icon" onClick={() => setConfirm(d.id)}>
+                        <Trash2 className="h-4 w-4 text-destructive" />
+                      </Button>
+                    )}
                   </td>
                 </tr>
               ))}

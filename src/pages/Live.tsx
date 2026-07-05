@@ -2,9 +2,20 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Navigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { useIndustry } from "@/hooks/useIndustry";
 import { PageLoader } from "@/components/PageLoader";
 import { Button } from "@/components/ui/button";
-import { Activity, Gauge, ShieldCheck, AlertTriangle, Wrench, Factory, Maximize2 } from "lucide-react";
+import { Activity, Gauge, ShieldCheck, AlertTriangle, Wrench, Factory, Maximize2, Truck, ParkingCircle } from "lucide-react";
+
+type FleetKpis = {
+  onRoad: number;
+  idle: number;
+  workshop: number;
+  offRoad: number;
+  vehicles: { label: string; status: "on_road" | "idle" | "workshop" | "off_road" }[];
+};
+
+const emptyFleet: FleetKpis = { onRoad: 0, idle: 0, workshop: 0, offRoad: 0, vehicles: [] };
 
 type Kpis = {
   // Production (today)
@@ -63,7 +74,9 @@ function Tile({
 
 export default function Live() {
   const { user, loading, organisation } = useAuth();
+  const { isFleet } = useIndustry();
   const [kpis, setKpis] = useState<Kpis>(empty);
+  const [fleetKpis, setFleetKpis] = useState<FleetKpis>(emptyFleet);
   const [now, setNow] = useState(new Date());
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
@@ -78,16 +91,22 @@ export default function Live() {
   useEffect(() => {
     const request = async () => {
       try {
-        // @ts-ignore
+        // @ts-expect-error wakeLock is not in the standard lib.dom types yet
         if ("wakeLock" in navigator) wakeLockRef.current = await (navigator as any).wakeLock.request("screen");
-      } catch {}
+      } catch {
+        // wake lock unsupported/denied — ignore
+      }
     };
     request();
     const onVis = () => { if (document.visibilityState === "visible") request(); };
     document.addEventListener("visibilitychange", onVis);
     return () => {
       document.removeEventListener("visibilitychange", onVis);
-      try { wakeLockRef.current?.release?.(); } catch {}
+      try {
+        wakeLockRef.current?.release?.();
+      } catch {
+        // ignore release errors
+      }
     };
   }, []);
 
@@ -140,27 +159,54 @@ export default function Live() {
     setLastUpdated(new Date());
   }, [organisation?.id]);
 
+  const loadFleet = useCallback(async () => {
+    if (!organisation?.id) return;
+    const orgId = organisation.id;
+    const [{ data: machines }, { data: trips }] = await Promise.all([
+      supabase.from("machines").select("id, name, plate_number, status").eq("organisation_id", orgId),
+      supabase.from("trips").select("machine_id, status").eq("organisation_id", orgId).eq("status", "in_progress"),
+    ]);
+    const onRoadIds = new Set((trips ?? []).map((t) => t.machine_id));
+    let onRoad = 0, idle = 0, workshop = 0, offRoad = 0;
+    const vehicles: FleetKpis["vehicles"] = [];
+    for (const m of machines ?? []) {
+      const label = m.plate_number ? `${m.name} (${m.plate_number})` : m.name;
+      if (m.status === "under_maintenance") { workshop++; vehicles.push({ label, status: "workshop" }); }
+      else if (m.status === "retired") { offRoad++; vehicles.push({ label, status: "off_road" }); }
+      else if (onRoadIds.has(m.id)) { onRoad++; vehicles.push({ label, status: "on_road" }); }
+      else { idle++; vehicles.push({ label, status: "idle" }); }
+    }
+    setFleetKpis({ onRoad, idle, workshop, offRoad, vehicles });
+    setLastUpdated(new Date());
+  }, [organisation?.id]);
+
   // Initial + polling fallback
   useEffect(() => {
     if (!organisation?.id) return;
-    load();
-    const t = setInterval(load, 30000);
+    if (isFleet) loadFleet(); else load();
+    const t = setInterval(() => (isFleet ? loadFleet() : load()), 30000);
     return () => clearInterval(t);
-  }, [organisation?.id, load]);
+  }, [organisation?.id, isFleet, load, loadFleet]);
 
   // Realtime subscriptions
   useEffect(() => {
     if (!organisation?.id) return;
-    const channel = supabase
-      .channel(`${organisation.id}:live-kpis`)
-      .on("postgres_changes", { event: "*", schema: "public", table: "production_kpis", filter: `organisation_id=eq.${organisation.id}` }, () => load())
-      .on("postgres_changes", { event: "*", schema: "public", table: "oee_records", filter: `organisation_id=eq.${organisation.id}` }, () => load())
-      .on("postgres_changes", { event: "*", schema: "public", table: "safety_incidents", filter: `organisation_id=eq.${organisation.id}` }, () => load())
-      .on("postgres_changes", { event: "*", schema: "public", table: "machines", filter: `organisation_id=eq.${organisation.id}` }, () => load())
-      .on("postgres_changes", { event: "*", schema: "public", table: "work_orders", filter: `organisation_id=eq.${organisation.id}` }, () => load())
-      .subscribe();
+    const channel = supabase.channel(`${organisation.id}:live-kpis`);
+    if (isFleet) {
+      channel
+        .on("postgres_changes", { event: "*", schema: "public", table: "machines", filter: `organisation_id=eq.${organisation.id}` }, () => loadFleet())
+        .on("postgres_changes", { event: "*", schema: "public", table: "trips", filter: `organisation_id=eq.${organisation.id}` }, () => loadFleet());
+    } else {
+      channel
+        .on("postgres_changes", { event: "*", schema: "public", table: "production_kpis", filter: `organisation_id=eq.${organisation.id}` }, () => load())
+        .on("postgres_changes", { event: "*", schema: "public", table: "oee_records", filter: `organisation_id=eq.${organisation.id}` }, () => load())
+        .on("postgres_changes", { event: "*", schema: "public", table: "safety_incidents", filter: `organisation_id=eq.${organisation.id}` }, () => load())
+        .on("postgres_changes", { event: "*", schema: "public", table: "machines", filter: `organisation_id=eq.${organisation.id}` }, () => load())
+        .on("postgres_changes", { event: "*", schema: "public", table: "work_orders", filter: `organisation_id=eq.${organisation.id}` }, () => load());
+    }
+    channel.subscribe();
     return () => { supabase.removeChannel(channel); };
-  }, [organisation?.id, load]);
+  }, [organisation?.id, isFleet, load, loadFleet]);
 
   const toggleFullscreen = () => {
     if (!document.fullscreenElement) document.documentElement.requestFullscreen?.().catch(() => {});
@@ -193,64 +239,101 @@ export default function Live() {
           </div>
         </div>
 
-        {/* PRODUCTION */}
-        <SectionTitle icon={<Factory className="h-5 w-5" />} title="Production — Today" />
-        <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
-          <Tile
-            icon={<Activity className="h-6 w-6" />}
-            label="Attainment"
-            value={pct(kpis.prodAttainment)}
-            sub={`${kpis.prodActual.toLocaleString()} / ${kpis.prodTarget.toLocaleString()} units`}
-            accent={colorFor(kpis.prodAttainment, 95, 75)}
-          />
-          <Tile
-            icon={<Factory className="h-6 w-6" />}
-            label="Units Produced"
-            value={kpis.prodActual.toLocaleString()}
-            sub={`Target ${kpis.prodTarget.toLocaleString()}`}
-          />
-          <Tile
-            icon={<AlertTriangle className="h-6 w-6" />}
-            label="Scrap"
-            value={kpis.scrap.toLocaleString()}
-            sub={kpis.prodActual > 0 ? `${((kpis.scrap / (kpis.prodActual + kpis.scrap)) * 100).toFixed(1)}% of total` : "—"}
-            accent={kpis.scrap === 0 ? "text-emerald-400" : "text-amber-400"}
-          />
-        </div>
+        {isFleet ? (
+          <>
+            {/* FLEET AVAILABILITY */}
+            <SectionTitle icon={<Truck className="h-5 w-5" />} title="Vehicle Availability" />
+            <div className="grid grid-cols-2 gap-5 md:grid-cols-4">
+              <Tile icon={<Truck className="h-6 w-6" />} label="On Road" value={String(fleetKpis.onRoad)} accent="text-emerald-400" />
+              <Tile icon={<ParkingCircle className="h-6 w-6" />} label="Idle" value={String(fleetKpis.idle)} accent="text-sky-400" />
+              <Tile icon={<Wrench className="h-6 w-6" />} label="Workshop" value={String(fleetKpis.workshop)} accent="text-amber-400" />
+              <Tile icon={<AlertTriangle className="h-6 w-6" />} label="Off Road" value={String(fleetKpis.offRoad)} accent="text-rose-400" />
+            </div>
 
-        {/* OEE */}
-        <SectionTitle icon={<Gauge className="h-5 w-5" />} title="OEE — Last 7 Days" />
-        <div className="grid grid-cols-2 gap-5 md:grid-cols-4">
-          <Tile icon={<Gauge className="h-6 w-6" />} label="OEE" value={pct(kpis.oee)} accent={colorFor(kpis.oee, 85, 60)} />
-          <Tile icon={<Activity className="h-6 w-6" />} label="Availability" value={pct(kpis.availability)} accent={colorFor(kpis.availability)} big={false} />
-          <Tile icon={<Activity className="h-6 w-6" />} label="Performance" value={pct(kpis.performance)} accent={colorFor(kpis.performance)} big={false} />
-          <Tile icon={<Activity className="h-6 w-6" />} label="Quality" value={pct(kpis.quality)} accent={colorFor(kpis.quality)} big={false} />
-        </div>
+            {/* FLEET STATUS BOARD */}
+            <SectionTitle icon={<Activity className="h-5 w-5" />} title="Fleet Status Board" />
+            <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4">
+              {fleetKpis.vehicles.map((v) => (
+                <div
+                  key={v.label}
+                  className="flex items-center justify-between rounded-xl border border-white/10 bg-white/5 px-4 py-3"
+                >
+                  <span className="truncate text-lg font-medium">{v.label}</span>
+                  <span
+                    className={
+                      v.status === "on_road" ? "text-emerald-400" :
+                      v.status === "idle" ? "text-sky-400" :
+                      v.status === "workshop" ? "text-amber-400" : "text-rose-400"
+                    }
+                  >
+                    ●
+                  </span>
+                </div>
+              ))}
+            </div>
+          </>
+        ) : (
+          <>
+            {/* PRODUCTION */}
+            <SectionTitle icon={<Factory className="h-5 w-5" />} title="Production — Today" />
+            <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
+              <Tile
+                icon={<Activity className="h-6 w-6" />}
+                label="Attainment"
+                value={pct(kpis.prodAttainment)}
+                sub={`${kpis.prodActual.toLocaleString()} / ${kpis.prodTarget.toLocaleString()} units`}
+                accent={colorFor(kpis.prodAttainment, 95, 75)}
+              />
+              <Tile
+                icon={<Factory className="h-6 w-6" />}
+                label="Units Produced"
+                value={kpis.prodActual.toLocaleString()}
+                sub={`Target ${kpis.prodTarget.toLocaleString()}`}
+              />
+              <Tile
+                icon={<AlertTriangle className="h-6 w-6" />}
+                label="Scrap"
+                value={kpis.scrap.toLocaleString()}
+                sub={kpis.prodActual > 0 ? `${((kpis.scrap / (kpis.prodActual + kpis.scrap)) * 100).toFixed(1)}% of total` : "—"}
+                accent={kpis.scrap === 0 ? "text-emerald-400" : "text-amber-400"}
+              />
+            </div>
 
-        {/* SAFETY */}
-        <SectionTitle icon={<ShieldCheck className="h-5 w-5" />} title="Safety" />
-        <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
-          <Tile
-            icon={<ShieldCheck className="h-6 w-6" />}
-            label="Days Since Incident"
-            value={kpis.daysSinceIncident === null ? "∞" : String(kpis.daysSinceIncident)}
-            sub={kpis.daysSinceIncident === null ? "No incidents recorded" : "Keep it going"}
-            accent={kpis.daysSinceIncident === null || kpis.daysSinceIncident >= 30 ? "text-emerald-400" : kpis.daysSinceIncident >= 7 ? "text-amber-400" : "text-rose-400"}
-          />
-          <Tile
-            icon={<AlertTriangle className="h-6 w-6" />}
-            label="Open Incidents"
-            value={String(kpis.openIncidents)}
-            sub={`${kpis.totalIncidents30d} reported in 30d`}
-            accent={kpis.openIncidents === 0 ? "text-emerald-400" : "text-rose-400"}
-          />
-          <Tile
-            icon={<Wrench className="h-6 w-6" />}
-            label="Machines & Work Orders"
-            value={`${kpis.activeMachines}/${kpis.totalMachines}`}
-            sub={`${kpis.openWorkOrders} open work orders`}
-          />
-        </div>
+            {/* OEE */}
+            <SectionTitle icon={<Gauge className="h-5 w-5" />} title="OEE — Last 7 Days" />
+            <div className="grid grid-cols-2 gap-5 md:grid-cols-4">
+              <Tile icon={<Gauge className="h-6 w-6" />} label="OEE" value={pct(kpis.oee)} accent={colorFor(kpis.oee, 85, 60)} />
+              <Tile icon={<Activity className="h-6 w-6" />} label="Availability" value={pct(kpis.availability)} accent={colorFor(kpis.availability)} big={false} />
+              <Tile icon={<Activity className="h-6 w-6" />} label="Performance" value={pct(kpis.performance)} accent={colorFor(kpis.performance)} big={false} />
+              <Tile icon={<Activity className="h-6 w-6" />} label="Quality" value={pct(kpis.quality)} accent={colorFor(kpis.quality)} big={false} />
+            </div>
+
+            {/* SAFETY */}
+            <SectionTitle icon={<ShieldCheck className="h-5 w-5" />} title="Safety" />
+            <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
+              <Tile
+                icon={<ShieldCheck className="h-6 w-6" />}
+                label="Days Since Incident"
+                value={kpis.daysSinceIncident === null ? "∞" : String(kpis.daysSinceIncident)}
+                sub={kpis.daysSinceIncident === null ? "No incidents recorded" : "Keep it going"}
+                accent={kpis.daysSinceIncident === null || kpis.daysSinceIncident >= 30 ? "text-emerald-400" : kpis.daysSinceIncident >= 7 ? "text-amber-400" : "text-rose-400"}
+              />
+              <Tile
+                icon={<AlertTriangle className="h-6 w-6" />}
+                label="Open Incidents"
+                value={String(kpis.openIncidents)}
+                sub={`${kpis.totalIncidents30d} reported in 30d`}
+                accent={kpis.openIncidents === 0 ? "text-emerald-400" : "text-rose-400"}
+              />
+              <Tile
+                icon={<Wrench className="h-6 w-6" />}
+                label="Machines & Work Orders"
+                value={`${kpis.activeMachines}/${kpis.totalMachines}`}
+                sub={`${kpis.openWorkOrders} open work orders`}
+              />
+            </div>
+          </>
+        )}
 
         <div className="mt-10 text-center text-xs text-white/30">
           Auto-refresh every 30s · {lastUpdated ? `updated ${lastUpdated.toLocaleTimeString()}` : "loading..."}

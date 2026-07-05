@@ -12,12 +12,14 @@ import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { ArrowLeft, Plus, Trash2, ShieldCheck, Archive, GitBranch, Loader2, Lock } from "lucide-react";
 import { toast } from "sonner";
 import { formatDate } from "@/lib/format";
+import { useIndustry } from "@/hooks/useIndustry";
 
 const ITEM_TYPES = [
   { value: "pass_fail", label: "Pass / Fail" },
   { value: "measurement", label: "Measurement (numeric)" },
   { value: "text", label: "Text answer" },
   { value: "photo_required", label: "Photo required" },
+  { value: "tri_state", label: "OK / Not OK / Not Relevant" },
 ];
 const SEVERITIES = ["minor", "major", "critical"] as const;
 const SEVERITY_COLORS: Record<string, string> = {
@@ -30,6 +32,7 @@ export default function ChecklistTemplateDetail() {
   const { id } = useParams<{ id: string }>();
   const { profile, user } = useAuth();
   const { canAuthorTemplates } = useUserRole();
+  const { isFleet } = useIndustry();
   const navigate = useNavigate();
   const [template, setTemplate] = useState<any>(null);
   const [items, setItems] = useState<any[]>([]);
@@ -227,6 +230,26 @@ export default function ChecklistTemplateDetail() {
         )}
       </div>
 
+      {isFleet && (
+        <div className="rounded-xl border border-border bg-card p-5">
+          <label className="flex items-start gap-3">
+            <input
+              type="checkbox"
+              className="mt-0.5"
+              checked={!!template.is_fleet_pre_start}
+              disabled={!canAuthorTemplates}
+              onChange={(e) => saveMeta({ is_fleet_pre_start: e.target.checked })}
+            />
+            <span>
+              <span className="block text-sm font-medium">Use as the fleet pre-start inspection template</span>
+              <span className="block text-xs text-muted-foreground">
+                This is the checklist drivers see when they scan a vehicle's QR code and tap "Pre-Start Inspection" — no login required. Use tri-state items (OK / Not OK / Not Relevant) for best results; a "Not OK" answer auto-creates a fault report.
+              </span>
+            </span>
+          </label>
+        </div>
+      )}
+
       {/* Items */}
       <div className="space-y-3">
         <div className="flex items-center justify-between">
@@ -345,6 +368,7 @@ export default function ChecklistTemplateDetail() {
         onOpenChange={(v) => !v && setConfirmAction(null)}
         title="Approve this template?"
         description="Once approved, items become read-only. Create a new version to edit."
+        confirmLabel="Approve"
         onConfirm={async () => { await approve(); }}
       />
       <ConfirmDialog
@@ -352,6 +376,7 @@ export default function ChecklistTemplateDetail() {
         onOpenChange={(v) => !v && setConfirmAction(null)}
         title="Archive this template?"
         description="Archived templates can no longer be used for new inspections."
+        confirmLabel="Archive"
         onConfirm={async () => { await archive(); }}
       />
       <ConfirmDialog
@@ -359,6 +384,7 @@ export default function ChecklistTemplateDetail() {
         onOpenChange={(v) => !v && setConfirmAction(null)}
         title={`Create v${template.version + 1} draft?`}
         description="A new draft will be created with a copy of these items. The current approved version stays in use."
+        confirmLabel="Create draft"
         onConfirm={async () => { await newVersion(); }}
       />
       <ConfirmDialog

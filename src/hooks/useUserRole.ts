@@ -15,12 +15,9 @@ export function useUserRole() {
     if (!user || !profile) { setLoading(false); return; }
     setLoading(true);
     supabase
-      .from("user_roles")
-      .select("role")
-      .eq("user_id", user.id)
-      .eq("organisation_id", profile.organisation_id)
+      .rpc("get_my_roles")
       .then(({ data }) => {
-        const roles = (data ?? []).map((r: any) => r.role as Role);
+        const roles = (data ?? []) as Role[];
         if (roles.length === 0) { setRole(null); setLoading(false); return; }
         roles.sort((a, b) => RANK[b] - RANK[a]);
         setRole(roles[0]);
@@ -30,6 +27,11 @@ export function useUserRole() {
 
   const can = (min: Role) => role !== null && RANK[role] >= RANK[min];
   const canAuthorTemplates = role === "owner" || role === "engineer";
+  // Mirrors the DB's can_write(): owner/manager/technician may create and
+  // update operational records (drivers, trips, tyres, fuel, documents…).
+  // Engineer is intentionally excluded — RANK-based can() can't express this
+  // since engineer outranks technician but isn't a can_write role.
+  const canWrite = role === "owner" || role === "manager" || role === "technician";
 
-  return { role, loading, can, canAuthorTemplates, isOwner: role === "owner", isManager: can("manager"), isEngineer: role === "engineer", isTechnician: can("technician") };
+  return { role, loading, can, canAuthorTemplates, canWrite, isOwner: role === "owner", isManager: can("manager"), isEngineer: role === "engineer", isTechnician: can("technician") };
 }

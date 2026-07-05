@@ -5,6 +5,8 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import type { IndustryProfile } from "@/hooks/useIndustry";
+import { IndustryPicker } from "@/components/IndustryPicker";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -14,16 +16,15 @@ import { toast } from "sonner";
 import { useI18n } from "@/i18n/I18nProvider";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 
-const INDUSTRIES = [
-  "Transport",
-  "Logistics",
-  "Construction",
-  "Manufacturing",
-  "Agriculture",
-  "Mining",
-  "Energy",
-  "Other",
-];
+// ── Form schema ────────────────────────────────────────────────
+const schema = z.object({
+  full_name: z.string().trim().min(2, "Required").max(100),
+  organisation_name: z.string().trim().min(2, "Required").max(100).optional(),
+  email: z.string().trim().email("Enter a valid email").max(255),
+  password: z.string().min(8, "At least 8 characters").max(72),
+});
+
+type FormValues = z.infer<typeof schema>;
 
 export default function Signup() {
   const { user } = useAuth();
@@ -35,19 +36,8 @@ export default function Signup() {
   const [submitting, setSubmitting] = useState(false);
   const [accepted, setAccepted] = useState(false);
   const [emailSent, setEmailSent] = useState<string | null>(null);
-
-  const schema = z.object({
-    full_name: z.string().trim().min(2, "Required").max(100),
-    organisation_name: inviteToken
-      ? z.string().optional()
-      : z.string().trim().min(2, "Required").max(100),
-    industry: inviteToken
-      ? z.string().optional()
-      : z.string().min(1, "Required"),
-    email: z.string().trim().email("Enter a valid email").max(255),
-    password: z.string().min(8, "At least 8 characters").max(72),
-  });
-  type FormValues = z.infer<typeof schema>;
+  const [industryProfile, setIndustryProfile] =
+    useState<IndustryProfile>("manufacturing");
 
   useEffect(() => {
     if (user) navigate("/dashboard", { replace: true });
@@ -59,7 +49,7 @@ export default function Signup() {
     formState: { errors },
   } = useForm<FormValues>({
     resolver: zodResolver(schema),
-    defaultValues: { industry: "Transport", email: inviteEmail ?? "" },
+    defaultValues: { email: inviteEmail ?? "" },
   });
 
   const onSubmit = async (values: FormValues) => {
@@ -76,17 +66,19 @@ export default function Signup() {
       return;
     }
     setSubmitting(true);
-    const redirectUrl = `${window.location.origin}/dashboard`;
     const { error } = await supabase.auth.signUp({
       email: values.email,
       password: values.password,
       options: {
-        emailRedirectTo: redirectUrl,
+        emailRedirectTo: `${window.location.origin}/dashboard`,
         data: {
           full_name: values.full_name,
-          organisation_name: values.organisation_name,
-          industry: values.industry,
-          ...(inviteToken ? { invite_token: inviteToken } : {}),
+          ...(inviteToken
+            ? { invite_token: inviteToken }
+            : {
+                organisation_name: values.organisation_name,
+                industry_profile: industryProfile,
+              }),
         },
       },
     });
@@ -98,6 +90,7 @@ export default function Signup() {
     setEmailSent(values.email);
   };
 
+  // ── Email sent confirmation ──────────────────────────────────
   if (emailSent) {
     return (
       <div className="flex min-h-screen items-center justify-center p-4">
@@ -119,6 +112,7 @@ export default function Signup() {
 
   return (
     <div className="grid min-h-screen md:grid-cols-2">
+      {/* Brand panel */}
       <div
         className="hidden md:flex md:flex-col md:items-center md:justify-center md:p-12 md:text-primary-foreground"
         style={{ background: "var(--gradient-primary)" }}
@@ -130,6 +124,7 @@ export default function Signup() {
         </div>
       </div>
 
+      {/* Form panel */}
       <div className="relative flex items-center justify-center px-4 py-10">
         <div className="absolute left-4 top-4">
           <Button asChild variant="ghost" size="sm">
@@ -142,13 +137,14 @@ export default function Signup() {
           <LanguageSwitcher />
         </div>
 
-        <div className="w-full max-w-sm">
+        <div className="w-full max-w-md">
           <div className="mb-6 flex items-center gap-2">
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary text-primary-foreground">
               <Wrench className="h-5 w-5" />
             </div>
             <span className="text-xl font-semibold">{t.common.appName}</span>
           </div>
+
           <h1 className="mb-1 text-3xl font-bold tracking-tight">
             {inviteToken ? t.auth.joinTeam : t.auth.createAccount}
           </h1>
@@ -183,19 +179,14 @@ export default function Signup() {
                     </p>
                   )}
                 </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="industry">{t.auth.industry}</Label>
-                  <select
-                    id="industry"
-                    {...register("industry")}
-                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  >
-                    {INDUSTRIES.map((i) => (
-                      <option key={i} value={i}>
-                        {i}
-                      </option>
-                    ))}
-                  </select>
+
+                {/* ── Industry profile picker ──────────────────── */}
+                <div className="space-y-2">
+                  <Label>Industry type</Label>
+                  <IndustryPicker
+                    value={industryProfile}
+                    onChange={setIndustryProfile}
+                  />
                 </div>
               </>
             )}
@@ -215,6 +206,7 @@ export default function Signup() {
                 </p>
               )}
             </div>
+
             <div className="space-y-1.5">
               <Label htmlFor="password">{t.auth.password}</Label>
               <Input

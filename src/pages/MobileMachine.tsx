@@ -228,12 +228,29 @@ export default function MobileMachine() {
               {machine.serial_number && (
                 <p><span className="text-muted-foreground">{t.sn}:</span> {machine.serial_number}</p>
               )}
+              {machine.plate_number && (
+                <p><span className="text-muted-foreground">Plate:</span> {machine.plate_number}</p>
+              )}
               {machine.current_hours != null && (
                 <p className="col-span-2"><span className="text-muted-foreground">{t.hours}:</span> {Number(machine.current_hours).toLocaleString()}</p>
+              )}
+              {machine.last_service_date && (
+                <p className="col-span-2"><span className="text-muted-foreground">Last service:</span> {format(new Date(machine.last_service_date), "d MMM yyyy")}</p>
               )}
             </div>
           </div>
         </div>
+
+        {/* Pre-start inspection — no login required */}
+        <Link
+          to={`/m/${machine.id}/inspect`}
+          className="flex items-center justify-between rounded-2xl border border-primary/30 bg-primary-soft p-4 text-sm font-medium text-primary hover:border-primary/50"
+        >
+          <span className="flex items-center gap-2">
+            <ClipboardCheck className="h-5 w-5" /> Pre-Start Inspection
+          </span>
+          <ArrowRight className="h-4 w-4" />
+        </Link>
 
         {/* Signed-in: role-aware quick actions */}
         {user && isOwnOrg && (

@@ -37,23 +37,30 @@ async function send(templateName: string, recipientEmail: string, idempotencyKey
 }
 
 async function getOrgRecipients(orgId: string, includeManagers: boolean, includeEngineers: boolean) {
-  // Pull profiles in org, then look up auth emails for them.
+  // Roles live in user_roles, not profiles (profiles.role was dropped).
   const roles: string[] = []
   if (includeManagers) roles.push('owner', 'manager')
   if (includeEngineers) roles.push('engineer')
   if (roles.length === 0) return []
 
-  const { data: profs } = await supabase
-    .from('profiles')
-    .select('id, full_name, role')
+  const { data: userRoles } = await supabase
+    .from('user_roles')
+    .select('user_id')
     .eq('organisation_id', orgId)
     .in('role', roles)
 
-  if (!profs?.length) return []
+  if (!userRoles?.length) return []
+  const userIds = [...new Set(userRoles.map((r) => r.user_id))]
+  const { data: profs } = await supabase
+    .from('profiles')
+    .select('id, full_name')
+    .in('id', userIds)
+  const nameById = new Map((profs ?? []).map((p) => [p.id, p.full_name]))
+
   const out: { email: string; name: string }[] = []
-  for (const p of profs) {
-    const { data: u } = await supabase.auth.admin.getUserById(p.id)
-    if (u?.user?.email) out.push({ email: u.user.email, name: p.full_name ?? u.user.email })
+  for (const userId of userIds) {
+    const { data: u } = await supabase.auth.admin.getUserById(userId)
+    if (u?.user?.email) out.push({ email: u.user.email, name: nameById.get(userId) ?? u.user.email })
   }
   return out
 }
@@ -77,8 +84,8 @@ async function processOrg(org: Org) {
   const machineMap = new Map((machines ?? []).map(m => [m.id, m.name]))
   const machineIds = (machines ?? []).map(m => m.id)
 
-  let dueSoon: { machine: string; name: string; due: string }[] = []
-  let overdue: { machine: string; name: string; due: string }[] = []
+  const dueSoon: { machine: string; name: string; due: string }[] = []
+  const overdue: { machine: string; name: string; due: string }[] = []
 
   if (machineIds.length) {
     const { data: schedules } = await supabase
@@ -189,6 +196,220 @@ async function processOrg(org: Org) {
     console.error('inventory low-stock failed', e)
   }
 
+  // 4. Fleet: vehicle documents expiring (per-document reminder_days window) -> managers
+  try {
+    const { data: docs } = await supabase
+      .from('vehicle_documents')
+      .select('id, machine_id, doc_type, expires_on, reminder_days')
+      .eq('organisation_id', org.id)
+      .not('expires_on', 'is', null)
+
+    const expiringDocs = (docs ?? []).filter((d: any) => {
+      const daysAway = Math.floor((new Date(d.expires_on).getTime() - Date.now()) / 86400000)
+      return daysAway >= 0 && daysAway <= (d.reminder_days ?? 30)
+    })
+
+    if (expiringDocs.length > 0) {
+      const mgrs = await getOrgRecipients(org.id, true, false)
+      const key = `vehicledoc-${org.id}-${today}`
+      for (const d of expiringDocs as any[]) {
+        const vehicleLabel = machineMap.get(d.machine_id) ?? 'Vehicle'
+        const daysAway = Math.floor((new Date(d.expires_on).getTime() - Date.now()) / 86400000)
+        for (const r of mgrs) {
+          const ok = await send('document-expiring', r.email, `${key}-${d.id}-${r.email}`, {
+            recipientName: r.name, orgName: org.name,
+            subjectLabel: `${d.doc_type} for ${vehicleLabel}`,
+            docType: d.doc_type, holderLabel: vehicleLabel,
+            expiresOn: d.expires_on, daysAway,
+          })
+          if (ok) sent++
+        }
+      }
+    }
+  } catch (e) {
+    console.error('vehicle document expiry failed', e)
+  }
+
+  // 5. Fleet: driver licence/medical expiring -> the driver (if they have an email) + managers
+  try {
+    const { data: drivers } = await supabase
+      .from('drivers')
+      .select('id, full_name, email, licence_expiry, medical_expiry')
+      .eq('organisation_id', org.id)
+      .eq('status', 'active')
+
+    const withinWindow = (dateStr: string | null) => {
+      if (!dateStr) return null
+      const daysAway = Math.floor((new Date(dateStr).getTime() - Date.now()) / 86400000)
+      return daysAway >= 0 && daysAway <= (org.notifications_lead_days ?? 8) ? daysAway : null
+    }
+
+    const expiringDriverDocs: { driver: any; docType: string; expiresOn: string; daysAway: number }[] = []
+    for (const d of (drivers ?? []) as any[]) {
+      const licDays = withinWindow(d.licence_expiry)
+      if (licDays !== null) expiringDriverDocs.push({ driver: d, docType: 'Driving licence', expiresOn: d.licence_expiry, daysAway: licDays })
+      const medDays = withinWindow(d.medical_expiry)
+      if (medDays !== null) expiringDriverDocs.push({ driver: d, docType: 'Medical certificate', expiresOn: d.medical_expiry, daysAway: medDays })
+    }
+
+    if (expiringDriverDocs.length > 0) {
+      const mgrs = await getOrgRecipients(org.id, true, false)
+      const key = `driverdoc-${org.id}-${today}`
+      for (const item of expiringDriverDocs) {
+        const recipients = [...mgrs]
+        if (item.driver.email) recipients.push({ email: item.driver.email, name: item.driver.full_name })
+        for (const r of recipients) {
+          const ok = await send('document-expiring', r.email, `${key}-${item.driver.id}-${item.docType}-${r.email}`, {
+            recipientName: r.name, orgName: org.name,
+            subjectLabel: `${item.docType} for ${item.driver.full_name}`,
+            docType: item.docType, holderLabel: item.driver.full_name,
+            expiresOn: item.expiresOn, daysAway: item.daysAway,
+          })
+          if (ok) sent++
+        }
+      }
+    }
+  } catch (e) {
+    console.error('driver document expiry failed', e)
+  }
+
+  // 6. Fleet: tyres past their target replacement distance -> managers
+  try {
+    const { data: tyres } = await supabase
+      .from('tyres')
+      .select('id, machine_id, position, brand, target_replace_km, fitted_odo')
+      .eq('organisation_id', org.id)
+      .is('removed_at', null)
+      .not('target_replace_km', 'is', null)
+      .not('fitted_odo', 'is', null)
+
+    const { data: machinesForOdo } = await supabase
+      .from('machines')
+      .select('id, current_odometer_km')
+      .eq('organisation_id', org.id)
+    const odoMap = new Map((machinesForOdo ?? []).map((m: any) => [m.id, m.current_odometer_km]))
+
+    const overdueTyres = (tyres ?? []).filter((t: any) => {
+      const odo = odoMap.get(t.machine_id)
+      if (odo == null) return false
+      return (Number(odo) - Number(t.fitted_odo)) >= Number(t.target_replace_km)
+    })
+
+    if (overdueTyres.length > 0) {
+      const mgrs = await getOrgRecipients(org.id, true, false)
+      const key = `tyre-${org.id}-${today}`
+      for (const t of overdueTyres as any[]) {
+        const vehicleLabel = machineMap.get(t.machine_id) ?? 'Vehicle'
+        const rows = [
+          { label: 'Vehicle', value: vehicleLabel },
+          { label: 'Position', value: t.position },
+          ...(t.brand ? [{ label: 'Brand', value: t.brand }] : []),
+          { label: 'Target replace', value: `${t.target_replace_km} km` },
+          { label: 'Current odometer', value: `${odoMap.get(t.machine_id)} km` },
+        ]
+        for (const r of mgrs) {
+          const ok = await send('fleet-alert', r.email, `${key}-${t.id}-${r.email}`, {
+            recipientName: r.name, orgName: org.name,
+            emoji: '🛞', heading: `Tyre replacement due: ${vehicleLabel}`,
+            message: 'A tyre on this vehicle has passed its target replacement distance.',
+            rows,
+          })
+          if (ok) sent++
+        }
+      }
+    }
+  } catch (e) {
+    console.error('tyre replacement check failed', e)
+  }
+
+  // 7. Fleet: trips overdue (planned end passed, still in progress) -> managers
+  try {
+    const { data: overdueTrips } = await supabase
+      .from('trips')
+      .select('id, machine_id, driver_id, end_at, purpose')
+      .eq('organisation_id', org.id)
+      .eq('status', 'in_progress')
+      .not('end_at', 'is', null)
+      .lt('end_at', new Date().toISOString())
+
+    if (overdueTrips && overdueTrips.length > 0) {
+      const mgrs = await getOrgRecipients(org.id, true, false)
+      const driverIds = [...new Set(overdueTrips.map((t: any) => t.driver_id).filter(Boolean))]
+      const { data: driversData } = driverIds.length
+        ? await supabase.from('drivers').select('id, full_name').in('id', driverIds)
+        : { data: [] }
+      const driverNameMap = new Map((driversData ?? []).map((d: any) => [d.id, d.full_name]))
+      const key = `tripoverdue-${org.id}-${today}`
+      for (const t of overdueTrips as any[]) {
+        const vehicleLabel = machineMap.get(t.machine_id) ?? 'Vehicle'
+        const rows = [
+          { label: 'Vehicle', value: vehicleLabel },
+          { label: 'Driver', value: t.driver_id ? (driverNameMap.get(t.driver_id) ?? '—') : '—' },
+          { label: 'Purpose', value: t.purpose ?? '—' },
+          { label: 'Expected end', value: t.end_at },
+        ]
+        for (const r of mgrs) {
+          const ok = await send('fleet-alert', r.email, `${key}-${t.id}-${r.email}`, {
+            recipientName: r.name, orgName: org.name,
+            emoji: '⏰', heading: `Trip overdue: ${vehicleLabel}`,
+            message: 'This trip was expected to end but is still marked in progress.',
+            rows,
+          })
+          if (ok) sent++
+        }
+      }
+    }
+  } catch (e) {
+    console.error('trip overdue check failed', e)
+  }
+
+  // 8. Fleet: pre-start inspection not submitted today by an active vehicle -> managers
+  try {
+    const { data: templates } = await supabase
+      .from('checklist_templates')
+      .select('id')
+      .eq('organisation_id', org.id)
+      .eq('is_fleet_pre_start', true)
+      .eq('status', 'approved')
+    const templateIds = (templates ?? []).map((t: any) => t.id)
+
+    if (templateIds.length > 0 && machineIds.length > 0) {
+      const startOfDay = new Date()
+      startOfDay.setUTCHours(0, 0, 0, 0)
+
+      const { data: activeMachines } = await supabase
+        .from('machines')
+        .select('id, name')
+        .eq('organisation_id', org.id)
+        .eq('status', 'active')
+
+      const { data: todaysExecs } = await supabase
+        .from('checklist_executions')
+        .select('machine_id')
+        .in('template_id', templateIds)
+        .gte('performed_at', startOfDay.toISOString())
+
+      const submittedIds = new Set((todaysExecs ?? []).map((e: any) => e.machine_id))
+      const missing = (activeMachines ?? []).filter((m: any) => !submittedIds.has(m.id))
+
+      if (missing.length > 0) {
+        const mgrs = await getOrgRecipients(org.id, true, false)
+        const key = `inspectionmissing-${org.id}-${today}`
+        for (const r of mgrs) {
+          const ok = await send('fleet-alert', r.email, `${key}-${r.email}`, {
+            recipientName: r.name, orgName: org.name,
+            emoji: '📋', heading: `${missing.length} vehicle(s) missing today's pre-start inspection`,
+            message: 'These active vehicles have not had a pre-start inspection submitted today.',
+            rows: missing.map((m: any) => ({ label: 'Vehicle', value: m.name })),
+          })
+          if (ok) sent++
+        }
+      }
+    }
+  } catch (e) {
+    console.error('inspection completion check failed', e)
+  }
+
   // Log run
   await supabase.from('maintenance_email_runs').insert({
     organisation_id: org.id,
@@ -201,8 +422,22 @@ async function processOrg(org: Org) {
   return { dueSoon: dueSoon.length, overdue: overdue.length, sent }
 }
 
+// This function iterates every organisation, reads across their fleet/maintenance
+// data with a service-role client, and sends real emails — it must only run on
+// a schedule (cron) or a trusted manual trigger, never on an arbitrary public
+// request. verify_jwt is false here (so the cron invoker doesn't need a user
+// session), so the shared secret below is the only gate.
+const CRON_SECRET = Deno.env.get('CRON_SECRET')
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders })
+
+  if (!CRON_SECRET || req.headers.get('x-cron-secret') !== CRON_SECRET) {
+    return new Response(JSON.stringify({ error: 'Forbidden' }), {
+      status: 403,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    })
+  }
 
   // Optionally allow targeting a single org for manual triggers
   let onlyOrgId: string | undefined
@@ -211,7 +446,9 @@ Deno.serve(async (req) => {
       const body = await req.json().catch(() => ({}))
       onlyOrgId = body?.organisation_id
     }
-  } catch {}
+  } catch {
+    // malformed body; fall through and process all orgs
+  }
 
   const { data: orgs, error } = await supabase
     .from('organisations')

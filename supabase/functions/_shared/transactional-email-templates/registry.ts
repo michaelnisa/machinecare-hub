@@ -4,6 +4,8 @@ import { template as serviceOverdue } from './service-overdue.tsx'
 import { template as woAssigned } from './wo-assigned.tsx'
 import { template as maintenanceDigest } from './maintenance-digest.tsx'
 import { template as inventoryLowStock } from './inventory-low-stock.tsx'
+import { template as documentExpiring } from './document-expiring.tsx'
+import { template as fleetAlert } from './fleet-alert.tsx'
 
 export interface TemplateEntry {
   component: any
@@ -19,4 +21,6 @@ export const TEMPLATES: Record<string, TemplateEntry> = {
   'wo-assigned': woAssigned,
   'maintenance-digest': maintenanceDigest,
   'inventory-low-stock': inventoryLowStock,
+  'document-expiring': documentExpiring,
+  'fleet-alert': fleetAlert,
 }

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { useUserRole } from "@/hooks/useUserRole";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -15,6 +16,7 @@ import { format, parseISO } from "date-fns";
 
 export default function FuelLogs() {
   const { profile, user } = useAuth();
+  const { isManager } = useUserRole();
   const [loading, setLoading] = useState(true);
   const [logs, setLogs] = useState<any[]>([]);
   const [machines, setMachines] = useState<{ id: string; name: string }[]>([]);
@@ -133,9 +135,11 @@ export default function FuelLogs() {
                   <td className="px-5 py-3">{formatMoney(l.fuel_cost, l.currency ?? "TZS")}</td>
                   <td className="px-5 py-3 text-muted-foreground">{l.station ?? "—"}</td>
                   <td className="px-5 py-3 text-right">
-                    <Button variant="ghost" size="icon" onClick={() => setConfirm(l.id)}>
-                      <Trash2 className="h-4 w-4 text-destructive" />
-                    </Button>
+                    {isManager && (
+                      <Button variant="ghost" size="icon" onClick={() => setConfirm(l.id)}>
+                        <Trash2 className="h-4 w-4 text-destructive" />
+                      </Button>
+                    )}
                   </td>
                 </tr>
               ))}

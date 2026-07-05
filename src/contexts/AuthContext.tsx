@@ -15,10 +15,13 @@ interface Profile {
   department: string | null;
 }
 
+export type IndustryProfile =
+  "manufacturing" | "fleet_logistics" | "garage" | "mixed";
+
 interface Organisation {
   id: string;
   name: string;
-  industry: string | null;
+  industry_profile: IndustryProfile;
   logo_url: string | null;
   plan: "lite" | "standard";
 }

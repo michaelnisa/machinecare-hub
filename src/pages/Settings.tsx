@@ -1,6 +1,9 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { useUserRole } from "@/hooks/useUserRole";
+import type { IndustryProfile } from "@/hooks/useIndustry";
+import { IndustryPicker, INDUSTRY_PROFILES } from "@/components/IndustryPicker";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -18,25 +21,24 @@ import {
   X,
 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
-
-const INDUSTRIES = [
-  "Transport",
-  "Logistics",
-  "Construction",
-  "Manufacturing",
-  "Agriculture",
-  "Mining",
-  "Energy",
-  "Other",
-];
 
 export default function Settings() {
   const { user, profile, organisation, refresh } = useAuth();
+  const { isManager } = useUserRole();
   const [loading, setLoading] = useState(true);
   const [members, setMembers] = useState<any[]>([]);
   const [orgName, setOrgName] = useState("");
-  const [orgIndustry, setOrgIndustry] = useState("");
   const [fullName, setFullName] = useState("");
   const [department, setDepartment] = useState("");
   const [logoUploading, setLogoUploading] = useState(false);
@@ -44,11 +46,14 @@ export default function Settings() {
   const [savingProfile, setSavingProfile] = useState(false);
   const [pwd, setPwd] = useState("");
   const [savingPwd, setSavingPwd] = useState(false);
+  const [pendingProfile, setPendingProfile] = useState<IndustryProfile | null>(
+    null,
+  );
+  const [savingIndustryProfile, setSavingIndustryProfile] = useState(false);
 
   useEffect(() => {
     if (organisation) {
       setOrgName(organisation.name);
-      setOrgIndustry(organisation.industry ?? "Other");
     }
     if (profile) {
       setFullName(profile.full_name ?? "");
@@ -144,12 +149,28 @@ export default function Settings() {
     setSavingOrg(true);
     const { error } = await supabase
       .from("organisations")
-      .update({ name: orgName.trim(), industry: orgIndustry })
+      .update({ name: orgName.trim() })
       .eq("id", organisation.id);
     setSavingOrg(false);
     if (error) toast.error(error.message);
     else {
       toast.success("Organisation updated");
+      refresh();
+    }
+  };
+
+  const confirmIndustryProfileChange = async () => {
+    if (!organisation || !pendingProfile) return;
+    setSavingIndustryProfile(true);
+    const { error } = await supabase
+      .from("organisations")
+      .update({ industry_profile: pendingProfile })
+      .eq("id", organisation.id);
+    setSavingIndustryProfile(false);
+    setPendingProfile(null);
+    if (error) toast.error(error.message);
+    else {
+      toast.success("Industry profile updated");
       refresh();
     }
   };
@@ -255,20 +276,6 @@ export default function Settings() {
               maxLength={100}
             />
           </div>
-          <div className="space-y-1.5">
-            <Label>Industry</Label>
-            <select
-              value={orgIndustry}
-              onChange={(e) => setOrgIndustry(e.target.value)}
-              className="flex h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
-            >
-              {INDUSTRIES.map((i) => (
-                <option key={i} value={i}>
-                  {i}
-                </option>
-              ))}
-            </select>
-          </div>
         </div>
         <div className="mt-4 flex justify-end">
           <Button onClick={saveOrg} disabled={savingOrg}>
@@ -276,6 +283,50 @@ export default function Settings() {
           </Button>
         </div>
       </Section>
+
+      {isManager && (
+        <Section title="Industry profile">
+          <p className="mb-3 text-sm text-muted-foreground">
+            This decides your sidebar, dashboard and vocabulary across the app.
+          </p>
+          <IndustryPicker
+            value={organisation?.industry_profile ?? "manufacturing"}
+            onChange={setPendingProfile}
+          />
+
+          <AlertDialog
+            open={pendingProfile !== null}
+            onOpenChange={(open) => !open && setPendingProfile(null)}
+          >
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Change industry profile?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  This changes your sidebar and dashboard to{" "}
+                  {
+                    INDUSTRY_PROFILES.find((p) => p.value === pendingProfile)
+                      ?.label
+                  }
+                  . Everyone in your organisation will see the new layout on
+                  their next page load.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction
+                  onClick={confirmIndustryProfileChange}
+                  disabled={savingIndustryProfile}
+                >
+                  {savingIndustryProfile && (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  )}
+                  Confirm
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        </Section>
+      )}
 
       <Section title="Your profile">
         <div className="grid gap-4 sm:grid-cols-2">
