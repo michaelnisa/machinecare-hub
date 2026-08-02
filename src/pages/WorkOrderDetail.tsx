@@ -77,9 +77,16 @@ export default function WorkOrderDetail() {
         <Link to="/work-orders" className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground">
           <ArrowLeft className="h-4 w-4" /> Back to work orders
         </Link>
-        <Button variant="outline" asChild>
-          <Link to={`/work-orders/${id}/print`}><Printer className="mr-2 h-4 w-4" /> Print / Download</Link>
-        </Button>
+        <div className="flex items-center gap-2">
+          {machine?.category === "Vehicle" && (
+            <Button variant="outline" asChild>
+              <Link to={`/work-orders/${id}/print?view=jobcard`}><Printer className="mr-2 h-4 w-4" /> Print as Job Card</Link>
+            </Button>
+          )}
+          <Button variant="outline" asChild>
+            <Link to={`/work-orders/${id}/print`}><Printer className="mr-2 h-4 w-4" /> Print / Download</Link>
+          </Button>
+        </div>
       </div>
 
       <div>

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useNavigate, Link } from "react-router-dom";
+import { useNavigate, useSearchParams, Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
@@ -42,6 +42,8 @@ function addDays(base: Date, days: number) {
 export default function WorkOrderNew() {
   const { profile, user, organisation } = useAuth();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const preselectMachineId = searchParams.get("machine");
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
 
@@ -55,7 +57,7 @@ export default function WorkOrderNew() {
   const [nextNumber, setNextNumber] = useState<number | null>(null);
 
   const [form, setForm] = useState<any>({
-    machine_id: "",
+    machine_id: preselectMachineId ?? "",
     work_type: "repair",
     checklist_template_id: "",
     title: "",
@@ -68,7 +70,7 @@ export default function WorkOrderNew() {
     promised_date: "",
     vendor_cost: "",
     remarks: "",
-    // GSM-style request fields
+    // Company request/permit fields (shown on printable work order & job card)
     requested_by_name: "",
     department: "",
     plant_area: "",

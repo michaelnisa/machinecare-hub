@@ -286,7 +286,7 @@ export default function Home() {
         <div className="grid gap-5 md:grid-cols-3 lg:grid-cols-4">
           {[
             { icon: Factory, title: "Machine registry", desc: "Every asset with photo, QR, manuals, parts list, meter readings and lifetime history." },
-            { icon: ClipboardList, title: "Work orders", desc: "Corrective & preventive WOs with tasks, parts, costs, permits and sign-off (GSM-format)." },
+            { icon: ClipboardList, title: "Work orders", desc: "Corrective & preventive WOs with tasks, parts, costs, permits and sign-off — printable to your company's own format." },
             { icon: Wrench, title: "Preventive maintenance", desc: "Schedule by hours, kilometres or calendar. Auto-generate WOs before things break." },
             { icon: QrCode, title: "QR scan & log", desc: "Stick a QR on every machine — anyone with a phone can log work, fuel or a fault." },
             { icon: Gauge, title: "OEE tracking", desc: "Availability × Performance × Quality per machine, line and shift — with trends." },

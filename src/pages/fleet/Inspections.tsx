@@ -10,6 +10,7 @@ import { ClipboardCheck, Plus, Loader2, CheckCircle2, XCircle, MinusCircle, Aler
 import { toast } from "sonner";
 import { formatDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { useI18n } from "@/i18n/I18nProvider";
 
 type Machine = { id: string; name: string; plate_number: string | null; organisation_id: string };
 type Driver = { id: string; full_name: string };
@@ -30,6 +31,7 @@ const RESULT_CLASS: Record<string, string> = {
 export default function Inspections() {
   const { profile } = useAuth();
   const { canWrite } = useUserRole();
+  const { t } = useI18n();
   const [loading, setLoading] = useState(true);
   const [executions, setExecutions] = useState<Execution[]>([]);
   const [machines, setMachines] = useState<Machine[]>([]);
@@ -98,8 +100,8 @@ export default function Inspections() {
     <div className="space-y-6 animate-fade-in">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Inspections</h1>
-          <p className="text-sm text-muted-foreground">Submitted pre-start inspections across your fleet.</p>
+          <h1 className="text-2xl font-semibold tracking-tight">{t.fleet.inspectionsTitle}</h1>
+          <p className="text-sm text-muted-foreground">{t.fleet.inspectionsSub}</p>
         </div>
         {canWrite && machines.length > 0 && (
           <Button onClick={() => setNewOpen(true)}>

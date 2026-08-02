@@ -7,11 +7,14 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { PageLoader, EmptyState } from "@/components/PageLoader";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Gauge, Plus, Loader2, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { formatDate } from "@/lib/format";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from "recharts";
+
+const SHIFTS = ["All", "Day", "Evening", "Night"];
 
 export default function OEE() {
   const { profile, user } = useAuth();
@@ -19,6 +22,7 @@ export default function OEE() {
   const [loading, setLoading] = useState(true);
   const [records, setRecords] = useState<any[]>([]);
   const [machines, setMachines] = useState<{ id: string; name: string }[]>([]);
+  const [qaYieldByKey, setQaYieldByKey] = useState<Map<string, { yieldPct: number; inspections: number }>>(new Map());
   const [machineFilter, setMachineFilter] = useState<string>("all");
   const [open, setOpen] = useState(false);
   const [confirm, setConfirm] = useState<string | null>(null);
@@ -26,12 +30,32 @@ export default function OEE() {
   const load = async () => {
     if (!profile) return;
     setLoading(true);
-    const [{ data: r }, { data: m }] = await Promise.all([
+    const [{ data: r }, { data: m }, { data: qr }] = await Promise.all([
       supabase.from("oee_records").select("*, machines(name)").order("record_date", { ascending: false }).limit(500),
       supabase.from("machines").select("id, name").order("name"),
+      supabase.from("quality_reports").select("machine_id, report_date, units_inspected, units_defective").not("machine_id", "is", null),
     ]);
     setRecords(r ?? []);
     setMachines(m ?? []);
+
+    // Aggregate same-day inspections per machine so multiple QA checks on one
+    // machine/date roll up into a single yield % to cross-check against OEE Quality.
+    const totals = new Map<string, { inspected: number; defective: number; count: number }>();
+    for (const q of qr ?? []) {
+      if (!q.machine_id) continue;
+      const key = `${q.machine_id}|${q.report_date}`;
+      const acc = totals.get(key) ?? { inspected: 0, defective: 0, count: 0 };
+      acc.inspected += q.units_inspected ?? 0;
+      acc.defective += q.units_defective ?? 0;
+      acc.count += 1;
+      totals.set(key, acc);
+    }
+    const yieldMap = new Map<string, { yieldPct: number; inspections: number }>();
+    for (const [key, v] of totals) {
+      if (v.inspected <= 0) continue;
+      yieldMap.set(key, { yieldPct: ((v.inspected - v.defective) / v.inspected) * 100, inspections: v.count });
+    }
+    setQaYieldByKey(yieldMap);
     setLoading(false);
   };
 
@@ -44,7 +68,7 @@ export default function OEE() {
 
   const chartData = useMemo(() => {
     return [...filtered].reverse().slice(-30).map((r) => ({
-      date: r.record_date,
+      date: r.shift && r.shift !== "All" ? `${formatDate(r.record_date)} · ${r.shift}` : formatDate(r.record_date),
       OEE: Number(r.availability) * Number(r.performance) * Number(r.quality) / 10000,
       Availability: Number(r.availability),
       Performance: Number(r.performance),
@@ -136,30 +160,62 @@ export default function OEE() {
             <thead className="text-left text-xs uppercase tracking-wide text-muted-foreground">
               <tr>
                 <th className="px-5 py-3 font-medium">Date</th>
+                <th className="px-5 py-3 font-medium">Shift</th>
                 <th className="px-5 py-3 font-medium">Machine</th>
                 <th className="px-5 py-3 font-medium">Avail.</th>
                 <th className="px-5 py-3 font-medium">Perf.</th>
                 <th className="px-5 py-3 font-medium">Qual.</th>
+                <th className="px-5 py-3 font-medium">QA yield</th>
                 <th className="px-5 py-3 font-medium">OEE</th>
+                <th className="px-5 py-3 font-medium">Source</th>
                 <th className="px-5 py-3"></th>
               </tr>
             </thead>
             <tbody>
               {filtered.map((r) => {
                 const oee = Number(r.availability) * Number(r.performance) * Number(r.quality) / 10000;
+                const qa = qaYieldByKey.get(`${r.machine_id}|${r.record_date}`);
+                const disagrees = qa != null && Math.abs(qa.yieldPct - Number(r.quality)) > 5;
                 return (
                   <tr key={r.id} className="border-t border-border">
                     <td className="px-5 py-3">{formatDate(r.record_date)}</td>
+                    <td className="px-5 py-3 text-muted-foreground">{r.shift === "All" ? "—" : r.shift}</td>
                     <td className="px-5 py-3 text-muted-foreground">{r.machines?.name ?? "—"}</td>
                     <td className="px-5 py-3">{Number(r.availability).toFixed(1)}%</td>
                     <td className="px-5 py-3">{Number(r.performance).toFixed(1)}%</td>
                     <td className="px-5 py-3">{Number(r.quality).toFixed(1)}%</td>
+                    <td className="px-5 py-3">
+                      {qa ? (
+                        <span
+                          className={disagrees ? "font-medium text-amber-600" : "text-muted-foreground"}
+                          title={disagrees ? `Quality module reports ${qa.yieldPct.toFixed(1)}% yield from ${qa.inspections} inspection(s) — differs from OEE Quality by more than 5 points` : `From ${qa.inspections} QA inspection(s) that day`}
+                        >
+                          {qa.yieldPct.toFixed(1)}% {disagrees && "⚠"}
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
+                    </td>
                     <td className="px-5 py-3 font-semibold">{oee.toFixed(1)}%</td>
+                    <td className="px-5 py-3">
+                      {r.source === "production_sync" ? (
+                        <span className="rounded-full bg-primary-soft px-2 py-0.5 text-xs font-medium text-primary" title="Computed automatically from that day's Production logs for this machine">
+                          Auto (Production)
+                        </span>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">Manual</span>
+                      )}
+                    </td>
                     <td className="px-5 py-3 text-right">
-                      {isManager && (
+                      {isManager && r.source !== "production_sync" && (
                         <Button variant="ghost" size="icon" onClick={() => setConfirm(r.id)}>
                           <Trash2 className="h-4 w-4 text-destructive" />
                         </Button>
+                      )}
+                      {r.source === "production_sync" && (
+                        <span className="text-xs text-muted-foreground" title="Edit or remove the underlying Production logs for this machine/date to change this record">
+                          —
+                        </span>
                       )}
                     </td>
                   </tr>
@@ -170,7 +226,7 @@ export default function OEE() {
         </div>
       )}
 
-      <OEEDialog open={open} onOpenChange={setOpen} machines={machines} onSaved={load} />
+      <OEEDialog open={open} onOpenChange={setOpen} machines={machines} records={records} onSaved={load} />
       <ConfirmDialog open={!!confirm} onOpenChange={(v) => !v && setConfirm(null)}
         title="Delete this record?" description="This action cannot be undone."
         onConfirm={async () => { await handleDelete(); }} />
@@ -178,7 +234,7 @@ export default function OEE() {
   );
 }
 
-function OEEDialog({ open, onOpenChange, machines, onSaved }: any) {
+function OEEDialog({ open, onOpenChange, machines, records, onSaved }: any) {
   const { profile, user } = useAuth();
   const [submitting, setSubmitting] = useState(false);
   const [form, setForm] = useState<any>({});
@@ -187,6 +243,7 @@ function OEEDialog({ open, onOpenChange, machines, onSaved }: any) {
     if (open) setForm({
       machine_id: "",
       record_date: new Date().toISOString().slice(0, 10),
+      shift: "All",
       planned_minutes: 480,
       downtime_minutes: 0,
       units_produced: 0,
@@ -195,6 +252,12 @@ function OEEDialog({ open, onOpenChange, machines, onSaved }: any) {
       notes: "",
     });
   }, [open]);
+
+  const conflictsWithSyncedRecord = useMemo(() => {
+    return (records as any[]).some(
+      (r) => r.machine_id === form.machine_id && r.record_date === form.record_date && r.shift === form.shift && r.source === "production_sync",
+    );
+  }, [records, form.machine_id, form.record_date, form.shift]);
 
   const preview = useMemo(() => {
     const pm = Number(form.planned_minutes) || 0;
@@ -214,11 +277,13 @@ function OEEDialog({ open, onOpenChange, machines, onSaved }: any) {
     if (!profile) return;
     if (!form.machine_id) return toast.error("Pick a machine");
     if (!form.planned_minutes || Number(form.planned_minutes) <= 0) return toast.error("Planned minutes must be > 0");
+    if (conflictsWithSyncedRecord) return toast.error("This machine/date/shift is already tracked from Production logs — edit the production log instead.");
     setSubmitting(true);
     const { error } = await supabase.from("oee_records").insert({
       organisation_id: profile.organisation_id,
       machine_id: form.machine_id,
       record_date: form.record_date,
+      shift: form.shift || "All",
       planned_minutes: Number(form.planned_minutes),
       downtime_minutes: Number(form.downtime_minutes) || 0,
       units_produced: Number(form.units_produced) || 0,
@@ -252,6 +317,15 @@ function OEEDialog({ open, onOpenChange, machines, onSaved }: any) {
               <Input type="date" value={form.record_date ?? ""} onChange={(e) => setForm({ ...form, record_date: e.target.value })} />
             </div>
             <div className="space-y-1.5">
+              <Label>Shift</Label>
+              <Select value={form.shift ?? "All"} onValueChange={(v) => setForm({ ...form, shift: v })}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {SHIFTS.map((s) => <SelectItem key={s} value={s}>{s === "All" ? "Whole day (no shift split)" : s}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
               <Label>Planned minutes *</Label>
               <Input type="number" min="0" value={form.planned_minutes ?? ""} onChange={(e) => setForm({ ...form, planned_minutes: e.target.value })} />
             </div>
@@ -277,6 +351,11 @@ function OEEDialog({ open, onOpenChange, machines, onSaved }: any) {
                 className="flex min-h-[60px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm" />
             </div>
           </div>
+          {conflictsWithSyncedRecord && (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+              This machine already has a Production-log-driven OEE record for this date. Edit the production log(s) on that day instead of adding a manual record here.
+            </div>
+          )}
           <div className="rounded-lg border border-border bg-muted/40 p-3 text-sm">
             <div className="mb-1 text-xs uppercase tracking-wide text-muted-foreground">Preview</div>
             <div className="grid grid-cols-4 gap-2">
@@ -288,7 +367,7 @@ function OEEDialog({ open, onOpenChange, machines, onSaved }: any) {
           </div>
           <DialogFooter>
             <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>Cancel</Button>
-            <Button type="submit" disabled={submitting}>
+            <Button type="submit" disabled={submitting || conflictsWithSyncedRecord}>
               {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Save
             </Button>
           </DialogFooter>

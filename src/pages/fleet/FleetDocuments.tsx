@@ -14,6 +14,7 @@ import { FileWarning, Plus, Pencil, Trash2, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { formatDate } from "@/lib/format";
 import { scheduleStatus } from "@/lib/machine-constants";
+import { useI18n } from "@/i18n/I18nProvider";
 
 const DOC_TYPES = [
   { value: "insurance", label: "Insurance" },
@@ -60,6 +61,7 @@ const EMPTY_FORM = {
 export default function FleetDocuments() {
   const { profile } = useAuth();
   const { isManager, canWrite } = useUserRole();
+  const { t } = useI18n();
   const [loading, setLoading] = useState(true);
   const [docs, setDocs] = useState<VehicleDoc[]>([]);
   const [machines, setMachines] = useState<Machine[]>([]);
@@ -133,9 +135,9 @@ export default function FleetDocuments() {
     <div className="space-y-6 animate-fade-in">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Fleet Documents</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">{t.fleet.documentsTitle}</h1>
           <p className="text-sm text-muted-foreground">
-            Expiry inbox across vehicle documents and driver licences/medicals.
+            {t.fleet.documentsSub}
             {expiringSoonCount > 0 && (
               <span className="ml-2 font-medium text-amber-600">{expiringSoonCount} need attention</span>
             )}
@@ -143,7 +145,7 @@ export default function FleetDocuments() {
         </div>
         {canWrite && (
           <Button onClick={() => { setEditing(null); setOpen(true); }}>
-            <Plus className="mr-2 h-4 w-4" /> Add vehicle document
+            <Plus className="mr-2 h-4 w-4" /> {t.fleet.addDocument}
           </Button>
         )}
       </div>

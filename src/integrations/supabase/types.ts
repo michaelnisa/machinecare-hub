@@ -1519,6 +1519,8 @@ export type Database = {
           planned_minutes: number
           quality: number | null
           record_date: string
+          shift: string
+          source: string
           units_good: number
           units_produced: number
           updated_at: string
@@ -1537,6 +1539,8 @@ export type Database = {
           planned_minutes: number
           quality?: number | null
           record_date: string
+          shift?: string
+          source?: string
           units_good?: number
           units_produced?: number
           updated_at?: string
@@ -1555,6 +1559,8 @@ export type Database = {
           planned_minutes?: number
           quality?: number | null
           record_date?: string
+          shift?: string
+          source?: string
           units_good?: number
           units_produced?: number
           updated_at?: string
@@ -1703,6 +1709,70 @@ export type Database = {
         }
         Relationships: []
       }
+      production_downtime_events: {
+        Row: {
+          category: string
+          created_at: string
+          created_by: string | null
+          duration_minutes: number
+          id: string
+          machine_id: string | null
+          notes: string | null
+          organisation_id: string
+          production_kpi_id: string
+          reason_code: string
+          record_date: string
+        }
+        Insert: {
+          category: string
+          created_at?: string
+          created_by?: string | null
+          duration_minutes: number
+          id?: string
+          machine_id?: string | null
+          notes?: string | null
+          organisation_id: string
+          production_kpi_id: string
+          reason_code: string
+          record_date: string
+        }
+        Update: {
+          category?: string
+          created_at?: string
+          created_by?: string | null
+          duration_minutes?: number
+          id?: string
+          machine_id?: string | null
+          notes?: string | null
+          organisation_id?: string
+          production_kpi_id?: string
+          reason_code?: string
+          record_date?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "production_downtime_events_machine_id_fkey"
+            columns: ["machine_id"]
+            isOneToOne: false
+            referencedRelation: "machines"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "production_downtime_events_organisation_id_fkey"
+            columns: ["organisation_id"]
+            isOneToOne: false
+            referencedRelation: "organisations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "production_downtime_events_production_kpi_id_fkey"
+            columns: ["production_kpi_id"]
+            isOneToOne: false
+            referencedRelation: "production_kpis"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       production_kpis: {
         Row: {
           actual_units: number
@@ -1710,10 +1780,12 @@ export type Database = {
           created_at: string
           downtime_minutes: number
           id: string
+          ideal_cycle_seconds: number | null
           machine_id: string | null
           notes: string | null
           operator: string | null
           organisation_id: string
+          planned_minutes: number | null
           product: string | null
           record_date: string
           scrap_units: number
@@ -1727,10 +1799,12 @@ export type Database = {
           created_at?: string
           downtime_minutes?: number
           id?: string
+          ideal_cycle_seconds?: number | null
           machine_id?: string | null
           notes?: string | null
           operator?: string | null
           organisation_id: string
+          planned_minutes?: number | null
           product?: string | null
           record_date?: string
           scrap_units?: number
@@ -1744,10 +1818,12 @@ export type Database = {
           created_at?: string
           downtime_minutes?: number
           id?: string
+          ideal_cycle_seconds?: number | null
           machine_id?: string | null
           notes?: string | null
           operator?: string | null
           organisation_id?: string
+          planned_minutes?: number | null
           product?: string | null
           record_date?: string
           scrap_units?: number
@@ -2936,6 +3012,14 @@ export type Database = {
     Functions: {
       can_author_templates: { Args: { _org_id: string }; Returns: boolean }
       can_manage: { Args: { _org_id: string }; Returns: boolean }
+      can_submit_fleet_inspection: {
+        Args: { _machine_id: string; _org_id: string; _template_id: string }
+        Returns: boolean
+      }
+      can_submit_fleet_inspection_response: {
+        Args: { _execution_id: string }
+        Returns: boolean
+      }
       can_write: { Args: { _org_id: string }; Returns: boolean }
       current_org_id: { Args: never; Returns: string }
       delete_email: {
@@ -3022,6 +3106,10 @@ export type Database = {
           msg_id: number
           read_ct: number
         }[]
+      }
+      recompute_oee_for_shift: {
+        Args: { _date: string; _machine: string; _org: string; _shift: string }
+        Returns: undefined
       }
       record_in_org: { Args: { _record_id: string }; Returns: boolean }
       set_user_role: {

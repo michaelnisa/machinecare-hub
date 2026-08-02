@@ -6,6 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 import { Gauge, Wrench, AlertTriangle, Fuel, ClipboardCheck, Package } from "lucide-react";
 import { formatMoney, formatNumber } from "@/lib/format";
+import { useI18n } from "@/i18n/I18nProvider";
 
 const RANGE_OPTIONS = [
   { value: "30", label: "Last 30 days" },
@@ -21,11 +22,14 @@ type InventoryItem = { id: string; category: string | null; order_status: string
 type Trip = { machine_id: string; start_odo: number | null; end_odo: number | null; status: string };
 type FaultReport = { machine_id: string; created_at: string; description: string };
 type Execution = { machine_id: string; performed_at: string };
+type StatusHistoryRow = { machine_id: string; from_status: string | null; to_status: string; changed_at: string };
 
 const CLOSED_WO = new Set(["done", "completed", "closed"]);
+const DOWN_STATUSES = new Set(["under_maintenance", "retired"]);
 
 export default function FleetInsights() {
   const { profile } = useAuth();
+  const { t } = useI18n();
   const [loading, setLoading] = useState(true);
   const [rangeDays, setRangeDays] = useState("90");
   const [vehicleFilter, setVehicleFilter] = useState("all");
@@ -38,6 +42,7 @@ export default function FleetInsights() {
   const [trips, setTrips] = useState<Trip[]>([]);
   const [faultReports, setFaultReports] = useState<FaultReport[]>([]);
   const [executions, setExecutions] = useState<Execution[]>([]);
+  const [statusHistory, setStatusHistory] = useState<StatusHistoryRow[]>([]);
 
   const sinceISO = useMemo(() => new Date(Date.now() - Number(rangeDays) * 86400000).toISOString(), [rangeDays]);
 
@@ -54,6 +59,11 @@ export default function FleetInsights() {
         supabase.from("fault_reports").select("machine_id, created_at, description").gte("created_at", sinceISO),
         supabase.from("checklist_templates").select("id").eq("is_fleet_pre_start", true),
       ]);
+      const { data: sh } = await supabase
+        .from("machine_status_history")
+        .select("machine_id, from_status, to_status, changed_at")
+        .order("changed_at", { ascending: true });
+      setStatusHistory((sh ?? []) as StatusHistoryRow[]);
       setMachines((m ?? []) as Machine[]);
       setWorkOrders((wo ?? []) as WorkOrder[]);
       setServiceLogs((sl ?? []) as ServiceLog[]);
@@ -98,21 +108,46 @@ export default function FleetInsights() {
   const exScoped = useMemo(() => scoped(executions), [executions, vehicleFilter]);
   const inventoryMap = useMemo(() => new Map(inventoryItems.map((i) => [i.id, i.category])), [inventoryItems]);
 
-  // --- Downtime: WO created -> completed (or now, if still open), in hours ---
+  // --- Downtime: actual time spent in under_maintenance/retired status, from machine_status_history ---
+  // Each status period runs from one transition to the next (or to "now" if it's the current status),
+  // clipped to the selected date range. This reflects real off-road time, not just open work orders.
+  const shScoped = useMemo(() => scoped(statusHistory), [statusHistory, vehicleFilter]);
+  const downtimePeriods = useMemo(() => {
+    const since = new Date(sinceISO).getTime();
+    const now = Date.now();
+    const byMachine = new Map<string, StatusHistoryRow[]>();
+    for (const row of shScoped) {
+      const arr = byMachine.get(row.machine_id) ?? [];
+      arr.push(row);
+      byMachine.set(row.machine_id, arr);
+    }
+    const periods: { machineId: string; hours: number }[] = [];
+    for (const [machineId, rows] of byMachine) {
+      const sorted = [...rows].sort((a, b) => new Date(a.changed_at).getTime() - new Date(b.changed_at).getTime());
+      for (let i = 0; i < sorted.length; i++) {
+        if (!DOWN_STATUSES.has(sorted[i].to_status)) continue;
+        const periodStart = new Date(sorted[i].changed_at).getTime();
+        const periodEnd = i + 1 < sorted.length ? new Date(sorted[i + 1].changed_at).getTime() : now;
+        const clippedStart = Math.max(periodStart, since);
+        const clippedEnd = Math.min(periodEnd, now);
+        if (clippedEnd <= clippedStart) continue;
+        periods.push({ machineId, hours: (clippedEnd - clippedStart) / 3600000 });
+      }
+    }
+    return periods;
+  }, [shScoped, sinceISO]);
   const downtimeByMachine = useMemo(() => {
     const map = new Map<string, { hours: number; count: number }>();
-    for (const w of woScoped) {
-      const start = new Date(w.created_at).getTime();
-      const end = w.completed_at ? new Date(w.completed_at).getTime() : Date.now();
-      const hours = Math.max(0, (end - start) / 3600000);
-      const acc = map.get(w.machine_id) ?? { hours: 0, count: 0 };
-      acc.hours += hours;
+    for (const p of downtimePeriods) {
+      const acc = map.get(p.machineId) ?? { hours: 0, count: 0 };
+      acc.hours += p.hours;
       acc.count += 1;
-      map.set(w.machine_id, acc);
+      map.set(p.machineId, acc);
     }
     return map;
-  }, [woScoped]);
-  const totalDowntimeHrs = useMemo(() => Array.from(downtimeByMachine.values()).reduce((s, v) => s + v.hours, 0), [downtimeByMachine]);
+  }, [downtimePeriods]);
+  const totalDowntimeHrs = useMemo(() => downtimePeriods.reduce((s, p) => s + p.hours, 0), [downtimePeriods]);
+  const avgDowntimeDurationHrs = downtimePeriods.length > 0 ? totalDowntimeHrs / downtimePeriods.length : 0;
   const closedWOs = useMemo(() => woScoped.filter((w) => CLOSED_WO.has(w.status) && w.completed_at), [woScoped]);
   const avgRepairHrs = useMemo(() => {
     if (closedWOs.length === 0) return 0;
@@ -269,7 +304,8 @@ export default function FleetInsights() {
   if (loading) return <PageLoader />;
 
   const kpis = [
-    { label: "Fleet downtime", value: `${formatNumber(Math.round(totalDowntimeHrs))} hrs`, sub: `${woScoped.length} work orders`, icon: Wrench },
+    { label: "Fleet downtime", value: `${formatNumber(Math.round(totalDowntimeHrs))} hrs`, sub: `${downtimePeriods.length} workshop/off-road period(s)`, icon: Wrench },
+    { label: "Avg downtime duration", value: downtimePeriods.length > 0 ? `${avgDowntimeDurationHrs.toFixed(1)} hrs` : "—", sub: "per workshop/off-road period", icon: Wrench },
     { label: "Avg repair time", value: closedWOs.length > 0 ? `${avgRepairHrs.toFixed(1)} hrs` : "—", sub: `${closedWOs.length} closed`, icon: Wrench },
     { label: "Breakdown rate", value: breakdownRate.toFixed(2), sub: "fault reports / vehicle", icon: AlertTriangle },
     { label: "Cost per km", value: fleetCostPerKm != null ? formatMoney(Math.round(fleetCostPerKm)) : "—", sub: `${formatNumber(Math.round(fleetKm))} km travelled`, icon: Gauge },
@@ -281,14 +317,14 @@ export default function FleetInsights() {
     <div className="space-y-6 animate-fade-in">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Fleet KPIs & Analytics</h1>
-          <p className="text-sm text-muted-foreground">Downtime, reliability, cost and inspection performance across your fleet.</p>
+          <h1 className="text-2xl font-semibold tracking-tight">{t.fleet.insightsTitle}</h1>
+          <p className="text-sm text-muted-foreground">{t.fleet.insightsSub}</p>
         </div>
         <div className="flex flex-wrap gap-2">
           <Select value={vehicleFilter} onValueChange={setVehicleFilter}>
             <SelectTrigger className="w-[200px]"><SelectValue /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All vehicles</SelectItem>
+              <SelectItem value="all">{t.fleet.allVehicles}</SelectItem>
               {machines.map((m) => <SelectItem key={m.id} value={m.id}>{m.plate_number ? `${m.name} (${m.plate_number})` : m.name}</SelectItem>)}
             </SelectContent>
           </Select>
@@ -301,7 +337,7 @@ export default function FleetInsights() {
         </div>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-7">
         {kpis.map((k) => (
           <div key={k.label} className="rounded-xl border border-border bg-card p-4">
             <div className="flex items-center gap-2 text-xs uppercase tracking-wide text-muted-foreground">
@@ -317,7 +353,7 @@ export default function FleetInsights() {
         <div className="rounded-xl border border-border bg-card p-5">
           <h2 className="mb-3 text-sm font-medium">Downtime by vehicle (hrs)</h2>
           {downtimeChartData.length === 0 ? (
-            <EmptyState icon={<Wrench className="h-5 w-5" />} title="No downtime data" description="Work orders in this period will show up here." />
+            <EmptyState icon={<Wrench className="h-5 w-5" />} title="No downtime data" description="Time spent in workshop or off-road status in this period will show up here." />
           ) : (
             <div className="h-64">
               <ResponsiveContainer width="100%" height="100%">

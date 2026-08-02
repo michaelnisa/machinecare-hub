@@ -13,6 +13,7 @@ import { Route, Plus, Play, Square, Ban, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { formatDate, formatNumber, formatMoney } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { useI18n } from "@/i18n/I18nProvider";
 
 type Machine = { id: string; name: string; plate_number: string | null; current_odometer_km: number | null };
 type Driver = { id: string; full_name: string };
@@ -53,6 +54,7 @@ const TAB_LABELS: Record<(typeof TABS)[number], string> = {
 export default function Trips() {
   const { profile } = useAuth();
   const { canWrite } = useUserRole();
+  const { t: i18n } = useI18n();
   const [loading, setLoading] = useState(true);
   const [trips, setTrips] = useState<Trip[]>([]);
   const [machines, setMachines] = useState<Machine[]>([]);
@@ -123,12 +125,12 @@ export default function Trips() {
     <div className="space-y-6 animate-fade-in">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Trips</h1>
-          <p className="text-sm text-muted-foreground">Plan, start and close vehicle trips.</p>
+          <h1 className="text-2xl font-semibold tracking-tight">{i18n.fleet.tripsTitle}</h1>
+          <p className="text-sm text-muted-foreground">{i18n.fleet.tripsSub}</p>
         </div>
         {canWrite && (
           <Button onClick={() => setNewOpen(true)}>
-            <Plus className="mr-2 h-4 w-4" /> New trip
+            <Plus className="mr-2 h-4 w-4" /> {i18n.fleet.newTrip}
           </Button>
         )}
       </div>
@@ -191,7 +193,7 @@ export default function Trips() {
                     <td className="px-5 py-3 text-right">
                       {canWrite && t.status === "planned" && (
                         <>
-                          <Button variant="ghost" size="icon" title="Start trip" onClick={() => startTrip(t)}>
+                          <Button variant="ghost" size="icon" title={i18n.fleet.startTrip} onClick={() => startTrip(t)}>
                             <Play className="h-4 w-4" />
                           </Button>
                           <Button variant="ghost" size="icon" title="Cancel trip" onClick={() => setConfirmCancel(t.id)}>

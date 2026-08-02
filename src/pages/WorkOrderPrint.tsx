@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useParams, Link } from "react-router-dom";
+import { useParams, useSearchParams, Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { PageLoader } from "@/components/PageLoader";
@@ -17,6 +17,9 @@ function formatWoNumber(year: number | null | undefined, n: number | null | unde
 
 export default function WorkOrderPrint() {
   const { id } = useParams<{ id: string }>();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const isJobCard = searchParams.get("view") === "jobcard";
+  const docLabel = isJobCard ? "Job Card" : "Work Order";
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [downloading, setDownloading] = useState(false);
@@ -44,7 +47,8 @@ export default function WorkOrderPrint() {
         heightLeft -= pageHeight;
       }
       const woNum = formatWoNumber(data?.wo?.wo_year, data?.wo?.wo_number);
-      pdf.save(`${woNum}.pdf`);
+      const fileName = isJobCard ? `JC-${woNum.replace(/^WO-/, "")}` : woNum;
+      pdf.save(`${fileName}.pdf`);
     } catch (e: any) {
       toast.error(e?.message ?? "Failed to generate PDF");
     } finally {
@@ -59,13 +63,28 @@ export default function WorkOrderPrint() {
       const { data: wo } = await supabase.from("work_orders").select("*").eq("id", id).maybeSingle();
       if (!wo) { setLoading(false); return; }
       const [{ data: machine }, { data: org }, { data: assignee }, { data: vendor }, { data: createdBy }] = await Promise.all([
-        supabase.from("machines").select("id,name,make,model,year,serial_number,registration_number,current_hours,category").eq("id", wo.machine_id).maybeSingle(),
+        supabase.from("machines").select("id,name,make,model,year,serial_number,registration_number,current_hours,category,plate_number,current_odometer_km,home_depot").eq("id", wo.machine_id).maybeSingle(),
         supabase.from("organisations").select("id,name").eq("id", wo.organisation_id).maybeSingle(),
         wo.assignee_id ? supabase.from("profiles").select("id,full_name").eq("id", wo.assignee_id).maybeSingle() : Promise.resolve({ data: null }),
         wo.vendor_id ? supabase.from("vendors").select("id,name,phone,email,category").eq("id", wo.vendor_id).maybeSingle() : Promise.resolve({ data: null }),
         wo.created_by ? supabase.from("profiles").select("id,full_name").eq("id", wo.created_by).maybeSingle() : Promise.resolve({ data: null }),
       ]);
-      setData({ wo, machine, org, assignee, vendor, createdBy });
+      let driver: { full_name: string } | null = null;
+      if (machine?.category === "Vehicle") {
+        const { data: trip } = await supabase
+          .from("trips")
+          .select("driver_id")
+          .eq("machine_id", wo.machine_id)
+          .not("driver_id", "is", null)
+          .order("start_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        if (trip?.driver_id) {
+          const { data: dr } = await supabase.from("drivers").select("full_name").eq("id", trip.driver_id).maybeSingle();
+          driver = dr;
+        }
+      }
+      setData({ wo, machine, org, assignee, vendor, createdBy, driver });
       setLoading(false);
     })();
   }, [id]);
@@ -80,8 +99,9 @@ export default function WorkOrderPrint() {
     );
   }
 
-  const { wo, machine, org, assignee, vendor, createdBy } = data;
+  const { wo, machine, org, assignee, vendor, createdBy, driver } = data;
   const priorityLabel = wo.priority?.toUpperCase();
+  const isVehicle = machine?.category === "Vehicle";
 
   return (
     <div className="min-h-screen bg-muted/40 print:bg-white">
@@ -91,6 +111,14 @@ export default function WorkOrderPrint() {
           <ArrowLeft className="h-4 w-4" /> Back
         </Link>
         <div className="flex items-center gap-2">
+          {isVehicle && (
+            <Button
+              variant="ghost"
+              onClick={() => setSearchParams(isJobCard ? {} : { view: "jobcard" })}
+            >
+              View as {isJobCard ? "Work Order" : "Job Card"}
+            </Button>
+          )}
           <Button variant="outline" onClick={handleDownload} disabled={downloading}>
             <Download className="mr-2 h-4 w-4" /> {downloading ? "Generating…" : "Download PDF"}
           </Button>
@@ -106,7 +134,7 @@ export default function WorkOrderPrint() {
         {/* Header */}
         <div className="flex items-start justify-between border-b-2 border-teal-600 pb-4">
           <div>
-            <div className="text-xs font-semibold uppercase tracking-[0.2em] text-teal-700">Work Order</div>
+            <div className="text-xs font-semibold uppercase tracking-[0.2em] text-teal-700">{docLabel}</div>
             <div className="mt-1 text-3xl font-bold tracking-tight">{formatWoNumber(wo.wo_year, wo.wo_number)}</div>
             <div className="mt-1 text-xs text-slate-500">Issued {formatDate(wo.created_at)}</div>
           </div>
@@ -125,12 +153,23 @@ export default function WorkOrderPrint() {
 
         {/* Parties grid */}
         <div className="mt-5 grid grid-cols-2 gap-4">
-          <Box title="Machine">
+          <Box title={isVehicle ? "Vehicle" : "Machine"}>
             <div className="font-semibold">{machine?.name ?? "—"}</div>
             <div className="text-xs text-slate-600">{[machine?.make, machine?.model, machine?.year].filter(Boolean).join(" · ")}</div>
-            {machine?.serial_number && <Row label="Serial" value={machine.serial_number} />}
-            {machine?.registration_number && <Row label="Reg" value={machine.registration_number} />}
-            {machine?.current_hours != null && <Row label="Current hrs/km" value={String(machine.current_hours)} />}
+            {isVehicle ? (
+              <>
+                {machine?.plate_number && <Row label="Plate" value={machine.plate_number} />}
+                {machine?.current_odometer_km != null && <Row label="Odometer" value={`${machine.current_odometer_km} km`} />}
+                {machine?.home_depot && <Row label="Depot" value={machine.home_depot} />}
+                {driver?.full_name && <Row label="Driver" value={driver.full_name} />}
+              </>
+            ) : (
+              <>
+                {machine?.serial_number && <Row label="Serial" value={machine.serial_number} />}
+                {machine?.registration_number && <Row label="Reg" value={machine.registration_number} />}
+                {machine?.current_hours != null && <Row label="Current hrs/km" value={String(machine.current_hours)} />}
+              </>
+            )}
           </Box>
           <Box title={wo.is_outsourced ? "Assigned vendor" : "Assigned to"}>
             {wo.is_outsourced ? (
@@ -229,7 +268,7 @@ export default function WorkOrderPrint() {
         </section>
 
         <div className="mt-8 border-t border-slate-200 pt-2 text-center text-[9pt] text-slate-400">
-          {org?.name} · Work Order {formatWoNumber(wo.wo_year, wo.wo_number)} · Generated {new Date().toLocaleDateString()}
+          {org?.name} · {docLabel} {formatWoNumber(wo.wo_year, wo.wo_number)} · Generated {new Date().toLocaleDateString()}
         </div>
       </div>
 

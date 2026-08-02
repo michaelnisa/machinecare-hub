@@ -14,6 +14,7 @@ import { Contact, Plus, Pencil, Trash2, Loader2, Search } from "lucide-react";
 import { toast } from "sonner";
 import { formatDate } from "@/lib/format";
 import { scheduleStatus } from "@/lib/machine-constants";
+import { useI18n } from "@/i18n/I18nProvider";
 
 type Driver = {
   id: string;
@@ -43,6 +44,7 @@ const EMPTY_FORM = {
 export default function Drivers() {
   const { profile } = useAuth();
   const { isManager, canWrite } = useUserRole();
+  const { t } = useI18n();
   const [loading, setLoading] = useState(true);
   const [drivers, setDrivers] = useState<Driver[]>([]);
   const [open, setOpen] = useState(false);
@@ -95,12 +97,12 @@ export default function Drivers() {
     <div className="space-y-6 animate-fade-in">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Drivers</h1>
-          <p className="text-sm text-muted-foreground">Manage your fleet's drivers, licences and medical certificates.</p>
+          <h1 className="text-2xl font-semibold tracking-tight">{t.fleet.driversTitle}</h1>
+          <p className="text-sm text-muted-foreground">{t.fleet.driversSub}</p>
         </div>
         {canWrite && (
           <Button onClick={() => { setEditing(null); setOpen(true); }}>
-            <Plus className="mr-2 h-4 w-4" /> New driver
+            <Plus className="mr-2 h-4 w-4" /> {t.fleet.addDriver}
           </Button>
         )}
       </div>

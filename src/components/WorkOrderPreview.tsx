@@ -37,7 +37,7 @@ export interface PreviewData {
   vendor_currency?: string | null;
   warranty_days?: number | null;
   warranty_notes?: string | null;
-  // GSM-style fields
+  // Request/permit fields (printable work order & job card)
   requested_by_name?: string | null;
   department?: string | null;
   plant_area?: string | null;

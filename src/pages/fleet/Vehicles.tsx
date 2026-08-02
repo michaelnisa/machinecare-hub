@@ -13,8 +13,9 @@ import { StatusBadge } from "@/components/StatusBadge";
 import { CoverImage } from "@/components/CoverImage";
 import { scheduleStatus } from "@/lib/machine-constants";
 import { formatNumber } from "@/lib/format";
-import { Truck, Search, Plus, Pencil, Loader2, Upload } from "lucide-react";
+import { Truck, Search, Plus, Pencil, Loader2, Upload, ClipboardList } from "lucide-react";
 import { toast } from "sonner";
+import { useI18n } from "@/i18n/I18nProvider";
 
 type Machine = {
   id: string;
@@ -44,6 +45,11 @@ type Schedule = {
   next_due_date: string | null;
 };
 
+type VehicleDoc = {
+  machine_id: string;
+  expires_on: string | null;
+};
+
 type Driver = { id: string; full_name: string };
 
 const FUEL_TYPES = ["diesel", "petrol", "electric", "hybrid"];
@@ -65,10 +71,12 @@ const EMPTY_FORM = {
 export default function Vehicles() {
   const { profile } = useAuth();
   const { canWrite } = useUserRole();
+  const { t } = useI18n();
   const [loading, setLoading] = useState(true);
   const [machines, setMachines] = useState<Machine[]>([]);
   const [trips, setTrips] = useState<Trip[]>([]);
   const [schedules, setSchedules] = useState<Schedule[]>([]);
+  const [docs, setDocs] = useState<VehicleDoc[]>([]);
   const [drivers, setDrivers] = useState<Driver[]>([]);
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("all");
@@ -78,7 +86,7 @@ export default function Vehicles() {
   const load = async () => {
     if (!profile) return;
     setLoading(true);
-    const [{ data: m }, { data: t }, { data: s }, { data: d }] = await Promise.all([
+    const [{ data: m }, { data: t }, { data: s }, { data: doc }, { data: d }] = await Promise.all([
       supabase
         .from("machines")
         .select("id, name, plate_number, make, model, year, vin, fuel_type, tank_capacity_l, status, current_odometer_km, home_depot, cover_image_url")
@@ -86,11 +94,13 @@ export default function Vehicles() {
         .order("name"),
       supabase.from("trips").select("machine_id, driver_id, status, start_at").order("start_at", { ascending: false }),
       supabase.from("service_schedules").select("machine_id, next_due_date").order("next_due_date", { nullsFirst: false }),
+      supabase.from("vehicle_documents").select("machine_id, expires_on").order("expires_on", { nullsFirst: false }),
       supabase.from("drivers").select("id, full_name"),
     ]);
     setMachines((m ?? []) as Machine[]);
     setTrips((t ?? []) as Trip[]);
     setSchedules((s ?? []) as Schedule[]);
+    setDocs((doc ?? []) as VehicleDoc[]);
     setDrivers((d ?? []) as Driver[]);
     setLoading(false);
   };
@@ -121,6 +131,17 @@ export default function Vehicles() {
     return map;
   }, [schedules]);
 
+  // Earliest expiring document (insurance, road licence, etc.) per vehicle
+  const nextDocExpiryByMachine = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const doc of docs) {
+      if (!doc.expires_on) continue;
+      const existing = map.get(doc.machine_id);
+      if (!existing || new Date(doc.expires_on) < new Date(existing)) map.set(doc.machine_id, doc.expires_on);
+    }
+    return map;
+  }, [docs]);
+
   const filtered = machines.filter((m) => {
     if (status !== "all" && m.status !== status) return false;
     if (search) {
@@ -136,12 +157,12 @@ export default function Vehicles() {
     <div className="space-y-6 animate-fade-in">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Vehicles</h1>
-          <p className="text-sm text-muted-foreground">Every vehicle in your fleet — plate, driver, odometer and next service.</p>
+          <h1 className="text-2xl font-semibold tracking-tight">{t.fleet.vehiclesTitle}</h1>
+          <p className="text-sm text-muted-foreground">{t.fleet.vehiclesSub}</p>
         </div>
         {canWrite && (
           <Button onClick={() => { setEditing(null); setOpen(true); }}>
-            <Plus className="mr-2 h-4 w-4" /> Add vehicle
+            <Plus className="mr-2 h-4 w-4" /> {t.fleet.addVehicle}
           </Button>
         )}
       </div>
@@ -149,14 +170,14 @@ export default function Vehicles() {
       <div className="flex flex-wrap items-center gap-2">
         <div className="relative flex-1 min-w-[200px] max-w-sm">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search name or plate…" className="pl-9" />
+          <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder={t.fleet.searchVehicles} className="pl-9" />
         </div>
         <select
           value={status}
           onChange={(e) => setStatus(e.target.value)}
           className="h-10 rounded-md border border-input bg-background px-3 text-sm"
         >
-          <option value="all">All statuses</option>
+          <option value="all">{t.fleet.allStatuses}</option>
           <option value="active">Active</option>
           <option value="under_maintenance">Under maintenance</option>
           <option value="retired">Retired</option>
@@ -166,34 +187,35 @@ export default function Vehicles() {
       {filtered.length === 0 ? (
         <EmptyState
           icon={<Truck className="h-5 w-5" />}
-          title={machines.length === 0 ? "No vehicles yet" : "No vehicles match your filters"}
+          title={machines.length === 0 ? t.fleet.noVehiclesTitle : t.fleet.noVehiclesFiltered}
           description={
             machines.length === 0
-              ? "Add your first vehicle to start tracking plates, drivers and odometer readings."
+              ? t.fleet.noVehiclesDesc
               : "Try changing or clearing filters."
           }
           action={
             machines.length === 0 && canWrite ? (
               <Button onClick={() => { setEditing(null); setOpen(true); }}>
-                <Plus className="mr-2 h-4 w-4" /> Add vehicle
+                <Plus className="mr-2 h-4 w-4" /> {t.fleet.addVehicle}
               </Button>
             ) : undefined
           }
         />
       ) : (
         <div className="overflow-hidden rounded-xl border border-border bg-card">
-          <div className="border-b border-border px-5 py-3 text-sm font-medium">Vehicles ({filtered.length})</div>
+          <div className="border-b border-border px-5 py-3 text-sm font-medium">{t.fleet.vehiclesTitle} ({filtered.length})</div>
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[900px] text-sm">
+            <table className="w-full min-w-[1050px] text-sm">
               <thead className="text-left text-xs uppercase tracking-wide text-muted-foreground">
                 <tr>
-                  <th className="px-5 py-3 font-medium">Vehicle</th>
-                  <th className="px-5 py-3 font-medium">Plate</th>
-                  <th className="px-5 py-3 font-medium">Driver</th>
-                  <th className="px-5 py-3 font-medium">Odometer</th>
-                  <th className="px-5 py-3 font-medium">Next service</th>
-                  <th className="px-5 py-3 font-medium">Depot</th>
-                  <th className="px-5 py-3 font-medium">Status</th>
+                  <th className="px-5 py-3 font-medium">{t.fleet.colVehicle}</th>
+                  <th className="px-5 py-3 font-medium">{t.fleet.colPlate}</th>
+                  <th className="px-5 py-3 font-medium">{t.fleet.colDriver}</th>
+                  <th className="px-5 py-3 font-medium">{t.fleet.colOdometer}</th>
+                  <th className="px-5 py-3 font-medium">{t.fleet.colNextService}</th>
+                  <th className="px-5 py-3 font-medium">{t.fleet.colDocs}</th>
+                  <th className="px-5 py-3 font-medium">{t.fleet.colDepot}</th>
+                  <th className="px-5 py-3 font-medium">{t.fleet.colStatus}</th>
                   <th className="px-5 py-3"></th>
                 </tr>
               </thead>
@@ -201,6 +223,7 @@ export default function Vehicles() {
                 {filtered.map((m) => {
                   const driver = currentDriver.get(m.id);
                   const nextDue = nextDueByMachine.get(m.id) ?? null;
+                  const nextDocExpiry = nextDocExpiryByMachine.get(m.id) ?? null;
                   return (
                     <tr key={m.id} className="border-t border-border hover:bg-muted/40">
                       <td className="px-5 py-3">
@@ -234,14 +257,31 @@ export default function Vehicles() {
                       <td className="px-5 py-3">
                         {nextDue ? <StatusBadge status={scheduleStatus(nextDue)} /> : <span className="text-muted-foreground">—</span>}
                       </td>
+                      <td className="px-5 py-3">
+                        {nextDocExpiry ? (
+                          <div className="flex flex-col gap-0.5">
+                            <StatusBadge status={scheduleStatus(nextDocExpiry)} />
+                            <span className="text-[10px] text-muted-foreground">exp. {new Date(nextDocExpiry).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })}</span>
+                          </div>
+                        ) : <span className="text-muted-foreground">—</span>}
+                      </td>
                       <td className="px-5 py-3 text-muted-foreground">{m.home_depot ?? "—"}</td>
                       <td className="px-5 py-3"><StatusBadge status={m.status} /></td>
                       <td className="px-5 py-3 text-right">
-                        {canWrite && (
-                          <Button variant="ghost" size="icon" onClick={() => { setEditing(m); setOpen(true); }}>
-                            <Pencil className="h-4 w-4" />
-                          </Button>
-                        )}
+                        <div className="flex items-center justify-end gap-1">
+                          {canWrite && (
+                            <Button variant="ghost" size="icon" asChild title={t.fleet.newJobCard}>
+                              <Link to={`/work-orders/new?machine=${m.id}`}>
+                                <ClipboardList className="h-4 w-4" />
+                              </Link>
+                            </Button>
+                          )}
+                          {canWrite && (
+                            <Button variant="ghost" size="icon" onClick={() => { setEditing(m); setOpen(true); }} title={t.fleet.editVehicle}>
+                              <Pencil className="h-4 w-4" />
+                            </Button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   );
@@ -263,7 +303,8 @@ function VehicleDialog({ open, onOpenChange, machine, onSaved }: {
   machine: Machine | null;
   onSaved: () => void;
 }) {
-  const { profile } = useAuth();
+  const { profile, user } = useAuth();
+  const { t } = useI18n();
   const [submitting, setSubmitting] = useState(false);
   const [form, setForm] = useState<typeof EMPTY_FORM>(EMPTY_FORM);
   const [photoFile, setPhotoFile] = useState<File | null>(null);
@@ -338,6 +379,21 @@ function VehicleDialog({ open, onOpenChange, machine, onSaved }: {
         ? await supabase.from("machines").update(payload).eq("id", machine.id)
         : await supabase.from("machines").insert({ ...payload, category: "Vehicle", organisation_id: profile.organisation_id });
       if (error) throw error;
+
+      // Keep the status audit trail (used for downtime tracking) in sync — this
+      // dialog can change status but, unlike MachineStatusControl, doesn't force
+      // a reason through it, so log it as a quick edit.
+      if (machine && form.status !== machine.status) {
+        await supabase.from("machine_status_history").insert({
+          organisation_id: profile.organisation_id,
+          machine_id: machine.id,
+          from_status: machine.status,
+          to_status: form.status,
+          reason: "Updated via vehicle edit form",
+          changed_by: user?.id ?? null,
+        });
+      }
+
       toast.success(machine ? "Vehicle updated" : "Vehicle added");
       onOpenChange(false);
       onSaved();
@@ -351,7 +407,7 @@ function VehicleDialog({ open, onOpenChange, machine, onSaved }: {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
-        <DialogHeader><DialogTitle>{machine ? "Edit vehicle" : "Add vehicle"}</DialogTitle></DialogHeader>
+        <DialogHeader><DialogTitle>{machine ? t.fleet.editVehicle : t.fleet.addVehicle}</DialogTitle></DialogHeader>
         <form onSubmit={submit} className="space-y-4">
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-1.5 sm:col-span-2">
@@ -449,7 +505,7 @@ function VehicleDialog({ open, onOpenChange, machine, onSaved }: {
           <DialogFooter>
             <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>Cancel</Button>
             <Button type="submit" disabled={submitting}>
-              {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} {machine ? "Save changes" : "Add vehicle"}
+              {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} {machine ? t.common.save : t.fleet.addVehicle}
             </Button>
           </DialogFooter>
         </form>

@@ -5,10 +5,11 @@ import { CoverImage } from "@/components/CoverImage";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { PageLoader } from "@/components/PageLoader";
-import { Wrench, ArrowRight, AlertTriangle, Gauge, Fuel, BookOpen, ClipboardList, LogIn, CheckCircle2, ClipboardCheck } from "lucide-react";
+import { Wrench, ArrowRight, AlertTriangle, Gauge, Fuel, BookOpen, ClipboardList, LogIn, CheckCircle2, ClipboardCheck, Route } from "lucide-react";
 import { ServiceLogDialog } from "@/components/ServiceLogDialog";
 import { UpdateReadingDialog } from "@/components/UpdateReadingDialog";
 import { QuickFuelDialog } from "@/components/QuickFuelDialog";
+import { QuickStartTripDialog } from "@/components/QuickStartTripDialog";
 import { StartInspectionDialog } from "@/components/StartInspectionDialog";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { useI18n } from "@/i18n/I18nProvider";
@@ -51,6 +52,7 @@ const T = {
     started: "Marked in progress",
     completed: "Marked complete",
     quickInspect: "Quick inspection",
+    startTrip: "Start trip",
   },
   sw: {
     notFound: "Mashine haijapatikana.",
@@ -80,6 +82,7 @@ const T = {
     started: "Imeanzishwa",
     completed: "Imekamilika",
     quickInspect: "Ukaguzi wa haraka",
+    startTrip: "Anza safari",
   },
 };
 
@@ -95,6 +98,7 @@ export default function MobileMachine() {
   const [readingOpen, setReadingOpen] = useState(false);
   const [fuelOpen, setFuelOpen] = useState(false);
   const [inspectOpen, setInspectOpen] = useState(false);
+  const [tripOpen, setTripOpen] = useState(false);
 
   // fault report form (visible when not signed in OR when user clicks)
   const [reporterName, setReporterName] = useState("");
@@ -272,6 +276,12 @@ export default function MobileMachine() {
                 <Fuel className="h-4 w-4" />
                 <span className="text-[11px] leading-tight">{t.logFuel}</span>
               </Button>
+              {machine.category === "Vehicle" && (
+                <Button variant="outline" className="col-span-2 h-12 gap-2" onClick={() => setTripOpen(true)}>
+                  <Route className="h-4 w-4" />
+                  <span className="text-sm">{t.startTrip}</span>
+                </Button>
+              )}
             </div>
 
             {myWOs.length > 0 && (
@@ -435,6 +445,13 @@ export default function MobileMachine() {
             machineId={machine.id}
             machineCategory={machine.category}
           />
+          {machine.category === "Vehicle" && (
+            <QuickStartTripDialog
+              open={tripOpen}
+              onOpenChange={setTripOpen}
+              machineId={machine.id}
+            />
+          )}
         </>
       )}
     </div>
