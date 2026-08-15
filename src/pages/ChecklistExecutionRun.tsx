@@ -10,6 +10,7 @@ import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { ArrowLeft, Check, X, MinusCircle, CheckCircle2, AlertTriangle, Loader2, Wrench } from "lucide-react";
 import { toast } from "sonner";
 import { formatDate } from "@/lib/format";
+import { enqueue, looksOffline, listPending } from "@/lib/offlineQueue";
 
 const SEVERITY_COLORS: Record<string, string> = {
   minor: "bg-muted text-muted-foreground",
@@ -28,6 +29,25 @@ export default function ChecklistExecutionRun() {
   const [confirmComplete, setConfirmComplete] = useState(false);
   const [completing, setCompleting] = useState(false);
   const [notes, setNotes] = useState("");
+  const [pendingSync, setPendingSync] = useState(0);
+
+  useEffect(() => {
+    if (!id) return;
+    const refresh = async () => {
+      const ops = await listPending();
+      const count = ops.filter((op) => {
+        if (op.kind === "checklist_complete") return (op.payload as any)?.executionId === id;
+        if (op.kind === "checklist_response_update") {
+          return responses.some((r) => r.id === (op.payload as any)?.responseId);
+        }
+        return false;
+      }).length;
+      setPendingSync(count);
+    };
+    refresh();
+    const t = setInterval(refresh, 5000);
+    return () => clearInterval(t);
+  }, [id, responses]);
 
   const load = async () => {
     if (!id) return;
@@ -72,22 +92,40 @@ export default function ChecklistExecutionRun() {
 
   const updateResponse = async (resId: string, patch: any) => {
     setResponses((prev) => prev.map((r) => (r.id === resId ? { ...r, ...patch } : r)));
-    const { error } = await supabase.from("checklist_execution_responses").update(patch).eq("id", resId);
-    if (error) toast.error(error.message);
+    try {
+      const { error } = await supabase.from("checklist_execution_responses").update(patch).eq("id", resId);
+      if (error) throw error;
+    } catch (err) {
+      if (looksOffline(err)) {
+        await enqueue("checklist_response_update", { responseId: resId, patch });
+        toast.message("Saved offline — will sync when connection returns");
+      } else {
+        toast.error(err instanceof Error ? err.message : "Failed to save");
+      }
+    }
   };
 
   const complete = async () => {
     setCompleting(true);
-    const { error } = await supabase
-      .from("checklist_executions")
-      .update({ status: "completed", notes: notes.trim() || null })
-      .eq("id", exec.id);
-    setCompleting(false);
-    setConfirmComplete(false);
-    if (error) return toast.error(error.message);
-    if (totals.fail > 0) toast.success(`Inspection complete. ${totals.fail} work order(s) created from failed items.`);
-    else toast.success("Inspection complete");
-    load();
+    const patch = { status: "completed", notes: notes.trim() || null };
+    try {
+      const { error } = await supabase.from("checklist_executions").update(patch).eq("id", exec.id);
+      if (error) throw error;
+      setCompleting(false);
+      setConfirmComplete(false);
+      if (totals.fail > 0) toast.success(`Inspection complete. ${totals.fail} work order(s) created from failed items.`);
+      else toast.success("Inspection complete");
+      load();
+    } catch (err) {
+      setCompleting(false);
+      setConfirmComplete(false);
+      if (looksOffline(err)) {
+        await enqueue("checklist_complete", { executionId: exec.id, patch });
+        toast.message("No connection — inspection will be marked complete once you're back online");
+      } else {
+        toast.error(err instanceof Error ? err.message : "Failed to complete inspection");
+      }
+    }
   };
 
   return (
@@ -104,6 +142,11 @@ export default function ChecklistExecutionRun() {
             <span className={`rounded-md px-2 py-0.5 text-xs font-medium capitalize ${isCompleted ? "bg-primary/15 text-primary" : "bg-amber-500/15 text-amber-700 dark:text-amber-400"}`}>
               {exec.status.replace("_", " ")}
             </span>
+            {pendingSync > 0 && (
+              <span className="rounded-md bg-amber-500/15 px-2 py-0.5 text-xs font-medium text-amber-700 dark:text-amber-400">
+                {pendingSync} change{pendingSync === 1 ? "" : "s"} pending sync
+              </span>
+            )}
           </div>
           <p className="text-sm text-muted-foreground">
             {machine?.name} · {formatDate(exec.performed_at)} · By {exec.performed_by_name ?? "—"}

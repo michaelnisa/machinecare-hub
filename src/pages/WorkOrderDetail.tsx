@@ -9,6 +9,11 @@ import { StatusPipelineBar, type WoStatus } from "@/components/StatusPipelineBar
 import { WorkOrderPreview, formatWoNumber } from "@/components/WorkOrderPreview";
 import { WorkOrderJobLog } from "@/components/WorkOrderJobLog";
 import { WorkOrderTasks } from "@/components/WorkOrderTasks";
+import { WorkOrderPtwCard } from "@/components/WorkOrderPtwCard";
+import { WorkOrderCloseApprovalCard } from "@/components/WorkOrderCloseApprovalCard";
+import { WorkOrderRiskAssessmentCard } from "@/components/WorkOrderRiskAssessmentCard";
+import { WorkOrderLotoCard } from "@/components/WorkOrderLotoCard";
+import { WorkOrderMaterialRequestCard } from "@/components/WorkOrderMaterialRequestCard";
 import { formatDate } from "@/lib/format";
 import { formatDistanceToNow } from "date-fns";
 
@@ -24,6 +29,7 @@ export default function WorkOrderDetail() {
   const [checklist, setChecklist] = useState<any>(null);
   const [history, setHistory] = useState<any[]>([]);
   const [userMap, setUserMap] = useState<Record<string, string>>({});
+  const [fromBreakdown, setFromBreakdown] = useState(false);
 
   const load = async () => {
     if (!id) return;
@@ -49,6 +55,13 @@ export default function WorkOrderDetail() {
       (users ?? []).forEach((u: any) => { map[u.id] = u.full_name ?? "—"; });
       setUserMap(map);
     }
+    const { data: dt } = await (supabase as any)
+      .from("production_downtime_events")
+      .select("id")
+      .eq("work_order_id", id)
+      .limit(1)
+      .maybeSingle();
+    setFromBreakdown(!!dt);
     setLoading(false);
   };
 
@@ -94,10 +107,17 @@ export default function WorkOrderDetail() {
         <h1 className="text-2xl font-semibold tracking-tight">{wo.title}</h1>
         <div className="mt-1 text-xs text-muted-foreground">
           {wo.work_type} · created {formatDate(wo.created_at)} {wo.due_date && <>· due {formatDate(wo.due_date)}</>}
+          {fromBreakdown && <> · <span className="text-amber-600">created from a production breakdown log</span></>}
         </div>
       </div>
 
       <StatusPipelineBar status={wo.status as WoStatus} onTransition={onTransition} />
+
+      <WorkOrderRiskAssessmentCard wo={wo} onSaved={load} />
+      <WorkOrderLotoCard wo={wo} onSaved={load} />
+      <WorkOrderMaterialRequestCard wo={wo} onSaved={load} />
+      <WorkOrderPtwCard wo={wo} onSaved={load} />
+      <WorkOrderCloseApprovalCard wo={wo} onSaved={load} />
 
       <div className="grid gap-5 lg:grid-cols-3">
         <div className="lg:col-span-2 space-y-5">

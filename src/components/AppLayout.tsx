@@ -7,6 +7,7 @@ import { Menu, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { NotificationsBell } from "@/components/NotificationsBell";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 
 export default function AppLayout() {
   const { user, loading } = useAuth();
@@ -58,7 +59,9 @@ export default function AppLayout() {
         </header>
         <main className="flex-1 overflow-auto">
           <div className="mx-auto w-full max-w-7xl px-4 py-6 md:px-8 md:py-8">
-            <Outlet />
+            <ErrorBoundary fullScreen={false} resetKey={location.pathname}>
+              <Outlet />
+            </ErrorBoundary>
           </div>
         </main>
       </div>

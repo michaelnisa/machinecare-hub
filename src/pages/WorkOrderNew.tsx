@@ -53,6 +53,10 @@ export default function WorkOrderNew() {
     Record<string, number>
   >({});
   const [vendors, setVendors] = useState<any[]>([]);
+  const [contractors, setContractors] = useState<any[]>([]);
+  const [safetyProfiles, setSafetyProfiles] = useState<Record<string, string[]>>({});
+  const [competencies, setCompetencies] = useState<Record<string, { name: string; expiry: string | null }[]>>({});
+  const [safetyRules, setSafetyRules] = useState<any[]>([]);
   const [templates, setTemplates] = useState<any[]>([]);
   const [nextNumber, setNextNumber] = useState<number | null>(null);
 
@@ -69,6 +73,7 @@ export default function WorkOrderNew() {
     vendor_id: "",
     promised_date: "",
     vendor_cost: "",
+    contractor_id: "",
     remarks: "",
     // Company request/permit fields (shown on printable work order & job card)
     requested_by_name: "",
@@ -84,6 +89,7 @@ export default function WorkOrderNew() {
     permit_jsea: false,
     permit_isolation: false,
     permit_confined_space: false,
+    request_ptw: false,
   });
   const [dueTouched, setDueTouched] = useState(false);
 
@@ -98,6 +104,10 @@ export default function WorkOrderNew() {
         { data: t },
         { data: c },
         { data: openWos },
+        { data: ctr },
+        { data: msp },
+        { data: ecomp },
+        { data: rules },
       ] = await Promise.all([
         supabase
           .from("machines")
@@ -128,12 +138,38 @@ export default function WorkOrderNew() {
           .from("work_orders")
           .select("assignee_id")
           .in("status", ["open", "assigned", "in_progress", "waiting_parts"]),
+        (supabase as any)
+          .from("contractors")
+          .select("id, company_name")
+          .eq("status", "active")
+          .order("company_name"),
+        (supabase as any)
+          .from("machine_safety_profiles")
+          .select("machine_id, required_competencies"),
+        (supabase as any)
+          .from("employee_competencies")
+          .select("employee_id, competency_name, expiry_date")
+          .eq("status", "active"),
+        (supabase as any)
+          .from("safety_rules")
+          .select("*")
+          .eq("is_active", true),
       ]);
       setMachines(m ?? []);
       setMembers(p ?? []);
       setVendors(v ?? []);
       setTemplates(t ?? []);
+      setContractors(ctr ?? []);
       setNextNumber(c?.next_number ?? 1);
+      const profileMap: Record<string, string[]> = {};
+      (msp ?? []).forEach((row: any) => { profileMap[row.machine_id] = row.required_competencies ?? []; });
+      setSafetyProfiles(profileMap);
+      const compMap: Record<string, { name: string; expiry: string | null }[]> = {};
+      (ecomp ?? []).forEach((row: any) => {
+        (compMap[row.employee_id] ??= []).push({ name: row.competency_name, expiry: row.expiry_date });
+      });
+      setCompetencies(compMap);
+      setSafetyRules(rules ?? []);
       const counts: Record<string, number> = {};
       (openWos ?? []).forEach((w: any) => {
         if (w.assignee_id)
@@ -151,6 +187,30 @@ export default function WorkOrderNew() {
     members.find((p) => p.id === form.assignee_id) ?? null;
   const selectedTemplate =
     templates.find((t) => t.id === form.checklist_template_id) ?? null;
+
+  const matchedRules = useMemo(() => {
+    return safetyRules.filter((r) => {
+      const val = r.match_field === "machine_category" ? selectedMachine?.category : form.work_type;
+      return (val ?? "").toLowerCase() === r.match_value;
+    });
+  }, [safetyRules, form.work_type, selectedMachine]);
+
+  const missingCompetencies = useMemo(() => {
+    if (!form.assignee_id) return [];
+    const required = [
+      ...(selectedMachine ? safetyProfiles[selectedMachine.id] ?? [] : []),
+      ...matchedRules.map((r) => r.requires_competency).filter(Boolean),
+    ];
+    if (required.length === 0) return [];
+    const today = new Date().toISOString().slice(0, 10);
+    const held = competencies[form.assignee_id] ?? [];
+    return [...new Set(required)].filter((req) => {
+      const match = held.find((h) => h.name.toLowerCase() === req.toLowerCase());
+      if (!match) return true;
+      if (match.expiry && match.expiry < today) return true;
+      return false;
+    });
+  }, [selectedMachine, form.assignee_id, safetyProfiles, competencies, matchedRules]);
 
   const filteredTemplates = useMemo(() => {
     if (!selectedMachine) return templates;
@@ -203,6 +263,7 @@ export default function WorkOrderNew() {
           ? Number(form.vendor_cost)
           : null,
       vendor_currency: form.is_outsourced ? "TZS" : null,
+      contractor_id: form.contractor_id || null,
       remarks: form.remarks?.trim() || null,
       requested_by_name: form.requested_by_name?.trim() || null,
       department: form.department?.trim() || null,
@@ -231,6 +292,46 @@ export default function WorkOrderNew() {
     // Auto-populate required service tasks from machine PM schedule for preventive/inspection WOs
     if (form.work_type === "preventive" || form.work_type === "inspection") {
       await supabase.rpc("populate_wo_tasks_from_pm", { _wo_id: inserted.id });
+    }
+
+    // Safety rules matched at creation time are a hard gate at start (see
+    // trg_block_wo_start_rule_requirements) — auto-create whatever they
+    // require so the requester isn't blocked later without knowing why.
+    const needsPtw = form.request_ptw || matchedRules.some((r) => r.requires_ptw);
+    const needsRiskAssessment = matchedRules.some((r) => r.requires_risk_assessment);
+    const needsLoto = matchedRules.some((r) => r.requires_loto);
+
+    if (needsPtw) {
+      // wo_safety_approvals added by migration 20260814020000; will not
+      // appear in generated types until `supabase gen types` is re-run.
+      await (supabase as any).from("wo_safety_approvals").insert({
+        organisation_id: profile.organisation_id,
+        work_order_id: inserted.id,
+        requested_by: profile.id,
+        status: "pending",
+      } as any);
+    }
+    if (needsRiskAssessment) {
+      await (supabase as any).from("risk_assessments").insert({
+        organisation_id: profile.organisation_id,
+        work_order_id: inserted.id,
+        machine_id: form.machine_id,
+        title: form.title.trim(),
+        activity: form.title.trim(),
+        status: "draft",
+        created_by: profile.id,
+      });
+    }
+    if (needsLoto) {
+      await (supabase as any).from("wo_loto_checklists").insert({
+        organisation_id: profile.organisation_id,
+        work_order_id: inserted.id,
+        status: "not_started",
+        created_by: profile.id,
+      });
+    }
+    if (needsRiskAssessment || needsLoto) {
+      toast.message("This job matched a safety rule — a risk assessment and/or LOTO checklist was started for it. Complete them on the work order before starting work.");
     }
 
     // Notify assignee
@@ -358,6 +459,28 @@ export default function WorkOrderNew() {
               ))}
             </div>
           </div>
+
+          {matchedRules.length > 0 && (
+            <div className="space-y-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs text-amber-800">
+              <div className="font-medium">Safety requirements for this job:</div>
+              {matchedRules.map((r) => {
+                const items: string[] = [];
+                if (r.requires_risk_assessment) items.push("Risk assessment");
+                if (r.requires_loto) items.push("LOTO");
+                if (r.requires_ptw) items.push("Permit to work");
+                if (r.requires_competency) items.push(`Competency: ${r.requires_competency}`);
+                (r.required_ppe ?? []).forEach((p: string) => items.push(`PPE: ${p}`));
+                return (
+                  <div key={r.id}>
+                    <span className="font-medium">{r.name}</span> — {items.join(", ") || "no specific controls set"}
+                  </div>
+                );
+              })}
+              <p>
+                Risk assessment and LOTO are set up on the work order after it's created. If a permit is required, check "Request Permit to Work" below.
+              </p>
+            </div>
+          )}
 
           {(form.work_type === "preventive" ||
             form.work_type === "inspection") && (
@@ -551,6 +674,21 @@ export default function WorkOrderNew() {
                     ))}
                   </div>
                 </div>
+                <div className="space-y-1.5 rounded-md border border-amber-200 bg-amber-50 p-3">
+                  <label className="inline-flex items-center gap-2 text-sm font-medium text-amber-900">
+                    <input
+                      type="checkbox"
+                      checked={!!form.request_ptw}
+                      onChange={(e) =>
+                        setForm({ ...form, request_ptw: e.target.checked })
+                      }
+                    />
+                    Request Permit to Work from Safety
+                  </label>
+                  <p className="text-xs text-amber-800">
+                    Optional. If checked, this work order can't move to "in progress" until someone in the Safety department approves it.
+                  </p>
+                </div>
               </div>
             </details>
           )}
@@ -632,6 +770,18 @@ export default function WorkOrderNew() {
             </div>
           </div>
 
+          {missingCompetencies.length > 0 && (
+            <div className="rounded-lg border border-red-300 bg-red-50 p-3 text-xs text-red-800">
+              <span className="font-medium">
+                {selectedAssignee?.full_name ?? "This technician"} is not authorized for this machine
+              </span>
+              {" — "}missing or expired: {missingCompetencies.join(", ")}.{" "}
+              <a href="/safety/competency" target="_blank" rel="noreferrer" className="underline">
+                Manage competencies
+              </a>
+            </div>
+          )}
+
           <div className="rounded-lg border border-border bg-muted/30 p-4 space-y-3">
             <label className="flex items-center gap-2 text-sm font-medium">
               <input
@@ -686,6 +836,29 @@ export default function WorkOrderNew() {
               </div>
             )}
           </div>
+
+          {contractors.length > 0 && (
+            <div className="space-y-1.5">
+              <Label>On-site contractor (optional)</Label>
+              <select
+                value={form.contractor_id ?? ""}
+                onChange={(e) =>
+                  setForm({ ...form, contractor_id: e.target.value })
+                }
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+              >
+                <option value="">Not a contractor job</option>
+                {contractors.map((c: any) => (
+                  <option key={c.id} value={c.id}>
+                    {c.company_name}
+                  </option>
+                ))}
+              </select>
+              <p className="text-xs text-muted-foreground">
+                If contractor workers will be doing this job, pick their company here so their induction and permit history can be tracked under Safety → Contractors.
+              </p>
+            </div>
+          )}
 
           <div className="flex justify-end gap-2 pt-2">
             <Button

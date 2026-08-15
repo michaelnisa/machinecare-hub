@@ -36,8 +36,10 @@ import { MachineQrDialog } from "@/components/MachineQrDialog";
 import { Link as RouterLink } from "react-router-dom";
 import { MachineInspections } from "@/components/MachineInspections";
 import { MachinePmParts } from "@/components/MachinePmParts";
+import { MachinePartsList } from "@/components/MachinePartsList";
 import { MachineHealthStrip } from "@/components/MachineHealthStrip";
 import { MachineStatusControl } from "@/components/MachineStatusControl";
+import { MachineSafetyProfile } from "@/components/MachineSafetyProfile";
 import { useAuth } from "@/contexts/AuthContext";
 
 export default function MachineDetail() {
@@ -215,6 +217,7 @@ export default function MachineDetail() {
       <Tabs defaultValue="overview">
         <TabsList className="bg-muted/60">
           <TabsTrigger value="overview">Overview</TabsTrigger>
+          <TabsTrigger value="safety">Safety</TabsTrigger>
           <TabsTrigger value="inspections">Inspections</TabsTrigger>
           <TabsTrigger value="pm-parts">Spare parts</TabsTrigger>
           <TabsTrigger value="schedules">Schedules</TabsTrigger>
@@ -269,6 +272,10 @@ export default function MachineDetail() {
           </div>
         </TabsContent>
 
+        <TabsContent value="safety" className="mt-6">
+          <MachineSafetyProfile machineId={machine.id} />
+        </TabsContent>
+
         <TabsContent value="inspections" className="mt-6">
           <MachineInspections
             machineId={machine.id}
@@ -276,8 +283,11 @@ export default function MachineDetail() {
           />
         </TabsContent>
 
-        <TabsContent value="pm-parts" className="mt-6">
-          <MachinePmParts machineId={machine.id} />
+        <TabsContent value="pm-parts" className="mt-6 space-y-8">
+          <MachinePartsList machineId={machine.id} />
+          <div className="border-t border-border pt-6">
+            <MachinePmParts machineId={machine.id} />
+          </div>
         </TabsContent>
 
         <TabsContent value="schedules" className="mt-6 space-y-4">

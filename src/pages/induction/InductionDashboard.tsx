@@ -32,11 +32,13 @@ export default function InductionDashboard() {
   const load = async () => {
     if (!profile) return;
     setLoading(true);
-    const [{ data: ind }, { data: recs }, { data: progs }] = await Promise.all([
+    const [{ data: ind, error: e1 }, { data: recs, error: e2 }, { data: progs, error: e3 }] = await Promise.all([
       supabase.from("inductees").select("id,full_name,inductee_type,company").eq("organisation_id", profile.organisation_id),
       supabase.from("induction_records").select("id,inductee_id,programme_id,status,expires_at,completed_at").eq("organisation_id", profile.organisation_id),
       supabase.from("induction_programmes").select("id,name").eq("organisation_id", profile.organisation_id),
     ]);
+    const err = e1 || e2 || e3;
+    if (err) toast.error(err.message);
     setInductees((ind ?? []) as Inductee[]);
     setRecords((recs ?? []) as RecordRow[]);
     setProgrammes((progs ?? []) as Programme[]);
@@ -95,11 +97,8 @@ export default function InductionDashboard() {
   const sendReminder = async (recordId: string) => {
     if (!profile) return;
     setSending(recordId);
-    const { error } = await supabase.from("induction_reminders").insert({
-      organisation_id: profile.organisation_id,
-      induction_record_id: recordId,
-      channel: "manual",
-      reminded_by: profile.id,
+    const { error } = await supabase.functions.invoke("send-induction-reminder", {
+      body: { recordId },
     });
     setSending(null);
     if (error) return toast.error(error.message);

@@ -7,6 +7,13 @@ import { IndustryPicker, INDUSTRY_PROFILES } from "@/components/IndustryPicker";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { PageLoader } from "@/components/PageLoader";
 import { formatDate, initials } from "@/lib/format";
 import {
@@ -19,6 +26,7 @@ import {
   Send,
   Upload,
   X,
+  Target,
 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import {
@@ -346,15 +354,21 @@ export default function Settings() {
             <Label>
               Department{" "}
               <span className="text-xs text-muted-foreground">
-                (used to scope your machine view)
+                (scopes your machine view and Production access)
               </span>
             </Label>
-            <Input
-              value={department}
-              onChange={(e) => setDepartment(e.target.value)}
-              placeholder="e.g. Production, Maintenance, Logistics"
-              maxLength={80}
-            />
+            <Select
+              value={department || "unassigned"}
+              onValueChange={(v) => setDepartment(v === "unassigned" ? "" : v)}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="unassigned">Unassigned (see everything)</SelectItem>
+                <SelectItem value="production">Production</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
         </div>
         <div className="mt-4 flex justify-end">
@@ -440,6 +454,8 @@ export default function Settings() {
       <LiveTvSection />
 
       <NotificationsSection orgId={organisation?.id} />
+
+      <ProductionSettingsSection orgId={organisation?.id} />
 
       <Section title="Team members">
         <div className="overflow-hidden rounded-lg border border-border">
@@ -842,6 +858,133 @@ function NotificationsSection({ orgId }: { orgId?: string }) {
           </div>
         </div>
       )}
+    </section>
+  );
+}
+
+function ProductionSettingsSection({ orgId }: { orgId?: string }) {
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [cfg, setCfg] = useState({
+    production_cost_per_downtime_minute: "",
+    production_cost_per_scrap_unit: "",
+    production_alert_attainment_threshold: "",
+    production_alert_downtime_minutes: "",
+    production_alerts_sms_enabled: false,
+  });
+
+  useEffect(() => {
+    if (!orgId) return;
+    (async () => {
+      const { data } = await (supabase as any)
+        .from("organisations")
+        .select(
+          "production_cost_per_downtime_minute, production_cost_per_scrap_unit, production_alert_attainment_threshold, production_alert_downtime_minutes, production_alerts_sms_enabled",
+        )
+        .eq("id", orgId)
+        .maybeSingle();
+      if (data) {
+        setCfg({
+          production_cost_per_downtime_minute: data.production_cost_per_downtime_minute ?? "",
+          production_cost_per_scrap_unit: data.production_cost_per_scrap_unit ?? "",
+          production_alert_attainment_threshold: data.production_alert_attainment_threshold ?? "",
+          production_alert_downtime_minutes: data.production_alert_downtime_minutes ?? "",
+          production_alerts_sms_enabled: data.production_alerts_sms_enabled ?? false,
+        });
+      }
+      setLoading(false);
+    })();
+  }, [orgId]);
+
+  const save = async () => {
+    if (!orgId) return;
+    setSaving(true);
+    const num = (v: string) => (v === "" ? null : Number(v));
+    const { error } = await (supabase as any)
+      .from("organisations")
+      .update({
+        production_cost_per_downtime_minute: num(cfg.production_cost_per_downtime_minute),
+        production_cost_per_scrap_unit: num(cfg.production_cost_per_scrap_unit),
+        production_alert_attainment_threshold: num(cfg.production_alert_attainment_threshold),
+        production_alert_downtime_minutes: num(cfg.production_alert_downtime_minutes),
+        production_alerts_sms_enabled: cfg.production_alerts_sms_enabled,
+      })
+      .eq("id", orgId);
+    setSaving(false);
+    if (error) toast.error(error.message);
+    else toast.success("Production settings saved");
+  };
+
+  if (loading) return null;
+
+  return (
+    <section className="rounded-xl border border-border bg-card p-6">
+      <div className="mb-2 flex items-center gap-2">
+        <Target className="h-5 w-5 text-primary" />
+        <h2 className="font-semibold">Production settings</h2>
+      </div>
+      <p className="mb-5 text-sm text-muted-foreground">
+        Turn downtime and scrap into a cost figure, and auto-alert when a shift falls below target.
+      </p>
+
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div>
+          <Label>Cost per downtime minute (TZS)</Label>
+          <Input
+            type="number" min={0} placeholder="e.g. 5000"
+            value={cfg.production_cost_per_downtime_minute}
+            onChange={(e) => setCfg({ ...cfg, production_cost_per_downtime_minute: e.target.value })}
+            className="mt-1"
+          />
+        </div>
+        <div>
+          <Label>Cost per scrap unit (TZS)</Label>
+          <Input
+            type="number" min={0} placeholder="e.g. 1200"
+            value={cfg.production_cost_per_scrap_unit}
+            onChange={(e) => setCfg({ ...cfg, production_cost_per_scrap_unit: e.target.value })}
+            className="mt-1"
+          />
+        </div>
+        <div>
+          <Label>Alert if attainment falls below (%)</Label>
+          <Input
+            type="number" min={0} max={100} placeholder="e.g. 80"
+            value={cfg.production_alert_attainment_threshold}
+            onChange={(e) => setCfg({ ...cfg, production_alert_attainment_threshold: e.target.value })}
+            className="mt-1"
+          />
+        </div>
+        <div>
+          <Label>Alert if downtime exceeds (minutes)</Label>
+          <Input
+            type="number" min={0} placeholder="e.g. 60"
+            value={cfg.production_alert_downtime_minutes}
+            onChange={(e) => setCfg({ ...cfg, production_alert_downtime_minutes: e.target.value })}
+            className="mt-1"
+          />
+        </div>
+      </div>
+
+      {(cfg.production_alert_attainment_threshold || cfg.production_alert_downtime_minutes) && (
+        <p className="mt-4 text-xs text-muted-foreground">
+          When a threshold above is crossed, MachineCare emails production-department staff and every owner/manager immediately — not just an in-app notification.
+        </p>
+      )}
+
+      <div className="mt-4">
+        <ToggleRow
+          label="Also send SMS for critical breaches"
+          desc="Sent via Africa's Talking to anyone with a phone number on file, only when a shift is well past the threshold (e.g. attainment under half the target). Requires AFRICASTALKING_USERNAME and AFRICASTALKING_API_KEY to be set as Supabase Edge Function secrets — until then, no SMS goes out (logged as a failure, doesn't affect email)."
+          checked={cfg.production_alerts_sms_enabled}
+          onChange={(v) => setCfg({ ...cfg, production_alerts_sms_enabled: v })}
+        />
+      </div>
+
+      <Button className="mt-5" onClick={save} disabled={saving}>
+        {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+        Save production settings
+      </Button>
     </section>
   );
 }

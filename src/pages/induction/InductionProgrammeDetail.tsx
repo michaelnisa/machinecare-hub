@@ -18,8 +18,9 @@ import {
 } from "@/components/ui/select";
 import { PageLoader, EmptyState } from "@/components/PageLoader";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { InductionQrDialog } from "@/components/InductionQrDialog";
 import {
-  BookOpen, Plus, Trash2, ArrowLeft, Loader2, ChevronUp, ChevronDown, FileQuestion, Upload,
+  BookOpen, Plus, Trash2, ArrowLeft, Loader2, ChevronUp, ChevronDown, FileQuestion, Upload, QrCode,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -50,6 +51,8 @@ export default function InductionProgrammeDetail() {
   const [removeId, setRemoveId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [qrOpen, setQrOpen] = useState(false);
+  const [togglingQr, setTogglingQr] = useState(false);
 
   const [form, setForm] = useState({
     title: "",
@@ -136,6 +139,17 @@ export default function InductionProgrammeDetail() {
     load();
   };
 
+  const toggleSelfService = async (v: boolean) => {
+    if (!id) return;
+    setTogglingQr(true);
+    // qr_self_service_enabled added by migration 20260814010000; will not
+    // appear in generated types until `supabase gen types` is re-run.
+    const { error } = await supabase.from("induction_programmes").update({ qr_self_service_enabled: v } as any).eq("id", id);
+    setTogglingQr(false);
+    if (error) { toast.error(error.message); return; }
+    setProgramme((p: any) => ({ ...p, qr_self_service_enabled: v }));
+  };
+
   const uploadPdf = async (file: File) => {
     if (!profile) return;
     setUploading(true);
@@ -167,14 +181,34 @@ export default function InductionProgrammeDetail() {
             <span>{programme.validity_days ? `${programme.validity_days}d ${t.induction.validityDays.toLowerCase()}` : t.induction.noExpiry}</span>
           </div>
           {programme.description && <p className="mt-3 max-w-2xl text-sm text-muted-foreground">{programme.description}</p>}
+          {isManager && (
+            <div className="mt-3 flex items-center gap-2">
+              <Switch checked={!!programme.qr_self_service_enabled} onCheckedChange={toggleSelfService} disabled={togglingQr} />
+              <span className="text-sm text-muted-foreground">QR self-service access {programme.qr_self_service_enabled ? "on" : "off"}</span>
+            </div>
+          )}
         </div>
         {isManager && (
-          <Button onClick={openCreate} className="gap-2">
-            <Plus className="h-4 w-4" />
-            {t.induction.addModule}
-          </Button>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={() => setQrOpen(true)} className="gap-2">
+              <QrCode className="h-4 w-4" />
+              QR code
+            </Button>
+            <Button onClick={openCreate} className="gap-2">
+              <Plus className="h-4 w-4" />
+              {t.induction.addModule}
+            </Button>
+          </div>
         )}
       </div>
+
+      <InductionQrDialog
+        open={qrOpen}
+        onOpenChange={setQrOpen}
+        programmeId={programme.id}
+        programmeName={programme.name}
+        selfServiceEnabled={!!programme.qr_self_service_enabled}
+      />
 
       <div>
         <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-muted-foreground">{t.induction.modules}</h2>

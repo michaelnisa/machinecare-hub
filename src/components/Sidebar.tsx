@@ -9,7 +9,14 @@ import {
   Settings,
   LogOut,
   ClipboardList,
+  ClipboardCheck,
   Package,
+  Boxes,
+  Warehouse,
+  MapPin,
+  ArrowLeftRight,
+  ShoppingCart,
+  PackageX,
   Fuel,
   FileText,
   Users,
@@ -30,6 +37,14 @@ import {
   Contact,
   Route,
   CircleDot,
+  Factory,
+  History,
+  TrendingUp,
+  BellRing,
+  Calendar,
+  Receipt,
+  CreditCard,
+  UserCog,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { initials } from "@/lib/format";
@@ -45,7 +60,7 @@ type NavGroup = { id: string; label: string; items: NavItem[] };
 
 export function Sidebar() {
   const { profile, organisation, signOut } = useAuth();
-  const { isFleet } = useIndustry();
+  const { isFleet, isGarage } = useIndustry();
   const navigate = useNavigate();
   const { t } = useI18n();
 
@@ -87,6 +102,23 @@ export function Sidebar() {
               ]
             : []),
           { to: "/inventory", label: t.nav.inventory, icon: Package },
+          { to: "/inventory/items", label: "Items & spare parts", icon: Boxes },
+          { to: "/inventory/stock", label: "Stock", icon: Warehouse },
+          { to: "/inventory/locations", label: "Locations", icon: MapPin },
+          { to: "/inventory/requests", label: "Material requests", icon: ClipboardList },
+          { to: "/inventory/transfers", label: "Transfers", icon: ArrowLeftRight },
+          { to: "/inventory/critical-spares", label: "Critical spares", icon: ShieldAlert },
+          { to: "/inventory/purchase-requests", label: "Purchase requests", icon: ShoppingCart },
+          { to: "/inventory/purchase-orders", label: "Purchase orders", icon: ClipboardList },
+          { to: "/inventory/suppliers", label: "Suppliers", icon: Building2 },
+          { to: "/inventory/quarantine", label: "Quarantine", icon: PackageX },
+          { to: "/inventory/production-materials", label: "Production materials", icon: Factory },
+          { to: "/inventory/reorder", label: "Reorder & insights", icon: TrendingUp },
+          { to: "/inventory/stock-counts", label: "Stock counts", icon: ClipboardCheck },
+          { to: "/inventory/history", label: "Inventory history", icon: History },
+          { to: "/inventory/reports", label: "Inventory reports", icon: FileBarChart },
+          { to: "/safety/controlled-tools", label: "Tools & equipment", icon: Wrench },
+          { to: "/safety/ppe", label: "PPE", icon: ClipboardCheck },
           { to: "/fuel", label: t.nav.fuel, icon: Fuel },
           { to: "/documents", label: t.nav.documents, icon: FileText },
         ],
@@ -100,12 +132,13 @@ export function Sidebar() {
             },
           ]
         : []),
-      ...(!isLite
+      ...(!isLite && (!profile?.department || profile.department === "production")
         ? [
             {
-              id: "manufacturing",
-              label: "Manufacturing",
+              id: "production",
+              label: "Production",
               items: [
+                { to: "/live/production", label: "Live TV", icon: Tv },
                 { to: "/production", label: t.nav.production, icon: Target },
                 { to: "/oee", label: t.nav.oee, icon: Gauge },
                 { to: "/quality", label: t.nav.quality, icon: CheckCircle2 },
@@ -114,13 +147,24 @@ export function Sidebar() {
             },
           ]
         : []),
-      ...(!isLite
+      ...(!isLite && (!profile?.department || profile.department === "safety")
         ? [
             {
               id: "safety",
               label: "Safety & People",
               items: [
                 { to: "/safety", label: t.nav.safety, icon: ShieldAlert },
+                { to: "/safety/risk-assessments", label: "Risk assessments", icon: ClipboardList },
+                { to: "/safety/inspections", label: "Safety inspections", icon: CheckCircle2 },
+                { to: "/safety/corrective-actions", label: "Corrective actions", icon: AlertTriangle },
+                { to: "/safety/ppe", label: "PPE", icon: Package },
+                { to: "/safety/contractors", label: "Contractors", icon: Building2 },
+                { to: "/safety/competency", label: "Training & competency", icon: GraduationCap },
+                { to: "/safety/equipment", label: "Safety equipment", icon: ShieldAlert },
+                { to: "/safety/certificates", label: "Certificates", icon: ClipboardCheck },
+                { to: "/safety/controlled-tools", label: "Controlled tools", icon: Wrench },
+                { to: "/safety/documents", label: "Safety documents", icon: FileText },
+                { to: "/safety/rules", label: "Safety rules", icon: Settings },
                 {
                   to: "/induction/dashboard",
                   label: t.nav.induction,
@@ -167,7 +211,7 @@ export function Sidebar() {
         ],
       },
     ],
-    [t, isLite],
+    [t, isLite, profile?.department],
   );
 
   // Fleet & Logistics nav — pages not yet built (Phases 2-6) route to a
@@ -248,7 +292,71 @@ export function Sidebar() {
     [t],
   );
 
-  const groups = isFleet ? fleetGroups : manufacturingGroups;
+  // Workshop/Garage nav — a fully separate product experience from
+  // Industrial and Fleet (garage_workshop.md section 5), not a relabelled
+  // subset. Pages not yet built (later phases) route to a shared
+  // "coming soon" placeholder so nothing 404s while it's rolled out.
+  const garageGroups: NavGroup[] = useMemo(
+    () => [
+      {
+        id: "garage-overview",
+        label: "Overview",
+        items: [
+          { to: "/dashboard", label: "Workshop Dashboard", icon: LayoutDashboard },
+          { to: "/notifications", label: t.nav.notifications, icon: Bell },
+        ],
+      },
+      {
+        id: "garage-workshop",
+        label: "Workshop",
+        items: [
+          { to: "/garage/customers", label: "Customers", icon: Users },
+          { to: "/garage/vehicles", label: "Vehicles", icon: Truck },
+          { to: "/garage/jobs", label: "Jobs", icon: ClipboardList },
+          { to: "/garage/calendar", label: "Calendar", icon: Calendar },
+          { to: "/garage/reminders", label: "Reminders", icon: BellRing },
+        ],
+      },
+      {
+        id: "garage-commercial",
+        label: "Commercial",
+        items: [
+          { to: "/garage/estimates", label: "Estimates", icon: FileText },
+          { to: "/garage/invoices", label: "Invoices", icon: Receipt },
+          { to: "/garage/payments", label: "Payments", icon: CreditCard },
+        ],
+      },
+      {
+        id: "garage-inventory",
+        label: "Inventory",
+        items: [
+          { to: "/garage/inventory", label: "Parts & stock", icon: Package },
+          { to: "/garage/suppliers", label: "Suppliers", icon: Building2 },
+        ],
+      },
+      {
+        id: "garage-people",
+        label: "People",
+        items: [
+          { to: "/garage/mechanics", label: "Mechanics", icon: UserCog },
+          { to: "/team", label: t.nav.team, icon: Users },
+        ],
+      },
+      {
+        id: "garage-insights",
+        label: "Insights",
+        items: [{ to: "/garage/reports", label: "Reports", icon: FileBarChart }],
+      },
+      {
+        id: "system",
+        label: "System",
+        items: [{ to: "/settings", label: t.nav.settings, icon: Settings }],
+      },
+    ],
+    [t],
+  );
+
+  const groups = isFleet ? fleetGroups : isGarage ? garageGroups : manufacturingGroups;
 
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>(() => {
     try {
@@ -282,8 +390,15 @@ export function Sidebar() {
           <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary text-primary-foreground">
             <Wrench className="h-5 w-5" />
           </div>
-          <div className="text-lg font-semibold tracking-tight text-sidebar-foreground">
-            {t.common.appName}
+          <div>
+            <div className="text-lg font-semibold leading-tight tracking-tight text-sidebar-foreground">
+              {t.common.appName}
+            </div>
+            {(isGarage || isFleet) && (
+              <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+                {isGarage ? "Workshop" : "Fleet"}
+              </div>
+            )}
           </div>
         </div>
         <LanguageSwitcher compact />

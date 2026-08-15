@@ -17,3 +17,15 @@ verify_jwt = false
 
 [functions.daily-maintenance-emails]
 verify_jwt = false
+
+[functions.send-induction-reminder]
+verify_jwt = true
+
+[functions.complete-induction-public]
+verify_jwt = false
+
+[functions.send-production-alert]
+verify_jwt = true
+
+[functions.send-sms]
+verify_jwt = true

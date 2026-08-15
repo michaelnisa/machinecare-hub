@@ -43,7 +43,7 @@ const STATUS_BADGE: Record<string, string> = {
 
 export default function WorkOrders() {
   const { profile } = useAuth();
-  const { isManager } = useUserRole();
+  const { isManager, isTechnician } = useUserRole();
   const [params, setParams] = useSearchParams();
   const [loading, setLoading] = useState(true);
   const [orders, setOrders] = useState<any[]>([]);
@@ -122,7 +122,7 @@ export default function WorkOrders() {
           <h1 className="text-2xl font-semibold tracking-tight">Work orders</h1>
           <p className="text-sm text-muted-foreground">Track jobs from open through to closed.</p>
         </div>
-        {isManager && (
+        {isTechnician && (
           <Button asChild>
             <Link to="/work-orders/new"><Plus className="mr-2 h-4 w-4" /> New work order</Link>
           </Button>

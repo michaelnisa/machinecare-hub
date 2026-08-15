@@ -86,7 +86,13 @@ export default function Vehicles() {
   const load = async () => {
     if (!profile) return;
     setLoading(true);
-    const [{ data: m }, { data: t }, { data: s }, { data: doc }, { data: d }] = await Promise.all([
+    const [
+      { data: m, error: e1 },
+      { data: t, error: e2 },
+      { data: s, error: e3 },
+      { data: doc, error: e4 },
+      { data: d, error: e5 },
+    ] = await Promise.all([
       supabase
         .from("machines")
         .select("id, name, plate_number, make, model, year, vin, fuel_type, tank_capacity_l, status, current_odometer_km, home_depot, cover_image_url")
@@ -97,6 +103,8 @@ export default function Vehicles() {
       supabase.from("vehicle_documents").select("machine_id, expires_on").order("expires_on", { nullsFirst: false }),
       supabase.from("drivers").select("id, full_name"),
     ]);
+    const err = e1 || e2 || e3 || e4 || e5;
+    if (err) toast.error(err.message);
     setMachines((m ?? []) as Machine[]);
     setTrips((t ?? []) as Trip[]);
     setSchedules((s ?? []) as Schedule[]);

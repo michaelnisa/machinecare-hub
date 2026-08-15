@@ -4,6 +4,10 @@ import { Button } from "@/components/ui/button";
 
 interface Props {
   children: ReactNode;
+  /** When false, renders the fallback contained (no min-h-screen wrapper) for nesting inside a page shell. */
+  fullScreen?: boolean;
+  /** When this value changes, a previously-caught error is cleared — use e.g. the route pathname so navigating away recovers. */
+  resetKey?: unknown;
 }
 
 interface State {
@@ -21,10 +25,23 @@ export class ErrorBoundary extends Component<Props, State> {
     console.error("Unhandled error caught by ErrorBoundary", error, info.componentStack);
   }
 
+  componentDidUpdate(prevProps: Props) {
+    if (this.state.error && prevProps.resetKey !== this.props.resetKey) {
+      this.setState({ error: null });
+    }
+  }
+
   render() {
     if (this.state.error) {
+      const fullScreen = this.props.fullScreen ?? true;
       return (
-        <div className="flex min-h-screen items-center justify-center bg-background px-4">
+        <div
+          className={
+            fullScreen
+              ? "flex min-h-screen items-center justify-center bg-background px-4"
+              : "flex items-center justify-center px-4 py-16"
+          }
+        >
           <div className="flex flex-col items-center rounded-xl border border-border bg-card px-8 py-10 text-center shadow-sm">
             <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-red-50 text-red-600">
               <AlertTriangle className="h-6 w-6" />

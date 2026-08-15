@@ -7,6 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { ArrowLeft, CheckCircle2, XCircle, MinusCircle, Wrench, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { enqueue, looksOffline } from "@/lib/offlineQueue";
 
 type MachineInfo = {
   id: string;
@@ -37,6 +38,7 @@ export default function PreStartInspection() {
   const [step, setStep] = useState<"driver" | "checklist" | "confirm" | "done">("driver");
   const [responses, setResponses] = useState<Record<string, { result: Result; comment: string }>>({});
   const [submitting, setSubmitting] = useState(false);
+  const [savedOffline, setSavedOffline] = useState(false);
 
   useEffect(() => {
     if (!id) return;
@@ -81,7 +83,7 @@ export default function PreStartInspection() {
     const executionId = crypto.randomUUID();
     const overallResult = notOkItems.length > 0 ? "attention" : "ok";
 
-    const { error: execErr } = await supabase.from("checklist_executions").insert({
+    const executionPayload = {
       id: executionId,
       organisation_id: machine.organisation_id,
       machine_id: machine.id,
@@ -89,16 +91,11 @@ export default function PreStartInspection() {
       template_version: template.version,
       driver_id: driverId || null,
       performed_by_name: driverName,
+      performed_at: new Date().toISOString(),
       status: "completed",
       overall_result: overallResult,
-    });
-    if (execErr) {
-      setSubmitting(false);
-      toast.error(execErr.message);
-      return;
-    }
-
-    const rows = items.map((it, i) => ({
+    };
+    const responseRows = items.map((it, i) => ({
       execution_id: executionId,
       item_id: it.item_id,
       item_text_snapshot: it.item_text,
@@ -108,13 +105,24 @@ export default function PreStartInspection() {
       notes: responses[it.item_id]?.comment || null,
       sort_order: i,
     }));
-    const { error: respErr } = await supabase.from("checklist_execution_responses").insert(rows);
-    setSubmitting(false);
-    if (respErr) {
-      toast.error(respErr.message);
-      return;
+
+    try {
+      const { error: execErr } = await supabase.from("checklist_executions").insert(executionPayload);
+      if (execErr) throw execErr;
+      const { error: respErr } = await supabase.from("checklist_execution_responses").insert(responseRows);
+      if (respErr) throw respErr;
+      setSubmitting(false);
+      setStep("done");
+    } catch (err) {
+      setSubmitting(false);
+      if (looksOffline(err)) {
+        await enqueue("pre_start_inspection", { executionPayload, responseRows });
+        setSavedOffline(true);
+        setStep("done");
+      } else {
+        toast.error(err instanceof Error ? err.message : "Failed to submit inspection");
+      }
     }
-    setStep("done");
   };
 
   if (loading) return <PageLoader />;
@@ -262,8 +270,12 @@ export default function PreStartInspection() {
         {step === "done" && (
           <div className="rounded-2xl border border-border bg-card p-6 text-center">
             <CheckCircle2 className="mx-auto mb-3 h-10 w-10 text-emerald-500" />
-            <p className="font-medium">Inspection submitted</p>
-            {notOkItems.length > 0 ? (
+            <p className="font-medium">{savedOffline ? "Saved on this device" : "Inspection submitted"}</p>
+            {savedOffline ? (
+              <p className="mt-1 text-sm text-muted-foreground">
+                No connection right now — this will submit automatically once you're back online. You can leave this page.
+              </p>
+            ) : notOkItems.length > 0 ? (
               <p className="mt-1 text-sm text-muted-foreground">
                 {notOkItems.length} fault report{notOkItems.length === 1 ? "" : "s"} sent to the maintenance team.
               </p>
