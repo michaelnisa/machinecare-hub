@@ -13,26 +13,30 @@ import { useI18n } from "@/i18n/I18nProvider";
 interface Props {
   open: boolean;
   onOpenChange: (v: boolean) => void;
-  machineId: string;
+  machineId?: string;
+  machines?: { id: string; name: string }[];
   currentHours: number | null;
   onSaved: () => void;
 }
 
-export function UpdateReadingDialog({ open, onOpenChange, machineId, currentHours, onSaved }: Props) {
+export function UpdateReadingDialog({ open, onOpenChange, machineId, machines, currentHours, onSaved }: Props) {
   const { profile, user } = useAuth();
   const { t } = useI18n();
   const [reading, setReading] = useState("");
   const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [notes, setNotes] = useState("");
   const [saving, setSaving] = useState(false);
+  const [selectedMachineId, setSelectedMachineId] = useState(machineId ?? "");
+  const needsMachinePicker = !machineId && !!machines;
 
   useEffect(() => {
     if (open) {
       setReading("");
       setDate(new Date().toISOString().slice(0, 10));
       setNotes("");
+      setSelectedMachineId(machineId ?? "");
     }
-  }, [open]);
+  }, [open, machineId]);
 
   const submit = async () => {
     const value = Number(reading);
@@ -40,12 +44,16 @@ export function UpdateReadingDialog({ open, onOpenChange, machineId, currentHour
       toast.error(t.machine.invalidReading);
       return;
     }
+    if (needsMachinePicker && !selectedMachineId) {
+      toast.error("Pick a machine");
+      return;
+    }
     if (currentHours != null && value < currentHours) {
       if (!confirm(t.machine.confirmLowerReading)) return;
     }
     setSaving(true);
     const { error } = await supabase.from("meter_readings").insert({
-      machine_id: machineId,
+      machine_id: machineId ?? selectedMachineId,
       organisation_id: profile!.organisation_id,
       reading: value,
       reading_date: date,
@@ -64,6 +72,19 @@ export function UpdateReadingDialog({ open, onOpenChange, machineId, currentHour
       <DialogContent>
         <DialogHeader><DialogTitle>{t.machine.updateReading}</DialogTitle></DialogHeader>
         <div className="space-y-4">
+          {needsMachinePicker && (
+            <div className="space-y-1.5">
+              <Label>Machine *</Label>
+              <select
+                value={selectedMachineId}
+                onChange={(e) => setSelectedMachineId(e.target.value)}
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+              >
+                <option value="">Select machine</option>
+                {machines!.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+              </select>
+            </div>
+          )}
           <div className="space-y-1.5">
             <Label htmlFor="ur-reading">{t.machine.newReading} *</Label>
             <Input id="ur-reading" type="number" min={0} value={reading} onChange={(e) => setReading(e.target.value)} placeholder={currentHours != null ? `${t.machine.currentLabel}: ${currentHours}` : "0"} />

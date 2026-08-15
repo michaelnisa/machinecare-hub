@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from "react";
 import { NavLink } from "@/components/NavLink";
 import { useAuth } from "@/contexts/AuthContext";
 import { useIndustry } from "@/hooks/useIndustry";
+import { useUserRole } from "@/hooks/useUserRole";
 import {
   LayoutDashboard,
   Wrench,
@@ -45,6 +46,10 @@ import {
   Receipt,
   CreditCard,
   UserCog,
+  Activity,
+  AlertOctagon,
+  CalendarRange,
+  Recycle,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { initials } from "@/lib/format";
@@ -61,6 +66,7 @@ type NavGroup = { id: string; label: string; items: NavItem[] };
 export function Sidebar() {
   const { profile, organisation, signOut } = useAuth();
   const { isFleet, isGarage } = useIndustry();
+  const { isManager } = useUserRole();
   const navigate = useNavigate();
   const { t } = useI18n();
 
@@ -79,7 +85,7 @@ export function Sidebar() {
       },
       {
         id: "assets",
-        label: "Assets",
+        label: "Maintenance",
         items: [
           { to: "/machines", label: t.nav.machines, icon: Wrench },
           { to: "/work-orders", label: t.nav.workOrders, icon: ClipboardList },
@@ -101,48 +107,41 @@ export function Sidebar() {
                 },
               ]
             : []),
-          { to: "/inventory", label: t.nav.inventory, icon: Package },
-          { to: "/inventory/items", label: "Items & spare parts", icon: Boxes },
-          { to: "/inventory/stock", label: "Stock", icon: Warehouse },
-          { to: "/inventory/locations", label: "Locations", icon: MapPin },
-          { to: "/inventory/requests", label: "Material requests", icon: ClipboardList },
-          { to: "/inventory/transfers", label: "Transfers", icon: ArrowLeftRight },
-          { to: "/inventory/critical-spares", label: "Critical spares", icon: ShieldAlert },
-          { to: "/inventory/purchase-requests", label: "Purchase requests", icon: ShoppingCart },
-          { to: "/inventory/purchase-orders", label: "Purchase orders", icon: ClipboardList },
-          { to: "/inventory/suppliers", label: "Suppliers", icon: Building2 },
-          { to: "/inventory/quarantine", label: "Quarantine", icon: PackageX },
-          { to: "/inventory/production-materials", label: "Production materials", icon: Factory },
-          { to: "/inventory/reorder", label: "Reorder & insights", icon: TrendingUp },
-          { to: "/inventory/stock-counts", label: "Stock counts", icon: ClipboardCheck },
-          { to: "/inventory/history", label: "Inventory history", icon: History },
-          { to: "/inventory/reports", label: "Inventory reports", icon: FileBarChart },
-          { to: "/safety/controlled-tools", label: "Tools & equipment", icon: Wrench },
-          { to: "/safety/ppe", label: "PPE", icon: ClipboardCheck },
+          ...(!isLite
+            ? [
+                { to: "/maintenance/calendar", label: "Maintenance Calendar", icon: Calendar },
+                { to: "/maintenance/schedules", label: "PM Schedules", icon: ClipboardCheck },
+                { to: "/maintenance/history", label: "Service History", icon: History },
+                { to: "/maintenance/downtime", label: "Downtime", icon: AlertOctagon },
+                { to: "/maintenance/meter-readings", label: "Meter readings", icon: Activity },
+                { to: "/analytics", label: t.nav.analytics, icon: BarChart2 },
+              ]
+            : []),
           { to: "/fuel", label: t.nav.fuel, icon: Fuel },
           { to: "/documents", label: t.nav.documents, icon: FileText },
         ],
       },
-      ...(!isLite
-        ? [
-            {
-              id: "vendors",
-              label: "Vendors",
-              items: [{ to: "/vendors", label: "Vendors", icon: Building2 }],
-            },
-          ]
-        : []),
-      ...(!isLite && (!profile?.department || profile.department === "production")
+      ...(!isLite &&
+      isManager &&
+      (!profile?.department || profile.department === "production")
         ? [
             {
               id: "production",
               label: "Production",
               items: [
                 { to: "/live/production", label: "Live TV", icon: Tv },
-                { to: "/production", label: t.nav.production, icon: Target },
+                { to: "/production/overview", label: "Production Overview", icon: LayoutDashboard },
+                { to: "/production/planning", label: "Production Planning", icon: CalendarRange },
+                { to: "/production/orders", label: "Production Orders", icon: ClipboardList },
+                { to: "/production", label: "Production KPI", icon: Target },
                 { to: "/oee", label: t.nav.oee, icon: Gauge },
+                { to: "/production/downtime", label: "Downtime", icon: AlertOctagon },
                 { to: "/quality", label: t.nav.quality, icon: CheckCircle2 },
+                { to: "/production/material-waste", label: "Material & Waste", icon: Recycle },
                 { to: "/utilities", label: t.nav.utilities, icon: Zap },
+                { to: "/production/analytics", label: "Analytics", icon: BarChart2 },
+                { to: "/production/history", label: "Production History", icon: History },
+                { to: "/reports", label: t.nav.reports, icon: FileBarChart },
               ],
             },
           ]
@@ -185,6 +184,37 @@ export function Sidebar() {
             },
           ]
         : []),
+      {
+        id: "inventory",
+        label: "Inventory",
+        items: [
+          { to: "/inventory", label: t.nav.inventory, icon: Package },
+          { to: "/inventory/items", label: "Items & spare parts", icon: Boxes },
+          { to: "/inventory/stock", label: "Stock", icon: Warehouse },
+          { to: "/inventory/locations", label: "Locations", icon: MapPin },
+          { to: "/inventory/requests", label: "Material requests", icon: ClipboardList },
+          { to: "/inventory/transfers", label: "Transfers", icon: ArrowLeftRight },
+          { to: "/inventory/critical-spares", label: "Critical spares", icon: ShieldAlert },
+          { to: "/inventory/purchase-requests", label: "Purchase requests", icon: ShoppingCart },
+          { to: "/inventory/purchase-orders", label: "Purchase orders", icon: ClipboardList },
+          { to: "/inventory/suppliers", label: "Suppliers", icon: Building2 },
+          { to: "/inventory/quarantine", label: "Quarantine", icon: PackageX },
+          { to: "/inventory/production-materials", label: "Production materials", icon: Factory },
+          { to: "/inventory/reorder", label: "Reorder & insights", icon: TrendingUp },
+          { to: "/inventory/stock-counts", label: "Stock counts", icon: ClipboardCheck },
+          { to: "/inventory/history", label: "Inventory history", icon: History },
+          { to: "/inventory/reports", label: "Inventory reports", icon: FileBarChart },
+        ],
+      },
+      ...(!isLite
+        ? [
+            {
+              id: "vendors",
+              label: "Vendor Insight",
+              items: [{ to: "/vendors", label: "Vendors", icon: Building2 }],
+            },
+          ]
+        : []),
       ...(!isLite
         ? [
             {
@@ -211,7 +241,7 @@ export function Sidebar() {
         ],
       },
     ],
-    [t, isLite, profile?.department],
+    [t, isLite, profile?.department, isManager],
   );
 
   // Fleet & Logistics nav — pages not yet built (Phases 2-6) route to a
@@ -404,26 +434,49 @@ export function Sidebar() {
         <LanguageSwitcher compact />
       </div>
 
-      <nav className="flex-1 space-y-3 overflow-y-auto px-3 pb-3">
-        {groups.map((g) => {
+      <nav className="flex-1 space-y-1 overflow-y-auto px-3 pb-3">
+        {groups.map((g, idx) => {
           const open = openGroups[g.id] ?? true;
+          const isOverview = g.id === "overview" || g.id === "fleet-overview" || g.id === "garage-overview";
+
+          if (isOverview) {
+            return (
+              <div key={g.id} className="space-y-1 pb-2">
+                {g.items.map(({ to, label, icon: Icon }) => (
+                  <NavLink
+                    key={to}
+                    to={to}
+                    className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-semibold text-sidebar-foreground transition-colors hover:bg-sidebar-accent"
+                    activeClassName="!bg-primary !text-primary-foreground hover:!bg-primary"
+                  >
+                    <Icon className="h-[18px] w-[18px]" />
+                    {label}
+                  </NavLink>
+                ))}
+              </div>
+            );
+          }
+
           return (
-            <div key={g.id}>
+            <div
+              key={g.id}
+              className={cn(idx > 0 && "border-t border-sidebar-border pt-2")}
+            >
               <button
                 type="button"
                 onClick={() => toggle(g.id)}
-                className="flex w-full items-center justify-between px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground hover:text-sidebar-foreground"
+                className="flex w-full items-center justify-between rounded-md px-3 pb-1.5 pt-1.5 text-[11px] font-bold uppercase tracking-widest text-muted-foreground transition-colors hover:text-sidebar-foreground"
               >
                 <span>{g.label}</span>
                 <ChevronDown
                   className={cn(
-                    "h-3 w-3 transition-transform",
+                    "h-3.5 w-3.5 transition-transform",
                     !open && "-rotate-90",
                   )}
                 />
               </button>
               {open && (
-                <div className="space-y-1">
+                <div className="space-y-0.5 pb-1">
                   {g.items.map(({ to, label, icon: Icon }) => (
                     <NavLink
                       key={to}
@@ -431,8 +484,8 @@ export function Sidebar() {
                       className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-sidebar-foreground transition-colors hover:bg-sidebar-accent"
                       activeClassName="!bg-primary !text-primary-foreground hover:!bg-primary"
                     >
-                      <Icon className="h-4 w-4" />
-                      {label}
+                      <Icon className="h-4 w-4 shrink-0" />
+                      <span className="truncate">{label}</span>
                     </NavLink>
                   ))}
                 </div>

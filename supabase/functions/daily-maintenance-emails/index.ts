@@ -12,11 +12,54 @@ type Org = {
   notifications_notify_managers: boolean
   notifications_notify_technicians: boolean
   notifications_notify_engineers: boolean
+  maintenance_alerts_sms_enabled: boolean
 }
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!
 const SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 const supabase = createClient(SUPABASE_URL, SERVICE_KEY)
+
+// Mirrors src/lib/pm-prediction.ts. Duplicated (not imported) because this
+// runs in Deno, a separate runtime/bundle from the Vite app — keep the two
+// in sync if the blending logic changes. Blends the calendar interval with
+// a usage rate derived from meter-reading history, since a pure hours
+// interval is only as good as how often someone logs a reading, and a pure
+// date interval ignores how hard the machine is actually being run.
+function estimateUsageRate(readings: { reading: number; reading_date: string }[]): number | null {
+  const sorted = [...readings].sort((a, b) => new Date(a.reading_date).getTime() - new Date(b.reading_date).getTime())
+  if (sorted.length < 2) return null
+  const first = sorted[0]
+  const last = sorted[sorted.length - 1]
+  const days = (new Date(last.reading_date).getTime() - new Date(first.reading_date).getTime()) / 86400000
+  if (days <= 0) return null
+  const rate = (last.reading - first.reading) / days
+  return rate > 0 ? rate : null
+}
+
+function predictDueDate(params: {
+  nextDueDate: string | null
+  nextDueHours: number | null
+  currentHours: number | null
+  ratePerDay: number | null
+}): { dueDate: string; daysRemaining: number } | null {
+  const { nextDueDate, nextDueHours, currentHours, ratePerDay } = params
+  const now = new Date()
+
+  const calendarDays = nextDueDate != null ? (new Date(nextDueDate).getTime() - now.getTime()) / 86400000 : null
+  const usageDays =
+    nextDueHours != null && currentHours != null && ratePerDay
+      ? (nextDueHours - currentHours) / ratePerDay
+      : null
+
+  let daysRemaining: number | null = null
+  if (calendarDays != null && usageDays != null) daysRemaining = Math.min(calendarDays, usageDays)
+  else if (calendarDays != null) daysRemaining = calendarDays
+  else if (usageDays != null) daysRemaining = usageDays
+
+  if (daysRemaining == null) return null
+  const dueDate = new Date(now.getTime() + daysRemaining * 86400000).toISOString().slice(0, 10)
+  return { dueDate, daysRemaining }
+}
 
 async function send(templateName: string, recipientEmail: string, idempotencyKey: string, templateData: Record<string, unknown>) {
   try {
@@ -32,6 +75,21 @@ async function send(templateName: string, recipientEmail: string, idempotencyKey
     return res.ok
   } catch (e) {
     console.error('send threw', e)
+    return false
+  }
+}
+
+async function sendSms(to: string, message: string) {
+  try {
+    const res = await fetch(`${SUPABASE_URL}/functions/v1/send-sms`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${SERVICE_KEY}` },
+      body: JSON.stringify({ to, message }),
+    })
+    if (!res.ok) console.error('send-sms failed', to, await res.text())
+    return res.ok
+  } catch (e) {
+    console.error('send-sms threw', e)
     return false
   }
 }
@@ -53,14 +111,15 @@ async function getOrgRecipients(orgId: string, includeManagers: boolean, include
   const userIds = [...new Set(userRoles.map((r) => r.user_id))]
   const { data: profs } = await supabase
     .from('profiles')
-    .select('id, full_name')
+    .select('id, full_name, phone')
     .in('id', userIds)
-  const nameById = new Map((profs ?? []).map((p) => [p.id, p.full_name]))
+  const profById = new Map((profs ?? []).map((p) => [p.id, p]))
 
-  const out: { email: string; name: string }[] = []
+  const out: { email: string; name: string; phone: string | null }[] = []
   for (const userId of userIds) {
     const { data: u } = await supabase.auth.admin.getUserById(userId)
-    if (u?.user?.email) out.push({ email: u.user.email, name: nameById.get(userId) ?? u.user.email })
+    const prof = profById.get(userId)
+    if (u?.user?.email) out.push({ email: u.user.email, name: prof?.full_name ?? u.user.email, phone: prof?.phone ?? null })
   }
   return out
 }
@@ -73,32 +132,55 @@ async function getTechnicianEmail(userId: string): Promise<{ email: string; name
 }
 
 async function processOrg(org: Org) {
-  if (!org.notifications_enabled) return { dueSoon: 0, overdue: 0, sent: 0 }
+  if (!org.notifications_enabled) return { dueSoon: 0, overdue: 0, sent: 0, smsSent: 0 }
   const today = new Date().toISOString().slice(0, 10)
   const lead = new Date(); lead.setDate(lead.getDate() + (org.notifications_lead_days ?? 8))
   const leadDate = lead.toISOString().slice(0, 10)
 
-  // Service schedules: due soon (today < next_due_date <= today+lead) and overdue
+  // Service schedules: due soon / overdue, predicted from the blend of the
+  // calendar interval and each machine's actual usage rate (see
+  // estimateUsageRate/predictDueDate above) rather than next_due_date alone.
   const { data: machines } = await supabase
-    .from('machines').select('id, name').eq('organisation_id', org.id)
+    .from('machines').select('id, name, current_hours').eq('organisation_id', org.id)
   const machineMap = new Map((machines ?? []).map(m => [m.id, m.name]))
+  const machineHoursMap = new Map((machines ?? []).map(m => [m.id, m.current_hours]))
   const machineIds = (machines ?? []).map(m => m.id)
 
   const dueSoon: { machine: string; name: string; due: string }[] = []
   const overdue: { machine: string; name: string; due: string }[] = []
 
   if (machineIds.length) {
-    const { data: schedules } = await supabase
-      .from('service_schedules')
-      .select('machine_id, name, next_due_date')
-      .in('machine_id', machineIds)
-      .not('next_due_date', 'is', null)
+    const [{ data: schedules }, { data: readingsRaw }] = await Promise.all([
+      supabase
+        .from('service_schedules')
+        .select('machine_id, name, next_due_date, next_due_hours')
+        .in('machine_id', machineIds),
+      supabase
+        .from('meter_readings')
+        .select('machine_id, reading, reading_date')
+        .in('machine_id', machineIds)
+        .order('reading_date', { ascending: false })
+        .limit(2000),
+    ])
+
+    const readingsByMachine: Record<string, { reading: number; reading_date: string }[]> = {}
+    for (const r of readingsRaw ?? []) {
+      ;(readingsByMachine[r.machine_id] ||= []).push({ reading: r.reading, reading_date: r.reading_date })
+    }
 
     for (const s of schedules ?? []) {
       const mname = machineMap.get(s.machine_id) ?? 'Machine'
-      const due = s.next_due_date as string
-      if (due < today) overdue.push({ machine: mname, name: s.name, due })
-      else if (due <= leadDate) dueSoon.push({ machine: mname, name: s.name, due })
+      const ratePerDay = estimateUsageRate(readingsByMachine[s.machine_id] ?? [])
+      const predicted = predictDueDate({
+        nextDueDate: s.next_due_date,
+        nextDueHours: s.next_due_hours,
+        currentHours: machineHoursMap.get(s.machine_id) ?? null,
+        ratePerDay,
+      })
+      if (!predicted) continue
+      const { dueDate, daysRemaining } = predicted
+      if (daysRemaining < 0) overdue.push({ machine: mname, name: s.name, due: dueDate })
+      else if (dueDate <= leadDate) dueSoon.push({ machine: mname, name: s.name, due: dueDate })
     }
   }
 
@@ -127,6 +209,21 @@ async function processOrg(org: Org) {
       overdue, dueSoon, openWorkOrders: openWos?.length ?? 0,
     })
     if (ok) sent++
+  }
+
+  // 1b. Overdue PM -> SMS to managers/owners with a phone on file (opt-in
+  // per org). Only fires for overdue items, not due-soon, to keep it to
+  // genuinely urgent texts.
+  let smsSent = 0
+  if (org.maintenance_alerts_sms_enabled && overdue.length > 0) {
+    const smsRecipients = recipients.filter((r) => r.phone)
+    const shown = overdue.slice(0, 3).map((o) => `${o.machine}: ${o.name}`).join('; ')
+    const more = overdue.length > 3 ? ` +${overdue.length - 3} more` : ''
+    const smsText = `MachineCare: ${overdue.length} overdue PM service${overdue.length === 1 ? '' : 's'} at ${org.name}. ${shown}${more}`
+    for (const r of smsRecipients) {
+      const ok = await sendSms(r.phone!, smsText)
+      if (ok) smsSent++
+    }
   }
 
   // 2. Per-technician overdue work-order email (only assignees)
@@ -416,28 +513,38 @@ async function processOrg(org: Org) {
     due_soon_count: dueSoon.length,
     overdue_count: overdue.length,
     emails_sent: sent,
+    sms_sent: smsSent,
     status: 'success',
   })
 
-  return { dueSoon: dueSoon.length, overdue: overdue.length, sent }
+  return { dueSoon: dueSoon.length, overdue: overdue.length, sent, smsSent }
 }
 
 // This function iterates every organisation, reads across their fleet/maintenance
 // data with a service-role client, and sends real emails — it must only run on
 // a schedule (cron) or a trusted manual trigger, never on an arbitrary public
 // request. verify_jwt is false here (so the cron invoker doesn't need a user
-// session), so the shared secret below is the only gate.
+// session) — so this function does its own gate: either the shared cron
+// secret (processes every org), or a logged-in owner/manager's session
+// token self-triggering their own org only (the "Send now" button in
+// Settings -> Notifications).
 const CRON_SECRET = Deno.env.get('CRON_SECRET')
+
+function parseJwtClaims(token: string): Record<string, unknown> | null {
+  const parts = token.split('.')
+  if (parts.length < 2) return null
+  try {
+    const payload = parts[1].replaceAll('-', '+').replaceAll('_', '/').padEnd(Math.ceil(parts[1].length / 4) * 4, '=')
+    return JSON.parse(atob(payload)) as Record<string, unknown>
+  } catch {
+    return null
+  }
+}
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders })
 
-  if (!CRON_SECRET || req.headers.get('x-cron-secret') !== CRON_SECRET) {
-    return new Response(JSON.stringify({ error: 'Forbidden' }), {
-      status: 403,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    })
-  }
+  const isCron = !!CRON_SECRET && req.headers.get('x-cron-secret') === CRON_SECRET
 
   // Optionally allow targeting a single org for manual triggers
   let onlyOrgId: string | undefined
@@ -447,12 +554,39 @@ Deno.serve(async (req) => {
       onlyOrgId = body?.organisation_id
     }
   } catch {
-    // malformed body; fall through and process all orgs
+    // malformed body; fall through
+  }
+
+  if (!isCron) {
+    const authHeader = req.headers.get('Authorization')
+    const token = authHeader?.startsWith('Bearer ') ? authHeader.slice('Bearer '.length).trim() : null
+    const claims = token ? parseJwtClaims(token) : null
+    const userId = claims?.sub as string | undefined
+
+    if (!userId || !onlyOrgId) {
+      return new Response(JSON.stringify({ error: 'Forbidden' }), {
+        status: 403,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
+    }
+    const { data: role } = await supabase
+      .from('user_roles')
+      .select('role')
+      .eq('user_id', userId)
+      .eq('organisation_id', onlyOrgId)
+      .in('role', ['owner', 'manager'])
+      .maybeSingle()
+    if (!role) {
+      return new Response(JSON.stringify({ error: 'Forbidden' }), {
+        status: 403,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
+    }
   }
 
   const { data: orgs, error } = await supabase
     .from('organisations')
-    .select('id, name, notifications_enabled, notifications_system_inbox, notifications_lead_days, notifications_notify_managers, notifications_notify_technicians, notifications_notify_engineers')
+    .select('id, name, notifications_enabled, notifications_system_inbox, notifications_lead_days, notifications_notify_managers, notifications_notify_technicians, notifications_notify_engineers, maintenance_alerts_sms_enabled')
   if (error) {
     return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
   }

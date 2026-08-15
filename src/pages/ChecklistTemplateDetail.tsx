@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { PageLoader } from "@/components/PageLoader";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
-import { ArrowLeft, Plus, Trash2, ShieldCheck, Archive, GitBranch, Loader2, Lock } from "lucide-react";
+import { ArrowLeft, Plus, Trash2, ShieldCheck, Archive, GitBranch, Loader2, Lock, Printer } from "lucide-react";
 import { toast } from "sonner";
 import { formatDate } from "@/lib/format";
 import { useIndustry } from "@/hooks/useIndustry";
@@ -189,8 +189,14 @@ export default function ChecklistTemplateDetail() {
             {template.approved_at && ` · Approved ${formatDate(template.approved_at)}`}
           </p>
         </div>
-        {canAuthorTemplates && (
-          <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-2">
+          <Link to={`/checklist-templates/${template.id}/print`}>
+            <Button variant="outline">
+              <Printer className="mr-2 h-4 w-4" /> Print
+            </Button>
+          </Link>
+          {canAuthorTemplates && (
+            <>
             {template.status === "draft" && (
               <Button onClick={() => setConfirmAction("approve")}>
                 <ShieldCheck className="mr-2 h-4 w-4" /> Approve
@@ -211,8 +217,9 @@ export default function ChecklistTemplateDetail() {
                 <Trash2 className="mr-2 h-4 w-4 text-destructive" /> Delete
               </Button>
             )}
-          </div>
-        )}
+            </>
+          )}
+        </div>
       </div>
 
       {/* Metadata edit */}

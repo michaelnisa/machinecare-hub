@@ -22,6 +22,8 @@ const schema = z.object({
   serial_number: z.string().max(80).optional().or(z.literal("")),
   registration_number: z.string().max(40).optional().or(z.literal("")),
   purchase_date: z.string().optional().or(z.literal("")),
+  warranty_expiry: z.string().optional().or(z.literal("")),
+  warranty_provider: z.string().max(120).optional().or(z.literal("")),
   current_hours: z.coerce.number().min(0).optional().or(z.literal("" as any)),
   status: z.string(),
   notes: z.string().max(2000).optional().or(z.literal("")),
@@ -58,6 +60,8 @@ export function MachineFormDialog({ open, onOpenChange, onSaved, machine }: Prop
         serial_number: machine?.serial_number ?? "",
         registration_number: machine?.registration_number ?? "",
         purchase_date: machine?.purchase_date ?? "",
+        warranty_expiry: machine?.warranty_expiry ?? "",
+        warranty_provider: machine?.warranty_provider ?? "",
         current_hours: machine?.current_hours ?? ("" as any),
         status: machine?.status ?? "active",
         notes: machine?.notes ?? "",
@@ -96,6 +100,8 @@ export function MachineFormDialog({ open, onOpenChange, onSaved, machine }: Prop
         serial_number: values.serial_number || null,
         registration_number: values.registration_number || null,
         purchase_date: values.purchase_date || null,
+        warranty_expiry: values.warranty_expiry || null,
+        warranty_provider: values.warranty_provider || null,
         current_hours: values.current_hours === "" || values.current_hours == null ? 0 : Number(values.current_hours),
         status: values.status,
         notes: values.notes || null,
@@ -175,6 +181,14 @@ export function MachineFormDialog({ open, onOpenChange, onSaved, machine }: Prop
             <div className="space-y-1.5">
               <Label htmlFor="current_hours">Current hours / km</Label>
               <Input id="current_hours" type="number" step="any" {...register("current_hours")} />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="warranty_expiry">Warranty expiry</Label>
+              <Input id="warranty_expiry" type="date" {...register("warranty_expiry")} />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="warranty_provider">Warranty provider</Label>
+              <Input id="warranty_provider" placeholder="e.g. Vendor name" {...register("warranty_provider")} />
             </div>
             <div className="space-y-1.5 sm:col-span-2">
               <Label htmlFor="cover">Cover image</Label>

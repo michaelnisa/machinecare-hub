@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useUserRole } from "@/hooks/useUserRole";
@@ -13,7 +14,7 @@ import { formatDate } from "@/lib/format";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { differenceInDays, parseISO } from "date-fns";
 
-const DOC_CATEGORIES = ["insurance", "registration", "inspection", "manual", "receipt", "other"];
+const DOC_CATEGORIES = ["insurance", "registration", "certificate", "inspection", "manual", "receipt", "other"];
 
 function expiryStatus(expires_on?: string | null, reminder_days = 30): "ok" | "due_soon" | "overdue" | "none" {
   if (!expires_on) return "none";
@@ -26,10 +27,13 @@ function expiryStatus(expires_on?: string | null, reminder_days = 30): "ok" | "d
 export default function Documents() {
   const { profile } = useAuth();
   const { isManager } = useUserRole();
+  const [searchParams] = useSearchParams();
+  const categoryParam = searchParams.get("category");
   const [loading, setLoading] = useState(true);
   const [docs, setDocs] = useState<any[]>([]);
   const [machines, setMachines] = useState<{ id: string; name: string }[]>([]);
   const [filter, setFilter] = useState<"all" | "expiring">("all");
+  const [category, setCategory] = useState<string>(categoryParam ?? "all");
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<any>(null);
   const [confirm, setConfirm] = useState<string | null>(null);
@@ -52,9 +56,11 @@ export default function Documents() {
   );
 
   const filtered = useMemo(() => {
-    if (filter === "expiring") return enriched.filter((d) => d._status === "due_soon" || d._status === "overdue");
-    return enriched;
-  }, [enriched, filter]);
+    let list = enriched;
+    if (filter === "expiring") list = list.filter((d) => d._status === "due_soon" || d._status === "overdue");
+    if (category !== "all") list = list.filter((d) => d.doc_category === category);
+    return list;
+  }, [enriched, filter, category]);
 
   const expiring = enriched.filter((d) => d._status === "due_soon" || d._status === "overdue").length;
 
@@ -86,10 +92,20 @@ export default function Documents() {
     <div className="space-y-6 animate-fade-in">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Documents</h1>
-          <p className="text-sm text-muted-foreground">Insurance, registration and certificates with expiry tracking.</p>
+          <h1 className="text-2xl font-semibold tracking-tight">
+            {category === "certificate" ? "Machine Certificates" : "Documents"}
+          </h1>
+          <p className="text-sm text-muted-foreground">
+            {category === "certificate"
+              ? "Compliance certificates per machine — boiler, pressure vessel, calibration and other statutory certs — with expiry tracking."
+              : "Insurance, registration and certificates with expiry tracking."}
+          </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
+          <select value={category} onChange={(e) => setCategory(e.target.value)} className="h-10 rounded-md border border-input bg-background px-3 text-sm capitalize">
+            <option value="all">All categories</option>
+            {DOC_CATEGORIES.map((c) => <option key={c} value={c} className="capitalize">{c}</option>)}
+          </select>
           <select value={filter} onChange={(e) => setFilter(e.target.value as any)} className="h-10 rounded-md border border-input bg-background px-3 text-sm">
             <option value="all">All documents</option>
             <option value="expiring">Expiring & overdue</option>

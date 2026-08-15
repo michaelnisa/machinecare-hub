@@ -8,10 +8,11 @@ import { StatusBadge } from "@/components/StatusBadge";
 import { PageLoader, EmptyState } from "@/components/PageLoader";
 import {
   CATEGORY_ICONS,
-  scheduleStatus,
   KNOWLEDGE_CATEGORIES,
 } from "@/lib/machine-constants";
+import { estimateUsageRate, predictScheduleDue, formatDaysRemaining } from "@/lib/pm-prediction";
 import { formatDate, formatMoney, formatNumber } from "@/lib/format";
+import { cn } from "@/lib/utils";
 import {
   ArrowLeft,
   Pencil,
@@ -64,12 +65,13 @@ export default function MachineDetail() {
   const [openLog, setOpenLog] = useState<string | null>(null);
   const [openKnowledge, setOpenKnowledge] = useState<any>(null);
   const [qrOpen, setQrOpen] = useState(false);
+  const [readings, setReadings] = useState<{ reading: number; reading_date: string }[]>([]);
 
   const load = async () => {
     if (!id) return;
     setLoading(true);
     try {
-      const [m, s, l, d, k] = await Promise.all([
+      const [m, s, l, d, k, r] = await Promise.all([
         supabase.from("machines").select("*").eq("id", id).maybeSingle(),
         supabase
           .from("service_schedules")
@@ -91,6 +93,12 @@ export default function MachineDetail() {
           .select("*")
           .eq("machine_id", id)
           .order("created_at", { ascending: false }),
+        supabase
+          .from("meter_readings")
+          .select("reading, reading_date")
+          .eq("machine_id", id)
+          .order("reading_date", { ascending: false })
+          .limit(200),
       ]);
       if (m.error) throw m.error;
       setMachine(m.data);
@@ -98,6 +106,7 @@ export default function MachineDetail() {
       setLogs(l.data ?? []);
       setDocs(d.data ?? []);
       setKnowledge(k.data ?? []);
+      setReadings(r.data ?? []);
 
       const logIds = (l.data ?? []).map((x: any) => x.id);
       if (logIds.length > 0) {
@@ -124,6 +133,15 @@ export default function MachineDetail() {
     if (profile) load();
   }, [id, profile]);
 
+  const usageEstimate = estimateUsageRate(readings);
+  const predictFor = (s: any) =>
+    predictScheduleDue({
+      nextDueDate: s.next_due_date,
+      nextDueHours: s.next_due_hours,
+      currentHours: machine?.current_hours,
+      usage: usageEstimate,
+    });
+
   const generateWoFromSchedule = async (s: any) => {
     if (!profile) return;
     const { error } = await supabase.from("work_orders").insert({
@@ -133,7 +151,7 @@ export default function MachineDetail() {
       title: `PM: ${s.name}`,
       description: `Scheduled ${s.service_type} service${s.next_due_date ? ` (due ${s.next_due_date})` : ""}.`,
       priority:
-        scheduleStatus(s.next_due_date) === "overdue" ? "high" : "normal",
+        predictFor(s).status === "overdue" ? "high" : "normal",
       status: "open",
       due_date: s.next_due_date,
     });
@@ -316,14 +334,15 @@ export default function MachineDetail() {
                     <th className="px-5 py-3 font-medium">Type</th>
                     <th className="px-5 py-3 font-medium">Interval</th>
                     <th className="px-5 py-3 font-medium">Last done</th>
-                    <th className="px-5 py-3 font-medium">Next due</th>
+                    <th className="px-5 py-3 font-medium">Predicted due</th>
                     <th className="px-5 py-3 font-medium">Status</th>
                     <th className="px-5 py-3"></th>
                   </tr>
                 </thead>
                 <tbody>
                   {schedules.map((s) => {
-                    const status = scheduleStatus(s.next_due_date);
+                    const pred = predictFor(s);
+                    const status = pred.status;
                     const interval =
                       [
                         s.interval_days ? `${s.interval_days} d` : null,
@@ -346,7 +365,16 @@ export default function MachineDetail() {
                           {formatDate(s.last_service_date)}
                         </td>
                         <td className="px-5 py-3">
-                          {formatDate(s.next_due_date)}
+                          <div className={cn(
+                            "font-medium",
+                            status === "overdue" && "text-red-600",
+                            status === "due_soon" && "text-amber-600",
+                          )}>
+                            {formatDaysRemaining(pred.daysRemaining)}
+                          </div>
+                          {s.next_due_date && (
+                            <div className="text-xs text-muted-foreground">{formatDate(s.next_due_date)}</div>
+                          )}
                         </td>
                         <td className="px-5 py-3">
                           <StatusBadge status={status} />

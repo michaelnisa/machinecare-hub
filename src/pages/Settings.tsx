@@ -49,6 +49,7 @@ export default function Settings() {
   const [orgName, setOrgName] = useState("");
   const [fullName, setFullName] = useState("");
   const [department, setDepartment] = useState("");
+  const [phone, setPhone] = useState("");
   const [logoUploading, setLogoUploading] = useState(false);
   const [savingOrg, setSavingOrg] = useState(false);
   const [savingProfile, setSavingProfile] = useState(false);
@@ -66,6 +67,7 @@ export default function Settings() {
     if (profile) {
       setFullName(profile.full_name ?? "");
       setDepartment(profile.department ?? "");
+      setPhone(profile.phone ?? "");
     }
   }, [organisation, profile]);
 
@@ -192,6 +194,7 @@ export default function Settings() {
       .update({
         full_name: fullName.trim(),
         department: department.trim() || null,
+        phone: phone.trim() || null,
       } as any)
       .eq("id", profile.id);
     setSavingProfile(false);
@@ -349,6 +352,21 @@ export default function Settings() {
           <div className="space-y-1.5">
             <Label>Email</Label>
             <Input value={user?.email ?? ""} disabled />
+          </div>
+          <div className="space-y-1.5 sm:col-span-2">
+            <Label>
+              Phone{" "}
+              <span className="text-xs text-muted-foreground">
+                (used for SMS alerts, e.g. critical production breaches)
+              </span>
+            </Label>
+            <Input
+              type="tel"
+              placeholder="+255 7XX XXX XXX"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              maxLength={20}
+            />
           </div>
           <div className="space-y-1.5 sm:col-span-2">
             <Label>
@@ -641,6 +659,7 @@ function NotificationsSection({ orgId }: { orgId?: string }) {
     notifications_notify_managers: true,
     notifications_notify_technicians: true,
     notifications_notify_engineers: true,
+    maintenance_alerts_sms_enabled: false,
   });
   const [runs, setRuns] = useState<any[]>([]);
 
@@ -650,7 +669,7 @@ function NotificationsSection({ orgId }: { orgId?: string }) {
       const { data } = await supabase
         .from("organisations")
         .select(
-          "notifications_enabled, notifications_system_inbox, notifications_lead_days, notifications_notify_managers, notifications_notify_technicians, notifications_notify_engineers",
+          "notifications_enabled, notifications_system_inbox, notifications_lead_days, notifications_notify_managers, notifications_notify_technicians, notifications_notify_engineers, maintenance_alerts_sms_enabled",
         )
         .eq("id", orgId)
         .maybeSingle();
@@ -756,6 +775,14 @@ function NotificationsSection({ orgId }: { orgId?: string }) {
           checked={cfg.notifications_notify_technicians}
           onChange={(v) =>
             setCfg({ ...cfg, notifications_notify_technicians: v })
+          }
+        />
+        <ToggleRow
+          label="SMS overdue PM to managers"
+          desc="Texts owners/managers with a phone on file when there's at least one overdue preventive-maintenance schedule. Requires AFRICASTALKING_USERNAME and AFRICASTALKING_API_KEY to be set."
+          checked={cfg.maintenance_alerts_sms_enabled}
+          onChange={(v) =>
+            setCfg({ ...cfg, maintenance_alerts_sms_enabled: v })
           }
         />
 

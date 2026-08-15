@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { PageLoader } from "@/components/PageLoader";
 import { Button } from "@/components/ui/button";
-import { Activity, Gauge, AlertTriangle, Factory, Maximize2 } from "lucide-react";
+import { Activity, Gauge, AlertTriangle, Factory, Maximize2, ShieldCheck } from "lucide-react";
 import { formatTZS } from "@/lib/format";
 
 type Kpis = {
@@ -18,12 +18,16 @@ type Kpis = {
   quality: number;
   costLost: number;
   costEnabled: boolean;
+  daysSinceIncident: number | null;
+  openIncidents: number;
+  totalIncidents30d: number;
 };
 
 const empty: Kpis = {
   prodActual: 0, prodTarget: 0, prodAttainment: 0, scrap: 0,
   oee: 0, availability: 0, performance: 0, quality: 0,
   costLost: 0, costEnabled: false,
+  daysSinceIncident: null, openIncidents: 0, totalIncidents30d: 0,
 };
 
 function pct(n: number) {
@@ -103,11 +107,14 @@ export default function LiveProduction() {
     const today = new Date(); today.setHours(0, 0, 0, 0);
     const todayStr = today.toISOString().slice(0, 10);
     const d7 = new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10);
+    const d30 = new Date(Date.now() - 30 * 86400000).toISOString();
 
-    const [prodRes, oeeRes, orgRes] = await Promise.all([
+    const [prodRes, oeeRes, orgRes, incRes, openIncRes] = await Promise.all([
       supabase.from("production_kpis").select("target_units,actual_units,scrap_units,downtime_minutes").eq("organisation_id", orgId).eq("record_date", todayStr),
       supabase.from("oee_records").select("availability,performance,quality").eq("organisation_id", orgId).gte("record_date", d7),
       (supabase as any).from("organisations").select("production_cost_per_downtime_minute, production_cost_per_scrap_unit").eq("id", orgId).maybeSingle(),
+      supabase.from("safety_incidents").select("occurred_at").eq("organisation_id", orgId).order("occurred_at", { ascending: false }).limit(50),
+      supabase.from("safety_incidents").select("id", { count: "exact", head: true }).eq("organisation_id", orgId).neq("status", "closed"),
     ]);
 
     const prod = prodRes.data ?? [];
@@ -129,7 +136,15 @@ export default function LiveProduction() {
     const costEnabled = org?.production_cost_per_downtime_minute != null || org?.production_cost_per_scrap_unit != null;
     const costLost = downtime * Number(org?.production_cost_per_downtime_minute ?? 0) + scrap * Number(org?.production_cost_per_scrap_unit ?? 0);
 
-    setKpis({ prodActual, prodTarget, prodAttainment, scrap, oee, availability, performance, quality, costLost, costEnabled });
+    const incidents = incRes.data ?? [];
+    const last = incidents[0]?.occurred_at ? new Date(incidents[0].occurred_at) : null;
+    const daysSinceIncident = last ? Math.floor((Date.now() - last.getTime()) / 86400000) : null;
+    const totalIncidents30d = incidents.filter((i) => i.occurred_at && i.occurred_at >= d30).length;
+
+    setKpis({
+      prodActual, prodTarget, prodAttainment, scrap, oee, availability, performance, quality, costLost, costEnabled,
+      daysSinceIncident, openIncidents: openIncRes.count ?? 0, totalIncidents30d,
+    });
     setLastUpdated(new Date());
   }, [organisation?.id]);
 
@@ -146,6 +161,7 @@ export default function LiveProduction() {
     channel
       .on("postgres_changes", { event: "*", schema: "public", table: "production_kpis", filter: `organisation_id=eq.${organisation.id}` }, () => load())
       .on("postgres_changes", { event: "*", schema: "public", table: "oee_records", filter: `organisation_id=eq.${organisation.id}` }, () => load())
+      .on("postgres_changes", { event: "*", schema: "public", table: "safety_incidents", filter: `organisation_id=eq.${organisation.id}` }, () => load())
       .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [organisation?.id, load]);
@@ -220,6 +236,24 @@ export default function LiveProduction() {
           <Tile icon={<Activity className="h-6 w-6" />} label="Availability" value={pct(kpis.availability)} accent={colorFor(kpis.availability)} big={false} />
           <Tile icon={<Activity className="h-6 w-6" />} label="Performance" value={pct(kpis.performance)} accent={colorFor(kpis.performance)} big={false} />
           <Tile icon={<Activity className="h-6 w-6" />} label="Quality" value={pct(kpis.quality)} accent={colorFor(kpis.quality)} big={false} />
+        </div>
+
+        <SectionTitle icon={<ShieldCheck className="h-5 w-5" />} title="Safety" />
+        <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
+          <Tile
+            icon={<ShieldCheck className="h-6 w-6" />}
+            label="Days Since Incident"
+            value={kpis.daysSinceIncident === null ? "∞" : String(kpis.daysSinceIncident)}
+            sub={kpis.daysSinceIncident === null ? "No incidents recorded" : "Keep it going"}
+            accent={kpis.daysSinceIncident === null || kpis.daysSinceIncident >= 30 ? "text-emerald-400" : kpis.daysSinceIncident >= 7 ? "text-amber-400" : "text-rose-400"}
+          />
+          <Tile
+            icon={<AlertTriangle className="h-6 w-6" />}
+            label="Open Incidents"
+            value={String(kpis.openIncidents)}
+            sub={`${kpis.totalIncidents30d} reported in 30d`}
+            accent={kpis.openIncidents === 0 ? "text-emerald-400" : "text-rose-400"}
+          />
         </div>
 
         <div className="mt-10 text-center text-xs text-white/30">

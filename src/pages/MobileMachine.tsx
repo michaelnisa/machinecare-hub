@@ -34,6 +34,11 @@ const T = {
     yourName: "Your name",
     yourPhone: "Phone number",
     whatHappened: "What happened?",
+    severity: "How serious is it?",
+    severityMinor: "Minor",
+    severityMajor: "Major",
+    severityCritical: "Critical — machine unsafe/unusable",
+    addPhoto: "Add a photo (optional)",
     submit: "Submit report",
     submitted: "Thanks — your report has been sent to the maintenance team.",
     signInPrompt: "Sign in to access more actions",
@@ -64,6 +69,11 @@ const T = {
     yourName: "Jina lako",
     yourPhone: "Nambari ya simu",
     whatHappened: "Ni nini kimetokea?",
+    severity: "Ni kali kiasi gani?",
+    severityMinor: "Ndogo",
+    severityMajor: "Kubwa",
+    severityCritical: "Hatari — mashine si salama/haifanyi kazi",
+    addPhoto: "Ongeza picha (hiari)",
     submit: "Tuma ripoti",
     submitted: "Asante — ripoti yako imetumwa kwa timu ya matengenezo.",
     signInPrompt: "Ingia ili kupata huduma zaidi",
@@ -100,12 +110,15 @@ export default function MobileMachine() {
   const [inspectOpen, setInspectOpen] = useState(false);
   const [tripOpen, setTripOpen] = useState(false);
 
-  // fault report form (visible when not signed in OR when user clicks)
+  // fault report form (visible when not signed in, different org, or when a signed-in own-org user clicks "Report fault")
   const [reporterName, setReporterName] = useState("");
   const [reporterPhone, setReporterPhone] = useState("");
   const [faultDesc, setFaultDesc] = useState("");
+  const [faultSeverity, setFaultSeverity] = useState("major");
+  const [faultPhoto, setFaultPhoto] = useState<File | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [showFaultForm, setShowFaultForm] = useState(false);
 
   // signed-in extras
   const [myWOs, setMyWOs] = useState<any[]>([]);
@@ -113,6 +126,13 @@ export default function MobileMachine() {
   const [kb, setKb] = useState<any[]>([]);
 
   const isOwnOrg = !!profile && machine && profile.organisation_id === machine.organisation_id;
+
+  useEffect(() => {
+    if (user && isOwnOrg && profile) {
+      setReporterName(profile.full_name ?? "");
+      setReporterPhone(profile.phone ?? "");
+    }
+  }, [user, isOwnOrg, profile]);
 
   useEffect(() => {
     if (!id) return;
@@ -163,21 +183,46 @@ export default function MobileMachine() {
       return;
     }
     setSubmitting(true);
-    const { error } = await (supabase as any).from("fault_reports").insert({
-      organisation_id: machine.organisation_id,
-      machine_id: machine.id,
-      reporter_name: reporterName.trim(),
-      reporter_phone: reporterPhone.trim(),
-      description: faultDesc.trim(),
-    });
-    setSubmitting(false);
-    if (error) {
-      toast.error(error.message);
-      return;
+    try {
+      let photo_url: string | null = null;
+      if (faultPhoto) {
+        if (faultPhoto.size > 5 * 1024 * 1024) {
+          toast.error("Photo too large. Please keep it under 5 MB.");
+          setSubmitting(false);
+          return;
+        }
+        const ext = (faultPhoto.name.split(".").pop() || "jpg").toLowerCase();
+        const path = `${machine.organisation_id}/faults/${machine.id}/${crypto.randomUUID()}.${ext}`;
+        const { error: upErr } = await supabase.storage
+          .from("machine-docs")
+          .upload(path, faultPhoto, { contentType: faultPhoto.type, upsert: false });
+        if (upErr) throw upErr;
+        photo_url = path;
+      }
+
+      const { error } = await (supabase as any).from("fault_reports").insert({
+        organisation_id: machine.organisation_id,
+        machine_id: machine.id,
+        reporter_name: reporterName.trim(),
+        reporter_phone: reporterPhone.trim(),
+        description: faultDesc.trim(),
+        severity: faultSeverity,
+        photo_url,
+        created_by: user?.id ?? null,
+      });
+      if (error) throw error;
+
+      setSubmitted(true);
+      setFaultDesc("");
+      setFaultPhoto(null);
+      setFaultSeverity("major");
+      if (!user || !isOwnOrg) { setReporterName(""); setReporterPhone(""); }
+      toast.success(t.submitted);
+    } catch (e: any) {
+      toast.error(e.message ?? "Failed to submit report");
+    } finally {
+      setSubmitting(false);
     }
-    setSubmitted(true);
-    setReporterName(""); setReporterPhone(""); setFaultDesc("");
-    toast.success(t.submitted);
   };
 
   if (loading || authLoading) return <PageLoader />;
@@ -276,6 +321,10 @@ export default function MobileMachine() {
                 <Fuel className="h-4 w-4" />
                 <span className="text-[11px] leading-tight">{t.logFuel}</span>
               </Button>
+              <Button variant="outline" className="h-14 flex-col gap-1" onClick={() => { setShowFaultForm((v) => !v); setSubmitted(false); }}>
+                <AlertTriangle className="h-4 w-4 text-amber-500" />
+                <span className="text-[11px] leading-tight">{t.reportFault}</span>
+              </Button>
               {machine.category === "Vehicle" && (
                 <Button variant="outline" className="col-span-2 h-12 gap-2" onClick={() => setTripOpen(true)}>
                   <Route className="h-4 w-4" />
@@ -356,8 +405,8 @@ export default function MobileMachine() {
           </>
         )}
 
-        {/* Anonymous / different-org: Fault report form */}
-        {(!user || !isOwnOrg) && (
+        {/* Fault report form: always available to anonymous/different-org visitors; for a signed-in own-org user it's toggled via the "Report fault" quick action */}
+        {(!user || !isOwnOrg || showFaultForm) && (
           <div className="rounded-2xl border border-border bg-card p-5 space-y-3">
             <div className="flex items-center gap-2">
               <AlertTriangle className="h-5 w-5 text-amber-500" />
@@ -391,6 +440,28 @@ export default function MobileMachine() {
                   rows={4}
                   className="w-full rounded-md border border-input bg-background p-3 text-sm"
                 />
+                <div>
+                  <label className="mb-1 block text-xs text-muted-foreground">{t.severity}</label>
+                  <select
+                    value={faultSeverity}
+                    onChange={(e) => setFaultSeverity(e.target.value)}
+                    className="h-11 w-full rounded-md border border-input bg-background px-3 text-sm"
+                  >
+                    <option value="minor">{t.severityMinor}</option>
+                    <option value="major">{t.severityMajor}</option>
+                    <option value="critical">{t.severityCritical}</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs text-muted-foreground">{t.addPhoto}</label>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    onChange={(e) => setFaultPhoto(e.target.files?.[0] ?? null)}
+                    className="block w-full text-sm text-muted-foreground file:mr-3 file:rounded-md file:border-0 file:bg-muted file:px-3 file:py-2 file:text-sm"
+                  />
+                </div>
                 <Button className="h-12 w-full" onClick={submitFault} disabled={submitting}>
                   {submitting ? t.submitting : t.submit}
                 </Button>

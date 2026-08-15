@@ -25,14 +25,17 @@ type FormValues = z.infer<typeof schema>;
 interface Props {
   open: boolean;
   onOpenChange: (v: boolean) => void;
-  machineId: string;
+  machineId?: string;
+  machines?: { id: string; name: string }[];
   schedule?: any;
   onSaved?: () => void;
 }
 
-export function ScheduleFormDialog({ open, onOpenChange, machineId, schedule, onSaved }: Props) {
+export function ScheduleFormDialog({ open, onOpenChange, machineId, machines, schedule, onSaved }: Props) {
   const [submitting, setSubmitting] = useState(false);
+  const [selectedMachineId, setSelectedMachineId] = useState(machineId ?? "");
   const isEdit = !!schedule;
+  const needsMachinePicker = !machineId && !!machines;
   const { register, handleSubmit, reset, watch, setValue, formState: { errors } } = useForm<FormValues>({
     resolver: zodResolver(schema),
     defaultValues: { service_type: "small" },
@@ -48,8 +51,9 @@ export function ScheduleFormDialog({ open, onOpenChange, machineId, schedule, on
         last_service_date: schedule?.last_service_date ?? "",
         next_due_date: schedule?.next_due_date ?? "",
       });
+      setSelectedMachineId(machineId ?? schedule?.machine_id ?? "");
     }
-  }, [open, schedule, reset]);
+  }, [open, schedule, reset, machineId]);
 
   // Auto-suggest next due
   const lastDate = watch("last_service_date");
@@ -62,10 +66,14 @@ export function ScheduleFormDialog({ open, onOpenChange, machineId, schedule, on
   }, [lastDate, intervalDays, isEdit, setValue]);
 
   const onSubmit = async (values: FormValues) => {
+    if (needsMachinePicker && !selectedMachineId) {
+      toast.error("Pick a machine");
+      return;
+    }
     setSubmitting(true);
     try {
       const payload: any = {
-        machine_id: machineId,
+        machine_id: machineId ?? selectedMachineId,
         name: values.name.trim(),
         service_type: values.service_type,
         interval_days: values.interval_days === "" || values.interval_days == null ? null : Number(values.interval_days),
@@ -98,6 +106,19 @@ export function ScheduleFormDialog({ open, onOpenChange, machineId, schedule, on
           <DialogTitle>{isEdit ? "Edit schedule" : "Add service schedule"}</DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+          {needsMachinePicker && (
+            <div className="space-y-1.5">
+              <Label>Machine *</Label>
+              <select
+                value={selectedMachineId}
+                onChange={(e) => setSelectedMachineId(e.target.value)}
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+              >
+                <option value="">Select machine</option>
+                {machines!.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+              </select>
+            </div>
+          )}
           <div className="space-y-1.5">
             <Label htmlFor="sname">Name *</Label>
             <Input id="sname" placeholder="e.g. Oil change every 250 hrs" {...register("name")} />

@@ -40,6 +40,11 @@ const InventoryReports = lazy(() => import("./pages/inventory/Reports"));
 const InventoryReorder = lazy(() => import("./pages/inventory/Reorder"));
 const FuelLogs = lazy(() => import("./pages/FuelLogs"));
 const Documents = lazy(() => import("./pages/Documents"));
+const PMSchedules = lazy(() => import("./pages/PMSchedules"));
+const MeterReadings = lazy(() => import("./pages/MeterReadings"));
+const MaintenanceCalendar = lazy(() => import("./pages/MaintenanceCalendar"));
+const Downtime = lazy(() => import("./pages/Downtime"));
+const ServiceHistory = lazy(() => import("./pages/ServiceHistory"));
 const Team = lazy(() => import("./pages/Team"));
 const MobileMachine = lazy(() => import("./pages/MobileMachine"));
 const PreStartInspection = lazy(() => import("./pages/PreStartInspection"));
@@ -69,12 +74,20 @@ const SafetyDocuments = lazy(() => import("./pages/safety/SafetyDocuments"));
 const SafetyRules = lazy(() => import("./pages/safety/SafetyRules"));
 const Quality = lazy(() => import("./pages/Quality"));
 const Production = lazy(() => import("./pages/Production"));
+const ProductionOverview = lazy(() => import("./pages/production/Overview"));
+const ProductionPlanning = lazy(() => import("./pages/production/Planning"));
+const ProductionOrders = lazy(() => import("./pages/production/Orders"));
+const ProductionDowntime = lazy(() => import("./pages/production/Downtime"));
+const ProductionMaterialWaste = lazy(() => import("./pages/production/MaterialWaste"));
+const ProductionHistory = lazy(() => import("./pages/production/History"));
+const ProductionAnalytics = lazy(() => import("./pages/production/Analytics"));
 const MaintenanceKPIs = lazy(() => import("./pages/MaintenanceKPIs"));
 const Utilities = lazy(() => import("./pages/Utilities"));
 const Live = lazy(() => import("./pages/Live"));
 const LiveProduction = lazy(() => import("./pages/LiveProduction"));
 const Vendors = lazy(() => import("./pages/Vendors"));
 const WorkOrderPrint = lazy(() => import("./pages/WorkOrderPrint"));
+const ChecklistTemplatePrint = lazy(() => import("./pages/ChecklistTemplatePrint"));
 const WorkOrderNew = lazy(() => import("./pages/WorkOrderNew"));
 const WorkOrderDetail = lazy(() => import("./pages/WorkOrderDetail"));
 const VendorDetail = lazy(() => import("./pages/VendorDetail"));
@@ -127,6 +140,7 @@ const App = () => (
                 <Route path="/m/:id" element={<MobileMachine />} />
                 <Route path="/m/:id/inspect" element={<PreStartInspection />} />
                 <Route path="/work-orders/:id/print" element={<WorkOrderPrint />} />
+                <Route path="/checklist-templates/:id/print" element={<ChecklistTemplatePrint />} />
                 <Route path="/induction/run/:recordId" element={<InductionRun />} />
                 <Route path="/induction/certificate/:recordId" element={<InductionCertificate />} />
                 <Route path="/induction/qr/:programmeId" element={<InductionPublicRun />} />
@@ -184,6 +198,13 @@ const App = () => (
                   <Route path="/safety/rules" element={<SafetyRules />} />
                   <Route path="/quality" element={<Quality />} />
                   <Route path="/production" element={<Production />} />
+                  <Route path="/production/overview" element={<ProductionOverview />} />
+                  <Route path="/production/planning" element={<ProductionPlanning />} />
+                  <Route path="/production/orders" element={<ProductionOrders />} />
+                  <Route path="/production/downtime" element={<ProductionDowntime />} />
+                  <Route path="/production/material-waste" element={<ProductionMaterialWaste />} />
+                  <Route path="/production/history" element={<ProductionHistory />} />
+                  <Route path="/production/analytics" element={<ProductionAnalytics />} />
                   <Route path="/maintenance-kpis" element={<MaintenanceKPIs />} />
                   <Route path="/utilities" element={<Utilities />} />
                   <Route path="/inventory" element={<InventoryDashboard />} />
@@ -204,6 +225,11 @@ const App = () => (
                   <Route path="/inventory/reorder" element={<InventoryReorder />} />
                   <Route path="/fuel" element={<FuelLogs />} />
                   <Route path="/documents" element={<Documents />} />
+                  <Route path="/maintenance/schedules" element={<PMSchedules />} />
+                  <Route path="/maintenance/meter-readings" element={<MeterReadings />} />
+                  <Route path="/maintenance/calendar" element={<MaintenanceCalendar />} />
+                  <Route path="/maintenance/downtime" element={<Downtime />} />
+                  <Route path="/maintenance/history" element={<ServiceHistory />} />
                   <Route path="/team" element={<Team />} />
                   <Route path="/induction/dashboard" element={<InductionDashboard />} />
                   <Route path="/induction/programmes" element={<InductionProgrammes />} />

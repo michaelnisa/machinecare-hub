@@ -13,6 +13,7 @@ interface Profile {
   organisation_id: string;
   full_name: string | null;
   department: string | null;
+  phone: string | null;
 }
 
 export type IndustryProfile =

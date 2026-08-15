@@ -7,11 +7,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Plus, ClipboardCheck, ShieldCheck, Archive, Loader2 } from "lucide-react";
+import { Plus, ClipboardCheck, ShieldCheck, Archive, Loader2, FileStack } from "lucide-react";
 import { PageLoader, EmptyState } from "@/components/PageLoader";
 import { CATEGORIES } from "@/lib/machine-constants";
+import { CHECKLIST_SAMPLES } from "@/lib/checklist-samples";
 import { formatDate } from "@/lib/format";
 import { toast } from "sonner";
+import { cn } from "@/lib/utils";
 
 const STATUS_COLORS: Record<string, string> = {
   draft: "bg-muted text-muted-foreground",
@@ -125,36 +127,111 @@ function CreateTemplateDialog({ open, onOpenChange, orgId, userId, onCreated }: 
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [machineCategory, setMachineCategory] = useState<string>("");
+  const [sampleKey, setSampleKey] = useState<string>("blank");
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    if (open) { setName(""); setDescription(""); setMachineCategory(""); }
+    if (open) { setName(""); setDescription(""); setMachineCategory(""); setSampleKey("blank"); }
   }, [open]);
+
+  const applySample = (key: string) => {
+    setSampleKey(key);
+    const sample = CHECKLIST_SAMPLES.find((s) => s.key === key);
+    if (sample) {
+      setName(sample.name);
+      setDescription(sample.description);
+      setMachineCategory(sample.machine_category ?? "");
+    } else {
+      setName("");
+      setDescription("");
+      setMachineCategory("");
+    }
+  };
 
   const submit = async () => {
     if (!name.trim()) return toast.error("Name is required");
     setSaving(true);
-    const { error } = await supabase.from("checklist_templates").insert({
-      organisation_id: orgId,
-      name: name.trim(),
-      description: description.trim() || null,
-      machine_category: machineCategory || null,
-      version: 1,
-      status: "draft",
-      created_by: userId,
-    });
+    const { data: newTemplate, error } = await supabase
+      .from("checklist_templates")
+      .insert({
+        organisation_id: orgId,
+        name: name.trim(),
+        description: description.trim() || null,
+        machine_category: machineCategory || null,
+        version: 1,
+        status: "draft",
+        created_by: userId,
+      })
+      .select()
+      .single();
+    if (error || !newTemplate) {
+      setSaving(false);
+      return toast.error(error?.message ?? "Failed to create template");
+    }
+
+    const sample = CHECKLIST_SAMPLES.find((s) => s.key === sampleKey);
+    if (sample) {
+      const rows = sample.items.map((it, idx) => ({
+        template_id: newTemplate.id,
+        sort_order: idx,
+        text: it.text,
+        item_type: it.item_type,
+        severity: it.severity,
+        min_value: it.min_value ?? null,
+        max_value: it.max_value ?? null,
+        unit: it.unit ?? null,
+      }));
+      const { error: itemsError } = await supabase.from("checklist_template_items").insert(rows);
+      if (itemsError) toast.error(`Template created, but sample items failed: ${itemsError.message}`);
+    }
+
     setSaving(false);
-    if (error) return toast.error(error.message);
-    toast.success("Template created");
+    toast.success(sample ? `Template created with ${sample.items.length} sample items` : "Template created");
     onOpenChange(false);
     onCreated();
   };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-lg">
         <DialogHeader><DialogTitle>New checklist template</DialogTitle></DialogHeader>
         <div className="space-y-4">
+          <div className="space-y-1.5">
+            <Label>Start from</Label>
+            <div className="grid gap-2 sm:grid-cols-2">
+              <button
+                type="button"
+                onClick={() => applySample("blank")}
+                className={cn(
+                  "flex items-start gap-2 rounded-lg border p-3 text-left text-sm transition-colors",
+                  sampleKey === "blank" ? "border-primary bg-primary-soft" : "border-border hover:border-primary/40",
+                )}
+              >
+                <FileStack className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+                <div>
+                  <div className="font-medium">Blank template</div>
+                  <div className="text-xs text-muted-foreground">Start from scratch</div>
+                </div>
+              </button>
+              {CHECKLIST_SAMPLES.map((s) => (
+                <button
+                  key={s.key}
+                  type="button"
+                  onClick={() => applySample(s.key)}
+                  className={cn(
+                    "flex items-start gap-2 rounded-lg border p-3 text-left text-sm transition-colors",
+                    sampleKey === s.key ? "border-primary bg-primary-soft" : "border-border hover:border-primary/40",
+                  )}
+                >
+                  <ClipboardCheck className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+                  <div>
+                    <div className="font-medium">{s.name}</div>
+                    <div className="text-xs text-muted-foreground">{s.items.length} items</div>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
           <div className="space-y-1.5">
             <Label>Name *</Label>
             <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Daily pre-start — Excavator" />
