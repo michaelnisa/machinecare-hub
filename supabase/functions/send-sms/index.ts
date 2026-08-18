@@ -33,6 +33,22 @@ function parseJwtClaims(token: string): Record<string, unknown> | null {
   }
 }
 
+// Every phone number in this app is entered by a Tanzanian user (see
+// Settings.tsx placeholder "+255 7XX XXX XXX") without necessarily typing
+// the country code. Africa's Talking has no way to know that — a bare
+// "0764190999" or "764190999" was being sent through unchanged and AT
+// defaulted it to its own home market, +254 (Kenya), instead of +255
+// (Tanzania), so messages silently went to the wrong country. Normalize to
+// E.164 assuming Tanzania whenever the caller hasn't already supplied a
+// different country code.
+function toTanzaniaE164(raw: string): string {
+  const digits = raw.replace(/[^\d+]/g, '')
+  if (digits.startsWith('+')) return digits // caller already gave a full international number — trust it
+  if (digits.startsWith('255')) return `+${digits}`
+  if (digits.startsWith('0')) return `+255${digits.slice(1)}` // local format, e.g. 0764190999
+  return `+255${digits}` // bare subscriber number, e.g. 764190999
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders })
 
@@ -71,6 +87,7 @@ Deno.serve(async (req) => {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     })
   }
+  to = toTanzaniaE164(to)
 
   const supabase = createClient(SUPABASE_URL, SERVICE_KEY)
 
