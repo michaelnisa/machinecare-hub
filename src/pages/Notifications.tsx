@@ -264,6 +264,11 @@ export default function Notifications() {
                             {o.description}
                           </div>
                         )}
+                        {o.sms_alert_sent_at && (
+                          <div className="mt-1 line-clamp-2 rounded bg-red-50 px-1.5 py-1 text-[11px] text-red-700">
+                            SMS sent to {o.sms_recipients_count ?? 0}: "{o.sms_text}"
+                          </div>
+                        )}
                       </td>
                       <td className="px-5 py-3 text-muted-foreground">
                         {o.machines?.name ?? "—"}
@@ -480,19 +485,38 @@ function NotificationDialog({ open, onOpenChange, machines, onSaved }: any) {
     if (!profile) return;
     if (!form.title?.trim()) return toast.error("Title is required");
     setSubmitting(true);
-    const { error } = await supabase.from("maintenance_notifications").insert({
-      organisation_id: profile.organisation_id,
-      machine_id: form.machine_id || null,
-      title: form.title.trim(),
-      description: form.description || null,
-      severity: form.severity,
-      reported_by: user?.id,
-    });
+    const { data: created, error } = await supabase
+      .from("maintenance_notifications")
+      .insert({
+        organisation_id: profile.organisation_id,
+        machine_id: form.machine_id || null,
+        title: form.title.trim(),
+        description: form.description || null,
+        severity: form.severity,
+        reported_by: user?.id,
+      })
+      .select("id")
+      .single();
     setSubmitting(false);
     if (error) return toast.error(error.message);
     toast.success("Notification raised");
     onOpenChange(false);
     onSaved();
+
+    if (form.severity === "critical" && created) {
+      supabase.functions
+        .invoke("notify-critical-notification-sms", { body: { notificationId: created.id } })
+        .then(({ data, error: smsError }) => {
+          if (smsError) return;
+          if (data?.recipients === 0) {
+            toast.message("No SMS sent — no owner/manager has a phone number on file (Settings → My Profile).");
+          } else if (data?.smsText) {
+            toast.success(`SMS sent to ${data.recipients} recipient(s): "${data.smsText}"`, { duration: 10000 });
+          }
+          onSaved();
+        })
+        .catch(() => {});
+    }
   };
 
   return (
