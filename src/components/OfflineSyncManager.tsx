@@ -28,6 +28,7 @@ interface FaultReportPayload {
 }
 
 interface SafetyIncidentPayload {
+  id: string;
   organisation_id: string;
   machine_id: string;
   incident_type: string;
@@ -104,6 +105,7 @@ const handlers: FlushHandlers = {
       photo_url = path;
     }
     const { error } = await (supabase as any).from("safety_incidents").insert({
+      id: payload.id,
       organisation_id: payload.organisation_id,
       machine_id: payload.machine_id,
       incident_type: payload.incident_type,
@@ -118,6 +120,7 @@ const handlers: FlushHandlers = {
       photo_url,
     });
     if (error) throw error;
+    supabase.functions.invoke("notify-accident-sms", { body: { incidentId: payload.id } }).catch(() => {});
   },
   induction_complete: async (payload: InductionCompletePayload) => {
     const { error } = await supabase.functions.invoke("complete-induction-public", {

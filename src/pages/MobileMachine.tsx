@@ -300,7 +300,9 @@ export default function MobileMachine() {
     }
 
     setSubmittingIncident(true);
+    const incidentId = crypto.randomUUID();
     const incidentFields = {
+      id: incidentId,
       organisation_id: machine.organisation_id,
       machine_id: machine.id,
       incident_type: incidentType,
@@ -338,6 +340,8 @@ export default function MobileMachine() {
 
       const { error } = await (supabase as any).from("safety_incidents").insert({ ...incidentFields, photo_url });
       if (error) throw error;
+
+      supabase.functions.invoke("notify-accident-sms", { body: { incidentId } }).catch(() => {});
 
       setIncidentSubmitted(true);
       setIncidentSubmittedOffline(false);
