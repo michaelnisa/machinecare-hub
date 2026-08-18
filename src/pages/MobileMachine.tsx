@@ -5,7 +5,7 @@ import { CoverImage } from "@/components/CoverImage";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { PageLoader } from "@/components/PageLoader";
-import { Wrench, ArrowRight, AlertTriangle, Gauge, Fuel, BookOpen, ClipboardList, LogIn, CheckCircle2, ClipboardCheck, Route } from "lucide-react";
+import { Wrench, ArrowRight, AlertTriangle, Gauge, Fuel, BookOpen, ClipboardList, LogIn, CheckCircle2, ClipboardCheck, Route, Siren } from "lucide-react";
 import { ServiceLogDialog } from "@/components/ServiceLogDialog";
 import { UpdateReadingDialog } from "@/components/UpdateReadingDialog";
 import { QuickFuelDialog } from "@/components/QuickFuelDialog";
@@ -60,6 +60,16 @@ const T = {
     completed: "Marked complete",
     quickInspect: "Quick inspection",
     startTrip: "Start trip",
+    reportAccident: "Report an accident/incident",
+    incidentType: "What kind of incident?",
+    incidentAccident: "Accident",
+    incidentInjury: "Injury",
+    incidentNearMiss: "Near miss",
+    incidentPropertyDamage: "Property damage",
+    incidentEnvironmental: "Environmental",
+    whoWasInvolved: "Who was involved? (optional)",
+    whereItHappened: "Where did it happen? (optional)",
+    accidentSubmitted: "Thanks — this has been reported to the safety team immediately.",
   },
   sw: {
     notFound: "Mashine haijapatikana.",
@@ -96,6 +106,16 @@ const T = {
     completed: "Imekamilika",
     quickInspect: "Ukaguzi wa haraka",
     startTrip: "Anza safari",
+    reportAccident: "Ripoti ajali/tukio",
+    incidentType: "Ni tukio la aina gani?",
+    incidentAccident: "Ajali",
+    incidentInjury: "Jeraha",
+    incidentNearMiss: "Karibu kutokea",
+    incidentPropertyDamage: "Uharibifu wa mali",
+    incidentEnvironmental: "Kimazingira",
+    whoWasInvolved: "Nani alihusika? (hiari)",
+    whereItHappened: "Ilitokea wapi? (hiari)",
+    accidentSubmitted: "Asante — hii imeripotiwa kwa timu ya usalama mara moja.",
   },
 };
 
@@ -123,6 +143,18 @@ export default function MobileMachine() {
   const [submitted, setSubmitted] = useState(false);
   const [submittedOffline, setSubmittedOffline] = useState(false);
   const [showFaultForm, setShowFaultForm] = useState(false);
+
+  // accident/incident report form (same visibility rule as the fault report form)
+  const [incidentType, setIncidentType] = useState("accident");
+  const [incidentSeverity, setIncidentSeverity] = useState("major");
+  const [incidentDesc, setIncidentDesc] = useState("");
+  const [incidentLocation, setIncidentLocation] = useState("");
+  const [personsInvolved, setPersonsInvolved] = useState("");
+  const [incidentPhoto, setIncidentPhoto] = useState<File | null>(null);
+  const [submittingIncident, setSubmittingIncident] = useState(false);
+  const [incidentSubmitted, setIncidentSubmitted] = useState(false);
+  const [incidentSubmittedOffline, setIncidentSubmittedOffline] = useState(false);
+  const [showAccidentForm, setShowAccidentForm] = useState(false);
 
   // signed-in extras
   const [myWOs, setMyWOs] = useState<any[]>([]);
@@ -256,6 +288,75 @@ export default function MobileMachine() {
     }
   };
 
+  const submitAccident = async () => {
+    if (!machine) return;
+    if (!reporterName.trim() || !reporterPhone.trim() || !incidentDesc.trim()) {
+      toast.error(t.requireFields);
+      return;
+    }
+    if (incidentPhoto && incidentPhoto.size > 5 * 1024 * 1024) {
+      toast.error("Photo too large. Please keep it under 5 MB.");
+      return;
+    }
+
+    setSubmittingIncident(true);
+    const incidentFields = {
+      organisation_id: machine.organisation_id,
+      machine_id: machine.id,
+      incident_type: incidentType,
+      severity: incidentSeverity,
+      occurred_at: new Date().toISOString(),
+      location: incidentLocation.trim() || null,
+      persons_involved: personsInvolved.trim() || null,
+      description: incidentDesc.trim(),
+      reporter_name: reporterName.trim(),
+      reporter_phone: reporterPhone.trim(),
+      reported_by: user?.id ?? null,
+    };
+
+    const resetForm = () => {
+      setIncidentDesc("");
+      setIncidentLocation("");
+      setPersonsInvolved("");
+      setIncidentPhoto(null);
+      setIncidentType("accident");
+      setIncidentSeverity("major");
+      if (!user || !isOwnOrg) { setReporterName(""); setReporterPhone(""); }
+    };
+
+    try {
+      let photo_url: string | null = null;
+      if (incidentPhoto) {
+        const ext = (incidentPhoto.name.split(".").pop() || "jpg").toLowerCase();
+        const path = `${machine.organisation_id}/incidents/${machine.id}/${crypto.randomUUID()}.${ext}`;
+        const { error: upErr } = await supabase.storage
+          .from("machine-docs")
+          .upload(path, incidentPhoto, { contentType: incidentPhoto.type, upsert: false });
+        if (upErr) throw upErr;
+        photo_url = path;
+      }
+
+      const { error } = await (supabase as any).from("safety_incidents").insert({ ...incidentFields, photo_url });
+      if (error) throw error;
+
+      setIncidentSubmitted(true);
+      setIncidentSubmittedOffline(false);
+      resetForm();
+      toast.success(t.accidentSubmitted);
+    } catch (e: any) {
+      if (looksOffline(e)) {
+        await enqueue("safety_incident", { ...incidentFields, photo: incidentPhoto });
+        setIncidentSubmitted(true);
+        setIncidentSubmittedOffline(true);
+        resetForm();
+      } else {
+        toast.error(e.message ?? "Failed to submit report");
+      }
+    } finally {
+      setSubmittingIncident(false);
+    }
+  };
+
   if (loading || authLoading) return <PageLoader />;
 
   if (!machine) return (
@@ -355,6 +456,10 @@ export default function MobileMachine() {
               <Button variant="outline" className="h-14 flex-col gap-1" onClick={() => { setShowFaultForm((v) => !v); setSubmitted(false); setSubmittedOffline(false); }}>
                 <AlertTriangle className="h-4 w-4 text-amber-500" />
                 <span className="text-[11px] leading-tight">{t.reportFault}</span>
+              </Button>
+              <Button variant="outline" className="h-14 flex-col gap-1 border-red-200 dark:border-red-900" onClick={() => { setShowAccidentForm((v) => !v); setIncidentSubmitted(false); setIncidentSubmittedOffline(false); }}>
+                <Siren className="h-4 w-4 text-red-600" />
+                <span className="text-[11px] leading-tight">{t.reportAccident}</span>
               </Button>
               {machine.category === "Vehicle" && (
                 <Button variant="outline" className="col-span-2 h-12 gap-2" onClick={() => setTripOpen(true)}>
@@ -495,6 +600,108 @@ export default function MobileMachine() {
                 </div>
                 <Button className="h-12 w-full" onClick={submitFault} disabled={submitting}>
                   {submitting ? t.submitting : t.submit}
+                </Button>
+              </>
+            )}
+
+            {!user && (
+              <div className="mt-2 flex items-center justify-between rounded-lg border border-dashed border-border p-3 text-xs text-muted-foreground">
+                <span>{t.signInPrompt}</span>
+                <Link to={`/login?next=/m/${machine.id}`} className="inline-flex items-center gap-1 font-medium text-primary hover:underline">
+                  <LogIn className="h-3.5 w-3.5" /> {t.signIn}
+                </Link>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Accident/incident report form: same visibility rule as the fault report form, separate from it */}
+        {(!user || !isOwnOrg || showAccidentForm) && (
+          <div className="rounded-2xl border border-red-200 bg-card p-5 space-y-3 dark:border-red-900">
+            <div className="flex items-center gap-2">
+              <Siren className="h-5 w-5 text-red-600" />
+              <h2 className="font-semibold">{t.reportAccident}</h2>
+            </div>
+            {incidentSubmitted ? (
+              <div className={`flex items-start gap-2 rounded-lg p-3 text-sm ${incidentSubmittedOffline ? "bg-amber-500/10 text-amber-700 dark:text-amber-400" : "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"}`}>
+                <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
+                <p>{incidentSubmittedOffline ? t.savedOffline : t.accidentSubmitted}</p>
+              </div>
+            ) : (
+              <>
+                <div>
+                  <label className="mb-1 block text-xs text-muted-foreground">{t.incidentType}</label>
+                  <select
+                    value={incidentType}
+                    onChange={(e) => setIncidentType(e.target.value)}
+                    className="h-11 w-full rounded-md border border-input bg-background px-3 text-sm"
+                  >
+                    <option value="accident">{t.incidentAccident}</option>
+                    <option value="injury">{t.incidentInjury}</option>
+                    <option value="near_miss">{t.incidentNearMiss}</option>
+                    <option value="property_damage">{t.incidentPropertyDamage}</option>
+                    <option value="environmental">{t.incidentEnvironmental}</option>
+                  </select>
+                </div>
+                <input
+                  type="text"
+                  placeholder={t.yourName}
+                  value={reporterName}
+                  onChange={(e) => setReporterName(e.target.value)}
+                  className="h-11 w-full rounded-md border border-input bg-background px-3 text-sm"
+                />
+                <input
+                  type="tel"
+                  placeholder={t.yourPhone}
+                  value={reporterPhone}
+                  onChange={(e) => setReporterPhone(e.target.value)}
+                  className="h-11 w-full rounded-md border border-input bg-background px-3 text-sm"
+                />
+                <textarea
+                  placeholder={t.whatHappened}
+                  value={incidentDesc}
+                  onChange={(e) => setIncidentDesc(e.target.value)}
+                  rows={4}
+                  className="w-full rounded-md border border-input bg-background p-3 text-sm"
+                />
+                <input
+                  type="text"
+                  placeholder={t.whereItHappened}
+                  value={incidentLocation}
+                  onChange={(e) => setIncidentLocation(e.target.value)}
+                  className="h-11 w-full rounded-md border border-input bg-background px-3 text-sm"
+                />
+                <input
+                  type="text"
+                  placeholder={t.whoWasInvolved}
+                  value={personsInvolved}
+                  onChange={(e) => setPersonsInvolved(e.target.value)}
+                  className="h-11 w-full rounded-md border border-input bg-background px-3 text-sm"
+                />
+                <div>
+                  <label className="mb-1 block text-xs text-muted-foreground">{t.severity}</label>
+                  <select
+                    value={incidentSeverity}
+                    onChange={(e) => setIncidentSeverity(e.target.value)}
+                    className="h-11 w-full rounded-md border border-input bg-background px-3 text-sm"
+                  >
+                    <option value="minor">{t.severityMinor}</option>
+                    <option value="major">{t.severityMajor}</option>
+                    <option value="critical">{t.severityCritical}</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs text-muted-foreground">{t.addPhoto}</label>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    onChange={(e) => setIncidentPhoto(e.target.files?.[0] ?? null)}
+                    className="block w-full text-sm text-muted-foreground file:mr-3 file:rounded-md file:border-0 file:bg-muted file:px-3 file:py-2 file:text-sm"
+                  />
+                </div>
+                <Button className="h-12 w-full bg-red-600 hover:bg-red-700" onClick={submitAccident} disabled={submittingIncident}>
+                  {submittingIncident ? t.submitting : t.submit}
                 </Button>
               </>
             )}

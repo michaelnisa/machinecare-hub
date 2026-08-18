@@ -6,6 +6,7 @@ export type QueuedOpKind =
   | "checklist_response_update"
   | "checklist_complete"
   | "fault_report"
+  | "safety_incident"
   | "induction_complete";
 
 export interface QueuedOp<TPayload = unknown> {

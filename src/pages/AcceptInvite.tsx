@@ -24,11 +24,12 @@ export default function AcceptInvite() {
   useEffect(() => {
     (async () => {
       if (!token) { setError("Invalid invite link"); setLoading(false); return; }
-      // Read invite by token if signed-in user's email matches; otherwise show generic prompt
-      const { data, error } = await supabase
-        .from("org_invites")
-        .select("email, role, expires_at, status, organisations(name)")
-        .eq("token", token)
+      // Resolved via a SECURITY DEFINER RPC (not a direct table read) so it
+      // works before the invitee has an account or is signed in at all —
+      // org_invites' own RLS policies only grant SELECT to authenticated
+      // org managers or the matching signed-in recipient.
+      const { data, error } = await (supabase as any)
+        .rpc("get_invite_preview", { _token: token })
         .maybeSingle();
       if (error || !data) {
         setError("This invite link is no longer valid.");
@@ -36,10 +37,10 @@ export default function AcceptInvite() {
         return;
       }
       setPreview({
-        organisation_name: (data as any).organisations?.name ?? "an organisation",
-        email: (data as any).email,
-        role: (data as any).role,
-        expired: new Date((data as any).expires_at) < new Date() || (data as any).status !== "pending",
+        organisation_name: data.organisation_name ?? "an organisation",
+        email: data.email,
+        role: data.role,
+        expired: data.expired,
       });
       setLoading(false);
     })();
