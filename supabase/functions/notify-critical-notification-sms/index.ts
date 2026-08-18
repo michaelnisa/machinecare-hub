@@ -16,18 +16,19 @@ const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!
 const ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY')!
 const SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 
-async function sendSms(to: string, message: string): Promise<boolean> {
+async function sendSms(to: string, message: string): Promise<{ ok: boolean; detail: string }> {
   try {
     const res = await fetch(`${SUPABASE_URL}/functions/v1/send-sms`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${SERVICE_KEY}` },
       body: JSON.stringify({ to, message }),
     })
-    if (!res.ok) console.error('send-sms failed', to, await res.text())
-    return res.ok
+    const text = await res.text()
+    if (!res.ok) console.error('send-sms failed', to, text)
+    return { ok: res.ok, detail: `HTTP ${res.status}: ${text}` }
   } catch (e) {
     console.error('send-sms threw', e)
-    return false
+    return { ok: false, detail: `threw: ${(e as Error)?.message ?? e}` }
   }
 }
 
@@ -67,7 +68,7 @@ Deno.serve(async (req) => {
 
   const { data: notif, error: notifError } = await callerClient
     .from('maintenance_notifications')
-    .select('id, organisation_id, machine_id, title, description, severity, sms_alert_sent_at, sms_text, machines(name)')
+    .select('id, organisation_id, machine_id, title, description, severity, sms_alert_sent_at, sms_text, sms_error, machines(name)')
     .eq('id', notificationId)
     .maybeSingle()
 
@@ -89,7 +90,9 @@ Deno.serve(async (req) => {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     })
   }
-  if (notif.sms_alert_sent_at) {
+  // Only skip as "already sent" if a previous attempt actually succeeded —
+  // a prior failed attempt (sms_error set) should be retryable.
+  if (notif.sms_alert_sent_at && !notif.sms_error) {
     return new Response(JSON.stringify({ ok: true, alreadySent: true, smsText: notif.sms_text ?? null }), {
       status: 200,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -139,17 +142,27 @@ Deno.serve(async (req) => {
   const smsText = `MachineCare CRITICAL: ${heading}. ${notif.description ?? ''} (${org?.name ?? 'your site'})`.slice(0, 300)
 
   let smsSent = 0
+  const details: string[] = []
   for (const phone of phones) {
-    const ok = await sendSms(phone, smsText)
-    if (ok) smsSent++
+    const result = await sendSms(phone, smsText)
+    if (result.ok) smsSent++
+    details.push(`${phone}: ${result.detail}`)
   }
 
+  // Always record what actually happened — including failures — so "did
+  // this really send?" is answerable from the Notifications table itself,
+  // not just from Edge Function logs nobody's looking at.
   await supabase
     .from('maintenance_notifications')
-    .update({ sms_alert_sent_at: new Date().toISOString(), sms_text: smsText, sms_recipients_count: phones.size })
+    .update({
+      sms_alert_sent_at: new Date().toISOString(),
+      sms_text: smsText,
+      sms_recipients_count: phones.size,
+      sms_error: smsSent > 0 ? null : (phones.size === 0 ? 'No owner/manager has a phone on file' : details.join(' | ')),
+    })
     .eq('id', notificationId)
 
-  return new Response(JSON.stringify({ ok: true, recipients: phones.size, smsSent, smsText }), {
+  return new Response(JSON.stringify({ ok: true, recipients: phones.size, smsSent, smsText, details }), {
     status: 200,
     headers: { ...corsHeaders, 'Content-Type': 'application/json' },
   })

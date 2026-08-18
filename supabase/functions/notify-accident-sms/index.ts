@@ -15,18 +15,19 @@ import { corsHeaders } from 'npm:@supabase/supabase-js@2/cors'
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!
 const SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 
-async function sendSms(to: string, message: string): Promise<boolean> {
+async function sendSms(to: string, message: string): Promise<{ ok: boolean; detail: string }> {
   try {
     const res = await fetch(`${SUPABASE_URL}/functions/v1/send-sms`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${SERVICE_KEY}` },
       body: JSON.stringify({ to, message }),
     })
-    if (!res.ok) console.error('send-sms failed', to, await res.text())
-    return res.ok
+    const text = await res.text()
+    if (!res.ok) console.error('send-sms failed', to, text)
+    return { ok: res.ok, detail: `HTTP ${res.status}: ${text}` }
   } catch (e) {
     console.error('send-sms threw', e)
-    return false
+    return { ok: false, detail: `threw: ${(e as Error)?.message ?? e}` }
   }
 }
 
@@ -57,7 +58,7 @@ Deno.serve(async (req) => {
   // of the per-incident idempotency check below.
   const { data: incident, error: incidentError } = await supabase
     .from('safety_incidents')
-    .select('id, organisation_id, machine_id, incident_type, severity, description, reporter_name, reporter_phone, sms_alert_sent_at, reported_by')
+    .select('id, organisation_id, machine_id, incident_type, severity, description, reporter_name, reporter_phone, sms_alert_sent_at, sms_error, reported_by')
     .eq('id', incidentId)
     .maybeSingle()
 
@@ -73,7 +74,7 @@ Deno.serve(async (req) => {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     })
   }
-  if (incident.sms_alert_sent_at) {
+  if (incident.sms_alert_sent_at && !incident.sms_error) {
     return new Response(JSON.stringify({ ok: true, alreadySent: true }), {
       status: 200,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -128,14 +129,22 @@ Deno.serve(async (req) => {
   const smsText = `MachineCare ALERT: ${heading} at ${org?.name ?? 'your site'}. ${incident.description} (by ${incident.reporter_name ?? 'anonymous'}, ${incident.reporter_phone ?? 'no phone'})`.slice(0, 300)
 
   let smsSent = 0
+  const details: string[] = []
   for (const phone of phones) {
-    const ok = await sendSms(phone, smsText)
-    if (ok) smsSent++
+    const result = await sendSms(phone, smsText)
+    if (result.ok) smsSent++
+    details.push(`${phone}: ${result.detail}`)
   }
 
-  await supabase.from('safety_incidents').update({ sms_alert_sent_at: new Date().toISOString() }).eq('id', incidentId)
+  await supabase
+    .from('safety_incidents')
+    .update({
+      sms_alert_sent_at: new Date().toISOString(),
+      sms_error: smsSent > 0 ? null : (phones.size === 0 ? 'No safety/owner/manager has a phone on file' : details.join(' | ')),
+    })
+    .eq('id', incidentId)
 
-  return new Response(JSON.stringify({ ok: true, recipients: phones.size, smsSent }), {
+  return new Response(JSON.stringify({ ok: true, recipients: phones.size, smsSent, details }), {
     status: 200,
     headers: { ...corsHeaders, 'Content-Type': 'application/json' },
   })

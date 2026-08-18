@@ -38,8 +38,15 @@ Deno.serve(async (req) => {
 
   const authHeader = req.headers.get('Authorization')
   const token = authHeader?.startsWith('Bearer ') ? authHeader.slice('Bearer '.length).trim() : null
-  const claims = token ? parseJwtClaims(token) : null
-  if (claims?.role !== 'service_role') {
+  // Projects on Supabase's newer API key system issue an opaque
+  // SUPABASE_SERVICE_ROLE_KEY (e.g. "sb_secret_...") instead of a JWT, so it
+  // can't be decoded for a `role` claim — every caller in this codebase
+  // passes exactly this project's own service-role key back to us, so a
+  // direct comparison works for both old (JWT) and new (opaque) key
+  // formats. Fall back to decoding a `role: service_role` claim only for
+  // legacy JWT-format keys that don't match verbatim (e.g. rotated keys).
+  const isServiceRole = token === SERVICE_KEY || parseJwtClaims(token ?? '')?.role === 'service_role'
+  if (!isServiceRole) {
     return new Response(JSON.stringify({ error: 'Forbidden' }), {
       status: 403,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },

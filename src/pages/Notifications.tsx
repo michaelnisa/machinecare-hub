@@ -264,9 +264,14 @@ export default function Notifications() {
                             {o.description}
                           </div>
                         )}
-                        {o.sms_alert_sent_at && (
+                        {o.sms_alert_sent_at && !o.sms_error && (
                           <div className="mt-1 line-clamp-2 rounded bg-red-50 px-1.5 py-1 text-[11px] text-red-700">
                             SMS sent to {o.sms_recipients_count ?? 0}: "{o.sms_text}"
+                          </div>
+                        )}
+                        {o.sms_error && (
+                          <div className="mt-1 line-clamp-2 rounded bg-amber-50 px-1.5 py-1 text-[11px] text-amber-700">
+                            SMS failed: {o.sms_error}
                           </div>
                         )}
                       </td>
@@ -508,10 +513,14 @@ function NotificationDialog({ open, onOpenChange, machines, onSaved }: any) {
         .invoke("notify-critical-notification-sms", { body: { notificationId: created.id } })
         .then(({ data, error: smsError }) => {
           if (smsError) return;
-          if (data?.recipients === 0) {
+          if (data?.alreadySent) {
+            // no-op, a previous successful attempt already covers this
+          } else if (data?.recipients === 0) {
             toast.message("No SMS sent — no owner/manager has a phone number on file (Settings → My Profile).");
-          } else if (data?.smsText) {
-            toast.success(`SMS sent to ${data.recipients} recipient(s): "${data.smsText}"`, { duration: 10000 });
+          } else if (data?.smsSent > 0) {
+            toast.success(`SMS sent to ${data.smsSent}/${data.recipients} recipient(s): "${data.smsText}"`, { duration: 10000 });
+          } else {
+            toast.error(`SMS failed to send: ${data?.details?.[0] ?? "unknown error"}`, { duration: 10000 });
           }
           onSaved();
         })
