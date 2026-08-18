@@ -127,12 +127,24 @@ function CreateTemplateDialog({ open, onOpenChange, orgId, userId, onCreated }: 
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [machineCategory, setMachineCategory] = useState<string>("");
+  const [machineId, setMachineId] = useState<string>("");
+  const [machines, setMachines] = useState<{ id: string; name: string; registration_number: string | null }[]>([]);
   const [sampleKey, setSampleKey] = useState<string>("blank");
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    if (open) { setName(""); setDescription(""); setMachineCategory(""); setSampleKey("blank"); }
+    if (open) { setName(""); setDescription(""); setMachineCategory(""); setMachineId(""); setSampleKey("blank"); }
   }, [open]);
+
+  useEffect(() => {
+    if (!open || !orgId) return;
+    supabase
+      .from("machines")
+      .select("id, name, registration_number")
+      .eq("organisation_id", orgId)
+      .order("name")
+      .then(({ data }) => setMachines(data ?? []));
+  }, [open, orgId]);
 
   const applySample = (key: string) => {
     setSampleKey(key);
@@ -157,7 +169,8 @@ function CreateTemplateDialog({ open, onOpenChange, orgId, userId, onCreated }: 
         organisation_id: orgId,
         name: name.trim(),
         description: description.trim() || null,
-        machine_category: machineCategory || null,
+        machine_category: machineId ? null : (machineCategory || null),
+        machine_id: machineId || null,
         version: 1,
         status: "draft",
         created_by: userId,
@@ -238,10 +251,31 @@ function CreateTemplateDialog({ open, onOpenChange, orgId, userId, onCreated }: 
           </div>
           <div className="space-y-1.5">
             <Label>Applies to category</Label>
-            <select value={machineCategory} onChange={(e) => setMachineCategory(e.target.value)} className="flex h-10 w-full rounded-md border border-input bg-background px-3 text-sm">
+            <select
+              value={machineCategory}
+              onChange={(e) => setMachineCategory(e.target.value)}
+              disabled={!!machineId}
+              className="flex h-10 w-full rounded-md border border-input bg-background px-3 text-sm disabled:opacity-50"
+            >
               <option value="">Any machine</option>
               {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
             </select>
+          </div>
+          <div className="space-y-1.5">
+            <Label>Or applies to one specific machine</Label>
+            <select
+              value={machineId}
+              onChange={(e) => setMachineId(e.target.value)}
+              className="flex h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+            >
+              <option value="">— None (use category above) —</option>
+              {machines.map((m) => (
+                <option key={m.id} value={m.id}>{m.registration_number ? `${m.name} (${m.registration_number})` : m.name}</option>
+              ))}
+            </select>
+            <p className="text-xs text-muted-foreground">
+              Picking a machine here locks this template to that machine only — e.g. a daily inspection specific to one piece of equipment.
+            </p>
           </div>
           <div className="space-y-1.5">
             <Label>Description</Label>

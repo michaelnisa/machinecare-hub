@@ -12,7 +12,6 @@ import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { ArrowLeft, Plus, Trash2, ShieldCheck, Archive, GitBranch, Loader2, Lock, Printer } from "lucide-react";
 import { toast } from "sonner";
 import { formatDate } from "@/lib/format";
-import { useIndustry } from "@/hooks/useIndustry";
 
 const ITEM_TYPES = [
   { value: "pass_fail", label: "Pass / Fail" },
@@ -32,7 +31,6 @@ export default function ChecklistTemplateDetail() {
   const { id } = useParams<{ id: string }>();
   const { profile, user } = useAuth();
   const { canAuthorTemplates } = useUserRole();
-  const { isFleet } = useIndustry();
   const navigate = useNavigate();
   const [template, setTemplate] = useState<any>(null);
   const [items, setItems] = useState<any[]>([]);
@@ -237,25 +235,23 @@ export default function ChecklistTemplateDetail() {
         )}
       </div>
 
-      {isFleet && (
-        <div className="rounded-xl border border-border bg-card p-5">
-          <label className="flex items-start gap-3">
-            <input
-              type="checkbox"
-              className="mt-0.5"
-              checked={!!template.is_fleet_pre_start}
-              disabled={!canAuthorTemplates}
-              onChange={(e) => saveMeta({ is_fleet_pre_start: e.target.checked })}
-            />
-            <span>
-              <span className="block text-sm font-medium">Use as the fleet pre-start inspection template</span>
-              <span className="block text-xs text-muted-foreground">
-                This is the checklist drivers see when they scan a vehicle's QR code and tap "Pre-Start Inspection" — no login required. Use tri-state items (OK / Not OK / Not Relevant) for best results; a "Not OK" answer auto-creates a fault report.
-              </span>
+      <div className="rounded-xl border border-border bg-card p-5">
+        <label className="flex items-start gap-3">
+          <input
+            type="checkbox"
+            className="mt-0.5"
+            checked={!!template.is_fleet_pre_start}
+            disabled={!canAuthorTemplates}
+            onChange={(e) => saveMeta({ is_fleet_pre_start: e.target.checked })}
+          />
+          <span>
+            <span className="block text-sm font-medium">Use as the QR-scan daily inspection template</span>
+            <span className="block text-xs text-muted-foreground">
+              This is the checklist people see when they scan this machine's QR code and tap "Daily Inspection" — no login required. Scope it above to "Specific machine" or a machine category so it only applies where intended; leave unscoped ("Any machine") and it becomes the org-wide default. Use tri-state items (OK / Not OK / Not Relevant) for best results; a "Not OK" answer auto-creates a fault report.
             </span>
-          </label>
-        </div>
-      )}
+          </span>
+        </label>
+      </div>
 
       {/* Items */}
       <div className="space-y-3">

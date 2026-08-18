@@ -131,7 +131,7 @@ export default function PreStartInspection() {
     return (
       <div className="flex min-h-screen items-center justify-center p-6 text-center">
         <div>
-          <p className="text-muted-foreground">Vehicle not found.</p>
+          <p className="text-muted-foreground">Machine not found.</p>
           <Link to="/" className="mt-4 inline-block text-primary hover:underline">Home</Link>
         </div>
       </div>
@@ -143,12 +143,12 @@ export default function PreStartInspection() {
       <div className="flex min-h-screen items-center justify-center p-6 text-center">
         <div className="max-w-sm">
           <Wrench className="mx-auto mb-3 h-8 w-8 text-muted-foreground" />
-          <p className="font-medium">No pre-start inspection set up yet</p>
+          <p className="font-medium">No daily inspection set up yet</p>
           <p className="mt-1 text-sm text-muted-foreground">
-            Ask your fleet manager to mark a checklist template as the pre-start inspection in Checklist Templates.
+            Ask a manager or engineer to open this machine's checklist template and turn on "Use as the QR-scan daily inspection template".
           </p>
           <Link to={`/m/${machine.id}`} className="mt-4 inline-block text-primary hover:underline">
-            <ArrowLeft className="mr-1 inline h-3.5 w-3.5" /> Back to vehicle
+            <ArrowLeft className="mr-1 inline h-3.5 w-3.5" /> Back to machine
           </Link>
         </div>
       </div>
@@ -168,7 +168,7 @@ export default function PreStartInspection() {
 
         {step === "driver" && (
           <div className="space-y-4 rounded-2xl border border-border bg-card p-5">
-            <p className="text-sm text-muted-foreground">Who's doing this pre-start inspection?</p>
+            <p className="text-sm text-muted-foreground">Who's doing this inspection?</p>
             {drivers.length > 0 && (
               <Select value={driverId} onValueChange={setDriverId}>
                 <SelectTrigger><SelectValue placeholder="Pick your name" /></SelectTrigger>

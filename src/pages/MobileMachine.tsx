@@ -428,7 +428,7 @@ export default function MobileMachine() {
           className="flex items-center justify-between rounded-2xl border border-primary/30 bg-primary-soft p-4 text-sm font-medium text-primary hover:border-primary/50"
         >
           <span className="flex items-center gap-2">
-            <ClipboardCheck className="h-5 w-5" /> Pre-Start Inspection
+            <ClipboardCheck className="h-5 w-5" /> Daily Inspection
           </span>
           <ArrowRight className="h-4 w-4" />
         </Link>
