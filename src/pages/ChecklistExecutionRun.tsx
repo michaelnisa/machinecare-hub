@@ -10,7 +10,7 @@ import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { ArrowLeft, Check, X, MinusCircle, CheckCircle2, AlertTriangle, Loader2, Wrench } from "lucide-react";
 import { toast } from "sonner";
 import { formatDate } from "@/lib/format";
-import { enqueue, looksOffline, listPending } from "@/lib/offlineQueue";
+import { enqueue, errorMessage, looksOffline, listPending } from "@/lib/offlineQueue";
 
 const SEVERITY_COLORS: Record<string, string> = {
   minor: "bg-muted text-muted-foreground",
@@ -100,7 +100,7 @@ export default function ChecklistExecutionRun() {
         await enqueue("checklist_response_update", { responseId: resId, patch });
         toast.message("Saved offline — will sync when connection returns");
       } else {
-        toast.error(err instanceof Error ? err.message : "Failed to save");
+        toast.error(errorMessage(err, "Failed to save"));
       }
     }
   };
@@ -123,7 +123,7 @@ export default function ChecklistExecutionRun() {
         await enqueue("checklist_complete", { executionId: exec.id, patch });
         toast.message("No connection — inspection will be marked complete once you're back online");
       } else {
-        toast.error(err instanceof Error ? err.message : "Failed to complete inspection");
+        toast.error(errorMessage(err, "Failed to complete inspection"));
       }
     }
   };

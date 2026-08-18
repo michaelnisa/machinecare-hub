@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { ArrowLeft, CheckCircle2, XCircle, MinusCircle, Wrench, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { enqueue, looksOffline } from "@/lib/offlineQueue";
+import { enqueue, errorMessage, looksOffline } from "@/lib/offlineQueue";
 
 type MachineInfo = {
   id: string;
@@ -120,7 +120,7 @@ export default function PreStartInspection() {
         setSavedOffline(true);
         setStep("done");
       } else {
-        toast.error(err instanceof Error ? err.message : "Failed to submit inspection");
+        toast.error(errorMessage(err, "Failed to submit inspection"));
       }
     }
   };

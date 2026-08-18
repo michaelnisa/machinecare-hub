@@ -51,11 +51,26 @@ export async function removeOp(id: string): Promise<void> {
   await del(id, getStore());
 }
 
+/**
+ * Extracts a human-readable message from anything a failed request might
+ * throw or resolve with. Deliberately does NOT gate on `instanceof Error`:
+ * supabase-js's postgrest-js wraps fetch-level failures (DNS errors, dropped
+ * connections, timeouts — exactly the flaky-signal conditions this queue
+ * exists for) in a plain `{ message, details, hint, code }` object, not an
+ * Error instance, so an `instanceof Error` check silently falls through to
+ * "unknown error" on precisely the failures that should be recognized as
+ * offline. See @supabase/postgrest-js PostgrestBuilder's own comment on this.
+ */
+export function errorMessage(err: unknown, fallback = "Something went wrong"): string {
+  const message = (err as { message?: unknown })?.message;
+  return typeof message === "string" && message ? message : (err ? String(err) : fallback);
+}
+
 async function markFailed(op: QueuedOp, err: unknown): Promise<void> {
   const updated: QueuedOp = {
     ...op,
     attempts: op.attempts + 1,
-    lastError: err instanceof Error ? err.message : String(err),
+    lastError: errorMessage(err),
   };
   await set(op.id, updated, getStore());
 }
@@ -68,8 +83,7 @@ async function markFailed(op: QueuedOp, err: unknown): Promise<void> {
 export function looksOffline(err: unknown): boolean {
   if (!navigator.onLine) return true;
   if (err instanceof TypeError) return true; // "Failed to fetch" etc.
-  const message = err instanceof Error ? err.message : String(err ?? "");
-  return /fetch|network|offline/i.test(message);
+  return /fetch|network|offline/i.test(errorMessage(err, ""));
 }
 
 export type FlushHandlers = Partial<Record<QueuedOpKind, (payload: any) => Promise<void>>>;

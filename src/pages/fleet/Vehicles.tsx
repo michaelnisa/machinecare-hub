@@ -13,6 +13,7 @@ import { StatusBadge } from "@/components/StatusBadge";
 import { CoverImage } from "@/components/CoverImage";
 import { scheduleStatus } from "@/lib/machine-constants";
 import { formatNumber } from "@/lib/format";
+import { errorMessage } from "@/lib/offlineQueue";
 import { Truck, Search, Plus, Pencil, Loader2, Upload, ClipboardList } from "lucide-react";
 import { toast } from "sonner";
 import { useI18n } from "@/i18n/I18nProvider";
@@ -406,7 +407,7 @@ function VehicleDialog({ open, onOpenChange, machine, onSaved }: {
       onOpenChange(false);
       onSaved();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to save");
+      toast.error(errorMessage(err, "Failed to save"));
     } finally {
       setSubmitting(false);
     }

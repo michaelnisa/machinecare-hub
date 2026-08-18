@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { PageLoader } from "@/components/PageLoader";
 import { Loader2, ArrowRight, ArrowLeft, CheckCircle2, XCircle, Award, GraduationCap } from "lucide-react";
 import { toast } from "sonner";
-import { enqueue, looksOffline } from "@/lib/offlineQueue";
+import { enqueue, errorMessage, looksOffline } from "@/lib/offlineQueue";
 
 type Programme = { id: string; name: string; pass_mark_percent: number; description: string | null };
 type Module = {
@@ -196,7 +196,7 @@ export default function InductionPublicRun() {
         setCompletedOffline(true);
         setStep({ kind: "done" });
       } else {
-        toast.error(err instanceof Error ? err.message : "Could not complete induction");
+        toast.error(errorMessage(err, "Could not complete induction"));
       }
     } finally {
       setSubmitting(false);
