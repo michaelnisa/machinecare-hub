@@ -129,6 +129,7 @@ export default function ChecklistTemplateDetail() {
       description: template.description,
       machine_category: template.machine_category,
       machine_id: template.machine_id,
+      is_fleet_pre_start: template.is_fleet_pre_start,
       version: template.version + 1,
       parent_template_id: template.id,
       status: "draft" as const,
@@ -249,6 +250,11 @@ export default function ChecklistTemplateDetail() {
             <span className="block text-xs text-muted-foreground">
               This is the checklist people see when they scan this machine's QR code and tap "Daily Inspection" — no login required. Scope it above to "Specific machine" or a machine category so it only applies where intended; leave unscoped ("Any machine") and it becomes the org-wide default. Use tri-state items (OK / Not OK / Not Relevant) for best results; a "Not OK" answer auto-creates a fault report.
             </span>
+            {template.is_fleet_pre_start && template.status !== "approved" && (
+              <span className="mt-2 block rounded-md bg-amber-500/15 px-2 py-1 text-xs font-medium text-amber-700 dark:text-amber-400">
+                Not live yet — this template is still "{template.status}". Click "Approve" above so it actually appears on the QR page.
+              </span>
+            )}
           </span>
         </label>
       </div>
