@@ -15,6 +15,7 @@ import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { useI18n } from "@/i18n/I18nProvider";
 import { toast } from "sonner";
 import { format } from "date-fns";
+import { enqueue, looksOffline } from "@/lib/offlineQueue";
 
 const STATUS_COLORS: Record<string, string> = {
   active: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400",
@@ -41,6 +42,7 @@ const T = {
     addPhoto: "Add a photo (optional)",
     submit: "Submit report",
     submitted: "Thanks — your report has been sent to the maintenance team.",
+    savedOffline: "No connection right now — saved on this device and will send automatically once you're back online.",
     signInPrompt: "Sign in to access more actions",
     signIn: "Sign in",
     logService: "Log a service",
@@ -76,6 +78,7 @@ const T = {
     addPhoto: "Ongeza picha (hiari)",
     submit: "Tuma ripoti",
     submitted: "Asante — ripoti yako imetumwa kwa timu ya matengenezo.",
+    savedOffline: "Hakuna mtandao kwa sasa — imehifadhiwa kwenye kifaa hiki na itatumwa mtandao ukirudi.",
     signInPrompt: "Ingia ili kupata huduma zaidi",
     signIn: "Ingia",
     logService: "Andika huduma",
@@ -118,6 +121,7 @@ export default function MobileMachine() {
   const [faultPhoto, setFaultPhoto] = useState<File | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [submittedOffline, setSubmittedOffline] = useState(false);
   const [showFaultForm, setShowFaultForm] = useState(false);
 
   // signed-in extras
@@ -126,6 +130,20 @@ export default function MobileMachine() {
   const [kb, setKb] = useState<any[]>([]);
 
   const isOwnOrg = !!profile && machine && profile.organisation_id === machine.organisation_id;
+
+  const refreshMachineAndHistory = () => {
+    if (!machine) return;
+    (supabase as any).rpc("get_machine_public", { _machine_id: machine.id }).then(({ data }: any) => {
+      if (data?.[0]) setMachine(data[0]);
+    });
+    supabase
+      .from("service_logs")
+      .select("id, title, performed_at, service_type")
+      .eq("machine_id", machine.id)
+      .order("performed_at", { ascending: false })
+      .limit(5)
+      .then(({ data }) => setHistory(data ?? []));
+  };
 
   useEffect(() => {
     if (user && isOwnOrg && profile) {
@@ -182,15 +200,32 @@ export default function MobileMachine() {
       toast.error(t.requireFields);
       return;
     }
+    if (faultPhoto && faultPhoto.size > 5 * 1024 * 1024) {
+      toast.error("Photo too large. Please keep it under 5 MB.");
+      return;
+    }
+
     setSubmitting(true);
+    const reportFields = {
+      organisation_id: machine.organisation_id,
+      machine_id: machine.id,
+      reporter_name: reporterName.trim(),
+      reporter_phone: reporterPhone.trim(),
+      description: faultDesc.trim(),
+      severity: faultSeverity,
+      created_by: user?.id ?? null,
+    };
+
+    const resetForm = () => {
+      setFaultDesc("");
+      setFaultPhoto(null);
+      setFaultSeverity("major");
+      if (!user || !isOwnOrg) { setReporterName(""); setReporterPhone(""); }
+    };
+
     try {
       let photo_url: string | null = null;
       if (faultPhoto) {
-        if (faultPhoto.size > 5 * 1024 * 1024) {
-          toast.error("Photo too large. Please keep it under 5 MB.");
-          setSubmitting(false);
-          return;
-        }
         const ext = (faultPhoto.name.split(".").pop() || "jpg").toLowerCase();
         const path = `${machine.organisation_id}/faults/${machine.id}/${crypto.randomUUID()}.${ext}`;
         const { error: upErr } = await supabase.storage
@@ -200,26 +235,22 @@ export default function MobileMachine() {
         photo_url = path;
       }
 
-      const { error } = await (supabase as any).from("fault_reports").insert({
-        organisation_id: machine.organisation_id,
-        machine_id: machine.id,
-        reporter_name: reporterName.trim(),
-        reporter_phone: reporterPhone.trim(),
-        description: faultDesc.trim(),
-        severity: faultSeverity,
-        photo_url,
-        created_by: user?.id ?? null,
-      });
+      const { error } = await (supabase as any).from("fault_reports").insert({ ...reportFields, photo_url });
       if (error) throw error;
 
       setSubmitted(true);
-      setFaultDesc("");
-      setFaultPhoto(null);
-      setFaultSeverity("major");
-      if (!user || !isOwnOrg) { setReporterName(""); setReporterPhone(""); }
+      setSubmittedOffline(false);
+      resetForm();
       toast.success(t.submitted);
     } catch (e: any) {
-      toast.error(e.message ?? "Failed to submit report");
+      if (looksOffline(e)) {
+        await enqueue("fault_report", { ...reportFields, photo: faultPhoto });
+        setSubmitted(true);
+        setSubmittedOffline(true);
+        resetForm();
+      } else {
+        toast.error(e.message ?? "Failed to submit report");
+      }
     } finally {
       setSubmitting(false);
     }
@@ -321,7 +352,7 @@ export default function MobileMachine() {
                 <Fuel className="h-4 w-4" />
                 <span className="text-[11px] leading-tight">{t.logFuel}</span>
               </Button>
-              <Button variant="outline" className="h-14 flex-col gap-1" onClick={() => { setShowFaultForm((v) => !v); setSubmitted(false); }}>
+              <Button variant="outline" className="h-14 flex-col gap-1" onClick={() => { setShowFaultForm((v) => !v); setSubmitted(false); setSubmittedOffline(false); }}>
                 <AlertTriangle className="h-4 w-4 text-amber-500" />
                 <span className="text-[11px] leading-tight">{t.reportFault}</span>
               </Button>
@@ -413,9 +444,9 @@ export default function MobileMachine() {
               <h2 className="font-semibold">{t.reportFault}</h2>
             </div>
             {submitted ? (
-              <div className="flex items-start gap-2 rounded-lg bg-emerald-500/10 p-3 text-sm text-emerald-700 dark:text-emerald-400">
+              <div className={`flex items-start gap-2 rounded-lg p-3 text-sm ${submittedOffline ? "bg-amber-500/10 text-amber-700 dark:text-amber-400" : "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"}`}>
                 <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
-                <p>{t.submitted}</p>
+                <p>{submittedOffline ? t.savedOffline : t.submitted}</p>
               </div>
             ) : (
               <>
@@ -487,6 +518,7 @@ export default function MobileMachine() {
             onOpenChange={setLogOpen}
             machines={[{ id: machine.id, name: machine.name }]}
             defaultMachineId={machine.id}
+            onSaved={refreshMachineAndHistory}
           />
           <UpdateReadingDialog
             open={readingOpen}
@@ -521,6 +553,7 @@ export default function MobileMachine() {
               open={tripOpen}
               onOpenChange={setTripOpen}
               machineId={machine.id}
+              onSaved={refreshMachineAndHistory}
             />
           )}
         </>

@@ -27,6 +27,7 @@ const InventoryDashboard = lazy(() => import("./pages/inventory/Dashboard"));
 const InventoryLocations = lazy(() => import("./pages/inventory/Locations"));
 const InventoryStock = lazy(() => import("./pages/inventory/Stock"));
 const InventoryRequests = lazy(() => import("./pages/inventory/Requests"));
+const InventoryMaterialRequestReceipt = lazy(() => import("./pages/inventory/MaterialRequestReceipt"));
 const InventoryTransfers = lazy(() => import("./pages/inventory/Transfers"));
 const InventoryCriticalSpares = lazy(() => import("./pages/inventory/CriticalSpares"));
 const InventorySuppliers = lazy(() => import("./pages/inventory/Suppliers"));
@@ -117,6 +118,9 @@ const GarageCalendar = lazy(() => import("./pages/garage/Calendar"));
 const GarageReminders = lazy(() => import("./pages/garage/Reminders"));
 const GarageReports = lazy(() => import("./pages/garage/Reports"));
 const GarageEstimates = lazy(() => import("./pages/garage/Estimates"));
+const GarageEstimatePrint = lazy(() => import("./pages/garage/EstimatePrint"));
+const GarageInvoicePrint = lazy(() => import("./pages/garage/InvoicePrint"));
+const GarageJobStatusPublic = lazy(() => import("./pages/garage/JobStatusPublic"));
 
 const queryClient = new QueryClient();
 
@@ -144,6 +148,7 @@ const App = () => (
                 <Route path="/induction/run/:recordId" element={<InductionRun />} />
                 <Route path="/induction/certificate/:recordId" element={<InductionCertificate />} />
                 <Route path="/induction/qr/:programmeId" element={<InductionPublicRun />} />
+                <Route path="/g/:jobId" element={<GarageJobStatusPublic />} />
                 <Route path="/live" element={<Live />} />
                 <Route path="/live/production" element={<LiveProduction />} />
                 <Route path="/unsubscribe" element={<Unsubscribe />} />
@@ -163,7 +168,9 @@ const App = () => (
                   <Route path="/garage/calendar" element={<GarageCalendar />} />
                   <Route path="/garage/reminders" element={<GarageReminders />} />
                   <Route path="/garage/estimates" element={<GarageEstimates />} />
+                  <Route path="/garage/estimates/:id/print" element={<GarageEstimatePrint />} />
                   <Route path="/garage/invoices" element={<GarageInvoices />} />
+                  <Route path="/garage/invoices/:id/print" element={<GarageInvoicePrint />} />
                   <Route path="/garage/payments" element={<GaragePayments />} />
                   <Route path="/garage/inventory" element={<GarageInventory />} />
                   <Route path="/garage/suppliers" element={<GarageSuppliers />} />
@@ -212,6 +219,7 @@ const App = () => (
                   <Route path="/inventory/stock" element={<InventoryStock />} />
                   <Route path="/inventory/locations" element={<InventoryLocations />} />
                   <Route path="/inventory/requests" element={<InventoryRequests />} />
+                  <Route path="/inventory/requests/:id/receipt" element={<InventoryMaterialRequestReceipt />} />
                   <Route path="/inventory/transfers" element={<InventoryTransfers />} />
                   <Route path="/inventory/critical-spares" element={<InventoryCriticalSpares />} />
                   <Route path="/inventory/suppliers" element={<InventorySuppliers />} />

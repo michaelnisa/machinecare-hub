@@ -7,6 +7,7 @@ import { PageLoader, EmptyState } from "@/components/PageLoader";
 import { Receipt } from "lucide-react";
 import { toast } from "sonner";
 import { formatDate, formatMoney } from "@/lib/format";
+import { invoiceTotal } from "@/lib/garage-money";
 
 const TABS = [
   { value: "all", label: "All" },
@@ -14,11 +15,6 @@ const TABS = [
   { value: "partial", label: "Partially paid" },
   { value: "paid", label: "Paid" },
 ];
-
-function invoiceTotal(inv: any) {
-  const itemsTotal = (inv.garage_invoice_items ?? []).reduce((s: number, it: any) => s + Number(it.line_total ?? it.quantity * it.unit_price), 0);
-  return itemsTotal + Number(inv.labour_cost || 0) + Number(inv.other_cost || 0) - Number(inv.discount || 0);
-}
 
 export default function GarageInvoices() {
   const { profile } = useAuth();
@@ -105,6 +101,7 @@ export default function GarageInvoices() {
                 <th className="px-5 py-3 font-medium">Paid</th>
                 <th className="px-5 py-3 font-medium">Outstanding</th>
                 <th className="px-5 py-3 font-medium">Issued</th>
+                <th className="px-5 py-3" />
               </tr>
             </thead>
             <tbody>
@@ -123,6 +120,9 @@ export default function GarageInvoices() {
                     <span className={outstanding > 0 ? (status === "partial" ? "text-amber-600" : "text-red-600") : "text-emerald-600"}>{formatMoney(outstanding)}</span>
                   </td>
                   <td className="px-5 py-3 text-muted-foreground">{formatDate(inv.issued_at)}</td>
+                  <td className="px-5 py-3 text-right">
+                    <Link to={`/garage/invoices/${inv.id}/print`} target="_blank" rel="noreferrer" className="text-xs text-primary hover:underline">Print</Link>
+                  </td>
                 </tr>
               ))}
             </tbody>

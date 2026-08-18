@@ -13,7 +13,9 @@ export const formatMoney = (
 ) => {
   const n = typeof amount === "string" ? Number(amount) : amount;
   if (n === null || n === undefined || Number.isNaN(n)) return `${currency} 0`;
-  return `${currency} ${n.toLocaleString("en-US")}`;
+  // No decimals, per the app's currency convention — a fractional unit
+  // price would otherwise show inconsistent decimal places row to row.
+  return `${currency} ${n.toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
 };
 
 export const formatTZS = (amount?: number | string | null) => formatMoney(amount, "TZS");

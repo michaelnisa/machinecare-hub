@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/contexts/AuthContext";
+import { useAuth, type BusinessHours } from "@/contexts/AuthContext";
 import { useUserRole } from "@/hooks/useUserRole";
 import type { IndustryProfile } from "@/hooks/useIndustry";
+import { useIndustry } from "@/hooks/useIndustry";
 import { IndustryPicker, INDUSTRY_PROFILES } from "@/components/IndustryPicker";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -41,8 +42,25 @@ import {
 } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
 
+const DAYS: { key: keyof BusinessHours; label: string }[] = [
+  { key: "mon", label: "Mon" }, { key: "tue", label: "Tue" }, { key: "wed", label: "Wed" },
+  { key: "thu", label: "Thu" }, { key: "fri", label: "Fri" }, { key: "sat", label: "Sat" }, { key: "sun", label: "Sun" },
+];
+const DEFAULT_BUSINESS_HOURS: BusinessHours = {
+  mon: { open: "08:00", close: "18:00", closed: false },
+  tue: { open: "08:00", close: "18:00", closed: false },
+  wed: { open: "08:00", close: "18:00", closed: false },
+  thu: { open: "08:00", close: "18:00", closed: false },
+  fri: { open: "08:00", close: "18:00", closed: false },
+  sat: { open: "08:00", close: "13:00", closed: false },
+  sun: { open: "08:00", close: "13:00", closed: true },
+};
+const PAYMENT_METHOD_LABEL: Record<string, string> = { cash: "Cash", mobile_money: "Mobile money", bank: "Bank transfer", other: "Other" };
+const CHANNEL_LABEL: Record<string, string> = { whatsapp: "WhatsApp", sms: "SMS", email: "Email", phone_call: "Phone call", in_person: "In person", other: "Other" };
+
 export default function Settings() {
   const { user, profile, organisation, refresh } = useAuth();
+  const { isGarage, isMixed } = useIndustry();
   const { isManager } = useUserRole();
   const [loading, setLoading] = useState(true);
   const [members, setMembers] = useState<any[]>([]);
@@ -59,10 +77,28 @@ export default function Settings() {
     null,
   );
   const [savingIndustryProfile, setSavingIndustryProfile] = useState(false);
+  const [taxRate, setTaxRate] = useState("0");
+  const [savingTaxRate, setSavingTaxRate] = useState(false);
+  const [orgPhone, setOrgPhone] = useState("");
+  const [orgAddress, setOrgAddress] = useState("");
+  const [businessHours, setBusinessHours] = useState<BusinessHours>(DEFAULT_BUSINESS_HOURS);
+  const [invoiceFooterNote, setInvoiceFooterNote] = useState("");
+  const [paymentMethods, setPaymentMethods] = useState<string[]>(["cash", "mobile_money", "bank", "other"]);
+  const [labourRate, setLabourRate] = useState("0");
+  const [messageChannel, setMessageChannel] = useState("whatsapp");
+  const [savingWorkshopSettings, setSavingWorkshopSettings] = useState(false);
 
   useEffect(() => {
     if (organisation) {
       setOrgName(organisation.name);
+      setTaxRate(String(organisation.default_tax_rate_percent ?? 0));
+      setOrgPhone(organisation.phone ?? "");
+      setOrgAddress(organisation.address ?? "");
+      setBusinessHours(organisation.business_hours ?? DEFAULT_BUSINESS_HOURS);
+      setInvoiceFooterNote(organisation.invoice_footer_note ?? "");
+      setPaymentMethods(organisation.accepted_payment_methods?.length ? organisation.accepted_payment_methods : ["cash", "mobile_money", "bank", "other"]);
+      setLabourRate(String(organisation.default_labour_rate_per_hour ?? 0));
+      setMessageChannel(organisation.default_message_channel ?? "whatsapp");
     }
     if (profile) {
       setFullName(profile.full_name ?? "");
@@ -165,6 +201,58 @@ export default function Settings() {
     if (error) toast.error(error.message);
     else {
       toast.success("Organisation updated");
+      refresh();
+    }
+  };
+
+  const saveTaxRate = async () => {
+    if (!organisation) return;
+    const rate = Number(taxRate);
+    if (!Number.isFinite(rate) || rate < 0 || rate > 100) {
+      toast.error("Tax rate must be a number between 0 and 100");
+      return;
+    }
+    setSavingTaxRate(true);
+    const { error } = await supabase
+      .from("organisations")
+      .update({ default_tax_rate_percent: rate })
+      .eq("id", organisation.id);
+    setSavingTaxRate(false);
+    if (error) toast.error(error.message);
+    else {
+      toast.success("Default tax rate updated");
+      refresh();
+    }
+  };
+
+  const saveWorkshopSettings = async () => {
+    if (!organisation) return;
+    const rate = Number(labourRate);
+    if (!Number.isFinite(rate) || rate < 0) {
+      toast.error("Labour rate must be a positive number");
+      return;
+    }
+    if (paymentMethods.length === 0) {
+      toast.error("Accept at least one payment method");
+      return;
+    }
+    setSavingWorkshopSettings(true);
+    const { error } = await supabase
+      .from("organisations")
+      .update({
+        phone: orgPhone.trim() || null,
+        address: orgAddress.trim() || null,
+        business_hours: businessHours,
+        invoice_footer_note: invoiceFooterNote.trim() || null,
+        accepted_payment_methods: paymentMethods,
+        default_labour_rate_per_hour: rate,
+        default_message_channel: messageChannel,
+      })
+      .eq("id", organisation.id);
+    setSavingWorkshopSettings(false);
+    if (error) toast.error(error.message);
+    else {
+      toast.success("Workshop settings updated");
       refresh();
     }
   };
@@ -336,6 +424,123 @@ export default function Settings() {
               </AlertDialogFooter>
             </AlertDialogContent>
           </AlertDialog>
+        </Section>
+      )}
+
+      {isManager && (isGarage || isMixed) && (
+        <Section title="Tax settings">
+          <p className="mb-3 text-sm text-muted-foreground">
+            Default VAT/tax rate applied to new garage estimates — each estimate can still override it before sending.
+          </p>
+          <div className="max-w-xs space-y-1.5">
+            <Label>Default tax rate (%)</Label>
+            <Input
+              type="number"
+              min={0}
+              max={100}
+              value={taxRate}
+              onChange={(e) => setTaxRate(e.target.value)}
+            />
+          </div>
+          <div className="mt-4 flex justify-end">
+            <Button onClick={saveTaxRate} disabled={savingTaxRate}>
+              {savingTaxRate && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Save
+            </Button>
+          </div>
+        </Section>
+      )}
+
+      {isManager && (isGarage || isMixed) && (
+        <Section title="Workshop settings">
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <Label>Workshop phone</Label>
+              <Input value={orgPhone} onChange={(e) => setOrgPhone(e.target.value)} placeholder="+255 …" />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Address</Label>
+              <Input value={orgAddress} onChange={(e) => setOrgAddress(e.target.value)} placeholder="Street, city" />
+            </div>
+          </div>
+          <p className="mt-1 text-xs text-muted-foreground">Shown on printed estimates/invoices and the customer status page.</p>
+
+          <div className="mt-5">
+            <Label>Business hours</Label>
+            <div className="mt-2 space-y-1.5">
+              {DAYS.map(({ key, label }) => {
+                const day = businessHours[key];
+                return (
+                  <div key={key} className="flex items-center gap-3 text-sm">
+                    <span className="w-9 text-xs font-medium text-muted-foreground">{label}</span>
+                    <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                      <input
+                        type="checkbox"
+                        checked={day.closed}
+                        onChange={(e) => setBusinessHours({ ...businessHours, [key]: { ...day, closed: e.target.checked } })}
+                      />
+                      Closed
+                    </label>
+                    <Input
+                      type="time"
+                      value={day.open}
+                      disabled={day.closed}
+                      onChange={(e) => setBusinessHours({ ...businessHours, [key]: { ...day, open: e.target.value } })}
+                      className="h-8 w-28 disabled:opacity-40"
+                    />
+                    <span className="text-muted-foreground">–</span>
+                    <Input
+                      type="time"
+                      value={day.close}
+                      disabled={day.closed}
+                      onChange={(e) => setBusinessHours({ ...businessHours, [key]: { ...day, close: e.target.value } })}
+                      className="h-8 w-28 disabled:opacity-40"
+                    />
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="mt-5 space-y-1.5">
+            <Label>Invoice footer note</Label>
+            <Input value={invoiceFooterNote} onChange={(e) => setInvoiceFooterNote(e.target.value)} placeholder="e.g. Thank you for your business — 30-day part warranty applies." />
+          </div>
+
+          <div className="mt-5">
+            <Label>Accepted payment methods</Label>
+            <div className="mt-2 flex flex-wrap gap-4">
+              {Object.entries(PAYMENT_METHOD_LABEL).map(([value, methodLabel]) => (
+                <label key={value} className="flex items-center gap-1.5 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={paymentMethods.includes(value)}
+                    onChange={(e) => setPaymentMethods(e.target.checked ? [...paymentMethods, value] : paymentMethods.filter((m) => m !== value))}
+                  />
+                  {methodLabel}
+                </label>
+              ))}
+            </div>
+          </div>
+
+          <div className="mt-5 grid gap-4 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <Label>Default labour rate (per hour)</Label>
+              <Input type="number" min={0} value={labourRate} onChange={(e) => setLabourRate(e.target.value)} />
+              <p className="text-xs text-muted-foreground">Used as a quick-fill helper when pricing labour on an estimate.</p>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Default customer contact channel</Label>
+              <select value={messageChannel} onChange={(e) => setMessageChannel(e.target.value)} className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm">
+                {Object.entries(CHANNEL_LABEL).map(([value, chLabel]) => <option key={value} value={value}>{chLabel}</option>)}
+              </select>
+            </div>
+          </div>
+
+          <div className="mt-5 flex justify-end">
+            <Button onClick={saveWorkshopSettings} disabled={savingWorkshopSettings}>
+              {savingWorkshopSettings && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Save
+            </Button>
+          </div>
         </Section>
       )}
 

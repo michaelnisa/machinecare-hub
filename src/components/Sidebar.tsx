@@ -65,7 +65,7 @@ type NavGroup = { id: string; label: string; items: NavItem[] };
 
 export function Sidebar() {
   const { profile, organisation, signOut } = useAuth();
-  const { isFleet, isGarage } = useIndustry();
+  const { isFleet, isGarage, isMixed } = useIndustry();
   const { isManager } = useUserRole();
   const navigate = useNavigate();
   const { t } = useI18n();
@@ -386,7 +386,16 @@ export function Sidebar() {
     [t],
   );
 
-  const groups = isFleet ? fleetGroups : isGarage ? garageGroups : manufacturingGroups;
+  // "mixed" orgs run more than one business line — show all three nav sets
+  // merged (deduping the repeated "System" group) rather than defaulting to
+  // manufacturing-only and leaving garage/fleet routes unreachable.
+  const groups = isMixed
+    ? [
+        ...manufacturingGroups.filter((g) => g.id !== "system"),
+        ...fleetGroups.filter((g) => g.id !== "system"),
+        ...garageGroups,
+      ]
+    : isFleet ? fleetGroups : isGarage ? garageGroups : manufacturingGroups;
 
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>(() => {
     try {

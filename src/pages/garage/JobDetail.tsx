@@ -1,17 +1,20 @@
 import { useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { PageLoader } from "@/components/PageLoader";
-import { ArrowLeft, Loader2, Plus, Trash2 } from "lucide-react";
+import { ArrowLeft, Loader2, Plus, Trash2, Printer, QrCode } from "lucide-react";
+import { GarageJobStatusQrDialog } from "@/components/GarageJobStatusQrDialog";
 import { toast } from "sonner";
 import { formatDate, formatMoney } from "@/lib/format";
 import { STATUS_FLOW, STATUS_LABEL, STATUS_BADGE, formatJobNumber } from "@/lib/garage-constants";
 import { TRIGGER_EVENTS, TRIGGER_EVENT_LABEL, buildMessage } from "@/lib/garage-messages";
+import { estimateTotal, estimateTotals, invoiceTotal, invoiceTotals } from "@/lib/garage-money";
 
 export default function GarageJobDetail() {
   const { id } = useParams<{ id: string }>();
@@ -26,6 +29,7 @@ export default function GarageJobDetail() {
   const [mechanicId, setMechanicId] = useState("");
   const [busy, setBusy] = useState(false);
   const [decisionMode, setDecisionMode] = useState<"approve" | "decline" | null>(null);
+  const [qrOpen, setQrOpen] = useState(false);
 
   const load = async () => {
     if (!id) return;
@@ -107,13 +111,20 @@ export default function GarageJobDetail() {
             {job.garage_vehicles?.registration_number ? ` · ${job.garage_vehicles.registration_number}` : ""} — {job.garage_customers?.name}
           </p>
         </div>
-        {job.status !== "closed" && job.status !== "cancelled" && (
-          <div className="flex flex-wrap gap-2">
-            {nextStatus && <Button size="sm" onClick={() => setStatus(nextStatus)} disabled={busy}>Move to {STATUS_LABEL[nextStatus]}</Button>}
-            <Button size="sm" variant="outline" className="text-destructive" onClick={() => setStatus("cancelled")} disabled={busy}>Cancel job</Button>
-          </div>
-        )}
+        <div className="flex flex-wrap gap-2">
+          <Button size="sm" variant="outline" className="gap-1.5" onClick={() => setQrOpen(true)}>
+            <QrCode className="h-3.5 w-3.5" /> Status link
+          </Button>
+          {job.status !== "closed" && job.status !== "cancelled" && (
+            <>
+              {nextStatus && <Button size="sm" onClick={() => setStatus(nextStatus)} disabled={busy}>Move to {STATUS_LABEL[nextStatus]}</Button>}
+              <Button size="sm" variant="outline" className="text-destructive" onClick={() => setStatus("cancelled")} disabled={busy}>Cancel job</Button>
+            </>
+          )}
+        </div>
       </div>
+
+      <GarageJobStatusQrDialog open={qrOpen} onOpenChange={setQrOpen} jobId={job.id} jobLabel={formatJobNumber(job)} />
 
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="space-y-6 lg:col-span-2">
@@ -255,11 +266,17 @@ function DiagnosisCard({ job, findings, onSaveDiagnosis, onFindingsChanged }: an
 }
 
 function EstimateCard({ job, estimate, onChanged, decisionMode, setDecisionMode }: any) {
+  const { organisation } = useAuth();
   const [creating, setCreating] = useState(false);
 
   const createEstimate = async () => {
     setCreating(true);
-    const { error } = await (supabase as any).from("garage_estimates").insert({ organisation_id: job.organisation_id, job_id: job.id, status: "draft" });
+    const { error } = await (supabase as any).from("garage_estimates").insert({
+      organisation_id: job.organisation_id,
+      job_id: job.id,
+      status: "draft",
+      tax_rate_percent: organisation?.default_tax_rate_percent ?? 0,
+    });
     if (!error && ["received", "diagnosing"].includes(job.status)) {
       await (supabase as any).from("garage_jobs").update({ status: "estimate" }).eq("id", job.id);
     }
@@ -282,7 +299,12 @@ function EstimateCard({ job, estimate, onChanged, decisionMode, setDecisionMode 
     <div className="rounded-xl border border-border bg-card p-4">
       <div className="mb-3 flex items-center justify-between">
         <h2 className="text-sm font-medium">Estimate</h2>
-        <span className="rounded-full bg-muted px-2 py-0.5 text-xs capitalize text-muted-foreground">{estimate.status.replace("_", " ")}</span>
+        <div className="flex items-center gap-2">
+          <Link to={`/garage/estimates/${estimate.id}/print`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
+            <Printer className="h-3.5 w-3.5" /> Print
+          </Link>
+          <span className="rounded-full bg-muted px-2 py-0.5 text-xs capitalize text-muted-foreground">{estimate.status.replace("_", " ")}</span>
+        </div>
       </div>
 
       {estimate.status === "draft" || estimate.status === "changes_requested" ? (
@@ -314,11 +336,6 @@ function EstimateCard({ job, estimate, onChanged, decisionMode, setDecisionMode 
   );
 }
 
-function estimateTotal(estimate: any) {
-  const itemsTotal = (estimate.garage_estimate_items ?? []).reduce((s: number, it: any) => s + Number(it.line_total ?? it.quantity * it.unit_price), 0);
-  return itemsTotal + Number(estimate.labour_cost || 0) - Number(estimate.discount || 0);
-}
-
 function JobCosting({ estimate }: any) {
   const items = estimate.garage_estimate_items ?? [];
   if (items.length === 0 && Number(estimate.labour_cost) === 0) return null;
@@ -339,6 +356,7 @@ function JobCosting({ estimate }: any) {
 }
 
 function EstimateReadOnly({ estimate }: any) {
+  const totals = estimateTotals(estimate);
   return (
     <div className="space-y-2 text-sm">
       {(estimate.garage_estimate_items ?? []).map((it: any) => (
@@ -348,17 +366,22 @@ function EstimateReadOnly({ estimate }: any) {
         </div>
       ))}
       {Number(estimate.labour_cost) > 0 && <div className="flex justify-between text-muted-foreground"><span>Labour</span><span>{formatMoney(estimate.labour_cost)}</span></div>}
+      {Number(estimate.other_cost) > 0 && <div className="flex justify-between text-muted-foreground"><span>Other</span><span>{formatMoney(estimate.other_cost)}</span></div>}
       {Number(estimate.discount) > 0 && <div className="flex justify-between text-muted-foreground"><span>Discount</span><span>-{formatMoney(estimate.discount)}</span></div>}
-      <div className="flex justify-between border-t border-border pt-2 font-medium"><span>Total</span><span>{formatMoney(estimateTotal(estimate))}</span></div>
+      {Number(estimate.tax_rate_percent) > 0 && <div className="flex justify-between text-muted-foreground"><span>Tax ({estimate.tax_rate_percent}%)</span><span>{formatMoney(totals.taxAmount)}</span></div>}
+      <div className="flex justify-between border-t border-border pt-2 font-medium"><span>Total</span><span>{formatMoney(totals.total)}</span></div>
     </div>
   );
 }
 
 function EstimateEditor({ estimate, job, onChanged }: any) {
+  const { organisation } = useAuth();
   const [items, setItems] = useState<any[]>(estimate.garage_estimate_items ?? []);
+  const [labourHours, setLabourHours] = useState("");
   const [labour, setLabour] = useState(String(estimate.labour_cost ?? 0));
   const [discount, setDiscount] = useState(String(estimate.discount ?? 0));
   const [otherCost, setOtherCost] = useState(String(estimate.other_cost ?? 0));
+  const [taxRate, setTaxRate] = useState(String(estimate.tax_rate_percent ?? 0));
   const [parts, setParts] = useState<any[]>([]);
   const [newItem, setNewItem] = useState<any>({ item_id: "", description: "", quantity: "1", unit_price: "0", unit_cost: "0" });
   const [busy, setBusy] = useState(false);
@@ -368,6 +391,7 @@ function EstimateEditor({ estimate, job, onChanged }: any) {
     setLabour(String(estimate.labour_cost ?? 0));
     setDiscount(String(estimate.discount ?? 0));
     setOtherCost(String(estimate.other_cost ?? 0));
+    setTaxRate(String(estimate.tax_rate_percent ?? 0));
   }, [estimate.id]);
 
   useEffect(() => {
@@ -399,7 +423,12 @@ function EstimateEditor({ estimate, job, onChanged }: any) {
   };
 
   const saveCosts = async () => {
-    const { error } = await (supabase as any).from("garage_estimates").update({ labour_cost: Number(labour) || 0, discount: Number(discount) || 0, other_cost: Number(otherCost) || 0 }).eq("id", estimate.id);
+    const { error } = await (supabase as any).from("garage_estimates").update({
+      labour_cost: Number(labour) || 0,
+      discount: Number(discount) || 0,
+      other_cost: Number(otherCost) || 0,
+      tax_rate_percent: Number(taxRate) || 0,
+    }).eq("id", estimate.id);
     if (error) toast.error(error.message); else onChanged();
   };
 
@@ -446,15 +475,38 @@ function EstimateEditor({ estimate, job, onChanged }: any) {
         <Button size="sm" variant="outline" onClick={addItem}><Plus className="h-4 w-4" /></Button>
       </div>
 
-      <div className="grid grid-cols-3 gap-3">
+      {Number(organisation?.default_labour_rate_per_hour) > 0 && (
+        <div className="flex items-end gap-2">
+          <div className="flex-1"><Label className="text-xs">Labour hours (@ {organisation.default_labour_rate_per_hour}/hr)</Label>
+            <Input type="number" min={0} step={0.5} value={labourHours} onChange={(e) => setLabourHours(e.target.value)} className="mt-1 h-9" placeholder="e.g. 2.5" />
+          </div>
+          <Button
+            type="button" size="sm" variant="outline"
+            onClick={() => { const v = String(Math.round((Number(labourHours) || 0) * Number(organisation.default_labour_rate_per_hour))); setLabour(v); (supabase as any).from("garage_estimates").update({ labour_cost: Number(v) || 0 }).eq("id", estimate.id).then(onChanged); }}
+          >
+            Fill labour cost
+          </Button>
+        </div>
+      )}
+
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <div><Label className="text-xs">Labour cost</Label><Input type="number" min={0} value={labour} onChange={(e) => setLabour(e.target.value)} onBlur={saveCosts} className="mt-1 h-9" /></div>
         <div><Label className="text-xs">Other cost</Label><Input type="number" min={0} value={otherCost} onChange={(e) => setOtherCost(e.target.value)} onBlur={saveCosts} className="mt-1 h-9" /></div>
         <div><Label className="text-xs">Discount</Label><Input type="number" min={0} value={discount} onChange={(e) => setDiscount(e.target.value)} onBlur={saveCosts} className="mt-1 h-9" /></div>
+        <div><Label className="text-xs">Tax %</Label><Input type="number" min={0} max={100} value={taxRate} onChange={(e) => setTaxRate(e.target.value)} onBlur={saveCosts} className="mt-1 h-9" /></div>
       </div>
 
       <div className="flex justify-between border-t border-border pt-2 text-sm font-medium">
         <span>Total</span>
-        <span>{formatMoney((items.reduce((s, it) => s + Number(it.line_total ?? it.quantity * it.unit_price), 0)) + (Number(labour) || 0) - (Number(discount) || 0))}</span>
+        <span>
+          {formatMoney(estimateTotal({
+            garage_estimate_items: items,
+            labour_cost: Number(labour) || 0,
+            other_cost: Number(otherCost) || 0,
+            discount: Number(discount) || 0,
+            tax_rate_percent: Number(taxRate) || 0,
+          }))}
+        </span>
       </div>
 
       <Button size="sm" onClick={send} disabled={busy}>{busy ? <Loader2 className="h-4 w-4 animate-spin" /> : "Send to customer"}</Button>
@@ -530,9 +582,10 @@ const STATUS_TO_EVENT: Record<string, string> = {
 };
 
 function MessageCard({ job }: any) {
+  const { organisation } = useAuth();
   const [messages, setMessages] = useState<any[]>([]);
   const [event, setEvent] = useState(STATUS_TO_EVENT[job.status] ?? "custom");
-  const [channel, setChannel] = useState("whatsapp");
+  const [channel, setChannel] = useState(organisation?.default_message_channel ?? "whatsapp");
   const [body, setBody] = useState("");
   const [saving, setSaving] = useState(false);
 
@@ -595,11 +648,6 @@ function MessageCard({ job }: any) {
 
 const INVOICE_ELIGIBLE = new Set(["ready", "delivered", "closed"]);
 
-function invoiceTotal(invoice: any) {
-  const itemsTotal = (invoice.garage_invoice_items ?? []).reduce((s: number, it: any) => s + Number(it.line_total ?? it.quantity * it.unit_price), 0);
-  return itemsTotal + Number(invoice.labour_cost || 0) + Number(invoice.other_cost || 0) - Number(invoice.discount || 0);
-}
-
 function InvoiceCard({ job, invoice, payments, onChanged }: any) {
   const [generating, setGenerating] = useState(false);
   const [payMode, setPayMode] = useState<"payment" | "refund" | null>(null);
@@ -624,7 +672,8 @@ function InvoiceCard({ job, invoice, payments, onChanged }: any) {
     );
   }
 
-  const total = invoiceTotal(invoice);
+  const totals = invoiceTotals(invoice);
+  const total = totals.total;
   const paid = payments.filter((p: any) => p.type === "payment").reduce((s: number, p: any) => s + Number(p.amount), 0)
     - payments.filter((p: any) => p.type === "refund").reduce((s: number, p: any) => s + Number(p.amount), 0);
   const outstanding = total - paid;
@@ -635,7 +684,12 @@ function InvoiceCard({ job, invoice, payments, onChanged }: any) {
     <div className="rounded-xl border border-border bg-card p-4">
       <div className="mb-3 flex items-center justify-between">
         <h2 className="text-sm font-medium">Invoice INV-{invoice.invoice_year}-{String(invoice.invoice_number).padStart(4, "0")}</h2>
-        <span className={`rounded-full px-2 py-0.5 text-xs ${statusClass}`}>{status}</span>
+        <div className="flex items-center gap-2">
+          <Link to={`/garage/invoices/${invoice.id}/print`} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
+            <Printer className="h-3.5 w-3.5" /> Print
+          </Link>
+          <span className={`rounded-full px-2 py-0.5 text-xs ${statusClass}`}>{status}</span>
+        </div>
       </div>
 
       <div className="space-y-1.5 text-sm">
@@ -645,6 +699,7 @@ function InvoiceCard({ job, invoice, payments, onChanged }: any) {
         {Number(invoice.labour_cost) > 0 && <div className="flex justify-between text-muted-foreground"><span>Labour</span><span>{formatMoney(invoice.labour_cost)}</span></div>}
         {Number(invoice.other_cost) > 0 && <div className="flex justify-between text-muted-foreground"><span>Other</span><span>{formatMoney(invoice.other_cost)}</span></div>}
         {Number(invoice.discount) > 0 && <div className="flex justify-between text-muted-foreground"><span>Discount</span><span>-{formatMoney(invoice.discount)}</span></div>}
+        {Number(invoice.tax_rate_percent) > 0 && <div className="flex justify-between text-muted-foreground"><span>Tax ({invoice.tax_rate_percent}%)</span><span>{formatMoney(totals.taxAmount)}</span></div>}
         <div className="flex justify-between border-t border-border pt-1.5 font-medium"><span>Total</span><span>{formatMoney(total)}</span></div>
         <div className="flex justify-between text-muted-foreground"><span>Paid</span><span>{formatMoney(paid)}</span></div>
         <div className="flex justify-between font-medium"><span>Outstanding</span><span>{formatMoney(outstanding)}</span></div>
@@ -672,13 +727,16 @@ function InvoiceCard({ job, invoice, payments, onChanged }: any) {
 }
 
 function RecordPaymentDialog({ mode, setMode, invoice, outstanding, paid, onChanged }: any) {
+  const { organisation } = useAuth();
+  const methods = organisation?.accepted_payment_methods?.length ? organisation.accepted_payment_methods : ["cash", "mobile_money", "bank", "other"];
   const [amount, setAmount] = useState("");
-  const [method, setMethod] = useState("cash");
+  const [method, setMethod] = useState(methods[0]);
   const [reference, setReference] = useState("");
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    if (mode) { setAmount(String(Math.max(0, mode === "refund" ? paid : outstanding))); setMethod("cash"); setReference(""); }
+    if (mode) { setAmount(String(Math.max(0, mode === "refund" ? paid : outstanding))); setMethod(methods[0]); setReference(""); }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode]);
 
   const submit = async () => {
@@ -702,7 +760,7 @@ function RecordPaymentDialog({ mode, setMode, invoice, outstanding, paid, onChan
           <div><Label>Amount *</Label><Input type="number" min={0} value={amount} onChange={(e) => setAmount(e.target.value)} className="mt-1" /></div>
           <div><Label>Method</Label>
             <select value={method} onChange={(e) => setMethod(e.target.value)} className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm">
-              {["cash", "mobile_money", "bank", "other"].map((m) => <option key={m} value={m}>{m.replace("_", " ")}</option>)}
+              {methods.map((m: string) => <option key={m} value={m}>{m.replace(/_/g, " ")}</option>)}
             </select>
           </div>
           <div><Label>Reference (optional)</Label><Input value={reference} onChange={(e) => setReference(e.target.value)} className="mt-1" placeholder="Transaction ID, receipt #…" /></div>

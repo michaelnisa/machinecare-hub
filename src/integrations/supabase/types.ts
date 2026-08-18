@@ -12,31 +12,6 @@ export type Database = {
   __InternalSupabase: {
     PostgrestVersion: "14.5"
   }
-  graphql_public: {
-    Tables: {
-      [_ in never]: never
-    }
-    Views: {
-      [_ in never]: never
-    }
-    Functions: {
-      graphql: {
-        Args: {
-          extensions?: Json
-          operationName?: string
-          query?: string
-          variables?: Json
-        }
-        Returns: Json
-      }
-    }
-    Enums: {
-      [_ in never]: never
-    }
-    CompositeTypes: {
-      [_ in never]: never
-    }
-  }
   public: {
     Tables: {
       calibration_logs: {
@@ -1603,6 +1578,7 @@ export type Database = {
           other_cost: number
           sent_at: string | null
           status: string
+          tax_rate_percent: number
           updated_at: string
         }
         Insert: {
@@ -1623,6 +1599,7 @@ export type Database = {
           other_cost?: number
           sent_at?: string | null
           status?: string
+          tax_rate_percent?: number
           updated_at?: string
         }
         Update: {
@@ -1643,6 +1620,7 @@ export type Database = {
           other_cost?: number
           sent_at?: string | null
           status?: string
+          tax_rate_percent?: number
           updated_at?: string
         }
         Relationships: [
@@ -1739,6 +1717,7 @@ export type Database = {
           notes: string | null
           organisation_id: string
           other_cost: number
+          tax_rate_percent: number
         }
         Insert: {
           created_at?: string
@@ -1754,6 +1733,7 @@ export type Database = {
           notes?: string | null
           organisation_id: string
           other_cost?: number
+          tax_rate_percent?: number
         }
         Update: {
           created_at?: string
@@ -1769,6 +1749,7 @@ export type Database = {
           notes?: string | null
           organisation_id?: string
           other_cost?: number
+          tax_rate_percent?: number
         }
         Relationships: [
           {
@@ -3121,6 +3102,7 @@ export type Database = {
           organisation_id: string
           plate_number: string | null
           purchase_date: string | null
+          qr_enabled: boolean
           registration_number: string | null
           serial_number: string | null
           status: string
@@ -3147,6 +3129,7 @@ export type Database = {
           organisation_id: string
           plate_number?: string | null
           purchase_date?: string | null
+          qr_enabled?: boolean
           registration_number?: string | null
           serial_number?: string | null
           status?: string
@@ -3173,6 +3156,7 @@ export type Database = {
           organisation_id?: string
           plate_number?: string | null
           purchase_date?: string | null
+          qr_enabled?: boolean
           registration_number?: string | null
           serial_number?: string | null
           status?: string
@@ -3804,11 +3788,18 @@ export type Database = {
       }
       organisations: {
         Row: {
+          accepted_payment_methods: string[]
+          address: string | null
           block_expired_calibration_checkout: boolean
+          business_hours: Json
           created_at: string
+          default_labour_rate_per_hour: number
+          default_message_channel: string
+          default_tax_rate_percent: number
           id: string
           industry: string | null
           industry_profile: Database["public"]["Enums"]["industry_profile"]
+          invoice_footer_note: string | null
           logo_url: string | null
           maintenance_alerts_sms_enabled: boolean
           name: string
@@ -3818,6 +3809,7 @@ export type Database = {
           notifications_notify_managers: boolean
           notifications_notify_technicians: boolean
           notifications_system_inbox: string | null
+          phone: string | null
           plan: string
           production_alert_attainment_threshold: number | null
           production_alert_downtime_minutes: number | null
@@ -3827,11 +3819,18 @@ export type Database = {
           stock_count_variance_approval_threshold: number | null
         }
         Insert: {
+          accepted_payment_methods?: string[]
+          address?: string | null
           block_expired_calibration_checkout?: boolean
+          business_hours?: Json
           created_at?: string
+          default_labour_rate_per_hour?: number
+          default_message_channel?: string
+          default_tax_rate_percent?: number
           id?: string
           industry?: string | null
           industry_profile?: Database["public"]["Enums"]["industry_profile"]
+          invoice_footer_note?: string | null
           logo_url?: string | null
           maintenance_alerts_sms_enabled?: boolean
           name: string
@@ -3841,6 +3840,7 @@ export type Database = {
           notifications_notify_managers?: boolean
           notifications_notify_technicians?: boolean
           notifications_system_inbox?: string | null
+          phone?: string | null
           plan?: string
           production_alert_attainment_threshold?: number | null
           production_alert_downtime_minutes?: number | null
@@ -3850,11 +3850,18 @@ export type Database = {
           stock_count_variance_approval_threshold?: number | null
         }
         Update: {
+          accepted_payment_methods?: string[]
+          address?: string | null
           block_expired_calibration_checkout?: boolean
+          business_hours?: Json
           created_at?: string
+          default_labour_rate_per_hour?: number
+          default_message_channel?: string
+          default_tax_rate_percent?: number
           id?: string
           industry?: string | null
           industry_profile?: Database["public"]["Enums"]["industry_profile"]
+          invoice_footer_note?: string | null
           logo_url?: string | null
           maintenance_alerts_sms_enabled?: boolean
           name?: string
@@ -3864,6 +3871,7 @@ export type Database = {
           notifications_notify_managers?: boolean
           notifications_notify_technicians?: boolean
           notifications_system_inbox?: string | null
+          phone?: string | null
           plan?: string
           production_alert_attainment_threshold?: number | null
           production_alert_downtime_minutes?: number | null
@@ -4915,6 +4923,24 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      rate_limit_log: {
+        Row: {
+          bucket: string
+          created_at: string
+          id: number
+        }
+        Insert: {
+          bucket: string
+          created_at?: string
+          id?: number
+        }
+        Update: {
+          bucket?: string
+          created_at?: string
+          id?: number
+        }
+        Relationships: []
       }
       risk_assessment_items: {
         Row: {
@@ -7274,6 +7300,10 @@ export type Database = {
         Args: { message_id: number; queue_name: string }
         Returns: boolean
       }
+      enforce_rate_limit: {
+        Args: { _bucket: string; _max_count: number; _window_minutes: number }
+        Returns: undefined
+      }
       enqueue_email: {
         Args: { payload: Json; queue_name: string }
         Returns: number
@@ -7297,6 +7327,7 @@ export type Database = {
           notes: string | null
           organisation_id: string
           other_cost: number
+          tax_rate_percent: number
         }
         SetofOptions: {
           from: "*"
@@ -7315,6 +7346,34 @@ export type Database = {
           template_id: string
           template_name: string
           template_version: number
+        }[]
+      }
+      get_garage_job_status_public: {
+        Args: { _job_id: string }
+        Returns: {
+          business_hours: Json
+          created_at: string
+          customer_name: string
+          estimate_sent_at: string
+          estimate_status: string
+          estimate_total: number
+          expected_completion: string
+          invoice_number: number
+          invoice_outstanding: number
+          invoice_paid: number
+          invoice_total: number
+          invoice_year: number
+          job_number: number
+          job_year: number
+          mechanic_name: string
+          organisation_address: string
+          organisation_name: string
+          organisation_phone: string
+          priority: string
+          status: string
+          vehicle_make: string
+          vehicle_model: string
+          vehicle_registration: string
         }[]
       }
       get_inductees_for_programme_public: {
@@ -7708,9 +7767,6 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
-  graphql_public: {
-    Enums: {},
-  },
   public: {
     Enums: {
       app_role: ["owner", "manager", "technician", "viewer", "engineer"],

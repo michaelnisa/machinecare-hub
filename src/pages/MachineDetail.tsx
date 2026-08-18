@@ -666,6 +666,8 @@ export default function MachineDetail() {
         onOpenChange={setQrOpen}
         machineId={machine.id}
         machineName={machine.name}
+        qrEnabled={machine.qr_enabled !== false}
+        onQrEnabledChange={(v) => setMachine((m: any) => ({ ...m, qr_enabled: v }))}
       />
       <ConfirmDialog
         open={!!confirm}

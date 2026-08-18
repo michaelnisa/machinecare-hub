@@ -7,6 +7,7 @@ import {
 } from "react";
 import { Session, User } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
+import { setSentryUser } from "@/lib/sentry";
 
 interface Profile {
   id: string;
@@ -19,12 +20,27 @@ interface Profile {
 export type IndustryProfile =
   "manufacturing" | "fleet_logistics" | "garage" | "mixed";
 
+export interface BusinessHoursDay {
+  open: string;
+  close: string;
+  closed: boolean;
+}
+export type BusinessHours = Record<"mon" | "tue" | "wed" | "thu" | "fri" | "sat" | "sun", BusinessHoursDay>;
+
 interface Organisation {
   id: string;
   name: string;
   industry_profile: IndustryProfile;
   logo_url: string | null;
   plan: "lite" | "standard";
+  default_tax_rate_percent: number;
+  phone: string | null;
+  address: string | null;
+  business_hours: BusinessHours;
+  invoice_footer_note: string | null;
+  accepted_payment_methods: string[];
+  default_labour_rate_per_hour: number;
+  default_message_channel: string;
 }
 
 interface AuthContextValue {
@@ -92,6 +108,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     return () => sub.subscription.unsubscribe();
   }, []);
+
+  useEffect(() => {
+    setSentryUser(user ? { id: user.id, email: user.email } : null, profile?.organisation_id);
+  }, [user, profile]);
 
   const signOut = async () => {
     await supabase.auth.signOut();

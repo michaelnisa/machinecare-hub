@@ -89,13 +89,17 @@ export default function InductionProgrammes() {
   const save = async () => {
     if (!profile) return;
     if (!form.name.trim()) return toast.error("Name is required");
+    const passMark = Number(form.pass_mark_percent);
+    if (!Number.isFinite(passMark) || passMark < 0 || passMark > 100) {
+      return toast.error("Pass mark must be a number between 0 and 100");
+    }
     setSaving(true);
     const payload: any = {
       organisation_id: profile.organisation_id,
       name: form.name.trim(),
       inductee_type: form.inductee_type,
       description: form.description.trim() || null,
-      pass_mark_percent: Number(form.pass_mark_percent) || 80,
+      pass_mark_percent: passMark,
       validity_days: form.validity_days ? Number(form.validity_days) : null,
       is_active: form.is_active,
     };

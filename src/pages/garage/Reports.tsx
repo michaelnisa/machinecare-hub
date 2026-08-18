@@ -6,6 +6,7 @@ import { PageLoader, EmptyState } from "@/components/PageLoader";
 import { FileBarChart, Download } from "lucide-react";
 import { toast } from "sonner";
 import { formatMoney, formatNumber } from "@/lib/format";
+import { invoiceTotal } from "@/lib/garage-money";
 
 function monthBounds(yyyymm: string) {
   const [y, m] = yyyymm.split("-").map(Number);
@@ -14,10 +15,6 @@ function monthBounds(yyyymm: string) {
   return { startISO: start.toISOString(), endISO: end.toISOString() };
 }
 
-function invoiceTotal(inv: any) {
-  const itemsTotal = (inv.garage_invoice_items ?? []).reduce((s: number, it: any) => s + Number(it.line_total ?? it.quantity * it.unit_price), 0);
-  return itemsTotal + Number(inv.labour_cost || 0) + Number(inv.other_cost || 0) - Number(inv.discount || 0);
-}
 function invoicePartsCost(inv: any) {
   return (inv.garage_invoice_items ?? []).reduce((s: number, it: any) => s + Number(it.quantity) * Number(it.unit_cost || 0), 0);
 }

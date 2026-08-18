@@ -97,6 +97,12 @@ export default function InductionQuizEditor() {
     if (form.question_type === "multiple_choice") {
       const cleaned = form.options.map((o) => o.trim()).filter(Boolean);
       if (cleaned.length < 2) { toast.error("At least 2 options"); return; }
+      const seen = new Set<string>();
+      for (const o of cleaned) {
+        const key = o.toLowerCase();
+        if (seen.has(key)) { toast.error(`"${o}" is entered more than once — options must be unique`); return; }
+        seen.add(key);
+      }
       if (!cleaned.includes(form.correct_answer)) { toast.error("Correct answer must match an option"); return; }
     }
 

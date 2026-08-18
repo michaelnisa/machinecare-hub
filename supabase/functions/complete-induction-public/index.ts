@@ -74,6 +74,18 @@ Deno.serve(async (req) => {
     })
   }
 
+  const { error: rateLimitError } = await supabase.rpc('enforce_rate_limit', {
+    _bucket: `induction_complete:${recordId}`,
+    _max_count: 5,
+    _window_minutes: 15,
+  })
+  if (rateLimitError) {
+    return new Response(JSON.stringify({ error: 'Too many attempts — please wait a few minutes and try again' }), {
+      status: 429,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    })
+  }
+
   const path = `${record.organisation_id}/signatures/${recordId}.png`
   const { error: uploadError } = await supabase.storage
     .from('induction-assets')

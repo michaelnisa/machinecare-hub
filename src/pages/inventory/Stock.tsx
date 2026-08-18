@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { useUserRole } from "@/hooks/useUserRole";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -19,6 +20,7 @@ import { formatNumber } from "@/lib/format";
 
 export default function Stock() {
   const { profile } = useAuth();
+  const { isManager } = useUserRole();
   const [loading, setLoading] = useState(true);
   const [balances, setBalances] = useState<any[]>([]);
   const [items, setItems] = useState<any[]>([]);
@@ -181,14 +183,16 @@ export default function Stock() {
                         {formatNumber(b.available_stock)}
                       </td>
                       <td className="px-5 py-3 text-right">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => setAdjustTarget(b)}
-                          className="gap-1.5"
-                        >
-                          <SlidersHorizontal className="h-3.5 w-3.5" /> Adjust
-                        </Button>
+                        {isManager && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setAdjustTarget(b)}
+                            className="gap-1.5"
+                          >
+                            <SlidersHorizontal className="h-3.5 w-3.5" /> Adjust
+                          </Button>
+                        )}
                       </td>
                     </tr>
                   );
@@ -381,6 +385,9 @@ function AdjustStockDialog({ target, onClose, onSaved }: any) {
           <p className="text-xs text-muted-foreground">
             Current physical stock: {formatNumber(target.physical_stock)}{" "}
             {target.inventory_items?.unit} at {target.stock_locations?.name}
+          </p>
+          <p className="rounded-md bg-amber-50 px-2.5 py-2 text-xs text-amber-800">
+            For handing parts to a technician, use a material request instead — this is for count corrections (damaged, lost, miscounted) only.
           </p>
           <div>
             <Label>New physical count *</Label>

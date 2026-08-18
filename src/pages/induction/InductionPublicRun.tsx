@@ -12,6 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { PageLoader } from "@/components/PageLoader";
 import { Loader2, ArrowRight, ArrowLeft, CheckCircle2, XCircle, Award, GraduationCap } from "lucide-react";
 import { toast } from "sonner";
+import { enqueue, looksOffline } from "@/lib/offlineQueue";
 
 type Programme = { id: string; name: string; pass_mark_percent: number; description: string | null };
 type Module = {
@@ -57,6 +58,7 @@ export default function InductionPublicRun() {
   const [moduleResults, setModuleResults] = useState<Record<string, { score: number; passed: boolean }>>({});
   const [agreed, setAgreed] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [completedOffline, setCompletedOffline] = useState(false);
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const padRef = useRef<SignaturePad | null>(null);
@@ -67,12 +69,10 @@ export default function InductionPublicRun() {
     if (!programmeId) return;
     (async () => {
       setLoading(true);
-      // RPCs added by migration 20260814010000; will not appear in generated
-      // types until `supabase gen types` is re-run.
       const [{ data: prog }, { data: inds }, { data: mods }] = await Promise.all([
-        (supabase as any).rpc("get_induction_programme_public", { _programme_id: programmeId }),
-        (supabase as any).rpc("get_inductees_for_programme_public", { _programme_id: programmeId }),
-        (supabase as any).rpc("get_induction_modules_public", { _programme_id: programmeId }),
+        supabase.rpc("get_induction_programme_public", { _programme_id: programmeId }),
+        supabase.rpc("get_inductees_for_programme_public", { _programme_id: programmeId }),
+        supabase.rpc("get_induction_modules_public", { _programme_id: programmeId }),
       ]);
       setProgramme(prog?.[0] ?? null);
       setInductees((inds ?? []) as Inductee[]);
@@ -82,7 +82,7 @@ export default function InductionPublicRun() {
       const quizModules = ms.filter((m) => m.has_quiz);
       if (quizModules.length) {
         const results = await Promise.all(
-          quizModules.map((m) => (supabase as any).rpc("get_induction_quiz_questions_public", { _module_id: m.id })),
+          quizModules.map((m) => supabase.rpc("get_induction_quiz_questions_public", { _module_id: m.id })),
         );
         const grouped: Record<string, Question[]> = {};
         quizModules.forEach((m, i) => {
@@ -114,7 +114,7 @@ export default function InductionPublicRun() {
   const startInduction = async () => {
     if (!programmeId || !inducteeId) return;
     setStarting(true);
-    const { data, error } = await (supabase as any).rpc("start_induction_public", {
+    const { data, error } = await supabase.rpc("start_induction_public", {
       _programme_id: programmeId,
       _inductee_id: inducteeId,
     });
@@ -155,7 +155,7 @@ export default function InductionPublicRun() {
     if (qs.some((q) => !answers[q.id])) { toast.error("Answer all questions"); return; }
 
     setSubmitting(true);
-    const { data, error } = await (supabase as any).rpc("submit_induction_quiz_public", {
+    const { data, error } = await supabase.rpc("submit_induction_quiz_public", {
       _record_id: recordId,
       _module_id: m.id,
       _answers: answers,
@@ -183,12 +183,24 @@ export default function InductionPublicRun() {
 
     setSubmitting(true);
     const dataUrl = padRef.current.toDataURL("image/png");
-    const { error } = await supabase.functions.invoke("complete-induction-public", {
-      body: { recordId, signaturePngBase64: dataUrl },
-    });
-    setSubmitting(false);
-    if (error) return toast.error(error.message);
-    setStep({ kind: "done" });
+    try {
+      const { error } = await supabase.functions.invoke("complete-induction-public", {
+        body: { recordId, signaturePngBase64: dataUrl },
+      });
+      if (error) throw error;
+      setCompletedOffline(false);
+      setStep({ kind: "done" });
+    } catch (err) {
+      if (looksOffline(err)) {
+        await enqueue("induction_complete", { recordId, signaturePngBase64: dataUrl });
+        setCompletedOffline(true);
+        setStep({ kind: "done" });
+      } else {
+        toast.error(err instanceof Error ? err.message : "Could not complete induction");
+      }
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   if (loading) return <PageLoader />;
@@ -388,7 +400,11 @@ export default function InductionPublicRun() {
               <CheckCircle2 className="h-7 w-7" />
             </div>
             <h1 className="text-2xl font-semibold tracking-tight">{t.induction.completed}</h1>
-            <p className="mt-2 text-sm text-muted-foreground">{t.induction.completedSub}</p>
+            <p className="mt-2 text-sm text-muted-foreground">
+              {completedOffline
+                ? "No connection right now — your signature was saved on this device and will be sent automatically once you're back online."
+                : t.induction.completedSub}
+            </p>
           </div>
         )}
       </div>

@@ -4,7 +4,9 @@ import { useCallback, useEffect, useState } from "react";
 export type QueuedOpKind =
   | "pre_start_inspection"
   | "checklist_response_update"
-  | "checklist_complete";
+  | "checklist_complete"
+  | "fault_report"
+  | "induction_complete";
 
 export interface QueuedOp<TPayload = unknown> {
   id: string;

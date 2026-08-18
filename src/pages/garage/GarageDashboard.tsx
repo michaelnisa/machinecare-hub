@@ -7,13 +7,9 @@ import { ClipboardList } from "lucide-react";
 import { toast } from "sonner";
 import { formatMoney } from "@/lib/format";
 import { STATUS_LABEL, STATUS_BADGE, formatJobNumber } from "@/lib/garage-constants";
+import { invoiceTotal } from "@/lib/garage-money";
 
 const OPEN_STATUSES = new Set(["received", "diagnosing", "estimate", "awaiting_approval", "approved", "in_progress", "quality_check", "ready"]);
-
-function invoiceTotal(inv: any) {
-  const itemsTotal = (inv.garage_invoice_items ?? []).reduce((s: number, it: any) => s + Number(it.line_total ?? it.quantity * it.unit_price), 0);
-  return itemsTotal + Number(inv.labour_cost || 0) + Number(inv.other_cost || 0) - Number(inv.discount || 0);
-}
 
 export default function GarageDashboard() {
   const { profile, organisation } = useAuth();

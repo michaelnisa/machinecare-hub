@@ -36,6 +36,10 @@ type Module = {
   has_quiz: boolean;
 };
 
+const ASSET_SIGNED_URL_TTL_SECONDS = 60 * 60 * 24 * 365 * 10; // 10 years — anon QR viewers never authenticate, so this must be a signed URL, not getPublicUrl on a private bucket
+const MAX_PDF_BYTES = 20 * 1024 * 1024; // 20MB
+const MAX_VIDEO_BYTES = 200 * 1024 * 1024; // 200MB — matches the induction-assets bucket's file_size_limit
+
 const CONTENT_TYPES = ["text", "video", "pdf", "mixed"] as const;
 
 export default function InductionProgrammeDetail() {
@@ -51,8 +55,10 @@ export default function InductionProgrammeDetail() {
   const [removeId, setRemoveId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [uploadingVideo, setUploadingVideo] = useState(false);
   const [qrOpen, setQrOpen] = useState(false);
   const [togglingQr, setTogglingQr] = useState(false);
+  const [quizCounts, setQuizCounts] = useState<Record<string, number>>({});
 
   const [form, setForm] = useState({
     title: "",
@@ -71,7 +77,21 @@ export default function InductionProgrammeDetail() {
       supabase.from("induction_modules").select("*").eq("programme_id", id).order("order_index"),
     ]);
     setProgramme(prog);
-    setModules((mods ?? []) as Module[]);
+    const loadedModules = (mods ?? []) as Module[];
+    setModules(loadedModules);
+
+    const quizModuleIds = loadedModules.filter((m) => m.has_quiz).map((m) => m.id);
+    if (quizModuleIds.length > 0) {
+      const { data: qs } = await supabase
+        .from("induction_quiz_questions")
+        .select("module_id")
+        .in("module_id", quizModuleIds);
+      const counts: Record<string, number> = {};
+      for (const row of qs ?? []) counts[row.module_id] = (counts[row.module_id] ?? 0) + 1;
+      setQuizCounts(counts);
+    } else {
+      setQuizCounts({});
+    }
     setLoading(false);
   };
   useEffect(() => { load(); }, [id, profile]);
@@ -97,6 +117,18 @@ export default function InductionProgrammeDetail() {
   const save = async () => {
     if (!id) return;
     if (!form.title.trim()) { toast.error("Title is required"); return; }
+    if ((form.content_type === "text" || form.content_type === "mixed") && !form.content_text.trim()) {
+      toast.error("Add the module text, or pick a different content type");
+      return;
+    }
+    if ((form.content_type === "video") && !form.video_url.trim()) {
+      toast.error("Add a video URL, or pick a different content type");
+      return;
+    }
+    if ((form.content_type === "pdf") && !form.document_url.trim()) {
+      toast.error("Upload a PDF, or pick a different content type");
+      return;
+    }
     setSaving(true);
     const nextOrder = editing ? editing.order_index : (modules[modules.length - 1]?.order_index ?? -1) + 1;
     const payload: any = {
@@ -141,24 +173,73 @@ export default function InductionProgrammeDetail() {
 
   const toggleSelfService = async (v: boolean) => {
     if (!id) return;
+
+    if (v) {
+      if (modules.length === 0) {
+        toast.error("Add at least one module before turning on QR self-service — an empty programme would give inductees nothing to complete.");
+        return;
+      }
+      const emptyQuizModule = modules.find((m) => m.has_quiz && (quizCounts[m.id] ?? 0) === 0);
+      if (emptyQuizModule) {
+        toast.warning(`Heads up: "${emptyQuizModule.title}" has its quiz switch on but no questions yet — that step will be silently skipped for inductees. Add questions or turn its quiz off.`);
+      }
+      const brokenContent = modules.find(
+        (m) => (m.content_type === "video" && !m.video_url) || (m.content_type === "pdf" && !m.document_url),
+      );
+      if (brokenContent) {
+        const missing = brokenContent.content_type === "video" ? "video URL" : "PDF";
+        toast.warning(`Heads up: "${brokenContent.title}" is set to ${brokenContent.content_type} but has no ${missing} — that step will show empty content.`);
+      }
+    }
+
     setTogglingQr(true);
-    // qr_self_service_enabled added by migration 20260814010000; will not
-    // appear in generated types until `supabase gen types` is re-run.
-    const { error } = await supabase.from("induction_programmes").update({ qr_self_service_enabled: v } as any).eq("id", id);
+    const { error } = await supabase.from("induction_programmes").update({ qr_self_service_enabled: v }).eq("id", id);
     setTogglingQr(false);
     if (error) { toast.error(error.message); return; }
     setProgramme((p: any) => ({ ...p, qr_self_service_enabled: v }));
   };
 
-  const uploadPdf = async (file: File) => {
-    if (!profile) return;
-    setUploading(true);
-    const path = `${profile.organisation_id}/modules/${crypto.randomUUID()}-${file.name}`;
+  const uploadAsset = async (file: File, subfolder: string): Promise<string | null> => {
+    if (!profile) return null;
+    const path = `${profile.organisation_id}/modules/${subfolder}/${crypto.randomUUID()}-${file.name}`;
     const { error } = await supabase.storage.from("induction-assets").upload(path, file);
+    if (error) { toast.error(error.message); return null; }
+    // induction-assets is a private bucket and QR self-service viewers are
+    // anonymous, so a plain getPublicUrl would 403 for them — sign it instead.
+    const { data, error: signError } = await supabase.storage
+      .from("induction-assets")
+      .createSignedUrl(path, ASSET_SIGNED_URL_TTL_SECONDS);
+    if (signError || !data) { toast.error(signError?.message ?? "Failed to prepare file link"); return null; }
+    return data.signedUrl;
+  };
+
+  const uploadPdf = async (file: File) => {
+    if (file.size > MAX_PDF_BYTES) {
+      toast.error("PDF too large. Please keep it under 20 MB.");
+      return;
+    }
+    setUploading(true);
+    const url = await uploadAsset(file, "pdf");
     setUploading(false);
-    if (error) { toast.error(error.message); return; }
-    const { data } = supabase.storage.from("induction-assets").getPublicUrl(path);
-    setForm((f) => ({ ...f, document_url: data.publicUrl }));
+    if (!url) return;
+    setForm((f) => ({ ...f, document_url: url }));
+    toast.success("Uploaded");
+  };
+
+  const uploadVideo = async (file: File) => {
+    if (!file.type.startsWith("video/")) {
+      toast.error("Please choose a video file.");
+      return;
+    }
+    if (file.size > MAX_VIDEO_BYTES) {
+      toast.error("Video too large. Please keep it under 200 MB — consider uploading to YouTube and pasting the link instead.");
+      return;
+    }
+    setUploadingVideo(true);
+    const url = await uploadAsset(file, "video");
+    setUploadingVideo(false);
+    if (!url) return;
+    setForm((f) => ({ ...f, video_url: url }));
     toast.success("Uploaded");
   };
 
@@ -230,7 +311,17 @@ export default function InductionProgrammeDetail() {
                   <div className="flex flex-wrap items-center gap-2">
                     <div className="font-medium">{i + 1}. {m.title}</div>
                     <Badge variant="outline" className="capitalize">{m.content_type}</Badge>
-                    {m.has_quiz && <Badge className="bg-primary-soft text-primary">Quiz</Badge>}
+                    {m.has_quiz && (quizCounts[m.id] ?? 0) === 0 ? (
+                      <Badge variant="outline" className="border-amber-300 bg-amber-50 text-amber-700">Quiz — no questions yet</Badge>
+                    ) : m.has_quiz ? (
+                      <Badge className="bg-primary-soft text-primary">Quiz · {quizCounts[m.id]} question{quizCounts[m.id] === 1 ? "" : "s"}</Badge>
+                    ) : null}
+                    {m.content_type === "video" && !m.video_url && (
+                      <Badge variant="outline" className="border-amber-300 bg-amber-50 text-amber-700">No video URL</Badge>
+                    )}
+                    {m.content_type === "pdf" && !m.document_url && (
+                      <Badge variant="outline" className="border-amber-300 bg-amber-50 text-amber-700">No PDF</Badge>
+                    )}
                   </div>
                   {m.content_text && <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">{m.content_text}</p>}
                   {m.video_url && <a href={m.video_url} target="_blank" rel="noreferrer" className="mt-1 block truncate text-xs text-primary hover:underline">{m.video_url}</a>}
@@ -286,6 +377,15 @@ export default function InductionProgrammeDetail() {
               <div className="space-y-1.5">
                 <Label>{t.induction.videoUrl}</Label>
                 <Input placeholder="https://youtube.com/..." value={form.video_url} onChange={(e) => setForm({ ...form, video_url: e.target.value })} />
+                <div className="flex items-center gap-2 pt-1">
+                  <span className="text-xs text-muted-foreground">or upload a video file</span>
+                  <div className="h-px flex-1 bg-border" />
+                </div>
+                <div className="flex items-center gap-2">
+                  <Input type="file" accept="video/*" onChange={(e) => e.target.files?.[0] && uploadVideo(e.target.files[0])} disabled={uploadingVideo} />
+                  {uploadingVideo && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
+                </div>
+                <p className="text-[11px] text-muted-foreground">Up to 200 MB. For longer videos, upload to YouTube and paste the link above instead — it streams better on slow connections.</p>
               </div>
             )}
             {(form.content_type === "pdf" || form.content_type === "mixed") && (
@@ -305,7 +405,7 @@ export default function InductionProgrammeDetail() {
           </div>
           <DialogFooter>
             <Button variant="ghost" onClick={() => setOpen(false)}>{t.common.cancel}</Button>
-            <Button onClick={save} disabled={saving}>
+            <Button onClick={save} disabled={saving || uploading || uploadingVideo}>
               {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               {t.common.save}
             </Button>

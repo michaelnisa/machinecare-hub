@@ -7,6 +7,7 @@ import { PageLoader, EmptyState } from "@/components/PageLoader";
 import { FileText } from "lucide-react";
 import { toast } from "sonner";
 import { formatDate, formatMoney } from "@/lib/format";
+import { estimateTotal } from "@/lib/garage-money";
 
 const STATUS_BADGE: Record<string, string> = {
   draft: "bg-slate-100 text-slate-600", sent: "bg-amber-100 text-amber-700", approved: "bg-emerald-100 text-emerald-700",
@@ -17,11 +18,6 @@ const TABS = [
   { value: "all", label: "All" }, { value: "draft", label: "Draft" }, { value: "sent", label: "Sent" },
   { value: "approved", label: "Approved" }, { value: "declined", label: "Declined" }, { value: "changes_requested", label: "Changes requested" },
 ];
-
-function estimateTotal(est: any) {
-  const itemsTotal = (est.garage_estimate_items ?? []).reduce((s: number, it: any) => s + Number(it.line_total ?? it.quantity * it.unit_price), 0);
-  return itemsTotal + Number(est.labour_cost || 0) - Number(est.discount || 0);
-}
 
 export default function GarageEstimates() {
   const { profile } = useAuth();
@@ -79,6 +75,7 @@ export default function GarageEstimates() {
                 <th className="px-5 py-3 font-medium">Total</th>
                 <th className="px-5 py-3 font-medium">Status</th>
                 <th className="px-5 py-3 font-medium">Created</th>
+                <th className="px-5 py-3" />
               </tr>
             </thead>
             <tbody>
@@ -96,6 +93,9 @@ export default function GarageEstimates() {
                   <td className="px-5 py-3">{formatMoney(estimateTotal(e))}</td>
                   <td className="px-5 py-3"><span className={`rounded-full px-2 py-0.5 text-xs capitalize ${STATUS_BADGE[e.status]}`}>{e.status.replace("_", " ")}</span></td>
                   <td className="px-5 py-3 text-muted-foreground">{formatDate(e.created_at)}</td>
+                  <td className="px-5 py-3 text-right">
+                    <Link to={`/garage/estimates/${e.id}/print`} target="_blank" rel="noreferrer" className="text-xs text-primary hover:underline">Print</Link>
+                  </td>
                 </tr>
               ))}
             </tbody>
