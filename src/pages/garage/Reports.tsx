@@ -47,10 +47,11 @@ export default function GarageReports() {
       { data: pay, error: e5 }, { data: m, error: e6 },
       { data: items, error: e7 }, { data: balances, error: e8 },
       { data: po, error: e9 }, { data: poItems, error: e10 },
+      { data: allPay, error: e11 },
     ] = await Promise.all([
       (supabase as any).from("garage_jobs").select("*, garage_customers(name), garage_vehicles(make, model, registration_number)").gte("created_at", startISO).lt("created_at", endISO),
       (supabase as any).from("garage_jobs").select("id, status, mechanic_id"),
-      (supabase as any).from("garage_invoices").select("*, garage_invoice_items(*), garage_jobs(garage_customers(name), garage_vehicles(make, model, registration_number))").gte("issued_at", startISO).lt("issued_at", endISO),
+      (supabase as any).from("garage_invoices").select("*, garage_invoice_items(*), garage_jobs(mechanic_id, garage_customers(name), garage_vehicles(make, model, registration_number))").gte("issued_at", startISO).lt("issued_at", endISO),
       (supabase as any).from("garage_invoices").select("*, garage_invoice_items(*)"),
       (supabase as any).from("garage_payments").select("*").gte("paid_at", startISO).lt("paid_at", endISO),
       (supabase as any).from("garage_mechanics").select("id, name").eq("status", "active").order("name"),
@@ -58,8 +59,10 @@ export default function GarageReports() {
       (supabase as any).from("stock_balances").select("item_id, available_stock"),
       (supabase as any).from("purchase_orders").select("id, supplier_id, created_at, suppliers(name)").gte("created_at", startISO).lt("created_at", endISO),
       (supabase as any).from("purchase_order_items").select("purchase_order_id, quantity, unit_price"),
+      // All payments (for outstanding invoices calculation) — was a serial query after Promise.all; now parallel
+      (supabase as any).from("garage_payments").select("invoice_id, amount, type"),
     ]);
-    const err = e1 || e2 || e3 || e4 || e5 || e6 || e7 || e8 || e9 || e10;
+    const err = e1 || e2 || e3 || e4 || e5 || e6 || e7 || e8 || e9 || e10 || e11;
     if (err) toast.error(err.message);
     setJobs(j ?? []);
     setAllOpenJobs((openJobs ?? []).filter((x: any) => OPEN_STATUSES.has(x.status)));
@@ -74,7 +77,6 @@ export default function GarageReports() {
 
     const allInvList = allInv ?? [];
     const paidByInvoice: Record<string, number> = {};
-    const { data: allPay } = await (supabase as any).from("garage_payments").select("invoice_id, amount, type");
     (allPay ?? []).forEach((p: any) => {
       const sign = p.type === "refund" ? -1 : 1;
       paidByInvoice[p.invoice_id] = (paidByInvoice[p.invoice_id] ?? 0) + sign * Number(p.amount);
@@ -122,13 +124,21 @@ export default function GarageReports() {
     return Object.values(map).sort((a, b) => b.revenue - a.revenue).slice(0, 5);
   }, [invoices]);
 
-  const mechanicWorkload = useMemo(() => {
+  const mechanicPerformance = useMemo(() => {
     return mechanics.map((m) => {
-      const mine = allOpenJobs.filter((j) => j.mechanic_id === m.id);
-      const completedThisMonth = jobs.filter((j) => j.mechanic_id === m.id && j.status === "closed").length;
-      return { name: m.name, active: mine.length, completed: completedThisMonth };
-    }).filter((r) => r.active + r.completed > 0);
-  }, [mechanics, allOpenJobs, jobs]);
+      const activeJobs   = allOpenJobs.filter((j) => j.mechanic_id === m.id).length;
+      const completedJobs = jobs.filter((j) => j.mechanic_id === m.id && j.status === "closed").length;
+      const totalThisMonth = jobs.filter((j) => j.mechanic_id === m.id).length;
+      const mechanicInvoices = invoices.filter((inv) => inv.garage_jobs?.mechanic_id === m.id);
+      const revenue = mechanicInvoices.reduce((s, inv) => s + invoiceTotal(inv), 0);
+      const avgValue = mechanicInvoices.length > 0 ? revenue / mechanicInvoices.length : 0;
+      const completionRate = totalThisMonth > 0 ? Math.round((completedJobs / totalThisMonth) * 100) : null;
+      return { id: m.id, name: m.name, activeJobs, completedJobs, totalThisMonth, revenue, avgValue, completionRate };
+    }).filter((r) => r.activeJobs + r.totalThisMonth > 0);
+  }, [mechanics, allOpenJobs, jobs, invoices]);
+
+  // keep old for CSV export compat
+  const mechanicWorkload = mechanicPerformance;
 
   const supplierSpend = useMemo(() => {
     const map: Record<string, number> = {};
@@ -156,8 +166,8 @@ export default function GarageReports() {
     rows.push(["Top vehicles", "Revenue"]);
     topVehicles.forEach((v) => rows.push([v.label, v.revenue.toFixed(2)]));
     rows.push([]);
-    rows.push(["Mechanic", "Active jobs", "Completed this month"]);
-    mechanicWorkload.forEach((m) => rows.push([m.name, String(m.active), String(m.completed)]));
+    rows.push(["Mechanic", "Active jobs", "Completed this month", "Revenue", "Avg job value", "Completion %"]);
+    mechanicPerformance.forEach((m) => rows.push([m.name, String(m.activeJobs), String(m.completedJobs), m.revenue.toFixed(2), m.avgValue.toFixed(2), m.completionRate !== null ? String(m.completionRate) + "%" : ""]));
     rows.push([]);
     rows.push(["Supplier", "Spend this month"]);
     supplierSpend.forEach((s) => rows.push([s.supplier, s.spend.toFixed(2)]));
@@ -240,14 +250,43 @@ export default function GarageReports() {
       )}
 
       <section>
-        <h2 className="mb-2 text-sm font-medium text-foreground">Mechanic workload</h2>
-        {mechanicWorkload.length === 0 ? <p className="text-sm text-muted-foreground">No jobs assigned to a mechanic.</p> : (
+        <h2 className="mb-2 text-sm font-medium text-foreground">Mechanic performance</h2>
+        {mechanicPerformance.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No jobs assigned to mechanics yet.</p>
+        ) : (
           <div className="overflow-hidden rounded-xl border border-border bg-card">
             <table className="w-full text-sm">
-              <thead className="text-left text-xs uppercase tracking-wide text-muted-foreground"><tr><th className="px-5 py-3 font-medium">Mechanic</th><th className="px-5 py-3 font-medium">Active jobs</th><th className="px-5 py-3 font-medium">Completed this month</th></tr></thead>
-              <tbody>{mechanicWorkload.map((m) => (
-                <tr key={m.name} className="border-t border-border"><td className="px-5 py-3 font-medium">{m.name}</td><td className="px-5 py-3">{m.active}</td><td className="px-5 py-3">{m.completed}</td></tr>
-              ))}</tbody>
+              <thead className="text-left text-xs uppercase tracking-wide text-muted-foreground">
+                <tr>
+                  <th className="px-5 py-3 font-medium">Mechanic</th>
+                  <th className="px-5 py-3 font-medium">Active</th>
+                  <th className="px-5 py-3 font-medium">Completed</th>
+                  <th className="px-5 py-3 font-medium">Completion %</th>
+                  <th className="px-5 py-3 font-medium text-right">Revenue</th>
+                  <th className="px-5 py-3 font-medium text-right">Avg job</th>
+                </tr>
+              </thead>
+              <tbody>
+                {mechanicPerformance.map((m) => (
+                  <tr key={m.id} className="border-t border-border">
+                    <td className="px-5 py-3 font-medium">{m.name}</td>
+                    <td className="px-5 py-3 text-muted-foreground">{m.activeJobs}</td>
+                    <td className="px-5 py-3">{m.completedJobs}</td>
+                    <td className="px-5 py-3">
+                      {m.completionRate !== null ? (
+                        <div className="flex items-center gap-2">
+                          <div className="h-1.5 w-16 rounded-full bg-muted overflow-hidden">
+                            <div className="h-full rounded-full bg-primary" style={{ width: `${m.completionRate}%` }} />
+                          </div>
+                          <span className="text-xs">{m.completionRate}%</span>
+                        </div>
+                      ) : "—"}
+                    </td>
+                    <td className="px-5 py-3 text-right font-medium">{formatMoney(m.revenue)}</td>
+                    <td className="px-5 py-3 text-right text-muted-foreground">{m.avgValue > 0 ? formatMoney(m.avgValue) : "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
             </table>
           </div>
         )}

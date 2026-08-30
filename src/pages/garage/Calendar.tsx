@@ -35,7 +35,8 @@ function toLocalTime(iso: string) {
 }
 function startOfWeek(d: Date) {
   const x = new Date(d);
-  x.setDate(x.getDate() - x.getDay());
+  // Monday = 1; shift so Monday is day-0 (Sunday wraps to 6)
+  x.setDate(x.getDate() - ((x.getDay() + 6) % 7));
   x.setHours(0, 0, 0, 0);
   return x;
 }

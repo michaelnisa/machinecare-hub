@@ -14,6 +14,98 @@ export type Database = {
   }
   public: {
     Tables: {
+      /* ── Garage / Workshop tables ─────────────────────────── */
+      garage_customers: {
+        Row: { id: string; organisation_id: string; name: string; phone: string | null; email: string | null; address: string | null; notes: string | null; created_by: string | null; created_at: string; updated_at: string }
+        Insert: { id?: string; organisation_id: string; name: string; phone?: string | null; email?: string | null; address?: string | null; notes?: string | null; created_by?: string | null }
+        Update: { name?: string; phone?: string | null; email?: string | null; address?: string | null; notes?: string | null }
+        Relationships: []
+      }
+      garage_vehicles: {
+        Row: { id: string; organisation_id: string; customer_id: string; registration_number: string | null; vin: string | null; make: string | null; model: string | null; year: number | null; engine: string | null; fuel_type: string | null; transmission: string | null; mileage: number; photo_url: string | null; notes: string | null; status: string; next_service_date: string | null; next_service_mileage: number | null; created_by: string | null; created_at: string; updated_at: string }
+        Insert: { id?: string; organisation_id: string; customer_id: string; registration_number?: string | null; vin?: string | null; make?: string | null; model?: string | null; year?: number | null; engine?: string | null; fuel_type?: string | null; transmission?: string | null; mileage?: number; notes?: string | null; status?: string; next_service_date?: string | null; next_service_mileage?: number | null; created_by?: string | null }
+        Update: { customer_id?: string; registration_number?: string | null; vin?: string | null; make?: string | null; model?: string | null; year?: number | null; engine?: string | null; fuel_type?: string | null; transmission?: string | null; mileage?: number; notes?: string | null; status?: string; next_service_date?: string | null; next_service_mileage?: number | null }
+        Relationships: []
+      }
+      garage_mechanics: {
+        Row: { id: string; organisation_id: string; name: string; phone: string | null; specialization: string | null; status: string; notes: string | null; created_by: string | null; created_at: string; updated_at: string }
+        Insert: { id?: string; organisation_id: string; name: string; phone?: string | null; specialization?: string | null; status?: string; notes?: string | null; created_by?: string | null }
+        Update: { name?: string; phone?: string | null; specialization?: string | null; status?: string; notes?: string | null }
+        Relationships: []
+      }
+      garage_jobs: {
+        Row: { id: string; organisation_id: string; job_number: number | null; job_year: number | null; customer_id: string; vehicle_id: string; mechanic_id: string | null; reported_problem: string; mileage_at_intake: number | null; priority: string; status: string; expected_completion: string | null; notes: string | null; diagnosis_notes: string | null; recommended_repair: string | null; started_at: string | null; ready_at: string | null; delivered_at: string | null; closed_at: string | null; created_by: string | null; created_at: string; updated_at: string }
+        Insert: { id?: string; organisation_id: string; customer_id: string; vehicle_id: string; mechanic_id?: string | null; reported_problem: string; mileage_at_intake?: number | null; priority?: string; status?: string; expected_completion?: string | null; notes?: string | null; created_by?: string | null }
+        Update: { mechanic_id?: string | null; reported_problem?: string; mileage_at_intake?: number | null; priority?: string; status?: string; expected_completion?: string | null; notes?: string | null; diagnosis_notes?: string | null; recommended_repair?: string | null }
+        Relationships: []
+      }
+      garage_job_status_history: {
+        Row: { id: string; job_id: string; from_status: string | null; to_status: string; changed_by: string | null; note: string | null; created_at: string }
+        Insert: { id?: string; job_id: string; from_status?: string | null; to_status: string; changed_by?: string | null; note?: string | null }
+        Update: { note?: string | null }
+        Relationships: []
+      }
+      garage_job_findings: {
+        Row: { id: string; job_id: string; description: string; created_at: string }
+        Insert: { id?: string; job_id: string; description: string }
+        Update: { description?: string }
+        Relationships: []
+      }
+      garage_estimates: {
+        Row: { id: string; organisation_id: string; job_id: string; status: string; labour_cost: number | null; other_cost: number | null; discount: number | null; tax_rate_percent: number | null; sent_at: string | null; approved_at: string | null; approved_amount: number | null; approved_by_name: string | null; approval_method: string | null; decline_reason: string | null; created_at: string; updated_at: string }
+        Insert: { id?: string; organisation_id: string; job_id: string; status?: string; labour_cost?: number | null; other_cost?: number | null; discount?: number | null; tax_rate_percent?: number | null }
+        Update: { status?: string; labour_cost?: number | null; other_cost?: number | null; discount?: number | null; tax_rate_percent?: number | null; sent_at?: string | null; approved_at?: string | null; approved_amount?: number | null; approved_by_name?: string | null; approval_method?: string | null; decline_reason?: string | null }
+        Relationships: []
+      }
+      garage_estimate_items: {
+        Row: { id: string; estimate_id: string; item_id: string | null; description: string; quantity: number; unit_price: number; unit_cost: number | null; line_total: number | null }
+        Insert: { id?: string; estimate_id: string; item_id?: string | null; description: string; quantity?: number; unit_price?: number; unit_cost?: number | null }
+        Update: { description?: string; quantity?: number; unit_price?: number; unit_cost?: number | null }
+        Relationships: []
+      }
+      garage_invoices: {
+        Row: { id: string; organisation_id: string; job_id: string; invoice_number: number | null; invoice_year: number | null; status: string; labour_cost: number | null; other_cost: number | null; discount: number | null; tax_rate_percent: number | null; issued_at: string; due_date: string | null; paid_at: string | null; notes: string | null; created_at: string }
+        Insert: { id?: string; organisation_id: string; job_id: string; labour_cost?: number | null; other_cost?: number | null; discount?: number | null; tax_rate_percent?: number | null; due_date?: string | null; notes?: string | null }
+        Update: { labour_cost?: number | null; other_cost?: number | null; discount?: number | null; tax_rate_percent?: number | null; due_date?: string | null; paid_at?: string | null; notes?: string | null }
+        Relationships: []
+      }
+      garage_invoice_items: {
+        Row: { id: string; invoice_id: string; item_id: string | null; description: string; quantity: number; unit_price: number; unit_cost: number | null; line_total: number | null }
+        Insert: { id?: string; invoice_id: string; item_id?: string | null; description: string; quantity?: number; unit_price?: number; unit_cost?: number | null }
+        Update: { description?: string; quantity?: number; unit_price?: number; unit_cost?: number | null }
+        Relationships: []
+      }
+      garage_payments: {
+        Row: { id: string; organisation_id: string; invoice_id: string; type: string; amount: number; method: string; reference: string | null; paid_at: string; received_by: string | null; created_at: string }
+        Insert: { id?: string; organisation_id: string; invoice_id: string; type: string; amount: number; method: string; reference?: string | null; received_by?: string | null }
+        Update: { reference?: string | null }
+        Relationships: []
+      }
+      garage_customer_messages: {
+        Row: { id: string; organisation_id: string; customer_id: string; job_id: string | null; trigger_event: string; channel: string; message_body: string; status: string; sent_at: string; created_at: string }
+        Insert: { id?: string; organisation_id: string; customer_id: string; job_id?: string | null; trigger_event: string; channel: string; message_body: string; status?: string }
+        Update: { status?: string }
+        Relationships: []
+      }
+      garage_job_photos: {
+        Row: { id: string; organisation_id: string; job_id: string; file_url: string; caption: string | null; stage: string; uploaded_by: string | null; created_at: string }
+        Insert: { id?: string; organisation_id: string; job_id: string; file_url: string; caption?: string | null; stage?: string; uploaded_by?: string | null }
+        Update: { caption?: string | null; stage?: string }
+        Relationships: []
+      }
+      garage_intake_checklists: {
+        Row: { id: string; job_id: string; organisation_id: string; fuel_level: number | null; mileage: number | null; damage_front: boolean; damage_rear: boolean; damage_left: boolean; damage_right: boolean; damage_roof: boolean; damage_notes: string | null; radio_present: boolean; spare_tyre_present: boolean; jack_present: boolean; vehicle_documents_present: boolean; other_items: string | null; general_notes: string | null; inspected_by: string | null; created_at: string; updated_at: string }
+        Insert: { id?: string; job_id: string; organisation_id: string; fuel_level?: number | null; mileage?: number | null; damage_front?: boolean; damage_rear?: boolean; damage_left?: boolean; damage_right?: boolean; damage_roof?: boolean; damage_notes?: string | null; radio_present?: boolean; spare_tyre_present?: boolean; jack_present?: boolean; vehicle_documents_present?: boolean; other_items?: string | null; general_notes?: string | null; inspected_by?: string | null }
+        Update: { fuel_level?: number | null; mileage?: number | null; damage_front?: boolean; damage_rear?: boolean; damage_left?: boolean; damage_right?: boolean; damage_roof?: boolean; damage_notes?: string | null; radio_present?: boolean; spare_tyre_present?: boolean; jack_present?: boolean; vehicle_documents_present?: boolean; other_items?: string | null; general_notes?: string | null; inspected_by?: string | null }
+        Relationships: []
+      }
+      org_job_counters: {
+        Row: { organisation_id: string; year: number; next_number: number; updated_at: string }
+        Insert: { organisation_id: string; year: number; next_number?: number }
+        Update: { next_number?: number }
+        Relationships: []
+      }
+      /* ── End garage tables ─────────────────────────────────── */
       calibration_logs: {
         Row: {
           calibrated_by: string | null

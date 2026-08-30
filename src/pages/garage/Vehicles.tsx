@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useUserRole } from "@/hooks/useUserRole";
@@ -16,6 +16,7 @@ import { formatNumber, formatDate } from "@/lib/format";
 import { STATUS_LABEL, STATUS_BADGE, formatJobNumber } from "@/lib/garage-constants";
 
 export default function GarageVehicles() {
+  const navigate = useNavigate();
   const { profile, user } = useAuth();
   const { isManager } = useUserRole();
   const [loading, setLoading] = useState(true);
@@ -106,7 +107,7 @@ export default function GarageVehicles() {
             </thead>
             <tbody>
               {filtered.map((v) => (
-                <tr key={v.id} className="cursor-pointer border-t border-border hover:bg-muted/40" onClick={() => setHistoryTarget(v)}>
+                <tr key={v.id} className="cursor-pointer border-t border-border hover:bg-muted/40" onClick={() => navigate(`/garage/vehicles/${v.id}`)}>
                   <td className="px-5 py-3">
                     <div className="font-medium">{[v.make, v.model].filter(Boolean).join(" ") || "—"}</div>
                     {v.year && <div className="text-xs text-muted-foreground">{v.year}</div>}

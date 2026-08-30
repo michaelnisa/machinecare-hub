@@ -107,6 +107,7 @@ const FleetInspections = lazy(() => import("./pages/fleet/Inspections"));
 const FleetInsights = lazy(() => import("./pages/fleet/FleetInsights"));
 const GarageCustomers = lazy(() => import("./pages/garage/Customers"));
 const GarageVehicles = lazy(() => import("./pages/garage/Vehicles"));
+const GarageVehicleDetail = lazy(() => import("./pages/garage/VehicleDetail"));
 const GarageJobs = lazy(() => import("./pages/garage/Jobs"));
 const GarageJobDetail = lazy(() => import("./pages/garage/JobDetail"));
 const GarageMechanics = lazy(() => import("./pages/garage/Mechanics"));
@@ -163,6 +164,7 @@ const App = () => (
                   <Route path="/fleet/insights" element={<FleetInsights />} />
                   <Route path="/garage/customers" element={<GarageCustomers />} />
                   <Route path="/garage/vehicles" element={<GarageVehicles />} />
+                                    <Route path="/garage/vehicles/:id" element={<GarageVehicleDetail />} />
                   <Route path="/garage/jobs" element={<GarageJobs />} />
                   <Route path="/garage/jobs/:id" element={<GarageJobDetail />} />
                   <Route path="/garage/calendar" element={<GarageCalendar />} />

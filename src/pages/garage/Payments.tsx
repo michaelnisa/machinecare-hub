@@ -7,11 +7,17 @@ import { CreditCard } from "lucide-react";
 import { toast } from "sonner";
 import { formatDate, formatMoney } from "@/lib/format";
 
+// today's date as YYYY-MM-DD
+function today() { return new Date().toISOString().slice(0, 10); }
+function firstOfMonth() { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`; }
+
 export default function GaragePayments() {
   const { profile } = useAuth();
   const [loading, setLoading] = useState(true);
   const [payments, setPayments] = useState<any[]>([]);
   const [methodFilter, setMethodFilter] = useState("all");
+  const [dateFrom, setDateFrom] = useState(firstOfMonth());
+  const [dateTo, setDateTo] = useState(today());
 
   useEffect(() => {
     if (!profile) return;
@@ -22,7 +28,14 @@ export default function GaragePayments() {
       .then(({ data, error }: any) => { if (error) toast.error(error.message); setPayments(data ?? []); setLoading(false); });
   }, [profile]);
 
-  const filtered = useMemo(() => methodFilter === "all" ? payments : payments.filter((p) => p.method === methodFilter), [payments, methodFilter]);
+  const filtered = useMemo(() => {
+    let out = payments;
+    if (methodFilter !== "all") out = out.filter((p) => p.method === methodFilter);
+    if (dateFrom) out = out.filter((p) => p.paid_at >= dateFrom);
+    if (dateTo)   out = out.filter((p) => p.paid_at <= dateTo + "T23:59:59");
+    return out;
+  }, [payments, methodFilter, dateFrom, dateTo]);
+
   const total = useMemo(() => filtered.reduce((s, p) => s + (p.type === "refund" ? -1 : 1) * Number(p.amount), 0), [filtered]);
 
   if (loading) return <PageLoader />;
@@ -34,12 +47,20 @@ export default function GaragePayments() {
         <p className="text-sm text-muted-foreground">Every payment received — a running ledger, not editable after the fact.</p>
       </div>
 
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="flex flex-wrap items-center gap-3">
         <select value={methodFilter} onChange={(e) => setMethodFilter(e.target.value)} className="h-10 rounded-md border border-input bg-background px-3 text-sm">
           <option value="all">All methods</option>
           {["cash", "mobile_money", "bank", "other"].map((m) => <option key={m} value={m}>{m.replace("_", " ")}</option>)}
         </select>
-        <div className="text-sm text-muted-foreground">Total: <span className="font-medium text-foreground">{formatMoney(total)}</span></div>
+        <div className="flex items-center gap-2">
+          <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="h-10 rounded-md border border-input bg-background px-3 text-sm" />
+          <span className="text-muted-foreground text-sm">to</span>
+          <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="h-10 rounded-md border border-input bg-background px-3 text-sm" />
+        </div>
+        <div className="ml-auto text-sm text-muted-foreground">
+          {filtered.length} transaction{filtered.length !== 1 ? "s" : ""} ·
+          Total: <span className="font-semibold text-foreground">{formatMoney(total)}</span>
+        </div>
       </div>
 
       {filtered.length === 0 ? (

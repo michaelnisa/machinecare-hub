@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { PageLoader, EmptyState } from "@/components/PageLoader";
-import { ClipboardList, Plus, Loader2 } from "lucide-react";
+import { ClipboardList, Plus, Loader2, Search } from "lucide-react";
 import { toast } from "sonner";
 import { formatDate } from "@/lib/format";
 import { STATUS_FLOW, STATUS_LABEL, STATUS_BADGE, PRIORITY_BORDER, formatJobNumber } from "@/lib/garage-constants";
@@ -21,7 +21,10 @@ export default function GarageJobs() {
   const [params, setParams] = useSearchParams();
   const [loading, setLoading] = useState(true);
   const [jobs, setJobs] = useState<any[]>([]);
+  const [mechanics, setMechanics] = useState<any[]>([]);
   const [tab, setTab] = useState(params.get("status") ?? "all");
+  const [search, setSearch] = useState("");
+  const [mechanicFilter, setMechanicFilter] = useState("all");
   const [newOpen, setNewOpen] = useState(false);
 
   const changeTab = (v: string) => { setTab(v); setParams(v === "all" ? {} : { status: v }); };
@@ -29,17 +32,38 @@ export default function GarageJobs() {
   const load = async () => {
     if (!profile) return;
     setLoading(true);
-    const { data, error } = await (supabase as any)
-      .from("garage_jobs")
-      .select("*, garage_customers(id, name), garage_vehicles(id, make, model, registration_number), garage_mechanics(id, name)")
-      .order("created_at", { ascending: false });
+    const [{ data, error }, { data: mech }] = await Promise.all([
+      (supabase as any)
+        .from("garage_jobs")
+        .select("id, job_number, job_year, status, priority, reported_problem, created_at, expected_completion, customer_id, vehicle_id, mechanic_id, garage_customers(id, name, phone), garage_vehicles(id, make, model, registration_number), garage_mechanics(id, name)")
+        .order("created_at", { ascending: false })
+        .limit(500),
+      (supabase as any).from("garage_mechanics").select("id, name").eq("status", "active").order("name"),
+    ]);
     if (error) toast.error(error.message);
     setJobs(data ?? []);
+    setMechanics(mech ?? []);
     setLoading(false);
   };
   useEffect(() => { load(); }, [profile]);
 
-  const filtered = useMemo(() => (tab === "all" ? jobs : jobs.filter((j) => j.status === tab)), [jobs, tab]);
+  const filtered = useMemo(() => {
+    let out = tab === "all" ? jobs : jobs.filter((j) => j.status === tab);
+    if (mechanicFilter !== "all") {
+      out = out.filter((j) => j.mechanic_id === mechanicFilter);
+    }
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      out = out.filter((j) =>
+        j.garage_customers?.name?.toLowerCase().includes(q) ||
+        j.garage_vehicles?.registration_number?.toLowerCase().includes(q) ||
+        formatJobNumber(j).toLowerCase().includes(q) ||
+        j.reported_problem?.toLowerCase().includes(q)
+      );
+    }
+    return out;
+  }, [jobs, tab, mechanicFilter, search]);
+
   const counts = useMemo(() => {
     const c: Record<string, number> = { all: jobs.length };
     jobs.forEach((j) => { c[j.status] = (c[j.status] ?? 0) + 1; });
@@ -48,8 +72,14 @@ export default function GarageJobs() {
 
   if (loading) return <PageLoader />;
 
+  const isOverdue = (j: any) =>
+    j.expected_completion &&
+    new Date(j.expected_completion) < new Date() &&
+    !["delivered", "closed", "cancelled"].includes(j.status);
+
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="space-y-5 animate-fade-in">
+      {/* Header */}
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Jobs</h1>
@@ -58,52 +88,125 @@ export default function GarageJobs() {
         <Button onClick={() => setNewOpen(true)}><Plus className="mr-2 h-4 w-4" />Create job</Button>
       </div>
 
+      {/* Status tabs */}
       <div className="flex gap-1.5 overflow-x-auto pb-1">
         {TABS.map((t) => (
           <button key={t.value} onClick={() => changeTab(t.value)}
             className={`shrink-0 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${tab === t.value ? "border-primary bg-primary text-primary-foreground" : "border-border bg-card text-muted-foreground hover:bg-muted/60"}`}>
-            {t.label} {counts[t.value] ? <span className="opacity-70">({counts[t.value]})</span> : ""}
+            {t.label}{counts[t.value] ? <span className="ml-1 opacity-70">({counts[t.value]})</span> : ""}
           </button>
         ))}
       </div>
 
+      {/* Filters row */}
+      <div className="flex flex-wrap gap-2">
+        <div className="relative min-w-[200px] flex-1">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search job#, customer, plate, problem…"
+            className="pl-9"
+          />
+        </div>
+        <select
+          value={mechanicFilter}
+          onChange={(e) => setMechanicFilter(e.target.value)}
+          className="h-10 rounded-md border border-input bg-background px-3 text-sm"
+        >
+          <option value="all">All mechanics</option>
+          <option value="">Unassigned</option>
+          {mechanics.map((m: any) => <option key={m.id} value={m.id}>{m.name}</option>)}
+        </select>
+      </div>
+
+      {/* Table */}
       {filtered.length === 0 ? (
-        <EmptyState icon={<ClipboardList className="h-5 w-5" />} title={jobs.length === 0 ? "No jobs yet" : "Nothing in this status"} description={jobs.length === 0 ? "Create your first job when a customer's vehicle comes in." : "Try a different tab."} />
+        <EmptyState
+          icon={<ClipboardList className="h-5 w-5" />}
+          title={jobs.length === 0 ? "No jobs yet" : "Nothing matches your filters"}
+          description={jobs.length === 0 ? "Create your first job when a customer's vehicle comes in." : "Try clearing filters."}
+        />
       ) : (
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {filtered.map((j) => (
-            <button key={j.id} onClick={() => navigate(`/garage/jobs/${j.id}`)}
-              className={`rounded-xl border border-l-4 ${PRIORITY_BORDER[j.priority] ?? "border-l-slate-400"} border-border bg-card p-4 text-left hover:border-primary/50`}>
-              <div className="flex items-start justify-between gap-2">
-                <div className="text-xs font-medium text-muted-foreground">{formatJobNumber(j)}</div>
-                <span className={`rounded-full px-2 py-0.5 text-xs ${STATUS_BADGE[j.status]}`}>{STATUS_LABEL[j.status]}</span>
-              </div>
-              <div className="mt-1.5 font-medium">
-                {[j.garage_vehicles?.make, j.garage_vehicles?.model].filter(Boolean).join(" ") || "Vehicle"}
-                {j.garage_vehicles?.registration_number && <span className="ml-1.5 text-xs text-muted-foreground">{j.garage_vehicles.registration_number}</span>}
-              </div>
-              <div className="text-xs text-muted-foreground">{j.garage_customers?.name}</div>
-              <p className="mt-2 line-clamp-2 text-sm text-muted-foreground">{j.reported_problem}</p>
-              <div className="mt-3 flex items-center justify-between text-xs text-muted-foreground">
-                <span>{j.garage_mechanics?.name ?? "Unassigned"}</span>
-                <span>{formatDate(j.created_at)}</span>
-              </div>
-            </button>
-          ))}
+        <div className="overflow-hidden rounded-xl border border-border bg-card">
+          <table className="w-full text-sm">
+            <thead className="text-left text-xs uppercase tracking-wide text-muted-foreground">
+              <tr>
+                <th className="px-5 py-3 font-medium">Job</th>
+                <th className="px-5 py-3 font-medium">Vehicle</th>
+                <th className="px-5 py-3 font-medium">Customer</th>
+                <th className="px-5 py-3 font-medium hidden md:table-cell">Problem</th>
+                <th className="px-5 py-3 font-medium hidden lg:table-cell">Mechanic</th>
+                <th className="px-5 py-3 font-medium">Status</th>
+                <th className="px-5 py-3 font-medium hidden sm:table-cell">Date</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map((j) => (
+                <tr
+                  key={j.id}
+                  onClick={() => navigate(`/garage/jobs/${j.id}`)}
+                  className={`cursor-pointer border-t border-l-4 border-border hover:bg-muted/30 ${PRIORITY_BORDER[j.priority] ?? "border-l-slate-300"}`}
+                >
+                  <td className="px-5 py-3">
+                    <div className="font-medium text-xs text-muted-foreground">{formatJobNumber(j)}</div>
+                    {isOverdue(j) && (
+                      <div className="mt-0.5 text-[10px] font-semibold text-destructive uppercase">Overdue</div>
+                    )}
+                  </td>
+                  <td className="px-5 py-3">
+                    <div className="font-medium">{[j.garage_vehicles?.make, j.garage_vehicles?.model].filter(Boolean).join(" ") || "—"}</div>
+                    {j.garage_vehicles?.registration_number && (
+                      <div className="text-xs text-muted-foreground">{j.garage_vehicles.registration_number}</div>
+                    )}
+                  </td>
+                  <td className="px-5 py-3 text-muted-foreground">{j.garage_customers?.name ?? "—"}</td>
+                  <td className="px-5 py-3 text-muted-foreground hidden md:table-cell max-w-[200px]">
+                    <p className="truncate">{j.reported_problem}</p>
+                  </td>
+                  <td className="px-5 py-3 text-muted-foreground hidden lg:table-cell">
+                    {j.garage_mechanics?.name ?? <span className="text-xs italic">Unassigned</span>}
+                  </td>
+                  <td className="px-5 py-3">
+                    <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_BADGE[j.status] ?? ""}`}>
+                      {STATUS_LABEL[j.status] ?? j.status}
+                    </span>
+                  </td>
+                  <td className="px-5 py-3 text-muted-foreground text-xs hidden sm:table-cell">{formatDate(j.created_at)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {jobs.length >= 500 && (
+            <div className="border-t border-border px-5 py-3 text-xs text-muted-foreground">
+              Showing latest 500 jobs — use search or status tabs to narrow down.
+            </div>
+          )}
         </div>
       )}
 
-      <NewJobDialog open={newOpen} setOpen={setNewOpen} orgId={profile?.organisation_id} userId={user?.id} onSaved={load} />
+      <NewJobDialog
+        open={newOpen}
+        setOpen={setNewOpen}
+        orgId={profile?.organisation_id}
+        userId={user?.id}
+        onSaved={load}
+      />
     </div>
   );
 }
 
+/* ─── New job dialog (unchanged) ──────────────────────────── */
 function NewJobDialog({ open, setOpen, orgId, userId, onSaved }: any) {
   const [saving, setSaving] = useState(false);
   const [customers, setCustomers] = useState<any[]>([]);
   const [vehicles, setVehicles] = useState<any[]>([]);
   const [mechanics, setMechanics] = useState<any[]>([]);
-  const [form, setForm] = useState<any>({ customer_id: "", vehicle_id: "", reported_problem: "", mileage_at_intake: "", mechanic_id: "", priority: "normal", expected_completion: "", notes: "" });
+  const [form, setForm] = useState<any>({
+    customer_id: "", vehicle_id: "", reported_problem: "",
+    mileage_at_intake: "", mechanic_id: "", priority: "normal",
+    expected_completion: "", notes: "",
+  });
 
   useEffect(() => {
     if (open) {
@@ -155,29 +258,38 @@ function NewJobDialog({ open, setOpen, orgId, userId, onSaved }: any) {
       <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
         <DialogHeader><DialogTitle>Create job</DialogTitle></DialogHeader>
         <div className="grid gap-3">
-          <div><Label>Customer *</Label>
+          <div>
+            <Label>Customer *</Label>
             <select value={form.customer_id} onChange={(e) => setForm({ ...form, customer_id: e.target.value, vehicle_id: "" })} className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm">
               <option value="">Select…</option>
               {customers.map((c: any) => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
           </div>
-          <div><Label>Vehicle *</Label>
+          <div>
+            <Label>Vehicle *</Label>
             <select value={form.vehicle_id} onChange={(e) => onVehicleChange(e.target.value)} disabled={!form.customer_id} className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm disabled:opacity-50">
               <option value="">{form.customer_id ? "Select…" : "Select a customer first"}</option>
-              {vehicles.map((v: any) => <option key={v.id} value={v.id}>{[v.make, v.model].filter(Boolean).join(" ") || "Vehicle"}{v.registration_number ? ` · ${v.registration_number}` : ""}</option>)}
+              {vehicles.map((v: any) => (
+                <option key={v.id} value={v.id}>
+                  {[v.make, v.model].filter(Boolean).join(" ") || "Vehicle"}
+                  {v.registration_number ? ` · ${v.registration_number}` : ""}
+                </option>
+              ))}
             </select>
           </div>
           <div><Label>Reported problem *</Label><Textarea rows={2} value={form.reported_problem} onChange={(e) => setForm({ ...form, reported_problem: e.target.value })} className="mt-1" placeholder="What the customer says is wrong" /></div>
           <div className="grid grid-cols-2 gap-3">
             <div><Label>Mileage at intake (km)</Label><Input type="number" min={0} value={form.mileage_at_intake} onChange={(e) => setForm({ ...form, mileage_at_intake: e.target.value })} className="mt-1" /></div>
-            <div><Label>Priority</Label>
+            <div>
+              <Label>Priority</Label>
               <select value={form.priority} onChange={(e) => setForm({ ...form, priority: e.target.value })} className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm">
                 {["low", "normal", "high", "urgent"].map((p) => <option key={p} value={p}>{p}</option>)}
               </select>
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
-            <div><Label>Mechanic</Label>
+            <div>
+              <Label>Mechanic</Label>
               <select value={form.mechanic_id} onChange={(e) => setForm({ ...form, mechanic_id: e.target.value })} className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm">
                 <option value="">Unassigned</option>
                 {mechanics.map((m: any) => <option key={m.id} value={m.id}>{m.name}</option>)}
@@ -189,7 +301,9 @@ function NewJobDialog({ open, setOpen, orgId, userId, onSaved }: any) {
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
-          <Button onClick={submit} disabled={saving}>{saving ? <Loader2 className="h-4 w-4 animate-spin" /> : "Create job"}</Button>
+          <Button onClick={submit} disabled={saving}>
+            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : "Create job"}
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

@@ -8,7 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { PageLoader } from "@/components/PageLoader";
-import { ArrowLeft, Loader2, Plus, Trash2, Printer, QrCode } from "lucide-react";
+import { ArrowLeft, Loader2, Plus, Trash2, Printer, QrCode, Camera, X, ClipboardCheck } from "lucide-react";
 import { GarageJobStatusQrDialog } from "@/components/GarageJobStatusQrDialog";
 import { toast } from "sonner";
 import { formatDate, formatMoney } from "@/lib/format";
@@ -30,6 +30,7 @@ export default function GarageJobDetail() {
   const [busy, setBusy] = useState(false);
   const [decisionMode, setDecisionMode] = useState<"approve" | "decline" | null>(null);
   const [qrOpen, setQrOpen] = useState(false);
+  const [intakeOpen, setIntakeOpen] = useState(false);
 
   const load = async () => {
     if (!id) return;
@@ -79,11 +80,10 @@ export default function GarageJobDetail() {
     load();
   };
 
-  const assignMechanic = async () => {
-    setBusy(true);
-    const { error } = await (supabase as any).from("garage_jobs").update({ mechanic_id: mechanicId || null }).eq("id", job.id);
-    setBusy(false);
-    if (error) return toast.error(error.message);
+  const assignMechanic = async (newMechanicId: string) => {
+    setMechanicId(newMechanicId);
+    const { error } = await (supabase as any).from("garage_jobs").update({ mechanic_id: newMechanicId || null }).eq("id", job.id);
+    if (error) { toast.error(error.message); return; }
     toast.success("Mechanic updated");
     load();
   };
@@ -126,6 +126,9 @@ export default function GarageJobDetail() {
 
       <GarageJobStatusQrDialog open={qrOpen} onOpenChange={setQrOpen} jobId={job.id} jobLabel={formatJobNumber(job)} />
 
+      {/* ── Status pipeline ── */}
+      <JobStatusPipeline status={job.status} />
+
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="space-y-6 lg:col-span-2">
           <div className="rounded-xl border border-border bg-card p-4">
@@ -134,7 +137,11 @@ export default function GarageJobDetail() {
             {job.notes && <p className="mt-2 text-sm text-muted-foreground">{job.notes}</p>}
           </div>
 
+          <IntakeCard job={job} open={intakeOpen} setOpen={setIntakeOpen} onChanged={load} />
+
           <DiagnosisCard job={job} findings={findings} onSaveDiagnosis={saveDiagnosis} onFindingsChanged={load} />
+
+          <PhotosCard job={job} />
 
           <EstimateCard job={job} estimate={estimate} onChanged={load} decisionMode={decisionMode} setDecisionMode={setDecisionMode} />
 
@@ -167,13 +174,14 @@ export default function GarageJobDetail() {
 
           <div className="rounded-xl border border-border bg-card p-4">
             <Label>Mechanic</Label>
-            <div className="mt-1 flex gap-2">
-              <select value={mechanicId} onChange={(e) => setMechanicId(e.target.value)} className="h-10 flex-1 rounded-md border border-input bg-background px-3 text-sm">
-                <option value="">Unassigned</option>
-                {mechanics.map((m: any) => <option key={m.id} value={m.id}>{m.name}</option>)}
-              </select>
-              <Button size="sm" variant="outline" onClick={assignMechanic} disabled={busy}>Save</Button>
-            </div>
+            <select
+              value={mechanicId}
+              onChange={(e) => assignMechanic(e.target.value)}
+              className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+            >
+              <option value="">Unassigned</option>
+              {mechanics.map((m: any) => <option key={m.id} value={m.id}>{m.name}</option>)}
+            </select>
           </div>
 
           {["ready", "delivered", "closed"].includes(job.status) && <NextServiceCard vehicle={job.garage_vehicles} />}
@@ -722,6 +730,323 @@ function InvoiceCard({ job, invoice, payments, onChanged }: any) {
       )}
 
       <RecordPaymentDialog mode={payMode} setMode={setPayMode} invoice={invoice} outstanding={outstanding} paid={paid} onChanged={onChanged} />
+    </div>
+  );
+}
+
+/* ── Photos Card ──────────────────────────────────────────────────────── */
+const PHOTO_STAGES = [
+  { value: "intake",     label: "Intake" },
+  { value: "diagnosis",  label: "Diagnosis" },
+  { value: "in_progress",label: "Work" },
+  { value: "completion", label: "Completion" },
+  { value: "general",    label: "General" },
+];
+
+function PhotosCard({ job }: any) {
+  const { profile, user } = useAuth();
+  const [photos, setPhotos] = useState<any[]>([]);
+  const [uploading, setUploading] = useState(false);
+  const [stage, setStage] = useState("general");
+
+  const loadPhotos = () => {
+    (supabase as any)
+      .from("garage_job_photos")
+      .select("*")
+      .eq("job_id", job.id)
+      .order("created_at", { ascending: false })
+      .then(({ data }: any) => setPhotos(data ?? []));
+  };
+  useEffect(loadPhotos, [job.id]);
+
+  const upload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !profile) return;
+    if (file.size > 10 * 1024 * 1024) { toast.error("Photo must be under 10 MB"); return; }
+    setUploading(true);
+    const ext = file.name.split(".").pop()?.toLowerCase() ?? "jpg";
+    const path = `${profile.organisation_id}/garage/${job.id}/${Date.now()}.${ext}`;
+    const { error: upErr } = await supabase.storage.from("machine-docs").upload(path, file, { upsert: false });
+    if (upErr) { toast.error(upErr.message); setUploading(false); return; }
+    const { data: pub } = supabase.storage.from("machine-docs").getPublicUrl(path);
+    const { error: dbErr } = await (supabase as any).from("garage_job_photos").insert({
+      organisation_id: profile.organisation_id,
+      job_id: job.id,
+      file_url: pub.publicUrl,
+      stage,
+      uploaded_by: user?.id,
+    });
+    if (dbErr) toast.error(dbErr.message);
+    else { toast.success("Photo added"); loadPhotos(); }
+    e.target.value = "";
+    setUploading(false);
+  };
+
+  const remove = async (photoId: string, fileUrl: string) => {
+    await (supabase as any).from("garage_job_photos").delete().eq("id", photoId);
+    loadPhotos();
+  };
+
+  return (
+    <div className="rounded-xl border border-border bg-card p-4">
+      <div className="mb-3 flex items-center justify-between">
+        <h2 className="text-sm font-medium">Photos</h2>
+        <div className="flex items-center gap-2">
+          <select value={stage} onChange={(e) => setStage(e.target.value)} className="h-8 rounded-md border border-input bg-background px-2 text-xs">
+            {PHOTO_STAGES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
+          </select>
+          <label className={`inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-input bg-background px-2.5 py-1.5 text-xs hover:bg-accent ${uploading ? "pointer-events-none opacity-50" : ""}`}>
+            {uploading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Camera className="h-3.5 w-3.5" />}
+            {uploading ? "Uploading…" : "Add photo"}
+            <input type="file" accept="image/*" className="hidden" onChange={upload} disabled={uploading} />
+          </label>
+        </div>
+      </div>
+
+      {photos.length === 0 ? (
+        <p className="text-xs text-muted-foreground">No photos yet — add photos to document vehicle condition.</p>
+      ) : (
+        <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+          {photos.map((p: any) => (
+            <div key={p.id} className="group relative aspect-square overflow-hidden rounded-lg border border-border">
+              <img src={p.file_url} alt={p.stage} className="h-full w-full object-cover" />
+              <div className="absolute inset-0 flex flex-col items-end justify-between bg-black/0 p-1 transition-all group-hover:bg-black/30">
+                <button onClick={() => remove(p.id, p.file_url)} className="hidden rounded-full bg-white/80 p-0.5 text-destructive group-hover:flex">
+                  <X className="h-3.5 w-3.5" />
+                </button>
+                <span className="rounded-sm bg-black/60 px-1 py-0.5 text-[9px] text-white capitalize">{p.stage}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ── Intake Inspection Card ────────────────────────────────────────────── */
+const FUEL_LABELS = ["Empty", "¼", "½", "¾", "Full"];
+
+function IntakeCard({ job, open, setOpen, onChanged }: any) {
+  const { profile, user } = useAuth();
+  const [existing, setExisting] = useState<any>(null);
+
+  const load = () => {
+    (supabase as any)
+      .from("garage_intake_checklists")
+      .select("*")
+      .eq("job_id", job.id)
+      .maybeSingle()
+      .then(({ data }: any) => setExisting(data));
+  };
+  useEffect(load, [job.id]);
+
+  const isEmpty = !existing;
+  const showButton = ["received", "diagnosing"].includes(job.status) || existing;
+
+  if (!showButton) return null;
+
+  return (
+    <>
+      <div className="rounded-xl border border-border bg-card p-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-sm font-medium">Intake inspection</h2>
+            <p className="text-xs text-muted-foreground">
+              {existing ? `Completed · Fuel: ${FUEL_LABELS[existing.fuel_level ?? 2]}` : "Not completed — document vehicle condition before work begins."}
+            </p>
+          </div>
+          <Button size="sm" variant={existing ? "outline" : "default"} onClick={() => setOpen(true)}>
+            <ClipboardCheck className="mr-1.5 h-3.5 w-3.5" />
+            {existing ? "View / Edit" : "Complete intake"}
+          </Button>
+        </div>
+        {existing && (
+          <div className="mt-3 grid grid-cols-2 gap-x-6 gap-y-1 text-xs text-muted-foreground">
+            {existing.damage_front && <span className="text-amber-600">⚠ Front damage</span>}
+            {existing.damage_rear  && <span className="text-amber-600">⚠ Rear damage</span>}
+            {existing.damage_left  && <span className="text-amber-600">⚠ Left damage</span>}
+            {existing.damage_right && <span className="text-amber-600">⚠ Right damage</span>}
+            {existing.damage_roof  && <span className="text-amber-600">⚠ Roof damage</span>}
+            {!existing.spare_tyre_present && <span>❌ No spare tyre</span>}
+            {!existing.jack_present && <span>❌ No jack</span>}
+            {!existing.radio_present && <span>❌ No radio</span>}
+          </div>
+        )}
+      </div>
+      <IntakeDialog open={open} onOpenChange={setOpen} job={job} existing={existing} profile={profile} userId={user?.id} onSaved={() => { load(); onChanged(); }} />
+    </>
+  );
+}
+
+function IntakeDialog({ open, onOpenChange, job, existing, profile, userId, onSaved }: any) {
+  const EMPTY = { fuel_level: 2, mileage: job.mileage_at_intake ?? "", damage_front: false, damage_rear: false, damage_left: false, damage_right: false, damage_roof: false, damage_notes: "", radio_present: true, spare_tyre_present: true, jack_present: true, vehicle_documents_present: true, other_items: "", general_notes: "" };
+  const [form, setForm] = useState<any>(EMPTY);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => { if (open) setForm(existing ? { ...existing } : { ...EMPTY, mileage: job.mileage_at_intake ?? "" }); }, [open, existing?.id]);
+
+  const save = async () => {
+    if (!profile) return;
+    setSaving(true);
+    const payload = {
+      organisation_id: profile.organisation_id,
+      job_id: job.id,
+      fuel_level: Number(form.fuel_level),
+      mileage: form.mileage !== "" ? Number(form.mileage) : null,
+      damage_front: !!form.damage_front, damage_rear: !!form.damage_rear,
+      damage_left: !!form.damage_left, damage_right: !!form.damage_right,
+      damage_roof: !!form.damage_roof, damage_notes: form.damage_notes?.trim() || null,
+      radio_present: !!form.radio_present, spare_tyre_present: !!form.spare_tyre_present,
+      jack_present: !!form.jack_present, vehicle_documents_present: !!form.vehicle_documents_present,
+      other_items: form.other_items?.trim() || null,
+      general_notes: form.general_notes?.trim() || null,
+      inspected_by: userId,
+    };
+    const { error } = existing
+      ? await (supabase as any).from("garage_intake_checklists").update(payload).eq("id", existing.id)
+      : await (supabase as any).from("garage_intake_checklists").insert(payload);
+    setSaving(false);
+    if (error) return toast.error(error.message);
+    toast.success("Intake inspection saved");
+    onOpenChange(false);
+    onSaved();
+  };
+
+  const toggle = (key: string) => setForm((f: any) => ({ ...f, [key]: !f[key] }));
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-lg max-h-[85vh] overflow-y-auto">
+        <DialogHeader><DialogTitle>Vehicle intake inspection</DialogTitle></DialogHeader>
+        <div className="space-y-4 text-sm">
+
+          {/* Fuel + mileage */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label className="text-xs">Fuel level</Label>
+              <div className="mt-2 flex gap-1">
+                {FUEL_LABELS.map((l, i) => (
+                  <button key={i} type="button" onClick={() => setForm((f: any) => ({ ...f, fuel_level: i }))}
+                    className={`flex-1 rounded-md border py-1.5 text-[10px] font-medium transition-colors ${ form.fuel_level === i ? "border-primary bg-primary text-primary-foreground" : "border-input bg-background hover:bg-muted" }`}>
+                    {l}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div>
+              <Label className="text-xs">Mileage (km)</Label>
+              <Input type="number" min={0} value={form.mileage ?? ""} onChange={(e) => setForm((f: any) => ({ ...f, mileage: e.target.value }))} className="mt-1 h-9" />
+            </div>
+          </div>
+
+          {/* Exterior damage */}
+          <div>
+            <Label className="text-xs">Exterior damage (tick all that apply)</Label>
+            <div className="mt-2 grid grid-cols-3 gap-2">
+              {["damage_front", "damage_rear", "damage_left", "damage_right", "damage_roof"].map((k) => (
+                <label key={k} className={`flex cursor-pointer items-center gap-1.5 rounded-md border p-2 text-xs transition-colors ${ form[k] ? "border-amber-400 bg-amber-50 text-amber-800" : "border-border hover:bg-muted" }`}>
+                  <input type="checkbox" checked={!!form[k]} onChange={() => toggle(k)} className="h-3.5 w-3.5" />
+                  {k.replace("damage_", "").charAt(0).toUpperCase() + k.replace("damage_", "").slice(1)}
+                </label>
+              ))}
+            </div>
+            {(form.damage_front || form.damage_rear || form.damage_left || form.damage_right || form.damage_roof) && (
+              <Textarea placeholder="Describe damage…" rows={2} value={form.damage_notes ?? ""} onChange={(e) => setForm((f: any) => ({ ...f, damage_notes: e.target.value }))} className="mt-2" />
+            )}
+          </div>
+
+          {/* Items in vehicle */}
+          <div>
+            <Label className="text-xs">Items in vehicle</Label>
+            <div className="mt-2 grid grid-cols-2 gap-2">
+              {[
+                { key: "radio_present",             label: "Radio / Head unit" },
+                { key: "spare_tyre_present",         label: "Spare tyre" },
+                { key: "jack_present",               label: "Jack" },
+                { key: "vehicle_documents_present",  label: "Vehicle documents" },
+              ].map(({ key, label }) => (
+                <label key={key} className={`flex cursor-pointer items-center gap-1.5 rounded-md border p-2 text-xs transition-colors ${ form[key] ? "border-emerald-400 bg-emerald-50 text-emerald-800" : "border-destructive/30 bg-destructive/5 text-destructive" }`}>
+                  <input type="checkbox" checked={!!form[key]} onChange={() => toggle(key)} className="h-3.5 w-3.5" />
+                  {label} {form[key] ? "✓" : "✗"}
+                </label>
+              ))}
+            </div>
+            <Input placeholder="Other items (e.g. sunglasses, charger)…" value={form.other_items ?? ""} onChange={(e) => setForm((f: any) => ({ ...f, other_items: e.target.value }))} className="mt-2 h-9" />
+          </div>
+
+          {/* Notes */}
+          <div>
+            <Label className="text-xs">General notes</Label>
+            <Textarea rows={2} value={form.general_notes ?? ""} onChange={(e) => setForm((f: any) => ({ ...f, general_notes: e.target.value }))} className="mt-1" placeholder="Any other observations…" />
+          </div>
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
+          <Button onClick={save} disabled={saving}>
+            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save inspection"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/* ── Status Pipeline ──────────────────────────────────────────────────── */
+const PIPELINE_STAGES = [
+  { status: "received",          label: "Received" },
+  { status: "diagnosing",         label: "Diagnosing" },
+  { status: "estimate",           label: "Estimate" },
+  { status: "awaiting_approval",  label: "Approval" },
+  { status: "approved",           label: "Approved" },
+  { status: "in_progress",        label: "In progress" },
+  { status: "quality_check",      label: "QC" },
+  { status: "ready",              label: "Ready" },
+  { status: "delivered",          label: "Delivered" },
+  { status: "closed",             label: "Closed" },
+];
+
+function JobStatusPipeline({ status }: { status: string }) {
+  if (status === "cancelled") {
+    return (
+      <div className="flex items-center gap-2 rounded-xl border border-destructive/30 bg-destructive/5 px-4 py-3">
+        <span className="text-sm font-medium text-destructive">Job cancelled</span>
+      </div>
+    );
+  }
+  const currentIdx = PIPELINE_STAGES.findIndex((s) => s.status === status);
+  return (
+    <div className="overflow-x-auto">
+      <div className="flex min-w-max items-center gap-0">
+        {PIPELINE_STAGES.map((stage, i) => {
+          const done    = i < currentIdx;
+          const current = i === currentIdx;
+          const future  = i > currentIdx;
+          return (
+            <div key={stage.status} className="flex items-center">
+              <div className="flex flex-col items-center gap-1">
+                <div className={[
+                  "flex h-7 w-7 items-center justify-center rounded-full text-xs font-semibold transition-colors",
+                  done    ? "bg-primary text-primary-foreground" : "",
+                  current ? "bg-primary text-primary-foreground ring-2 ring-primary ring-offset-2" : "",
+                  future  ? "bg-muted text-muted-foreground" : "",
+                ].join(" ")}>
+                  {done ? "✓" : i + 1}
+                </div>
+                <span className={`whitespace-nowrap text-[10px] ${
+                  current ? "font-semibold text-foreground" : done ? "text-primary" : "text-muted-foreground"
+                }`}>{stage.label}</span>
+              </div>
+              {i < PIPELINE_STAGES.length - 1 && (
+                <div className={`h-0.5 w-8 sm:w-12 ${
+                  done ? "bg-primary" : "bg-muted"
+                }`} />
+              )}
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }
