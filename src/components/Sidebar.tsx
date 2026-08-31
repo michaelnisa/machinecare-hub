@@ -238,6 +238,7 @@ export function Sidebar() {
         items: [
           ...(isLite ? [{ to: "/team", label: t.nav.team, icon: Users }] : []),
           { to: "/settings", label: t.nav.settings, icon: Settings },
+          { to: "/admin", label: "Admin Portal", icon: ShieldAlert },
         ],
       },
     ],
@@ -316,7 +317,10 @@ export function Sidebar() {
       {
         id: "system",
         label: "System",
-        items: [{ to: "/settings", label: t.nav.settings, icon: Settings }],
+        items: [
+          { to: "/settings", label: t.nav.settings, icon: Settings },
+          { to: "/admin", label: "Admin Portal", icon: ShieldAlert },
+        ],
       },
     ],
     [t],
@@ -380,7 +384,10 @@ export function Sidebar() {
       {
         id: "system",
         label: "System",
-        items: [{ to: "/settings", label: t.nav.settings, icon: Settings }],
+        items: [
+          { to: "/settings", label: t.nav.settings, icon: Settings },
+          { to: "/admin", label: "Admin Portal", icon: ShieldAlert },
+        ],
       },
     ],
     [t],

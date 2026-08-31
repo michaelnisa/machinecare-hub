@@ -17,6 +17,7 @@ const ForgotPassword = lazy(() => import("./pages/ForgotPassword"));
 const ResetPassword = lazy(() => import("./pages/ResetPassword"));
 const AcceptInvite = lazy(() => import("./pages/AcceptInvite"));
 const DashboardRouter = lazy(() => import("./pages/DashboardRouter"));
+const Admin = lazy(() => import("./pages/Admin"));
 const Machines = lazy(() => import("./pages/Machines"));
 const MachineDetail = lazy(() => import("./pages/MachineDetail"));
 const Analytics = lazy(() => import("./pages/Analytics"));
@@ -248,6 +249,7 @@ const App = () => (
                   <Route path="/induction/inductees" element={<InductionInductees />} />
                   <Route path="/analytics" element={<Analytics />} />
                   <Route path="/settings" element={<Settings />} />
+                  <Route path="/admin" element={<Admin />} />
                 </Route>
                 <Route path="*" element={<NotFound />} />
               </Routes>
