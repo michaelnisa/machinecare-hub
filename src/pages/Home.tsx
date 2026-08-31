@@ -26,8 +26,9 @@ import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { useAuth } from "@/contexts/AuthContext";
 
 export default function Home() {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const { user } = useAuth();
+  const isSwahili = lang === "sw";
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -65,7 +66,7 @@ export default function Home() {
                   <Link to="/login">{t.common.login}</Link>
                 </Button>
                 <Button asChild size="sm">
-                  <Link to="/signup">{t.common.signup}</Link>
+                  <Link to="/signup">{isSwahili ? "Omba Kujiunga" : "Request Access"}</Link>
                 </Button>
               </>
             )}
@@ -129,7 +130,7 @@ export default function Home() {
                 }}
               >
                 <Link to="/signup">
-                  Start free — set up in 10 min
+                  {isSwahili ? "Omba Kujiunga & Onboarding" : "Request Access & Onboarding"}
                   <ArrowRight className="ml-1.5 h-5 w-5" />
                 </Link>
               </Button>
@@ -409,7 +410,7 @@ export default function Home() {
             Run your plant like a flagship.
           </h2>
           <p className="mx-auto mt-3 max-w-xl text-sm text-muted-foreground sm:text-base">
-            Free to start. No credit card. Add your first machine in under five minutes.
+            {isSwahili ? "Tuma ombi la kujiunga ili kuanza kusanidi kiwanda chako." : "Submit an access request to start setting up your workspace."}
           </p>
           <div className="mt-7 flex flex-wrap justify-center gap-3">
             <Button
@@ -418,7 +419,7 @@ export default function Home() {
               className="text-primary-foreground"
               style={{ background: "var(--gradient-primary)", boxShadow: "var(--shadow-elegant)" }}
             >
-              <Link to="/signup">{t.home.cta_signup}</Link>
+              <Link to="/signup">{isSwahili ? "Omba Kujiunga Sasa" : "Request Access Now"}</Link>
             </Button>
             <Button asChild size="lg" variant="outline">
               <Link to="/login">{t.home.cta_login}</Link>
@@ -457,7 +458,7 @@ export default function Home() {
               <p className="text-xs font-semibold uppercase tracking-wider text-foreground">Account</p>
               <ul className="mt-3 space-y-2 text-sm text-muted-foreground">
                 <li><Link to="/login" className="hover:text-foreground">Sign in</Link></li>
-                <li><Link to="/signup" className="hover:text-foreground">Create account</Link></li>
+                <li><Link to="/signup" className="hover:text-foreground">{isSwahili ? "Omba Kujiunga" : "Request Access"}</Link></li>
                 <li><Link to="/dashboard" className="hover:text-foreground">Dashboard</Link></li>
               </ul>
             </div>
