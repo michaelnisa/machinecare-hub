@@ -134,31 +134,30 @@ export default function Admin() {
   const fetchData = async () => {
     setLoading(true);
     try {
-      // 1. Fetch Onboarding Requests
-      const { data: reqData, error: reqErr } = await (supabase as any)
-        .from("onboarding_requests")
-        .select("*")
-        .order("created_at", { ascending: false });
+      // 1. Try security-definer RPC first to fetch across all orgs
+      const { data: rpcData, error: rpcErr } = await (supabase as any).rpc("get_admin_platform_overview");
+      if (!rpcErr && rpcData) {
+        const payload = rpcData as {
+          organisations: Organisation[];
+          profiles: Profile[];
+          requests: OnboardingRequest[];
+        };
+        setOrganisations(payload.organisations || []);
+        setProfiles(payload.profiles || []);
+        setRequests(payload.requests || []);
+        return;
+      }
 
-      if (reqErr) console.warn("Could not fetch onboarding requests", reqErr);
-      else setRequests((reqData as OnboardingRequest[]) || []);
+      // 2. Fallback to direct table select queries
+      const [{ data: reqData }, { data: orgData }, { data: profData }] = await Promise.all([
+        (supabase as any).from("onboarding_requests").select("*").order("created_at", { ascending: false }),
+        supabase.from("organisations").select("*").order("created_at", { ascending: false }),
+        supabase.from("profiles").select("id, organisation_id, full_name, email, created_at"),
+      ]);
 
-      // 2. Fetch Organisations
-      const { data: orgData, error: orgErr } = await supabase
-        .from("organisations")
-        .select("*")
-        .order("created_at", { ascending: false });
-
-      if (orgErr) console.warn("Could not fetch organisations", orgErr);
-      else setOrganisations((orgData as Organisation[]) || []);
-
-      // 3. Fetch Profiles
-      const { data: profData, error: profErr } = await supabase
-        .from("profiles")
-        .select("id, organisation_id, full_name, email, created_at");
-
-      if (profErr) console.warn("Could not fetch profiles", profErr);
-      else setProfiles((profData as Profile[]) || []);
+      setRequests((reqData as OnboardingRequest[]) || []);
+      setOrganisations((orgData as Organisation[]) || []);
+      setProfiles((profData as Profile[]) || []);
     } catch (err) {
       console.error("Failed to load admin data:", err);
     } finally {
