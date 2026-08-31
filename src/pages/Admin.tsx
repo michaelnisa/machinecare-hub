@@ -59,6 +59,8 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { useI18n } from "@/i18n/I18nProvider";
+import { isPlatformAdmin, PLATFORM_ADMIN_EMAILS } from "@/lib/admin";
+import { Link } from "react-router-dom";
 
 interface OnboardingRequest {
   id: string;
@@ -87,10 +89,27 @@ interface Profile {
 }
 
 export default function Admin() {
-  const { user } = useAuth();
-  const { isOwner } = useUserRole();
+  const { user, profile } = useAuth();
+  const isAdmin = isPlatformAdmin(user?.email || profile?.email);
   const { t, currentLang } = useI18n();
   const isSwahili = currentLang === "sw";
+
+  if (!isAdmin) {
+    return (
+      <div className="flex min-h-[60vh] flex-col items-center justify-center text-center p-6">
+        <ShieldCheck className="h-16 w-16 text-destructive mb-4" />
+        <h1 className="text-2xl font-bold">Access Restricted / Hauna Ruhusa</h1>
+        <p className="text-muted-foreground mt-2 max-w-md">
+          {isSwahili 
+            ? "Ukurasa huu wa usimamizi wa jukwaa unapatikana kwa Admin wa mfumo pekee."
+            : `The Admin Portal is restricted to platform administrators (${PLATFORM_ADMIN_EMAILS.join(", ")}).`}
+        </p>
+        <Button asChild className="mt-6">
+          <Link to="/dashboard">{isSwahili ? "Rudi Kwenye Dashboard" : "Return to Dashboard"}</Link>
+        </Button>
+      </div>
+    );
+  }
 
   const [loading, setLoading] = useState(true);
   const [requests, setRequests] = useState<OnboardingRequest[]>([]);

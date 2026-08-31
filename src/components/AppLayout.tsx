@@ -8,12 +8,15 @@ import { Button } from "@/components/ui/button";
 import { NotificationsBell } from "@/components/NotificationsBell";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { isPlatformAdmin } from "@/lib/admin";
 
 export default function AppLayout() {
   const { user, loading } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
+
+  const isAdmin = isPlatformAdmin(user?.email);
 
   useEffect(() => {
     if (!loading && !user) {
@@ -45,26 +48,30 @@ export default function AppLayout() {
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="flex h-14 items-center gap-2 border-b border-border bg-background px-4 md:hidden">
           <Button variant="ghost" size="icon" onClick={() => setMobileOpen((o) => !o)}>
-            {mobileOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+            {mobileOpen ? <X className="h-5 w-5 text-foreground" /> : <Menu className="h-5 w-5 text-foreground" />}
           </Button>
           <span className="font-semibold">MachineCare</span>
           <div className="ml-auto flex items-center gap-1">
-            <Button asChild variant="ghost" size="icon" title="Admin Portal">
-              <Link to="/admin">
-                <ShieldCheck className="h-5 w-5 text-primary" />
-              </Link>
-            </Button>
+            {isAdmin && (
+              <Button asChild variant="ghost" size="icon" title="Admin Portal">
+                <Link to="/admin">
+                  <ShieldCheck className="h-5 w-5 text-primary" />
+                </Link>
+              </Button>
+            )}
             <LanguageSwitcher compact />
             <NotificationsBell />
           </div>
         </header>
         <header className="hidden h-14 items-center justify-end gap-3 border-b border-border bg-background px-6 md:flex">
-          <Button asChild variant="outline" size="sm" className="gap-1.5 border-primary/40 text-primary hover:bg-primary-soft">
-            <Link to="/admin">
-              <ShieldCheck className="h-4 w-4" />
-              Admin Portal
-            </Link>
-          </Button>
+          {isAdmin && (
+            <Button asChild variant="outline" size="sm" className="gap-1.5 border-primary/40 text-primary hover:bg-primary-soft">
+              <Link to="/admin">
+                <ShieldCheck className="h-4 w-4" />
+                Admin Portal
+              </Link>
+            </Button>
+          )}
           <LanguageSwitcher />
           <NotificationsBell />
         </header>

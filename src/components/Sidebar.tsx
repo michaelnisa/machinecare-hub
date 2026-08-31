@@ -3,6 +3,7 @@ import { NavLink } from "@/components/NavLink";
 import { useAuth } from "@/contexts/AuthContext";
 import { useIndustry } from "@/hooks/useIndustry";
 import { useUserRole } from "@/hooks/useUserRole";
+import { isPlatformAdmin } from "@/lib/admin";
 import {
   LayoutDashboard,
   Wrench,
@@ -64,12 +65,13 @@ type NavItem = { to: string; label: string; icon: any };
 type NavGroup = { id: string; label: string; items: NavItem[] };
 
 export function Sidebar() {
-  const { profile, organisation, signOut } = useAuth();
+  const { user, profile, organisation, signOut } = useAuth();
   const { isFleet, isGarage, isMixed } = useIndustry();
   const { isManager } = useUserRole();
   const navigate = useNavigate();
   const { t } = useI18n();
 
+  const isAdmin = isPlatformAdmin(user?.email || profile?.email);
   const isLite = (organisation?.plan ?? "standard") === "lite";
 
   const manufacturingGroups: NavGroup[] = useMemo(
@@ -79,7 +81,7 @@ export function Sidebar() {
         label: "Overview",
         items: [
           { to: "/dashboard", label: t.nav.dashboard, icon: LayoutDashboard },
-          { to: "/admin", label: "Admin Portal", icon: ShieldAlert },
+          ...(isAdmin ? [{ to: "/admin", label: "Admin Portal", icon: ShieldAlert }] : []),
           ...(!isLite ? [{ to: "/live", label: "Live TV", icon: Tv }] : []),
           { to: "/notifications", label: t.nav.notifications, icon: Bell },
         ],
@@ -239,11 +241,11 @@ export function Sidebar() {
         items: [
           ...(isLite ? [{ to: "/team", label: t.nav.team, icon: Users }] : []),
           { to: "/settings", label: t.nav.settings, icon: Settings },
-          { to: "/admin", label: "Admin Portal", icon: ShieldAlert },
+          ...(isAdmin ? [{ to: "/admin", label: "Admin Portal", icon: ShieldAlert }] : []),
         ],
       },
     ],
-    [t, isLite, profile?.department, isManager],
+    [t, isLite, profile?.department, isManager, isAdmin],
   );
 
   // Fleet & Logistics nav — pages not yet built (Phases 2-6) route to a
@@ -259,7 +261,7 @@ export function Sidebar() {
             label: "Fleet Dashboard",
             icon: LayoutDashboard,
           },
-          { to: "/admin", label: "Admin Portal", icon: ShieldAlert },
+          ...(isAdmin ? [{ to: "/admin", label: "Admin Portal", icon: ShieldAlert }] : []),
           { to: "/live", label: "Live TV", icon: Tv },
           { to: "/notifications", label: t.nav.notifications, icon: Bell },
         ],
@@ -321,11 +323,11 @@ export function Sidebar() {
         label: "System",
         items: [
           { to: "/settings", label: t.nav.settings, icon: Settings },
-          { to: "/admin", label: "Admin Portal", icon: ShieldAlert },
+          ...(isAdmin ? [{ to: "/admin", label: "Admin Portal", icon: ShieldAlert }] : []),
         ],
       },
     ],
-    [t],
+    [t, isAdmin],
   );
 
   // Workshop/Garage nav — a fully separate product experience from
@@ -339,7 +341,7 @@ export function Sidebar() {
         label: "Overview",
         items: [
           { to: "/dashboard", label: "Workshop Dashboard", icon: LayoutDashboard },
-          { to: "/admin", label: "Admin Portal", icon: ShieldAlert },
+          ...(isAdmin ? [{ to: "/admin", label: "Admin Portal", icon: ShieldAlert }] : []),
           { to: "/notifications", label: t.nav.notifications, icon: Bell },
         ],
       },
@@ -389,11 +391,11 @@ export function Sidebar() {
         label: "System",
         items: [
           { to: "/settings", label: t.nav.settings, icon: Settings },
-          { to: "/admin", label: "Admin Portal", icon: ShieldAlert },
+          ...(isAdmin ? [{ to: "/admin", label: "Admin Portal", icon: ShieldAlert }] : []),
         ],
       },
     ],
-    [t],
+    [t, isAdmin],
   );
 
   // "mixed" orgs run more than one business line — show all three nav sets

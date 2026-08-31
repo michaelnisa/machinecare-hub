@@ -40,8 +40,11 @@ interface ActivityRow {
   machine_name: string;
 }
 
+import { isPlatformAdmin } from "@/lib/admin";
+
 export default function Dashboard() {
-  const { profile } = useAuth();
+  const { user, profile } = useAuth();
+  const isAdmin = isPlatformAdmin(user?.email || profile?.email);
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState<Stats>({ total: 0, active: 0, due_soon: 0, overdue: 0 });
   const [upcoming, setUpcoming] = useState<UpcomingRow[]>([]);
@@ -136,11 +139,13 @@ export default function Dashboard() {
           <p className="text-sm text-muted-foreground">An overview of your fleet maintenance.</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <Button asChild variant="outline" className="border-primary/40 text-primary hover:bg-primary-soft">
-            <Link to="/admin">
-              <ShieldCheck className="mr-1.5 h-4 w-4" /> Admin Portal
-            </Link>
-          </Button>
+          {isAdmin && (
+            <Button asChild variant="outline" className="border-primary/40 text-primary hover:bg-primary-soft">
+              <Link to="/admin">
+                <ShieldCheck className="mr-1.5 h-4 w-4" /> Admin Portal
+              </Link>
+            </Button>
+          )}
           <Button variant="outline" onClick={() => setLogDialog(true)} disabled={machines.length === 0}>
             <Activity className="mr-2 h-4 w-4" /> Log service
           </Button>
