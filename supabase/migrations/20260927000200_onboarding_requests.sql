@@ -20,6 +20,11 @@ GRANT ALL ON public.onboarding_requests TO service_role;
 -- Enable RLS
 ALTER TABLE public.onboarding_requests ENABLE ROW LEVEL SECURITY;
 
+-- Drop RLS Policies if they exist (for idempotency)
+DROP POLICY IF EXISTS "Allow public insert to onboarding_requests" ON public.onboarding_requests;
+DROP POLICY IF EXISTS "Allow authenticated view of onboarding_requests" ON public.onboarding_requests;
+DROP POLICY IF EXISTS "Allow authenticated update of onboarding_requests" ON public.onboarding_requests;
+
 -- RLS Policies
 CREATE POLICY "Allow public insert to onboarding_requests" 
   ON public.onboarding_requests 
@@ -104,6 +109,9 @@ BEGIN
   RETURN NEW;
 END;
 $$;
+
+-- Drop trigger if exists (for idempotency)
+DROP TRIGGER IF EXISTS on_onboarding_request_inserted ON public.onboarding_requests;
 
 CREATE OR REPLACE TRIGGER on_onboarding_request_inserted
   AFTER INSERT ON public.onboarding_requests
