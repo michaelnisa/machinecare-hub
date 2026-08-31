@@ -113,6 +113,20 @@ export default function Signup() {
         throw error;
       }
 
+      // Dispatch instant SMS notification to admin (+255764190999)
+      try {
+        await supabase.functions.invoke("notify-onboarding-request-sms", {
+          body: {
+            name: values.name,
+            contact: values.contact,
+            company: values.company,
+            industry: industryProfile,
+          },
+        });
+      } catch (smsErr) {
+        console.error("SMS notification dispatch failed:", smsErr);
+      }
+
       setRequestSubmitted(true);
       toast.success(isSwahili ? "Ombi limetumwa kikamilifu!" : "Request submitted successfully!");
     } catch (err: any) {

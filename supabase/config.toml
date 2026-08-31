@@ -35,3 +35,7 @@ verify_jwt = false
 
 [functions.notify-critical-notification-sms]
 verify_jwt = true
+
+[functions.notify-onboarding-request-sms]
+verify_jwt = false
+
