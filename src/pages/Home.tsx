@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import {
@@ -20,6 +21,14 @@ import {
   Activity,
   Smartphone,
   Globe,
+  Truck,
+  Check,
+  X,
+  Layers,
+  ChevronRight,
+  TrendingUp,
+  Clock,
+  ShieldAlert,
 } from "lucide-react";
 import { useI18n } from "@/i18n/I18nProvider";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
@@ -29,35 +38,44 @@ export default function Home() {
   const { t, lang } = useI18n();
   const { user } = useAuth();
   const isSwahili = lang === "sw";
+  const [activeTab, setActiveTab] = useState<"manufacturing" | "fleet" | "garage">("manufacturing");
 
   return (
-    <div className="min-h-screen bg-background text-foreground">
-      {/* Top bar */}
-      <header className="sticky top-0 z-30 border-b border-border/60 bg-background/80 backdrop-blur-xl">
+    <div className="min-h-screen bg-background text-foreground selection:bg-primary/20 selection:text-primary">
+      {/* ── TOP NAVIGATION BAR ────────────────────────────────────── */}
+      <header className="sticky top-0 z-40 border-b border-border/60 bg-background/85 backdrop-blur-xl transition-all">
         <div className="mx-auto flex h-16 w-full max-w-7xl items-center justify-between px-4 sm:px-6">
-          <Link to="/" className="flex items-center gap-2.5">
+          <Link to="/" className="flex items-center gap-2.5 group">
             <div
-              className="flex h-9 w-9 items-center justify-center rounded-xl text-primary-foreground shadow-sm"
+              className="flex h-9 w-9 items-center justify-center rounded-xl text-primary-foreground shadow-md transition-transform group-hover:scale-105"
               style={{ background: "var(--gradient-primary)" }}
             >
-              <Wrench className="h-4 w-4" />
+              <Wrench className="h-4.5 w-4.5" />
             </div>
-            <span className="text-lg font-bold tracking-tight">
+            <span className="text-lg font-extrabold tracking-tight">
               {t.common.appName}
             </span>
           </Link>
-          <nav className="hidden items-center gap-7 text-sm text-muted-foreground md:flex">
-            <a href="#what" className="hover:text-foreground transition-colors">What it does</a>
-            <a href="#features" className="hover:text-foreground transition-colors">Features</a>
-            <a href="#how" className="hover:text-foreground transition-colors">How it works</a>
-            <a href="#who" className="hover:text-foreground transition-colors">Who it's for</a>
+          <nav className="hidden items-center gap-8 text-sm font-medium text-muted-foreground md:flex">
+            <a href="#solutions" className="hover:text-foreground transition-colors">
+              {isSwahili ? "Ufumbuzi" : "Solutions"}
+            </a>
+            <a href="#comparison" className="hover:text-foreground transition-colors">
+              {isSwahili ? "Kwa Nini MachineCare" : "Why MachineCare"}
+            </a>
+            <a href="#features" className="hover:text-foreground transition-colors">
+              {isSwahili ? "Vipengele" : "Features"}
+            </a>
+            <a href="#how-it-works" className="hover:text-foreground transition-colors">
+              {isSwahili ? "Jinsi Inavyofanya Kazi" : "How it Works"}
+            </a>
           </nav>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2.5">
             <LanguageSwitcher />
             {user ? (
-              <Button asChild size="sm">
+              <Button asChild size="sm" style={{ background: "var(--gradient-primary)" }}>
                 <Link to="/dashboard">
-                  {t.nav.dashboard} <ArrowRight className="ml-1 h-4 w-4" />
+                  {t.nav.dashboard} <ArrowRight className="ml-1.5 h-4 w-4" />
                 </Link>
               </Button>
             ) : (
@@ -65,7 +83,7 @@ export default function Home() {
                 <Button asChild variant="ghost" size="sm" className="hidden sm:inline-flex">
                   <Link to="/login">{t.common.login}</Link>
                 </Button>
-                <Button asChild size="sm">
+                <Button asChild size="sm" style={{ background: "var(--gradient-primary)" }}>
                   <Link to="/signup">{isSwahili ? "Omba Kujiunga" : "Request Access"}</Link>
                 </Button>
               </>
@@ -74,56 +92,75 @@ export default function Home() {
         </div>
       </header>
 
-      {/* Hero */}
-      <section className="relative overflow-hidden">
+      {/* ── HERO SECTION ──────────────────────────────────────────── */}
+      <section className="relative overflow-hidden pt-8 pb-20 md:pt-16 md:pb-28">
+        {/* Glow & Grid Accents */}
         <div
           aria-hidden
-          className="pointer-events-none absolute inset-0 -z-10"
+          className="pointer-events-none absolute inset-0 -z-10 opacity-70"
           style={{ background: "var(--gradient-hero)" }}
         />
         <div
           aria-hidden
-          className="pointer-events-none absolute -top-32 left-1/2 -z-10 h-[600px] w-[900px] -translate-x-1/2 rounded-full opacity-60 blur-3xl"
+          className="pointer-events-none absolute -top-40 left-1/2 -z-10 h-[650px] w-[1000px] -translate-x-1/2 rounded-full opacity-50 blur-3xl"
           style={{
             background:
-              "radial-gradient(closest-side, hsl(var(--primary-glow) / 0.35), transparent)",
+              "radial-gradient(closest-side, hsl(var(--primary-glow) / 0.4), transparent)",
           }}
         />
         <div
           aria-hidden
-          className="pointer-events-none absolute inset-0 -z-10 opacity-[0.04]"
+          className="pointer-events-none absolute inset-0 -z-10 opacity-[0.03]"
           style={{
             backgroundImage:
               "linear-gradient(hsl(var(--foreground)) 1px, transparent 1px), linear-gradient(90deg, hsl(var(--foreground)) 1px, transparent 1px)",
-            backgroundSize: "44px 44px",
+            backgroundSize: "48px 48px",
             maskImage:
-              "radial-gradient(ellipse at center, black 40%, transparent 75%)",
+              "radial-gradient(ellipse at center, black 50%, transparent 80%)",
           }}
         />
 
-        <div className="mx-auto grid w-full max-w-7xl gap-12 px-4 py-20 sm:px-6 sm:py-28 md:grid-cols-12 md:items-center">
+        <div className="mx-auto grid w-full max-w-7xl gap-12 px-4 sm:px-6 md:grid-cols-12 md:items-center">
           <div className="animate-fade-in md:col-span-7">
-            <span className="inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary-soft px-3 py-1 text-xs font-semibold text-primary">
+            <div className="inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary-soft/80 px-3.5 py-1 text-xs font-semibold text-primary shadow-sm backdrop-blur">
               <Sparkles className="h-3.5 w-3.5" />
-              Manufacturing · Maintenance · Safety — one platform
-            </span>
-            <h1 className="mt-6 text-5xl font-bold leading-[1.05] tracking-tight sm:text-6xl md:text-7xl">
-              The operating system for{" "}
+              <span>
+                {isSwahili
+                  ? "Mfumo Wote Katika Mmoja — Viwanda, Magari & Usalama"
+                  : "All-In-One Platform — Plants, Fleets & Safety"}
+              </span>
+            </div>
+            
+            <h1 className="mt-6 text-4xl font-extrabold leading-[1.08] tracking-tight sm:text-6xl md:text-6xl lg:text-7xl">
+              {isSwahili ? "Ondoa Uharibifu Wa Mitambo." : "Stop Firefighting Downtime."}{" "}
               <span
                 className="bg-clip-text text-transparent"
                 style={{ backgroundImage: "var(--gradient-primary)" }}
               >
-                your plant floor.
+                {isSwahili ? "Simamia Mfumo Wako Kwa Usahihi." : "Operate With Absolute Precision."}
               </span>
             </h1>
+
             <p className="mt-6 max-w-xl text-base leading-relaxed text-muted-foreground sm:text-lg">
-              MachineCare brings <strong className="text-foreground">machines, work orders, preventive maintenance, OEE, production, safety and inductions</strong> into a single place — so your team stops chasing spreadsheets and starts running a tighter, safer, more productive operation.
+              {isSwahili ? (
+                <>
+                  MachineCare inakusaidia kubadilisha makaratasi, WhatsApp na spreadsheets na kuweka{" "}
+                  <strong className="text-foreground font-semibold">mitambo, matengenezo, OEE, mafuta, usalama na mafunzo</strong>{" "}
+                  kwenye mfumo mmoja wa kidijitali unaotumika rahisi.
+                </>
+              ) : (
+                <>
+                  MachineCare replaces paper checklists, messy WhatsApp chats, and lost Excel files with a single{" "}
+                  <strong className="text-foreground font-semibold">unified operating system for machines, work orders, preventive maintenance, OEE, and safety</strong>.
+                </>
+              )}
             </p>
-            <div className="mt-9 flex flex-wrap items-center gap-3">
+
+            <div className="mt-8 flex flex-wrap items-center gap-3">
               <Button
                 asChild
                 size="lg"
-                className="h-12 px-6 text-base text-primary-foreground"
+                className="h-12 px-7 text-base text-primary-foreground font-semibold shadow-lg hover:opacity-95 transition-all"
                 style={{
                   background: "var(--gradient-primary)",
                   boxShadow: "var(--shadow-elegant)",
@@ -131,348 +168,548 @@ export default function Home() {
               >
                 <Link to="/signup">
                   {isSwahili ? "Omba Kujiunga & Onboarding" : "Request Access & Onboarding"}
-                  <ArrowRight className="ml-1.5 h-5 w-5" />
+                  <ArrowRight className="ml-2 h-5 w-5" />
                 </Link>
               </Button>
-              <Button asChild size="lg" variant="outline" className="h-12 px-6 text-base">
+
+              <Button asChild size="lg" variant="outline" className="h-12 px-6 text-base border-border hover:bg-secondary">
                 <Link to="/login">{t.home.cta_login}</Link>
               </Button>
             </div>
 
-            <div className="mt-10 flex flex-wrap items-center gap-x-6 gap-y-2 text-xs text-muted-foreground">
-              <span className="inline-flex items-center gap-1.5"><CheckCircle2 className="h-3.5 w-3.5 text-primary" /> No credit card</span>
-              <span className="inline-flex items-center gap-1.5"><CheckCircle2 className="h-3.5 w-3.5 text-primary" /> Works on phone, tablet &amp; TV dashboards</span>
-              <span className="inline-flex items-center gap-1.5"><Globe className="h-3.5 w-3.5 text-primary" /> English &amp; Kiswahili</span>
+            <div className="mt-9 flex flex-wrap items-center gap-x-6 gap-y-2 text-xs font-medium text-muted-foreground">
+              <span className="inline-flex items-center gap-1.5">
+                <CheckCircle2 className="h-4 w-4 text-emerald-500" />{" "}
+                {isSwahili ? "Haitaji Kadi ya Benki" : "No credit card required"}
+              </span>
+              <span className="inline-flex items-center gap-1.5">
+                <CheckCircle2 className="h-4 w-4 text-emerald-500" />{" "}
+                {isSwahili ? "Inafanya kazi kwenye Simu, Tablet & Skrini za TV" : "Runs on Phone, Tablet & Shopfloor TV"}
+              </span>
+              <span className="inline-flex items-center gap-1.5">
+                <Globe className="h-4 w-4 text-primary" /> English &amp; Kiswahili
+              </span>
             </div>
           </div>
 
-          {/* Hero visual */}
+          {/* Hero Visual Card */}
           <div className="relative md:col-span-5">
             <div className="relative mx-auto max-w-md">
               <div
-                className="absolute -inset-6 -z-10 rounded-[2rem] opacity-40 blur-2xl"
+                className="absolute -inset-4 -z-10 rounded-[2.5rem] opacity-35 blur-2xl"
                 style={{ background: "var(--gradient-primary)" }}
               />
 
-              <div className="rounded-3xl border border-border bg-card/90 p-5 shadow-2xl backdrop-blur">
+              <div className="rounded-3xl border border-border/80 bg-card/95 p-6 shadow-2xl backdrop-blur-xl">
                 <div className="flex items-center justify-between border-b border-border pb-4">
                   <div className="flex items-center gap-3">
                     <div
-                      className="flex h-11 w-11 items-center justify-center rounded-xl text-primary-foreground"
+                      className="flex h-11 w-11 items-center justify-center rounded-xl text-primary-foreground shadow-sm"
                       style={{ background: "var(--gradient-primary)" }}
                     >
                       <Factory className="h-5 w-5" />
                     </div>
                     <div>
-                      <p className="text-sm font-semibold">Contiform Bloc · Water Line</p>
-                      <p className="text-xs text-muted-foreground">K998R20 · Bottling</p>
+                      <p className="text-sm font-bold text-foreground">Contiform Bottling Line 01</p>
+                      <p className="text-xs text-muted-foreground font-mono">ASSET-K998R · Active Line</p>
                     </div>
                   </div>
-                  <span className="status-pill status-ok">Running</span>
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/10 px-2.5 py-1 text-xs font-bold text-emerald-600 dark:text-emerald-400">
+                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                    Operational
+                  </span>
                 </div>
 
-                <div className="mt-4 grid grid-cols-3 gap-2 text-center">
-                  {[
-                    { k: "OEE", v: "87%" },
-                    { k: "Output", v: "42k/hr" },
-                    { k: "Open WO", v: "2" },
-                  ].map((m) => (
-                    <div key={m.k} className="rounded-xl bg-secondary/60 p-2.5">
-                      <p className="text-[10px] uppercase tracking-wider text-muted-foreground">{m.k}</p>
-                      <p className="text-base font-bold">{m.v}</p>
+                <div className="mt-4 grid grid-cols-3 gap-2.5 text-center">
+                  <div className="rounded-xl bg-secondary/70 p-3 border border-border/50">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">OEE</p>
+                    <p className="text-lg font-extrabold text-foreground">88.4%</p>
+                  </div>
+                  <div className="rounded-xl bg-secondary/70 p-3 border border-border/50">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Output</p>
+                    <p className="text-lg font-extrabold text-foreground">42k/hr</p>
+                  </div>
+                  <div className="rounded-xl bg-secondary/70 p-3 border border-border/50">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Status</p>
+                    <p className="text-lg font-extrabold text-emerald-600 dark:text-emerald-400">Optimal</p>
+                  </div>
+                </div>
+
+                <div className="mt-5 space-y-2">
+                  <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground flex items-center justify-between">
+                    <span>Preventive Maintenance (PM)</span>
+                    <span className="text-primary font-semibold">2 Tasks Due</span>
+                  </p>
+                  
+                  <div className="rounded-xl border border-border bg-background p-3 text-xs flex items-center justify-between">
+                    <div className="flex items-center gap-2.5">
+                      <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-amber-500/10 text-amber-600">
+                        <Wrench className="h-3.5 w-3.5" />
+                      </div>
+                      <div>
+                        <p className="font-semibold text-foreground">Filler Valve Seal Inspection</p>
+                        <p className="text-[10px] text-muted-foreground">Due in 4 hours · 500h Service</p>
+                      </div>
                     </div>
-                  ))}
+                    <span className="rounded-md bg-amber-500/10 px-2 py-0.5 text-[10px] font-bold text-amber-700">Due Soon</span>
+                  </div>
+
+                  <div className="rounded-xl border border-border bg-background p-3 text-xs flex items-center justify-between">
+                    <div className="flex items-center gap-2.5">
+                      <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-600">
+                        <CheckCircle2 className="h-3.5 w-3.5" />
+                      </div>
+                      <div>
+                        <p className="font-semibold text-foreground">Blow Moulder Calibration</p>
+                        <p className="text-[10px] text-muted-foreground">Completed by Technician Juma</p>
+                      </div>
+                    </div>
+                    <span className="rounded-md bg-emerald-500/10 px-2 py-0.5 text-[10px] font-bold text-emerald-700">Done</span>
+                  </div>
                 </div>
-
-                <p className="mt-4 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Next PM tasks</p>
-                <ul className="mt-2 space-y-2 text-sm">
-                  {[
-                    { l: "Blow moulder · clean preform infeed", d: true },
-                    { l: "Filler · valve seal inspection", d: true },
-                    { l: "Capper · torque calibration", d: false },
-                  ].map((s) => (
-                    <li key={s.l} className="flex items-center gap-2.5">
-                      <span
-                        className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-md text-[11px] ${
-                          s.d
-                            ? "bg-primary text-primary-foreground"
-                            : "border border-border text-muted-foreground"
-                        }`}
-                      >
-                        {s.d ? "✓" : ""}
-                      </span>
-                      <span className={s.d ? "text-muted-foreground line-through" : ""}>
-                        {s.l}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
               </div>
 
-              <div className="absolute -bottom-6 -left-6 hidden rotate-[-6deg] rounded-2xl border border-border bg-card p-3 shadow-xl sm:block">
-                <QrCode className="h-16 w-16 text-foreground" />
-                <p className="mt-1 text-center text-[10px] text-muted-foreground">Scan to log</p>
+              {/* Floating QR Sticker */}
+              <div className="absolute -bottom-6 -left-6 hidden rotate-[-5deg] rounded-2xl border border-border bg-card p-3 shadow-xl sm:block backdrop-blur-lg">
+                <QrCode className="h-14 w-14 text-foreground" />
+                <p className="mt-1 text-center text-[10px] font-bold text-muted-foreground">Scan Machine QR</p>
               </div>
 
-              <div className="absolute -right-4 -top-4 hidden rotate-[5deg] items-center gap-2 rounded-full border border-border bg-card px-3 py-2 text-xs font-medium shadow-xl sm:flex">
-                <span className="flex h-2 w-2 rounded-full bg-[hsl(var(--success))]" />
-                Service due in 8 days
+              {/* Floating Alert Badge */}
+              <div className="absolute -right-4 -top-4 hidden rotate-[4deg] items-center gap-2 rounded-2xl border border-border bg-card px-3.5 py-2.5 text-xs font-semibold shadow-xl sm:flex backdrop-blur-lg">
+                <ShieldCheck className="h-4 w-4 text-emerald-500" />
+                <span>100% Safety Compliance</span>
               </div>
             </div>
           </div>
         </div>
 
-        {/* Stats strip */}
-        <div className="mx-auto w-full max-w-7xl px-4 pb-16 sm:px-6">
-          <div className="grid grid-cols-2 gap-px overflow-hidden rounded-2xl border border-border bg-border md:grid-cols-4">
+        {/* ── KEY METRICS STRIP ───────────────────────────────────── */}
+        <div className="mx-auto w-full max-w-7xl px-4 pt-4 sm:px-6">
+          <div className="grid grid-cols-2 gap-px overflow-hidden rounded-2xl border border-border bg-border md:grid-cols-4 shadow-sm">
             {[
-              { k: "Avg. downtime cut", v: "32%" },
-              { k: "PMs completed on time", v: "96%" },
-              { k: "Faster work-order closure", v: "3×" },
-              { k: "Plant visibility", v: "24/7" },
+              { k: isSwahili ? "Kupunguza Downtime" : "Avg. Downtime Cut", v: "32%", sub: isSwahili ? "Kukata uharibifu wa ghafla" : "Reduced unplanned stops" },
+              { k: isSwahili ? "Matengenezo kwa Wakati" : "PMs Completed On-Time", v: "96%", sub: isSwahili ? "Uzuiaji kabla haujaharibika" : "Proactive maintenance execution" },
+              { k: isSwahili ? "Kasi ya Work-Orders" : "Faster WO Closure", v: "3×", sub: isSwahili ? "Funga mafundi haraka zaidi" : "Speed up job sign-offs" },
+              { k: isSwahili ? "Ufuatiliaji wa Kiwanda" : "Plant Visibility", v: "24/7", sub: isSwahili ? "Taarifa mubashara wakati wote" : "Real-time live telemetry" },
             ].map((s) => (
-              <div key={s.k} className="bg-card p-5 text-center">
-                <p className="text-2xl font-bold tracking-tight sm:text-3xl">{s.v}</p>
-                <p className="mt-1 text-xs uppercase tracking-wider text-muted-foreground">{s.k}</p>
+              <div key={s.k} className="bg-card p-6 text-center hover:bg-secondary/40 transition-colors">
+                <p className="text-3xl font-extrabold tracking-tight sm:text-4xl text-foreground">{s.v}</p>
+                <p className="mt-1 text-xs font-bold uppercase tracking-wider text-primary">{s.k}</p>
+                <p className="mt-1 text-[11px] text-muted-foreground">{s.sub}</p>
               </div>
             ))}
           </div>
         </div>
       </section>
 
-      {/* What it does — explainer */}
-      <section id="what" className="border-y border-border bg-secondary/30">
-        <div className="mx-auto w-full max-w-7xl px-4 py-20 sm:px-6">
-          <div className="mb-12 grid gap-6 md:grid-cols-2 md:items-end">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.2em] text-primary">What MachineCare actually does</p>
-              <h2 className="mt-2 text-3xl font-bold tracking-tight sm:text-4xl">
-                Replace 6 disconnected tools with one shared source of truth.
-              </h2>
-            </div>
-            <p className="text-base text-muted-foreground">
-              No more WhatsApp work orders, paper checklists, lost service logs or Excel OEE files. Every machine has its own profile, history, documents, parts, costs and live status — and every person on the team works from the same screen.
+      {/* ── PROBLEM VS SOLUTION SECTION ──────────────────────────── */}
+      <section id="comparison" className="border-y border-border bg-secondary/30 py-20">
+        <div className="mx-auto w-full max-w-7xl px-4 sm:px-6">
+          <div className="text-center max-w-3xl mx-auto mb-14">
+            <span className="text-xs font-bold uppercase tracking-[0.2em] text-primary">
+              {isSwahili ? "Ulinganifu wa Mifumo" : "The MachineCare Difference"}
+            </span>
+            <h2 className="mt-2 text-3xl font-bold tracking-tight sm:text-4xl">
+              {isSwahili ? "Kutoka Kwenye Machafuko Hadi Mfumo Uliojipanga" : "From Plant Floor Chaos to Digital Order"}
+            </h2>
+            <p className="mt-3 text-muted-foreground text-sm sm:text-base">
+              {isSwahili 
+                ? "Tazama jinsi MachineCare inavyobadilisha njia za zamani na kuleta uwazi kamili."
+                : "Compare how traditional paper and messaging workflows hold you back versus MachineCare's streamlined platform."}
             </p>
           </div>
 
-          <div className="grid gap-5 md:grid-cols-3">
-            {[
-              { icon: Factory, title: "Run production", desc: "Daily targets vs. actuals, scrap, attainment and live OEE per machine, line and site." },
-              { icon: Wrench, title: "Maintain equipment", desc: "Preventive schedules by hours or calendar, work orders, job logs, parts used and sign-offs." },
-              { icon: ShieldCheck, title: "Keep people safe", desc: "Incident reports, safety inductions with quizzes & certificates, permits and audit trail." },
-            ].map(({ icon: Icon, title, desc }) => (
-              <div key={title} className="rounded-2xl border border-border bg-card p-6">
-                <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-xl bg-primary-soft text-primary">
-                  <Icon className="h-5 w-5" />
-                </div>
-                <h3 className="text-lg font-semibold">{title}</h3>
-                <p className="mt-1.5 text-sm text-muted-foreground">{desc}</p>
+          <div className="grid md:grid-cols-2 gap-8">
+            {/* The Old Way */}
+            <div className="rounded-3xl border border-destructive/20 bg-card p-7 shadow-sm">
+              <div className="flex items-center gap-2 text-destructive font-bold text-base mb-6 border-b border-border pb-4">
+                <X className="h-5 w-5" />
+                <span>{isSwahili ? "Njia ya Zamani (Bila MachineCare)" : "The Old Way (Without MachineCare)"}</span>
               </div>
-            ))}
-          </div>
-        </div>
-      </section>
+              <ul className="space-y-4 text-sm text-muted-foreground">
+                <li className="flex items-start gap-3">
+                  <X className="h-5 w-5 text-destructive shrink-0 mt-0.5" />
+                  <span><strong>Paper Checklists & WhatsApp:</strong> Work orders get lost in chat groups or soaked in oil on the factory floor.</span>
+                </li>
+                <li className="flex items-start gap-3">
+                  <X className="h-5 w-5 text-destructive shrink-0 mt-0.5" />
+                  <span><strong>Reactive Breakdown Firefighting:</strong> Machines break down unexpectedly because no one tracked service hours.</span>
+                </li>
+                <li className="flex items-start gap-3">
+                  <X className="h-5 w-5 text-destructive shrink-0 mt-0.5" />
+                  <span><strong>Blind Management:</strong> Directors and managers have no real-time view of OEE, production output, or downtime causes.</span>
+                </li>
+                <li className="flex items-start gap-3">
+                  <X className="h-5 w-5 text-destructive shrink-0 mt-0.5" />
+                  <span><strong>Safety & Compliance Risks:</strong> No audit trail for contractor safety inductions, permits, or near-miss incidents.</span>
+                </li>
+              </ul>
+            </div>
 
-      {/* Features — full module list */}
-      <section id="features" className="mx-auto w-full max-w-7xl px-4 py-20 sm:px-6">
-        <div className="mb-12 max-w-2xl">
-          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-primary">
-            Every module included
-          </p>
-          <h2 className="mt-2 text-3xl font-bold tracking-tight sm:text-4xl">
-            One subscription. Every workflow your plant needs.
-          </h2>
-        </div>
-
-        <div className="grid gap-5 md:grid-cols-3 lg:grid-cols-4">
-          {[
-            { icon: Factory, title: "Machine registry", desc: "Every asset with photo, QR, manuals, parts list, meter readings and lifetime history." },
-            { icon: ClipboardList, title: "Work orders", desc: "Corrective & preventive WOs with tasks, parts, costs, permits and sign-off — printable to your company's own format." },
-            { icon: Wrench, title: "Preventive maintenance", desc: "Schedule by hours, kilometres or calendar. Auto-generate WOs before things break." },
-            { icon: QrCode, title: "QR scan & log", desc: "Stick a QR on every machine — anyone with a phone can log work, fuel or a fault." },
-            { icon: Gauge, title: "OEE tracking", desc: "Availability × Performance × Quality per machine, line and shift — with trends." },
-            { icon: BarChart3, title: "Production KPIs", desc: "Daily targets vs. actuals, scrap and attainment by line, product and operator." },
-            { icon: ShieldCheck, title: "Safety & incidents", desc: "Near-miss to lost-time reporting, root cause, corrective actions and days-since counter." },
-            { icon: GraduationCap, title: "Inductions", desc: "Build programmes, run quizzes on-site, issue certificates — keep contractors compliant." },
-            { icon: Boxes, title: "Inventory & parts", desc: "Stock levels, min/max, low-stock alerts and parts consumed per work order." },
-            { icon: Fuel, title: "Fuel & odometer", desc: "Capture refuels and meter readings from a phone. Drive PM triggers automatically." },
-            { icon: FileText, title: "Documents & vendors", desc: "Centralise manuals, drawings, certificates. Track vendors, contacts and SLAs." },
-            { icon: Activity, title: "Live TV dashboard", desc: "Big-screen real-time view of production, OEE, safety and open WOs for the shop floor." },
-          ].map(({ icon: Icon, title, desc }) => (
-            <div
-              key={title}
-              className="group relative overflow-hidden rounded-2xl border border-border bg-card p-6 transition-all hover:-translate-y-1 hover:border-primary/40 hover:shadow-xl"
-            >
+            {/* The MachineCare Way */}
+            <div className="rounded-3xl border border-emerald-500/30 bg-card p-7 shadow-md relative overflow-hidden">
               <div
                 aria-hidden
-                className="absolute -right-10 -top-10 h-32 w-32 rounded-full opacity-0 blur-2xl transition-opacity group-hover:opacity-60"
+                className="absolute top-0 right-0 h-32 w-32 rounded-full opacity-20 blur-xl pointer-events-none"
                 style={{ background: "var(--gradient-primary)" }}
               />
-              <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-xl bg-primary-soft text-primary">
-                <Icon className="h-5 w-5" />
+              <div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-400 font-bold text-base mb-6 border-b border-border pb-4">
+                <Check className="h-5 w-5" />
+                <span>{isSwahili ? "Njia ya MachineCare (Kidijitali)" : "The MachineCare Way (Digital & Unified)"}</span>
               </div>
-              <h3 className="mb-1.5 text-base font-semibold">{title}</h3>
-              <p className="text-sm text-muted-foreground">{desc}</p>
+              <ul className="space-y-4 text-sm text-foreground">
+                <li className="flex items-start gap-3">
+                  <CheckCircle2 className="h-5 w-5 text-emerald-500 shrink-0 mt-0.5" />
+                  <span><strong>Instant QR Code Scan & Log:</strong> Anyone with a smartphone scans a QR sticker on any machine to log work, fuel, or fault reports.</span>
+                </li>
+                <li className="flex items-start gap-3">
+                  <CheckCircle2 className="h-5 w-5 text-emerald-500 shrink-0 mt-0.5" />
+                  <span><strong>Automated Preventive Maintenance (PM):</strong> Service alerts trigger automatically based on hours, kilometres, or calendar dates.</span>
+                </li>
+                <li className="flex items-start gap-3">
+                  <CheckCircle2 className="h-5 w-5 text-emerald-500 shrink-0 mt-0.5" />
+                  <span><strong>Live TV & Mobile Dashboards:</strong> Real-time OEE, production targets vs actuals, and active work orders accessible 24/7.</span>
+                </li>
+                <li className="flex items-start gap-3">
+                  <CheckCircle2 className="h-5 w-5 text-emerald-500 shrink-0 mt-0.5" />
+                  <span><strong>Digital Safety & Contractor Inductions:</strong> Run safety quizzes on mobile, issue compliance certificates, and log incident root causes.</span>
+                </li>
+              </ul>
             </div>
-          ))}
-        </div>
-
-        <div className="mt-10 flex flex-wrap items-center justify-center gap-x-8 gap-y-3 text-xs text-muted-foreground">
-          <span className="inline-flex items-center gap-1.5"><Bell className="h-3.5 w-3.5 text-primary" /> Email & in-app alerts</span>
-          <span className="inline-flex items-center gap-1.5"><Smartphone className="h-3.5 w-3.5 text-primary" /> Mobile-first, offline-tolerant</span>
-          <span className="inline-flex items-center gap-1.5"><Users className="h-3.5 w-3.5 text-primary" /> Role-based access (admin · supervisor · technician)</span>
-          <span className="inline-flex items-center gap-1.5"><Globe className="h-3.5 w-3.5 text-primary" /> Multi-site & multi-language</span>
-        </div>
-      </section>
-
-      {/* How it works */}
-      <section id="how" className="border-y border-border bg-secondary/30">
-        <div className="mx-auto w-full max-w-7xl px-4 py-20 sm:px-6">
-          <div className="mb-12 max-w-2xl">
-            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-primary">
-              How it works
-            </p>
-            <h2 className="mt-2 text-3xl font-bold tracking-tight sm:text-4xl">
-              Up and running in an afternoon.
-            </h2>
           </div>
-          <ol className="grid gap-5 md:grid-cols-4">
-            {[
-              { n: "01", t: "Add your machines", d: "Import a spreadsheet or add critical assets first. Attach manuals & PM schedules." },
-              { n: "02", t: "Print the QR codes", d: "Stick one on every machine. Anyone with a phone becomes a technician." },
-              { n: "03", t: "Invite your team", d: "Operators, technicians, supervisors — each with the right permissions." },
-              { n: "04", t: "Watch the data flow", d: "Live OEE, due services, open WOs and safety stats land on dashboards automatically." },
-            ].map((s) => (
-              <li key={s.n} className="rounded-2xl border border-border bg-card p-6">
-                <p
-                  className="text-3xl font-bold tracking-tight text-transparent bg-clip-text"
-                  style={{ backgroundImage: "var(--gradient-primary)" }}
-                >
-                  {s.n}
-                </p>
-                <h3 className="mt-3 text-lg font-semibold">{s.t}</h3>
-                <p className="mt-1.5 text-sm text-muted-foreground">{s.d}</p>
-              </li>
-            ))}
-          </ol>
         </div>
       </section>
 
-      {/* Who it's for */}
-      <section id="who" className="mx-auto w-full max-w-7xl px-4 py-20 sm:px-6">
-        <div className="mb-12 max-w-2xl">
-          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-primary">Built for</p>
+      {/* ── SOLUTIONS BY INDUSTRY (TABBED SHOWCASE) ──────────────── */}
+      <section id="solutions" className="py-20 mx-auto w-full max-w-7xl px-4 sm:px-6">
+        <div className="text-center max-w-3xl mx-auto mb-10">
+          <span className="text-xs font-bold uppercase tracking-[0.2em] text-primary">
+            {isSwahili ? "Ufumbuzi kwa Sekta" : "Tailored Solutions"}
+          </span>
           <h2 className="mt-2 text-3xl font-bold tracking-tight sm:text-4xl">
-            Manufacturing plants, fleets and field operations.
+            {isSwahili ? "Imejengwa Kwa Ajili Ya Nyanja Zote Za Viwanda" : "Engineered for Your Specific Industry Workflow"}
+          </h2>
+          <p className="mt-3 text-muted-foreground text-sm sm:text-base">
+            {isSwahili
+              ? "MachineCare inabadilika kulingana na aina ya biashara yako — iwe ni kiwanda, usafirishaji au sekta ya marekebisho."
+              : "MachineCare dynamically adapts its features whether you operate a manufacturing plant, heavy transport fleet, or service workshop."}
+          </p>
+        </div>
+
+        {/* Industry Tabs Selector */}
+        <div className="flex justify-center mb-10">
+          <div className="inline-flex rounded-2xl border border-border bg-secondary/50 p-1.5">
+            <button
+              onClick={() => setActiveTab("manufacturing")}
+              className={`flex items-center gap-2 rounded-xl px-5 py-2.5 text-sm font-bold transition-all ${
+                activeTab === "manufacturing"
+                  ? "bg-card text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              <Factory className="h-4 w-4 text-blue-500" />
+              <span>{isSwahili ? "Viwanda & Uzalishaji" : "Manufacturing & Plants"}</span>
+            </button>
+            <button
+              onClick={() => setActiveTab("fleet")}
+              className={`flex items-center gap-2 rounded-xl px-5 py-2.5 text-sm font-bold transition-all ${
+                activeTab === "fleet"
+                  ? "bg-card text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              <Truck className="h-4 w-4 text-emerald-500" />
+              <span>{isSwahili ? "Magari & Logistiki" : "Fleet & Logistics"}</span>
+            </button>
+            <button
+              onClick={() => setActiveTab("garage")}
+              className={`flex items-center gap-2 rounded-xl px-5 py-2.5 text-sm font-bold transition-all ${
+                activeTab === "garage"
+                  ? "bg-card text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              <Wrench className="h-4 w-4 text-orange-500" />
+              <span>{isSwahili ? "Garakana & Workshop" : "Workshops & Garages"}</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Tab Content Cards */}
+        <div className="rounded-3xl border border-border bg-card p-8 md:p-12 shadow-sm">
+          {activeTab === "manufacturing" && (
+            <div className="grid md:grid-cols-2 gap-8 items-center">
+              <div className="space-y-4">
+                <div className="inline-flex items-center gap-2 text-xs font-bold text-blue-500 uppercase tracking-wider">
+                  <Factory className="h-4 w-4" /> Manufacturing Operations
+                </div>
+                <h3 className="text-2xl font-bold tracking-tight">Maximize OEE & Protect Bottling Lines</h3>
+                <p className="text-sm text-muted-foreground leading-relaxed">
+                  Ideal for food & beverage plants, packaging facilities, and heavy industrial manufacturing. Track availability, speed, and quality in real-time.
+                </p>
+                <ul className="space-y-2.5 text-xs text-foreground font-medium pt-2">
+                  <li className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-primary" /> Live OEE Telemetry & Downtime Root Cause Categorization</li>
+                  <li className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-primary" /> Hours-based Preventive Maintenance for Motors & Compressors</li>
+                  <li className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-primary" /> Shopfloor Big-Screen Live TV Displays for Line Operators</li>
+                </ul>
+              </div>
+              <div className="rounded-2xl border border-border bg-secondary/50 p-6 space-y-3">
+                <div className="flex items-center justify-between text-xs font-bold border-b border-border pb-3">
+                  <span>Line Attainment Rate</span>
+                  <span className="text-emerald-500 font-extrabold">+14.2% Increase</span>
+                </div>
+                <div className="space-y-2 text-xs">
+                  <div className="flex justify-between text-muted-foreground">
+                    <span>Shift Production Target:</span> <span className="font-semibold text-foreground">50,000 Units</span>
+                  </div>
+                  <div className="flex justify-between text-muted-foreground">
+                    <span>Actual Produced:</span> <span className="font-semibold text-foreground">48,450 Units</span>
+                  </div>
+                  <div className="flex justify-between text-muted-foreground">
+                    <span>Scrap / Reject Rate:</span> <span className="font-semibold text-emerald-600">0.4% (Optimal)</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {activeTab === "fleet" && (
+            <div className="grid md:grid-cols-2 gap-8 items-center">
+              <div className="space-y-4">
+                <div className="inline-flex items-center gap-2 text-xs font-bold text-emerald-500 uppercase tracking-wider">
+                  <Truck className="h-4 w-4" /> Fleet & Transport Operations
+                </div>
+                <h3 className="text-2xl font-bold tracking-tight">Km-Based Servicing & Fuel Efficiency</h3>
+                <p className="text-sm text-muted-foreground leading-relaxed">
+                  Designed for logistics companies, haulage, and heavy machinery fleets. Monitor fuel logs, tyre lifespans, and vehicle inspection checklists.
+                </p>
+                <ul className="space-y-2.5 text-xs text-foreground font-medium pt-2">
+                  <li className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-emerald-500" /> Odometer & Kilometre-Driven Service Triggering</li>
+                  <li className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-emerald-500" /> Fuel Log Entry & Theft / Consumption Variance Detection</li>
+                  <li className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-emerald-500" /> Driver Pre-Start Digital Inspection Checklists</li>
+                </ul>
+              </div>
+              <div className="rounded-2xl border border-border bg-secondary/50 p-6 space-y-3">
+                <div className="flex items-center justify-between text-xs font-bold border-b border-border pb-3">
+                  <span>Fleet Vehicle Status</span>
+                  <span className="text-emerald-500 font-extrabold">24 Active Vehicles</span>
+                </div>
+                <div className="space-y-2 text-xs">
+                  <div className="flex justify-between text-muted-foreground">
+                    <span>Scania Hauler T-882:</span> <span className="font-semibold text-foreground">Service Due in 340 km</span>
+                  </div>
+                  <div className="flex justify-between text-muted-foreground">
+                    <span>CAT Excavator E-104:</span> <span className="font-semibold text-emerald-600">Fuel Logged (420 L)</span>
+                  </div>
+                  <div className="flex justify-between text-muted-foreground">
+                    <span>Pending Trip Inspection:</span> <span className="font-semibold text-foreground">0 Defect Reports</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {activeTab === "garage" && (
+            <div className="grid md:grid-cols-2 gap-8 items-center">
+              <div className="space-y-4">
+                <div className="inline-flex items-center gap-2 text-xs font-bold text-orange-500 uppercase tracking-wider">
+                  <Wrench className="h-4 w-4" /> Service Workshop & Garage
+                </div>
+                <h3 className="text-2xl font-bold tracking-tight">Digital Job Cards & Customer Invoicing</h3>
+                <p className="text-sm text-muted-foreground leading-relaxed">
+                  Tailored for independent repair workshops, customer machine servicing, and field technicians. Manage job cards, spare parts billing, and customer quotes.
+                </p>
+                <ul className="space-y-2.5 text-xs text-foreground font-medium pt-2">
+                  <li className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-orange-500" /> Digital Workshop Job Cards & Mechanic Assignments</li>
+                  <li className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-orange-500" /> Customer Vehicle / Machine History Passport</li>
+                  <li className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-orange-500" /> Direct Parts Deduction & Instant Billing Estimates</li>
+                </ul>
+              </div>
+              <div className="rounded-2xl border border-border bg-secondary/50 p-6 space-y-3">
+                <div className="flex items-center justify-between text-xs font-bold border-b border-border pb-3">
+                  <span>Active Workshop Jobs</span>
+                  <span className="text-orange-500 font-extrabold">6 Jobs In Progress</span>
+                </div>
+                <div className="space-y-2 text-xs">
+                  <div className="flex justify-between text-muted-foreground">
+                    <span>Job #JOB-409 (Engine Overhaul):</span> <span className="font-semibold text-foreground">Mechanic Juma</span>
+                  </div>
+                  <div className="flex justify-between text-muted-foreground">
+                    <span>Spare Parts Consumed:</span> <span className="font-semibold text-foreground">Oil Filters, Gasket Kit</span>
+                  </div>
+                  <div className="flex justify-between text-muted-foreground">
+                    <span>Customer Sign-off:</span> <span className="font-semibold text-emerald-600">Estimate Approved</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </section>
+
+      {/* ── ALL MODULES & FEATURES GRID ───────────────────────────── */}
+      <section id="features" className="py-20 border-t border-border bg-secondary/30">
+        <div className="mx-auto w-full max-w-7xl px-4 sm:px-6">
+          <div className="text-center max-w-3xl mx-auto mb-14">
+            <span className="text-xs font-bold uppercase tracking-[0.2em] text-primary">
+              {isSwahili ? "Vipengele Vyote" : "Comprehensive Feature Suite"}
+            </span>
+            <h2 className="mt-2 text-3xl font-bold tracking-tight sm:text-4xl">
+              {isSwahili ? "Kila Kitu Unachohitaji Ili Kuendesha Kiwanda Chako" : "Everything Needed to Run a Flagship Operation"}
+            </h2>
+            <p className="mt-3 text-muted-foreground text-sm sm:text-base">
+              {isSwahili
+                ? "Mfumo mmoja uliokamilika badala ya programu 6 tofauti zinazotatanisha."
+                : "No need for multiple fragmented software apps. MachineCare connects all factory floor departments."}
+            </p>
+          </div>
+
+          <div className="grid gap-6 md:grid-cols-3 lg:grid-cols-4">
+            {[
+              { icon: Factory, title: "Machine Registry", desc: "Digital passport for every machine with photos, manuals, QR codes, and service logs." },
+              { icon: ClipboardList, title: "Work Orders (WO)", desc: "Corrective and preventive work orders with labor hours, parts consumed, and sign-offs." },
+              { icon: Wrench, title: "Preventive Maintenance", desc: "Automated schedules triggered by runtime hours, kilometres, or calendar frequencies." },
+              { icon: QrCode, title: "QR Scan & Log", desc: "Stick QR stickers on machines so technicians scan to instantly report faults or log work." },
+              { icon: Gauge, title: "OEE Tracking", desc: "Real-time Availability × Performance × Quality metrics for every machine and bottling line." },
+              { icon: BarChart3, title: "Production KPIs", desc: "Monitor daily production targets vs actuals, scrap rates, and line attainment." },
+              { icon: ShieldCheck, title: "Safety & Incidents", desc: "Log near-misses, lost-time incidents, root cause analysis, and safety audit trails." },
+              { icon: GraduationCap, title: "Safety Inductions", desc: "Run contractor safety inductions with quizzes, track compliance, and issue certificates." },
+              { icon: Boxes, title: "Inventory & Spare Parts", desc: "Track stock levels, minimum reorder alerts, supplier catalogs, and part usage." },
+              { icon: Fuel, title: "Fuel & Odometers", desc: "Log fuel refuels and meter readings from mobile to detect fuel theft and drive PM." },
+              { icon: FileText, title: "Documents & Vendors", desc: "Store machine manuals, electrical drawings, insurance, and vendor contacts in one place." },
+              { icon: Activity, title: "Live TV Shopfloor", desc: "Big-screen live TV dashboard for operator visibility, open work orders, and safety counters." },
+            ].map(({ icon: Icon, title, desc }) => (
+              <div
+                key={title}
+                className="group relative rounded-2xl border border-border bg-card p-6 transition-all hover:-translate-y-1 hover:border-primary/50 hover:shadow-xl"
+              >
+                <div className="mb-4 flex h-11 w-11 items-center justify-center rounded-xl bg-primary-soft text-primary transition-colors group-hover:bg-primary group-hover:text-primary-foreground">
+                  <Icon className="h-5.5 w-5.5" />
+                </div>
+                <h3 className="mb-1.5 text-base font-bold text-foreground">{title}</h3>
+                <p className="text-xs text-muted-foreground leading-relaxed">{desc}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ── HOW IT WORKS IN 4 EASY STEPS ───────────────────────────── */}
+      <section id="how-it-works" className="py-20 mx-auto w-full max-w-7xl px-4 sm:px-6">
+        <div className="text-center max-w-3xl mx-auto mb-14">
+          <span className="text-xs font-bold uppercase tracking-[0.2em] text-primary">
+            {isSwahili ? "Jinsi Inavyofanya Kazi" : "Easy Onboarding"}
+          </span>
+          <h2 className="mt-2 text-3xl font-bold tracking-tight sm:text-4xl">
+            {isSwahili ? "Hatua 4 Rahisi Za Kuanza Kujisajili" : "Up and Running in 4 Simple Steps"}
           </h2>
         </div>
-        <div className="grid gap-5 md:grid-cols-3">
+
+        <div className="grid gap-6 md:grid-cols-4">
           {[
-            { t: "Food, beverage & bottling", d: "Lines like Krones Contiform, fillers, cappers, conveyors — with hours-based PM and OEE." },
-            { t: "Heavy equipment & fleets", d: "Excavators, generators, trucks. Meter-driven services, fuel logs and vendor SLAs." },
-            { t: "Workshops & contractors", d: "Job cards, parts costs, customer machines and induction certificates in one place." },
-          ].map((c) => (
-            <div key={c.t} className="rounded-2xl border border-border bg-card p-6">
-              <h3 className="text-lg font-semibold">{c.t}</h3>
-              <p className="mt-1.5 text-sm text-muted-foreground">{c.d}</p>
+            { n: "01", t: "Request Access", d: "Fill out your company name & contact info to request access." },
+            { n: "02", t: "Add Assets & QR Codes", d: "Register your machines and print QR code stickers for each asset." },
+            { n: "03", t: "Invite Team Members", d: "Assign roles to technicians, supervisors, and operators." },
+            { n: "04", t: "Watch Performance Grow", d: "Track live OEE, automated PM alerts, and zero lost service logs." },
+          ].map((s) => (
+            <div key={s.n} className="rounded-3xl border border-border bg-card p-7 relative">
+              <span
+                className="text-4xl font-black bg-clip-text text-transparent opacity-80"
+                style={{ backgroundImage: "var(--gradient-primary)" }}
+              >
+                {s.n}
+              </span>
+              <h3 className="mt-3 text-lg font-bold">{s.t}</h3>
+              <p className="mt-2 text-xs text-muted-foreground leading-relaxed">{s.d}</p>
             </div>
           ))}
         </div>
       </section>
 
-      {/* Trust / Quote */}
-      <section className="border-y border-border bg-secondary/30">
-        <div className="mx-auto w-full max-w-7xl px-4 py-20 sm:px-6">
-          <figure className="mx-auto max-w-3xl text-center">
-            <p className="text-2xl font-medium leading-snug sm:text-3xl">
-              &ldquo;We cut unplanned downtime by a third in the first quarter.
-              The team actually <span className="text-primary">enjoys</span> doing inspections now.&rdquo;
-            </p>
-            <figcaption className="mt-6 text-sm text-muted-foreground">
-              Plant Manager · Heavy-equipment fleet, Dar es Salaam
-            </figcaption>
-          </figure>
-        </div>
-      </section>
-
-      {/* CTA */}
-      <section className="mx-auto w-full max-w-7xl px-4 py-20 sm:px-6">
+      {/* ── CALL TO ACTION BANNER ─────────────────────────────────── */}
+      <section className="py-16 mx-auto w-full max-w-7xl px-4 sm:px-6">
         <div
-          className="relative overflow-hidden rounded-3xl border border-border p-10 text-center sm:p-14"
+          className="relative overflow-hidden rounded-3xl border border-border p-10 text-center sm:p-16 shadow-2xl"
           style={{ background: "var(--gradient-hero)" }}
         >
           <div
             aria-hidden
-            className="pointer-events-none absolute -bottom-24 left-1/2 h-64 w-[120%] -translate-x-1/2 rounded-full opacity-40 blur-3xl"
+            className="pointer-events-none absolute -bottom-24 left-1/2 h-72 w-[120%] -translate-x-1/2 rounded-full opacity-40 blur-3xl"
             style={{ background: "var(--gradient-primary)" }}
           />
-          <h2 className="text-3xl font-bold tracking-tight sm:text-4xl">
-            Run your plant like a flagship.
+          <h2 className="text-3xl font-extrabold tracking-tight sm:text-5xl">
+            {isSwahili ? "Anza Kuendesha Kiwanda Chako Kwa Usahihi" : "Ready to Modernize Your Plant Operations?"}
           </h2>
-          <p className="mx-auto mt-3 max-w-xl text-sm text-muted-foreground sm:text-base">
-            {isSwahili ? "Tuma ombi la kujiunga ili kuanza kusanidi kiwanda chako." : "Submit an access request to start setting up your workspace."}
+          <p className="mx-auto mt-4 max-w-xl text-sm text-muted-foreground sm:text-base leading-relaxed">
+            {isSwahili
+              ? "Tuma ombi lako sasa ili upate nafasi ya kufunguliwa mfumo na timu yetu ya usaidizi."
+              : "Submit an onboarding access request today and let our engineering team set up your workspace."}
           </p>
-          <div className="mt-7 flex flex-wrap justify-center gap-3">
+          <div className="mt-8 flex flex-wrap justify-center gap-3">
             <Button
               asChild
               size="lg"
-              className="text-primary-foreground"
+              className="h-12 px-8 text-base text-primary-foreground font-bold shadow-xl"
               style={{ background: "var(--gradient-primary)", boxShadow: "var(--shadow-elegant)" }}
             >
-              <Link to="/signup">{isSwahili ? "Omba Kujiunga Sasa" : "Request Access Now"}</Link>
+              <Link to="/signup">
+                {isSwahili ? "Omba Kujiunga Sasa" : "Request Access Now"}
+                <ArrowRight className="ml-2 h-5 w-5" />
+              </Link>
             </Button>
-            <Button asChild size="lg" variant="outline">
+            <Button asChild size="lg" variant="outline" className="h-12 px-7 text-base">
               <Link to="/login">{t.home.cta_login}</Link>
             </Button>
           </div>
         </div>
       </section>
 
-      {/* Footer */}
-      <footer className="border-t border-border bg-background">
-        <div className="mx-auto w-full max-w-7xl px-4 py-12 sm:px-6">
+      {/* ── FOOTER ────────────────────────────────────────────────── */}
+      <footer className="border-t border-border bg-background py-12">
+        <div className="mx-auto w-full max-w-7xl px-4 sm:px-6">
           <div className="grid gap-8 md:grid-cols-4">
             <div>
               <div className="flex items-center gap-2.5">
                 <div
-                  className="flex h-9 w-9 items-center justify-center rounded-xl text-primary-foreground"
+                  className="flex h-9 w-9 items-center justify-center rounded-xl text-primary-foreground shadow-sm"
                   style={{ background: "var(--gradient-primary)" }}
                 >
                   <Wrench className="h-4 w-4" />
                 </div>
                 <span className="text-base font-bold tracking-tight">{t.common.appName}</span>
               </div>
-              <p className="mt-3 max-w-xs text-sm text-muted-foreground">
-                One platform for manufacturing, maintenance and safety — built for the plant floor.
+              <p className="mt-3 max-w-xs text-xs text-muted-foreground leading-relaxed">
+                The operating system for manufacturing plants, fleets, and repair workshops.
               </p>
             </div>
             <div>
-              <p className="text-xs font-semibold uppercase tracking-wider text-foreground">Product</p>
-              <ul className="mt-3 space-y-2 text-sm text-muted-foreground">
-                <li><a href="#features" className="hover:text-foreground">Features</a></li>
-                <li><a href="#how" className="hover:text-foreground">How it works</a></li>
-                <li><a href="#who" className="hover:text-foreground">Who it's for</a></li>
+              <p className="text-xs font-bold uppercase tracking-wider text-foreground">Solutions</p>
+              <ul className="mt-3 space-y-2 text-xs text-muted-foreground">
+                <li><a href="#solutions" className="hover:text-foreground">Manufacturing & Bottling</a></li>
+                <li><a href="#solutions" className="hover:text-foreground">Fleet & Heavy Machinery</a></li>
+                <li><a href="#solutions" className="hover:text-foreground">Workshops & Garages</a></li>
               </ul>
             </div>
             <div>
-              <p className="text-xs font-semibold uppercase tracking-wider text-foreground">Account</p>
-              <ul className="mt-3 space-y-2 text-sm text-muted-foreground">
-                <li><Link to="/login" className="hover:text-foreground">Sign in</Link></li>
+              <p className="text-xs font-bold uppercase tracking-wider text-foreground">Access</p>
+              <ul className="mt-3 space-y-2 text-xs text-muted-foreground">
+                <li><Link to="/login" className="hover:text-foreground">Sign In</Link></li>
                 <li><Link to="/signup" className="hover:text-foreground">{isSwahili ? "Omba Kujiunga" : "Request Access"}</Link></li>
                 <li><Link to="/dashboard" className="hover:text-foreground">Dashboard</Link></li>
               </ul>
             </div>
             <div>
-              <p className="text-xs font-semibold uppercase tracking-wider text-foreground">Contact</p>
-              <ul className="mt-3 space-y-2 text-sm text-muted-foreground">
-                <li><a href="mailto:hello@machinecare.company" className="hover:text-foreground">hello@machinecare.company</a></li>
-                <li><a href="https://machinecare.company" className="hover:text-foreground">machinecare.company</a></li>
+              <p className="text-xs font-bold uppercase tracking-wider text-foreground">Contact & Support</p>
+              <ul className="mt-3 space-y-2 text-xs text-muted-foreground">
+                <li><a href="mailto:michaelnisa3@gmail.com" className="hover:text-foreground">michaelnisa3@gmail.com</a></li>
+                <li><span>Phone: +255 764 190 999</span></li>
               </ul>
             </div>
           </div>
           <div className="mt-10 flex flex-col items-center justify-between gap-3 border-t border-border pt-6 text-xs text-muted-foreground sm:flex-row">
             <p>© {new Date().getFullYear()} {t.common.appName}. All rights reserved.</p>
-            <p>Built for fleets, workshops and field teams.</p>
+            <p>Built for industrial manufacturing, fleets, and field engineering.</p>
           </div>
         </div>
       </footer>
