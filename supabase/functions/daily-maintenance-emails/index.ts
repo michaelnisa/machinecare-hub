@@ -591,18 +591,36 @@ Deno.serve(async (req) => {
     return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
   }
 
+  const targetOrgs = (orgs ?? []).filter((o: any) => !onlyOrgId || o.id === onlyOrgId) as Org[]
   const results: any[] = []
-  for (const org of (orgs ?? []) as Org[]) {
-    if (onlyOrgId && org.id !== onlyOrgId) continue
-    try {
-      const r = await processOrg(org)
-      results.push({ org: org.name, ...r })
-    } catch (e) {
-      console.error('org failed', org.id, e)
-      await supabase.from('maintenance_email_runs').insert({
-        organisation_id: org.id, status: 'error', error_message: String((e as Error).message ?? e),
+
+  // Process organizations in concurrent batches of 5 to stay well within Deno execution limits
+  const BATCH_SIZE = 5
+  for (let i = 0; i < targetOrgs.length; i += BATCH_SIZE) {
+    const batch = targetOrgs.slice(i, i + BATCH_SIZE)
+    const settled = await Promise.allSettled(
+      batch.map(async (org) => {
+        try {
+          const r = await processOrg(org)
+          return { org: org.name, ...r }
+        } catch (e) {
+          console.error('org failed', org.id, e)
+          await supabase.from('maintenance_email_runs').insert({
+            organisation_id: org.id,
+            status: 'error',
+            error_message: String((e as Error).message ?? e),
+          })
+          return { org: org.name, error: String((e as Error).message ?? e) }
+        }
       })
-      results.push({ org: org.name, error: String((e as Error).message ?? e) })
+    )
+
+    for (const res of settled) {
+      if (res.status === 'fulfilled') {
+        results.push(res.value)
+      } else {
+        results.push({ error: String(res.reason) })
+      }
     }
   }
 

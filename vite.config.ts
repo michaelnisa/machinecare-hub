@@ -18,6 +18,30 @@ export default defineConfig(({ mode }) => {
       // then deleted below — otherwise they'd sit in dist/ and ship to every
       // visitor's browser, leaking source structure for no benefit.
       sourcemap: sentryEnabled,
+      chunkSizeWarningLimit: 650,
+      rollupOptions: {
+        output: {
+          manualChunks(id) {
+            if (id.includes("node_modules")) {
+              if (id.includes("jspdf")) {
+                return "vendor-jspdf";
+              }
+              if (id.includes("html2canvas") || id.includes("canvg")) {
+                return "vendor-html2canvas";
+              }
+              if (id.includes("recharts") || id.includes("d3-") || id.includes("victory-vendor")) {
+                return "vendor-charts";
+              }
+              if (id.includes("@radix-ui") || id.includes("lucide-react")) {
+                return "vendor-ui";
+              }
+              if (id.includes("@supabase") || id.includes("@tanstack")) {
+                return "vendor-data";
+              }
+            }
+          },
+        },
+      },
     },
     plugins: [
       react(),
