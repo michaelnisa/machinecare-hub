@@ -138,14 +138,7 @@ export default function Dashboard() {
           <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
           <p className="text-sm text-muted-foreground">An overview of your fleet maintenance.</p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          {isAdmin && (
-            <Button asChild variant="outline" className="border-primary/40 text-primary hover:bg-primary-soft">
-              <Link to="/admin">
-                <ShieldCheck className="mr-1.5 h-4 w-4" /> Admin Portal
-              </Link>
-            </Button>
-          )}
+        <div className="flex gap-2">
           <Button variant="outline" onClick={() => setLogDialog(true)} disabled={machines.length === 0}>
             <Activity className="mr-2 h-4 w-4" /> Log service
           </Button>

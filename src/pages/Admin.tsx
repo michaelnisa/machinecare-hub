@@ -243,9 +243,9 @@ export default function Admin() {
   // Handle Approve & Copy Invite Link
   const handleApproveAndCopy = async (req: OnboardingRequest) => {
     await updateRequestStatus(req.id, "completed");
-    const inviteUrl = `${window.location.origin}/signup?company=${encodeURIComponent(
+    const inviteUrl = `${window.location.origin}/signup?approved=true&company=${encodeURIComponent(
       req.company
-    )}&industry=${req.industry}`;
+    )}&industry=${req.industry}&email=${encodeURIComponent(req.contact)}`;
     navigator.clipboard.writeText(inviteUrl);
     toast.success(
       isSwahili
@@ -525,8 +525,9 @@ export default function Admin() {
                             variant="ghost"
                             onClick={() => {
                               setTargetPhone(req.contact);
+                              const link = `${window.location.origin}/signup?approved=true&company=${encodeURIComponent(req.company)}&industry=${req.industry}`;
                               setSmsText(
-                                `Jambo ${req.name}, ombi lako la kujiunga na MachineCare kwa ajili ya ${req.company} limekubaliwa. Jiunge hapa: ${window.location.origin}/signup`
+                                `Jambo ${req.name}, ombi lako la kujiunga na MachineCare kwa ajili ya ${req.company} limekubaliwa. Jiunge hapa: ${link}`
                               );
                               setSmsModalOpen(true);
                             }}

@@ -36,8 +36,9 @@ export default function Signup() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [params] = useSearchParams();
-  const inviteToken = params.get("invite");
-  const inviteEmail = params.get("email");
+  const inviteToken = params.get("invite") || params.get("approved") || params.get("company") || params.get("token");
+  const rawEmail = params.get("email") || "";
+  const inviteEmail = rawEmail.includes("@") ? rawEmail : "";
   const { t, currentLang } = useI18n();
   const isSwahili = currentLang === "sw";
 
@@ -70,7 +71,7 @@ export default function Signup() {
       toast.error(t.auth.mustAcceptTos);
       return;
     }
-    if (inviteToken && inviteEmail && values.email.toLowerCase() !== inviteEmail.toLowerCase()) {
+    if (inviteEmail && values.email.toLowerCase() !== inviteEmail.toLowerCase()) {
       toast.error(t.auth.inviteEmailMismatch);
       return;
     }

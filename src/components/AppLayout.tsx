@@ -52,26 +52,11 @@ export default function AppLayout() {
           </Button>
           <span className="font-semibold">MachineCare</span>
           <div className="ml-auto flex items-center gap-1">
-            {isAdmin && (
-              <Button asChild variant="ghost" size="icon" title="Admin Portal">
-                <Link to="/admin">
-                  <ShieldCheck className="h-5 w-5 text-primary" />
-                </Link>
-              </Button>
-            )}
             <LanguageSwitcher compact />
             <NotificationsBell />
           </div>
         </header>
-        <header className="hidden h-14 items-center justify-end gap-3 border-b border-border bg-background px-6 md:flex">
-          {isAdmin && (
-            <Button asChild variant="outline" size="sm" className="gap-1.5 border-primary/40 text-primary hover:bg-primary-soft">
-              <Link to="/admin">
-                <ShieldCheck className="h-4 w-4" />
-                Admin Portal
-              </Link>
-            </Button>
-          )}
+        <header className="hidden h-14 items-center justify-end gap-2 border-b border-border bg-background px-6 md:flex">
           <LanguageSwitcher />
           <NotificationsBell />
         </header>
