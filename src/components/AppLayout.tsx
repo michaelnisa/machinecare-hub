@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
-import { Outlet, useNavigate, useLocation } from "react-router-dom";
+import { Outlet, useNavigate, useLocation, Link } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { PageLoader } from "@/components/PageLoader";
 import { Sidebar } from "@/components/Sidebar";
-import { Menu, X } from "lucide-react";
+import { Menu, X, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { NotificationsBell } from "@/components/NotificationsBell";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
@@ -49,11 +49,22 @@ export default function AppLayout() {
           </Button>
           <span className="font-semibold">MachineCare</span>
           <div className="ml-auto flex items-center gap-1">
+            <Button asChild variant="ghost" size="icon" title="Admin Portal">
+              <Link to="/admin">
+                <ShieldCheck className="h-5 w-5 text-primary" />
+              </Link>
+            </Button>
             <LanguageSwitcher compact />
             <NotificationsBell />
           </div>
         </header>
-        <header className="hidden h-14 items-center justify-end gap-2 border-b border-border bg-background px-6 md:flex">
+        <header className="hidden h-14 items-center justify-end gap-3 border-b border-border bg-background px-6 md:flex">
+          <Button asChild variant="outline" size="sm" className="gap-1.5 border-primary/40 text-primary hover:bg-primary-soft">
+            <Link to="/admin">
+              <ShieldCheck className="h-4 w-4" />
+              Admin Portal
+            </Link>
+          </Button>
           <LanguageSwitcher />
           <NotificationsBell />
         </header>

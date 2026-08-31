@@ -7,7 +7,7 @@ import { StatusBadge } from "@/components/StatusBadge";
 import { PageLoader, EmptyState } from "@/components/PageLoader";
 import { CATEGORY_ICONS, scheduleStatus } from "@/lib/machine-constants";
 import { formatDate, formatMoney } from "@/lib/format";
-import { Plus, Wrench, AlertTriangle, CheckCircle2, Activity, Clock } from "lucide-react";
+import { Plus, Wrench, AlertTriangle, CheckCircle2, Activity, Clock, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 import { MachineFormDialog } from "@/components/MachineFormDialog";
 import { ServiceLogDialog } from "@/components/ServiceLogDialog";
@@ -135,7 +135,12 @@ export default function Dashboard() {
           <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
           <p className="text-sm text-muted-foreground">An overview of your fleet maintenance.</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <Button asChild variant="outline" className="border-primary/40 text-primary hover:bg-primary-soft">
+            <Link to="/admin">
+              <ShieldCheck className="mr-1.5 h-4 w-4" /> Admin Portal
+            </Link>
+          </Button>
           <Button variant="outline" onClick={() => setLogDialog(true)} disabled={machines.length === 0}>
             <Activity className="mr-2 h-4 w-4" /> Log service
           </Button>

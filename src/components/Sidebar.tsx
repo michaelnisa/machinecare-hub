@@ -79,6 +79,7 @@ export function Sidebar() {
         label: "Overview",
         items: [
           { to: "/dashboard", label: t.nav.dashboard, icon: LayoutDashboard },
+          { to: "/admin", label: "Admin Portal", icon: ShieldAlert },
           ...(!isLite ? [{ to: "/live", label: "Live TV", icon: Tv }] : []),
           { to: "/notifications", label: t.nav.notifications, icon: Bell },
         ],
@@ -258,6 +259,7 @@ export function Sidebar() {
             label: "Fleet Dashboard",
             icon: LayoutDashboard,
           },
+          { to: "/admin", label: "Admin Portal", icon: ShieldAlert },
           { to: "/live", label: "Live TV", icon: Tv },
           { to: "/notifications", label: t.nav.notifications, icon: Bell },
         ],
@@ -337,6 +339,7 @@ export function Sidebar() {
         label: "Overview",
         items: [
           { to: "/dashboard", label: "Workshop Dashboard", icon: LayoutDashboard },
+          { to: "/admin", label: "Admin Portal", icon: ShieldAlert },
           { to: "/notifications", label: t.nav.notifications, icon: Bell },
         ],
       },
