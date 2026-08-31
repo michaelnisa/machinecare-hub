@@ -36,7 +36,10 @@ export default function Signup() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [params] = useSearchParams();
-  const inviteToken = params.get("invite") || params.get("approved") || params.get("company") || params.get("token");
+  const orgInviteToken = params.get("invite") || params.get("token");
+  const isApprovedSignup = Boolean(params.get("approved") || params.get("company"));
+  const isAccessGranted = Boolean(orgInviteToken || isApprovedSignup);
+
   const rawEmail = params.get("email") || "";
   const inviteEmail = rawEmail.includes("@") ? rawEmail : "";
   const { t, currentLang } = useI18n();
@@ -49,10 +52,10 @@ export default function Signup() {
   const [industryProfile, setIndustryProfile] = useState<IndustryProfile>("manufacturing");
 
   useEffect(() => {
-    if (user && inviteToken) {
+    if (user && isAccessGranted) {
       navigate("/dashboard", { replace: true });
     }
-  }, [user, navigate, inviteToken]);
+  }, [user, navigate, isAccessGranted]);
 
   // ── Invite form setup ──────────────────────────────────────────
   const inviteForm = useForm<InviteFormValues>({
@@ -76,15 +79,26 @@ export default function Signup() {
       return;
     }
     setSubmitting(true);
+
+    const signupMetaData: Record<string, any> = {
+      full_name: values.full_name,
+    };
+    if (orgInviteToken) {
+      signupMetaData.invite_token = orgInviteToken;
+    }
+    if (params.get("company")) {
+      signupMetaData.company_name = params.get("company");
+    }
+    if (params.get("industry")) {
+      signupMetaData.industry_profile = params.get("industry");
+    }
+
     const { error } = await supabase.auth.signUp({
       email: values.email,
       password: values.password,
       options: {
         emailRedirectTo: `${window.location.origin}/dashboard`,
-        data: {
-          full_name: values.full_name,
-          invite_token: inviteToken,
-        },
+        data: signupMetaData,
       },
     });
     setSubmitting(false);
@@ -228,8 +242,8 @@ export default function Signup() {
             <span className="text-xl font-bold tracking-tight">{t.common.appName}</span>
           </div>
 
-          {inviteToken ? (
-            // ── FLOW A: Invited user registration ──
+          {isAccessGranted ? (
+            // ── FLOW A: Invited / Approved user registration ──
             <>
               <h1 className="mb-1 text-3xl font-bold tracking-tight">
                 {t.auth.joinTeam}
