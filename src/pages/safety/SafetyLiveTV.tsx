@@ -2,11 +2,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Navigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
-import { useUserRole } from "@/hooks/useUserRole";
 import { PageLoader } from "@/components/PageLoader";
 import {
   ShieldCheck,
-  Activity,
   Maximize2,
   Minimize2,
   Users,
@@ -19,20 +17,8 @@ import {
   Clock,
   CheckCircle2,
   FileWarning,
-  Settings2,
-  Edit3,
-  Save,
-  UserCheck,
   Heart,
-  Plus,
-  Trash2,
 } from "lucide-react";
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { toast } from "sonner";
 
 type SafetyKpis = {
   daysWithoutLti: number;
@@ -82,27 +68,13 @@ const defaultRoster: DutyRoster = {
 
 export default function SafetyLiveTV() {
   const { user, loading, organisation, profile } = useAuth();
-  const { isManager, isOwner } = useUserRole();
-  const canManageFeed = isManager || isOwner || profile?.department === "safety";
 
   const [kpis, setKpis] = useState<SafetyKpis>(initialKpis);
   const [roster, setRoster] = useState<DutyRoster>(defaultRoster);
   const [feedConfig, setFeedConfig] = useState<SafetyTvFeedConfig | null>(null);
   const [bulletinMessages, setBulletinMessages] = useState<string[]>([]);
-  const [teamMembers, setTeamMembers] = useState<Array<{ id: string; full_name: string; phone: string | null; department: string | null }>>([]);
-
-  const [feedModalOpen, setFeedModalOpen] = useState(false);
-  const [savingFeed, setSavingFeed] = useState(false);
-
-  // Form state for the feed configuration modal
-  const [formRoster, setFormRoster] = useState<DutyRoster>(defaultRoster);
-  const [formRecordDays, setFormRecordDays] = useState<string>("");
-  const [formBaselineDays, setFormBaselineDays] = useState<string>("");
-  const [formComplianceRate, setFormComplianceRate] = useState<string>("");
-  const [formBulletins, setFormBulletins] = useState<string>("");
 
   const [now, setNow] = useState(new Date());
-  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
 
   const orgId = organisation?.id || profile?.organisation_id;
@@ -278,17 +250,6 @@ export default function SafetyLiveTV() {
           .order("full_name"),
       ]);
 
-      if (profiles) {
-        setTeamMembers(
-          profiles.map((p) => ({
-            id: p.id,
-            full_name: p.full_name || "Staff Member",
-            phone: p.phone,
-            department: p.department,
-          }))
-        );
-      }
-
       // Calculate real continuous days without LTI
       const ltiList = (incidents ?? []).filter(
         (x: any) =>
@@ -375,8 +336,6 @@ export default function SafetyLiveTV() {
         emergencyFirstAidersOnDuty: firstAidersCount,
         fireWardensOnDuty: fireWardensCount,
       });
-
-      setLastUpdated(new Date());
     } catch (err) {
       console.error("Failed to load real safety data:", err);
     }
@@ -415,113 +374,6 @@ export default function SafetyLiveTV() {
     };
   }, [orgId, refreshData]);
 
-  // Open feed configuration modal and populate initial values
-  const openFeedModal = () => {
-    setFormRoster({
-      chiefSafetyOfficer: {
-        name: roster.chiefSafetyOfficer.name || "",
-        phone: roster.chiefSafetyOfficer.phone || "",
-      },
-      firstAidOfficer: {
-        name: roster.firstAidOfficer.name || "",
-        phone: roster.firstAidOfficer.phone || "",
-      },
-      safetyOfficerOnDuty: {
-        name: roster.safetyOfficerOnDuty.name || "",
-        phone: roster.safetyOfficerOnDuty.phone || "",
-      },
-    });
-    setFormRecordDays(feedConfig?.recordLtiDays ? String(feedConfig.recordLtiDays) : "");
-    setFormBaselineDays(feedConfig?.baselineLtiDays ? String(feedConfig.baselineLtiDays) : "");
-    setFormComplianceRate(feedConfig?.complianceTargetRate ? String(feedConfig.complianceTargetRate) : "");
-    setFormBulletins(
-      bulletinMessages.length > 0
-        ? bulletinMessages.join("\n")
-        : ""
-    );
-    setFeedModalOpen(true);
-  };
-
-  // Save feed configuration to Supabase & localStorage, then broadcast
-  const saveFeedConfiguration = async () => {
-    if (!orgId) return;
-    setSavingFeed(true);
-    try {
-      const parsedBulletins = formBulletins
-        .split("\n")
-        .map((l) => l.trim())
-        .filter((l) => l.length > 0);
-
-      const newConfig: SafetyTvFeedConfig = {
-        roster: formRoster,
-        bulletinNotices: parsedBulletins.length > 0 ? parsedBulletins : undefined,
-        recordLtiDays: formRecordDays ? parseInt(formRecordDays, 10) || null : null,
-        baselineLtiDays: formBaselineDays ? parseInt(formBaselineDays, 10) || null : null,
-        complianceTargetRate: formComplianceRate ? parseFloat(formComplianceRate) || null : null,
-      };
-
-      const payload = JSON.stringify(newConfig);
-
-      // 1. Save to local storage for instant access
-      if (storageKey) {
-        localStorage.setItem(storageKey, payload);
-      }
-
-      // 2. Persist to Supabase safety_rules table
-      const { data: existing } = await (supabase as any)
-        .from("safety_rules")
-        .select("id")
-        .eq("organisation_id", orgId)
-        .eq("name", "SAFETY_LIVE_TV_FEED")
-        .maybeSingle();
-
-      if (existing?.id) {
-        await (supabase as any)
-          .from("safety_rules")
-          .update({
-            match_value: payload,
-            is_active: true,
-            match_field: "live_config",
-          })
-          .eq("id", existing.id);
-      } else {
-        await (supabase as any)
-          .from("safety_rules")
-          .insert({
-            organisation_id: orgId,
-            name: "SAFETY_LIVE_TV_FEED",
-            match_field: "live_config",
-            match_value: payload,
-            is_active: true,
-            required_ppe: [],
-          });
-      }
-
-      // 3. Broadcast to all other open Live TV kiosks in real time
-      const channel = supabase.channel(`safety-live-tv:${orgId}`);
-      channel.send({
-        type: "broadcast",
-        event: "feed_updated",
-        payload: newConfig,
-      });
-
-      // 4. Update current state
-      setFeedConfig(newConfig);
-      setRoster(newConfig.roster);
-      if (parsedBulletins.length > 0) {
-        setBulletinMessages(parsedBulletins);
-      }
-
-      toast.success("Safety Live TV feed & duty roster updated");
-      setFeedModalOpen(false);
-      refreshData();
-    } catch (err: any) {
-      toast.error(err.message || "Failed to save feed configuration");
-    } finally {
-      setSavingFeed(false);
-    }
-  };
-
   // Dynamic live ticker messages (uses feeded bulletins or real account data)
   const activeBulletins = useMemo(() => {
     if (bulletinMessages.length > 0) return bulletinMessages;
@@ -542,7 +394,7 @@ export default function SafetyLiveTV() {
 
   return (
     <div className="min-h-screen w-full bg-[#0a0e1a] bg-[radial-gradient(ellipse_at_top,rgba(56,189,248,0.15),transparent_50%),radial-gradient(ellipse_at_bottom,rgba(168,85,247,0.12),transparent_50%)] text-white font-sans">
-      {/* Top Broadcast Navigation & Header */}
+      {/* Top Broadcast Navigation & Header (Display Only) */}
       <header className="sticky top-0 z-50 border-b border-white/10 bg-[#0a0e1a]/90 backdrop-blur-md px-6 py-4">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-4">
@@ -581,16 +433,6 @@ export default function SafetyLiveTV() {
                 <div className="text-[11px] text-white/50">{dateStr}</div>
               </div>
             </div>
-
-            {canManageFeed && (
-              <button
-                onClick={openFeedModal}
-                className="flex items-center gap-1.5 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-3.5 py-2 text-xs font-bold text-emerald-400 hover:bg-emerald-500/20 transition-colors shadow-sm"
-              >
-                <Edit3 className="h-4 w-4" />
-                <span>Feed Data & Roster</span>
-              </button>
-            )}
 
             <button
               onClick={toggleFullscreen}
@@ -725,27 +567,17 @@ export default function SafetyLiveTV() {
           </div>
         </div>
 
-        {/* EMERGENCY READINESS & SAFETY ROSTER */}
+        {/* EMERGENCY READINESS & SAFETY ROSTER (DISPLAY ONLY) */}
         <div className="rounded-3xl border border-white/10 bg-gradient-to-br from-white/5 to-white/[0.02] p-6 shadow-2xl backdrop-blur space-y-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2 text-white font-bold uppercase tracking-wider text-sm">
-              <PhoneCall className="h-4 w-4 text-emerald-400" /> Emergency Duty Roster & Safety Contacts
-            </div>
-            {canManageFeed && (
-              <button
-                onClick={openFeedModal}
-                className="flex items-center gap-1.5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-xs font-semibold text-emerald-400 hover:bg-emerald-500/20 transition-colors"
-              >
-                <Edit3 className="h-3.5 w-3.5" /> Edit Roster
-              </button>
-            )}
+          <div className="flex items-center gap-2 text-white font-bold uppercase tracking-wider text-sm">
+            <PhoneCall className="h-4 w-4 text-emerald-400" /> Emergency Duty Roster & Safety Contacts
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="rounded-xl border border-white/10 bg-black/40 p-4 space-y-1.5">
               <div className="text-[10px] uppercase font-bold text-white/60 tracking-wider">Chief Safety Officer</div>
               <div className="text-base font-bold text-white">
-                {roster.chiefSafetyOfficer.name || <span className="text-white/40 italic font-normal">Unassigned • Click to configure</span>}
+                {roster.chiefSafetyOfficer.name || <span className="text-white/40 font-normal">Unassigned</span>}
               </div>
               <div className="text-sm text-emerald-400 font-mono font-bold flex items-center gap-1.5">
                 <PhoneCall className="h-3.5 w-3.5" />
@@ -756,7 +588,7 @@ export default function SafetyLiveTV() {
             <div className="rounded-xl border border-white/10 bg-black/40 p-4 space-y-1.5">
               <div className="text-[10px] uppercase font-bold text-white/60 tracking-wider">First Aid Officer</div>
               <div className="text-base font-bold text-white">
-                {roster.firstAidOfficer.name || <span className="text-white/40 italic font-normal">Unassigned • Click to configure</span>}
+                {roster.firstAidOfficer.name || <span className="text-white/40 font-normal">Unassigned</span>}
               </div>
               <div className="text-sm text-emerald-400 font-mono font-bold flex items-center gap-1.5">
                 <PhoneCall className="h-3.5 w-3.5" />
@@ -767,7 +599,7 @@ export default function SafetyLiveTV() {
             <div className="rounded-xl border border-white/10 bg-black/40 p-4 space-y-1.5">
               <div className="text-[10px] uppercase font-bold text-white/60 tracking-wider">Safety Officer on Duty</div>
               <div className="text-base font-bold text-white">
-                {roster.safetyOfficerOnDuty.name || <span className="text-white/40 italic font-normal">Unassigned • Click to configure</span>}
+                {roster.safetyOfficerOnDuty.name || <span className="text-white/40 font-normal">Unassigned</span>}
               </div>
               <div className="text-sm text-emerald-400 font-mono font-bold flex items-center gap-1.5">
                 <PhoneCall className="h-3.5 w-3.5" />
@@ -793,281 +625,6 @@ export default function SafetyLiveTV() {
           </div>
         </div>
       </main>
-
-      {/* MODAL: Feed Live TV Data & Duty Roster */}
-      <Dialog open={feedModalOpen} onOpenChange={setFeedModalOpen}>
-        <DialogContent className="max-w-2xl bg-[#0f172a] border border-white/10 text-white shadow-2xl p-6">
-          <DialogHeader>
-            <DialogTitle className="text-xl font-bold text-white flex items-center gap-2">
-              <Settings2 className="h-5 w-5 text-emerald-400" /> Configure Safety Live TV & Duty Roster
-            </DialogTitle>
-            <div className="text-xs text-slate-400">
-              Update real-time duty roster contacts, custom site benchmarks, and daily safety ticker notices.
-            </div>
-          </DialogHeader>
-
-          <div className="space-y-6 py-3 max-h-[70vh] overflow-y-auto pr-2">
-            {/* EMERGENCY DUTY ROSTER PERSONNEL */}
-            <div className="space-y-4">
-              <div className="text-xs font-bold uppercase tracking-wider text-emerald-400 flex items-center gap-2">
-                <UserCheck className="h-4 w-4" /> Emergency Duty Roster Personnel
-              </div>
-
-              {/* Chief Safety Officer */}
-              <div className="rounded-xl border border-white/10 bg-white/5 p-4 space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-white">1. Chief Safety Officer</span>
-                  {teamMembers.length > 0 && (
-                    <select
-                      className="text-xs bg-slate-900 border border-white/10 rounded-md px-2 py-1 text-slate-300 focus:outline-none focus:border-emerald-500"
-                      onChange={(e) => {
-                        const m = teamMembers.find((x) => x.id === e.target.value);
-                        if (m) {
-                          setFormRoster((prev) => ({
-                            ...prev,
-                            chiefSafetyOfficer: { name: m.full_name, phone: m.phone || prev.chiefSafetyOfficer.phone },
-                          }));
-                        }
-                      }}
-                      defaultValue=""
-                    >
-                      <option value="" disabled>Select from team...</option>
-                      {teamMembers.map((m) => (
-                        <option key={m.id} value={m.id}>
-                          {m.full_name} {m.department ? `(${m.department})` : ""}
-                        </option>
-                      ))}
-                    </select>
-                  )}
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <Label className="text-[11px] text-slate-400">Officer Name</Label>
-                    <Input
-                      placeholder="e.g. Eng. Wilson Mkono"
-                      value={formRoster.chiefSafetyOfficer.name}
-                      onChange={(e) =>
-                        setFormRoster((prev) => ({
-                          ...prev,
-                          chiefSafetyOfficer: { ...prev.chiefSafetyOfficer, name: e.target.value },
-                        }))
-                      }
-                      className="bg-slate-900 border-white/10 text-white h-9 text-xs"
-                    />
-                  </div>
-                  <div>
-                    <Label className="text-[11px] text-slate-400">Emergency Phone Number</Label>
-                    <Input
-                      placeholder="e.g. +255 784 991 223"
-                      value={formRoster.chiefSafetyOfficer.phone}
-                      onChange={(e) =>
-                        setFormRoster((prev) => ({
-                          ...prev,
-                          chiefSafetyOfficer: { ...prev.chiefSafetyOfficer, phone: e.target.value },
-                        }))
-                      }
-                      className="bg-slate-900 border-white/10 text-white h-9 text-xs font-mono"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* First Aid Officer */}
-              <div className="rounded-xl border border-white/10 bg-white/5 p-4 space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-white">2. First Aid Officer</span>
-                  {teamMembers.length > 0 && (
-                    <select
-                      className="text-xs bg-slate-900 border border-white/10 rounded-md px-2 py-1 text-slate-300 focus:outline-none focus:border-emerald-500"
-                      onChange={(e) => {
-                        const m = teamMembers.find((x) => x.id === e.target.value);
-                        if (m) {
-                          setFormRoster((prev) => ({
-                            ...prev,
-                            firstAidOfficer: { name: m.full_name, phone: m.phone || prev.firstAidOfficer.phone },
-                          }));
-                        }
-                      }}
-                      defaultValue=""
-                    >
-                      <option value="" disabled>Select from team...</option>
-                      {teamMembers.map((m) => (
-                        <option key={m.id} value={m.id}>
-                          {m.full_name} {m.department ? `(${m.department})` : ""}
-                        </option>
-                      ))}
-                    </select>
-                  )}
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <Label className="text-[11px] text-slate-400">Officer Name</Label>
-                    <Input
-                      placeholder="e.g. Sarah K. Kimaro"
-                      value={formRoster.firstAidOfficer.name}
-                      onChange={(e) =>
-                        setFormRoster((prev) => ({
-                          ...prev,
-                          firstAidOfficer: { ...prev.firstAidOfficer, name: e.target.value },
-                        }))
-                      }
-                      className="bg-slate-900 border-white/10 text-white h-9 text-xs"
-                    />
-                  </div>
-                  <div>
-                    <Label className="text-[11px] text-slate-400">Emergency Phone Number</Label>
-                    <Input
-                      placeholder="e.g. +255 754 312 889"
-                      value={formRoster.firstAidOfficer.phone}
-                      onChange={(e) =>
-                        setFormRoster((prev) => ({
-                          ...prev,
-                          firstAidOfficer: { ...prev.firstAidOfficer, phone: e.target.value },
-                        }))
-                      }
-                      className="bg-slate-900 border-white/10 text-white h-9 text-xs font-mono"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Safety Officer on Duty */}
-              <div className="rounded-xl border border-white/10 bg-white/5 p-4 space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-white">3. Safety Officer on Duty</span>
-                  {teamMembers.length > 0 && (
-                    <select
-                      className="text-xs bg-slate-900 border border-white/10 rounded-md px-2 py-1 text-slate-300 focus:outline-none focus:border-emerald-500"
-                      onChange={(e) => {
-                        const m = teamMembers.find((x) => x.id === e.target.value);
-                        if (m) {
-                          setFormRoster((prev) => ({
-                            ...prev,
-                            safetyOfficerOnDuty: { name: m.full_name, phone: m.phone || prev.safetyOfficerOnDuty.phone },
-                          }));
-                        }
-                      }}
-                      defaultValue=""
-                    >
-                      <option value="" disabled>Select from team...</option>
-                      {teamMembers.map((m) => (
-                        <option key={m.id} value={m.id}>
-                          {m.full_name} {m.department ? `(${m.department})` : ""}
-                        </option>
-                      ))}
-                    </select>
-                  )}
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <Label className="text-[11px] text-slate-400">Officer Name</Label>
-                    <Input
-                      placeholder="e.g. Juma R. Mushi"
-                      value={formRoster.safetyOfficerOnDuty.name}
-                      onChange={(e) =>
-                        setFormRoster((prev) => ({
-                          ...prev,
-                          safetyOfficerOnDuty: { ...prev.safetyOfficerOnDuty, name: e.target.value },
-                        }))
-                      }
-                      className="bg-slate-900 border-white/10 text-white h-9 text-xs"
-                    />
-                  </div>
-                  <div>
-                    <Label className="text-[11px] text-slate-400">Emergency Phone Number</Label>
-                    <Input
-                      placeholder="e.g. +255 713 445 670"
-                      value={formRoster.safetyOfficerOnDuty.phone}
-                      onChange={(e) =>
-                        setFormRoster((prev) => ({
-                          ...prev,
-                          safetyOfficerOnDuty: { ...prev.safetyOfficerOnDuty, phone: e.target.value },
-                        }))
-                      }
-                      className="bg-slate-900 border-white/10 text-white h-9 text-xs font-mono"
-                    />
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* CUSTOM BENCHMARKS & TARGETS */}
-            <div className="space-y-3">
-              <div className="text-xs font-bold uppercase tracking-wider text-emerald-400 flex items-center gap-2">
-                <Award className="h-4 w-4" /> Custom Site Benchmarks & Targets (Optional)
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div>
-                  <Label className="text-[11px] text-slate-400">All-Time Site Record (Days)</Label>
-                  <Input
-                    type="number"
-                    placeholder="e.g. 365"
-                    value={formRecordDays}
-                    onChange={(e) => setFormRecordDays(e.target.value)}
-                    className="bg-slate-900 border-white/10 text-white h-9 text-xs font-mono"
-                  />
-                </div>
-                <div>
-                  <Label className="text-[11px] text-slate-400">Baseline Days Without LTI</Label>
-                  <Input
-                    type="number"
-                    placeholder="Auto-calculated if blank"
-                    value={formBaselineDays}
-                    onChange={(e) => setFormBaselineDays(e.target.value)}
-                    className="bg-slate-900 border-white/10 text-white h-9 text-xs font-mono"
-                  />
-                </div>
-                <div>
-                  <Label className="text-[11px] text-slate-400">Target Compliance (%)</Label>
-                  <Input
-                    type="number"
-                    step="0.1"
-                    placeholder="100.0"
-                    value={formComplianceRate}
-                    onChange={(e) => setFormComplianceRate(e.target.value)}
-                    className="bg-slate-900 border-white/10 text-white h-9 text-xs font-mono"
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* LIVE ROLLING TICKER BULLETINS */}
-            <div className="space-y-2">
-              <div className="text-xs font-bold uppercase tracking-wider text-emerald-400 flex items-center gap-2">
-                <Radio className="h-4 w-4" /> Live Bulletin Announcements (One notice per line)
-              </div>
-              <Textarea
-                rows={4}
-                placeholder="Enter custom daily safety notices (one per line)... If blank, dynamic live metrics will scroll."
-                value={formBulletins}
-                onChange={(e) => setFormBulletins(e.target.value)}
-                className="bg-slate-900 border-white/10 text-white text-xs font-sans leading-relaxed"
-              />
-              <div className="text-[11px] text-slate-400">
-                Leave empty to automatically display live status bulletins (incident-free count, contractor counts, emergency contacts).
-              </div>
-            </div>
-          </div>
-
-          <DialogFooter className="border-t border-white/10 pt-4 flex items-center justify-between">
-            <Button
-              variant="outline"
-              onClick={() => setFeedModalOpen(false)}
-              className="border-white/10 text-slate-300 hover:bg-white/10 text-xs"
-            >
-              Cancel
-            </Button>
-            <Button
-              onClick={saveFeedConfiguration}
-              disabled={savingFeed}
-              className="bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-1.5"
-            >
-              <Save className="h-4 w-4" />
-              {savingFeed ? "Saving..." : "Save & Broadcast to TV"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

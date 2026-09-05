@@ -7,11 +7,12 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { PageLoader, EmptyState } from "@/components/PageLoader";
-import { ShieldAlert, Plus, Loader2, CheckCircle2, XCircle, ClipboardList, ListChecks, ClipboardCheck, GraduationCap, Tv } from "lucide-react";
+import { ShieldAlert, Plus, Loader2, CheckCircle2, XCircle, ClipboardList, ListChecks, ClipboardCheck, GraduationCap, Tv, Settings2 } from "lucide-react";
 import { toast } from "sonner";
 import { formatDate } from "@/lib/format";
 import { Link } from "react-router-dom";
 import { formatWoNumber } from "@/components/WorkOrderPreview";
+import { SafetyLiveFeedModal } from "@/components/safety/SafetyLiveFeedModal";
 
 const TYPES = ["near_miss", "accident", "hazard", "first_aid", "lost_time"];
 const SEVERITIES = ["low", "medium", "high", "critical"];
@@ -35,6 +36,7 @@ export default function Safety() {
   const [items, setItems] = useState<any[]>([]);
   const [machines, setMachines] = useState<{ id: string; name: string }[]>([]);
   const [open, setOpen] = useState(false);
+  const [feedOpen, setFeedOpen] = useState(false);
   const [filter, setFilter] = useState("all");
   const [pendingPtw, setPendingPtw] = useState<any[]>([]);
   const [reviewingId, setReviewingId] = useState<string | null>(null);
@@ -122,6 +124,13 @@ export default function Safety() {
           <p className="text-sm text-muted-foreground">Incidents, permits, risk assessments, LOTO and corrective actions in one place.</p>
         </div>
         <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            onClick={() => setFeedOpen(true)}
+            className="gap-1.5 border-emerald-600/30 text-emerald-700 dark:text-emerald-400"
+          >
+            <Settings2 className="h-4 w-4" /> Feed Live TV & Roster
+          </Button>
           <Link to="/safety/live-tv">
             <Button variant="outline" className="gap-1.5 border-emerald-600/30 text-emerald-700 dark:text-emerald-400">
               <Tv className="h-4 w-4" /> Safety Live TV
@@ -250,6 +259,7 @@ export default function Safety() {
       )}
 
       <ReportDialog open={open} setOpen={setOpen} machines={machines} userId={user?.id} orgId={profile?.organisation_id} onSaved={load} />
+      <SafetyLiveFeedModal open={feedOpen} onOpenChange={setFeedOpen} onSaved={load} />
     </div>
   );
 }
