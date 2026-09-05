@@ -246,7 +246,7 @@ function ConvertToPoDialog({ request, onClose, onSaved }: any) {
 
   return (
     <Dialog open={!!request} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto">
         <DialogHeader><DialogTitle>Convert to purchase order</DialogTitle></DialogHeader>
         <div className="grid gap-3">
           <div><Label>Supplier *</Label>

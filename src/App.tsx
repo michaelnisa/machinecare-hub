@@ -87,6 +87,8 @@ const MaintenanceKPIs = lazy(() => import("./pages/MaintenanceKPIs"));
 const Utilities = lazy(() => import("./pages/Utilities"));
 const Live = lazy(() => import("./pages/Live"));
 const LiveProduction = lazy(() => import("./pages/LiveProduction"));
+const SafetyLiveTV = lazy(() => import("./pages/safety/SafetyLiveTV"));
+const VendorRiskAssessmentPublic = lazy(() => import("./pages/safety/VendorRiskAssessmentPublic"));
 const Vendors = lazy(() => import("./pages/Vendors"));
 const WorkOrderPrint = lazy(() => import("./pages/WorkOrderPrint"));
 const ChecklistTemplatePrint = lazy(() => import("./pages/ChecklistTemplatePrint"));
@@ -124,6 +126,17 @@ const GarageEstimatePrint = lazy(() => import("./pages/garage/EstimatePrint"));
 const GarageInvoicePrint = lazy(() => import("./pages/garage/InvoicePrint"));
 const GarageJobStatusPublic = lazy(() => import("./pages/garage/JobStatusPublic"));
 
+const IntegrationsLayout = lazy(() => import("./pages/integrations/IntegrationsLayout"));
+const IntegrationsMarketplace = lazy(() => import("./pages/integrations/IntegrationsMarketplace"));
+const ConnectedSystems = lazy(() => import("./pages/integrations/ConnectedSystems"));
+const DataMappingView = lazy(() => import("./pages/integrations/DataMappingView"));
+const SyncJobsView = lazy(() => import("./pages/integrations/SyncJobsView"));
+const SyncHistoryView = lazy(() => import("./pages/integrations/SyncHistoryView"));
+const ErrorCenterView = lazy(() => import("./pages/integrations/ErrorCenterView"));
+const WebhooksView = lazy(() => import("./pages/integrations/WebhooksView"));
+const CredentialsVaultView = lazy(() => import("./pages/integrations/CredentialsVaultView"));
+const IntegrationSettingsView = lazy(() => import("./pages/integrations/IntegrationSettingsView"));
+
 const queryClient = new QueryClient();
 
 const App = () => (
@@ -153,6 +166,9 @@ const App = () => (
                 <Route path="/g/:jobId" element={<GarageJobStatusPublic />} />
                 <Route path="/live" element={<Live />} />
                 <Route path="/live/production" element={<LiveProduction />} />
+                <Route path="/safety/live-tv" element={<SafetyLiveTV />} />
+                <Route path="/safety/qr-rams" element={<VendorRiskAssessmentPublic />} />
+                <Route path="/safety/qr-rams/:orgId" element={<VendorRiskAssessmentPublic />} />
                 <Route path="/unsubscribe" element={<Unsubscribe />} />
                 <Route element={<AppLayout />}>
                   <Route path="/dashboard" element={<DashboardRouter />} />
@@ -249,6 +265,17 @@ const App = () => (
                   <Route path="/induction/inductees" element={<InductionInductees />} />
                   <Route path="/analytics" element={<Analytics />} />
                   <Route path="/settings" element={<Settings />} />
+                  <Route path="/integrations" element={<IntegrationsLayout />}>
+                    <Route index element={<IntegrationsMarketplace />} />
+                    <Route path="connected" element={<ConnectedSystems />} />
+                    <Route path="mapping" element={<DataMappingView />} />
+                    <Route path="jobs" element={<SyncJobsView />} />
+                    <Route path="history" element={<SyncHistoryView />} />
+                    <Route path="errors" element={<ErrorCenterView />} />
+                    <Route path="webhooks" element={<WebhooksView />} />
+                    <Route path="credentials" element={<CredentialsVaultView />} />
+                    <Route path="settings" element={<IntegrationSettingsView />} />
+                  </Route>
                   <Route path="/admin" element={<Admin />} />
                 </Route>
                 <Route path="*" element={<NotFound />} />

@@ -274,7 +274,7 @@ function NewCountDialog({
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>New stock count</DialogTitle>
         </DialogHeader>
@@ -620,7 +620,7 @@ function AddLineDialog({ open, setOpen, countId, onSaved }: any) {
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogContent className="max-w-sm">
+      <DialogContent className="max-w-sm max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Add item to count</DialogTitle>
         </DialogHeader>

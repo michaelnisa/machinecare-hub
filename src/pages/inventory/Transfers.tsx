@@ -180,7 +180,7 @@ function NewTransferDialog({ open, setOpen, onSaved }: any) {
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>New transfer</DialogTitle>
         </DialogHeader>

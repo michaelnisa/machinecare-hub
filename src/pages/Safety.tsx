@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { PageLoader, EmptyState } from "@/components/PageLoader";
-import { ShieldAlert, Plus, Loader2, CheckCircle2, XCircle, ClipboardList, ListChecks, ClipboardCheck, GraduationCap } from "lucide-react";
+import { ShieldAlert, Plus, Loader2, CheckCircle2, XCircle, ClipboardList, ListChecks, ClipboardCheck, GraduationCap, Tv } from "lucide-react";
 import { toast } from "sonner";
 import { formatDate } from "@/lib/format";
 import { Link } from "react-router-dom";
@@ -121,7 +121,14 @@ export default function Safety() {
           <h1 className="text-2xl font-semibold tracking-tight">Safety dashboard</h1>
           <p className="text-sm text-muted-foreground">Incidents, permits, risk assessments, LOTO and corrective actions in one place.</p>
         </div>
-        <Button onClick={() => setOpen(true)}><Plus className="mr-2 h-4 w-4" />Report incident</Button>
+        <div className="flex items-center gap-2">
+          <Link to="/safety/live-tv">
+            <Button variant="outline" className="gap-1.5 border-emerald-600/30 text-emerald-700 dark:text-emerald-400">
+              <Tv className="h-4 w-4" /> Safety Live TV
+            </Button>
+          </Link>
+          <Button onClick={() => setOpen(true)}><Plus className="mr-2 h-4 w-4" />Report incident</Button>
+        </div>
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">

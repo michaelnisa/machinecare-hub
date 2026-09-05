@@ -262,7 +262,7 @@ function AddStockDialog({ open, setOpen, items, locations, onSaved }: any) {
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Stock an item</DialogTitle>
         </DialogHeader>
@@ -375,7 +375,7 @@ function AdjustStockDialog({ target, onClose, onSaved }: any) {
 
   return (
     <Dialog open={!!target} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>
             Adjust stock — {target.inventory_items?.name}

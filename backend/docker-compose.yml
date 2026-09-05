@@ -1,0 +1,21 @@
+version: "3.8"
+
+services:
+  erp-sync-engine:
+    build:
+      context: ..
+      dockerfile: backend/Dockerfile
+    container_name: machinecare-erp-engine
+    ports:
+      - "8000:8000"
+    environment:
+      - PORT=8000
+      - MACHINECARE_INTEGRATION_MASTER_KEY=${MACHINECARE_INTEGRATION_MASTER_KEY:-dev_master_key_for_machinecare_vault_32b}
+      - SUPABASE_URL=${VITE_SUPABASE_URL:-http://localhost:54321}
+      - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY:-}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3

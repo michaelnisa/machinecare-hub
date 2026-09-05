@@ -28,7 +28,9 @@ import {
   Upload,
   X,
   Target,
+  Layers,
 } from "lucide-react";
+import { Link } from "react-router-dom";
 import { Switch } from "@/components/ui/switch";
 import {
   AlertDialog,
@@ -315,6 +317,30 @@ export default function Settings() {
         <p className="text-sm text-muted-foreground">
           Manage your organisation and account.
         </p>
+      </div>
+
+      <div className="rounded-lg border border-primary/20 bg-primary/5 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="flex items-start gap-3">
+          <div className="p-2.5 rounded-lg bg-primary/10 text-primary">
+            <Layers className="h-5 w-5" />
+          </div>
+          <div>
+            <div className="text-sm font-bold text-foreground flex items-center gap-2">
+              ERP & Business Systems Integration
+              <span className="rounded bg-emerald-500/10 text-emerald-600 px-1.5 py-0.2 text-[10px] font-bold border border-emerald-500/20">
+                ACTIVE
+              </span>
+            </div>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Connect MachineCare operational intelligence with Odoo, SAP Business One, Microsoft Dynamics 365, or custom ERPs.
+            </p>
+          </div>
+        </div>
+        <Link to="/integrations">
+          <Button size="sm" className="whitespace-nowrap text-xs gap-1.5 font-semibold">
+            Open Integration Hub →
+          </Button>
+        </Link>
       </div>
 
       <Section title="Organisation logo">

@@ -370,7 +370,7 @@ export default function Reorder() {
       </section>
 
       <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Create purchase request</DialogTitle>
           </DialogHeader>

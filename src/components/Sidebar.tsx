@@ -51,6 +51,7 @@ import {
   AlertOctagon,
   CalendarRange,
   Recycle,
+  Layers,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { initials } from "@/lib/format";
@@ -155,6 +156,7 @@ export function Sidebar() {
               label: "Safety & People",
               items: [
                 { to: "/safety", label: t.nav.safety, icon: ShieldAlert },
+                { to: "/safety/live-tv", label: "Safety Live TV", icon: Tv },
                 { to: "/safety/risk-assessments", label: "Risk assessments", icon: ClipboardList },
                 { to: "/safety/inspections", label: "Safety inspections", icon: CheckCircle2 },
                 { to: "/safety/corrective-actions", label: "Corrective actions", icon: AlertTriangle },
@@ -239,6 +241,7 @@ export function Sidebar() {
         label: isLite ? "Account" : "System",
         items: [
           ...(isLite ? [{ to: "/team", label: t.nav.team, icon: Users }] : []),
+          { to: "/integrations", label: "ERP Integrations", icon: Layers },
           { to: "/settings", label: t.nav.settings, icon: Settings },
           ...(isAdmin ? [{ to: "/admin", label: "Admin Portal", icon: ShieldAlert }] : []),
         ],
@@ -320,6 +323,7 @@ export function Sidebar() {
         id: "system",
         label: "System",
         items: [
+          { to: "/integrations", label: "ERP Integrations", icon: Layers },
           { to: "/settings", label: t.nav.settings, icon: Settings },
           ...(isAdmin ? [{ to: "/admin", label: "Admin Portal", icon: ShieldAlert }] : []),
         ],
@@ -387,6 +391,7 @@ export function Sidebar() {
         id: "system",
         label: "System",
         items: [
+          { to: "/integrations", label: "ERP Integrations", icon: Layers },
           { to: "/settings", label: t.nav.settings, icon: Settings },
           ...(isAdmin ? [{ to: "/admin", label: "Admin Portal", icon: ShieldAlert }] : []),
         ],

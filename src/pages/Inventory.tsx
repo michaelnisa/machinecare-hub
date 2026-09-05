@@ -461,7 +461,7 @@ function InventoryDialog({ open, onOpenChange, item, onSaved }: any) {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-2xl">
+      <DialogContent className="sm:max-w-2xl max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{item ? "Edit part" : "Add part"}</DialogTitle>
         </DialogHeader>
@@ -842,7 +842,7 @@ function ItemMachinesDialog({
 
   return (
     <Dialog open={!!item} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Machines using {item?.name}</DialogTitle>
         </DialogHeader>

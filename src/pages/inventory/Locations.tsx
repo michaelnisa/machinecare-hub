@@ -102,7 +102,7 @@ function NewLocationDialog({ open, setOpen, orgId, onSaved }: any) {
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto">
         <DialogHeader><DialogTitle>Add stock location</DialogTitle></DialogHeader>
         <div className="grid gap-3">
           <div><Label>Name *</Label><Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="mt-1" placeholder="e.g. Maintenance Store" /></div>

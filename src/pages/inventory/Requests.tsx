@@ -228,7 +228,7 @@ export default function Requests() {
       )}
 
       <Dialog open={!!reviewTarget} onOpenChange={(v) => !v && setReviewTarget(null)}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto">
           <DialogHeader><DialogTitle className="capitalize">{reviewTarget?.decision.replace(/_/g, " ")}</DialogTitle></DialogHeader>
           <Textarea rows={3} placeholder="Note (optional)" value={note} onChange={(e) => setNote(e.target.value)} />
           <DialogFooter>

@@ -362,7 +362,7 @@ function AddMaterialDialog({ open, setOpen, productId, orgId, onSaved }: any) {
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Add material to bill of materials</DialogTitle>
         </DialogHeader>
@@ -450,7 +450,7 @@ function PurchaseRequestDialog({ item, onClose, orgId, userId }: any) {
 
   return (
     <Dialog open={!!item} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="max-w-sm">
+      <DialogContent className="max-w-sm max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Create purchase request</DialogTitle>
         </DialogHeader>

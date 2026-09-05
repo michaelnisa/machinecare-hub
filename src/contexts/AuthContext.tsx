@@ -3,15 +3,15 @@ import {
   useContext,
   useEffect,
   useState,
-  ReactNode,
+  type ReactNode,
 } from "react";
-import { Session, User } from "@supabase/supabase-js";
+import type { Session, User } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 import { setSentryUser } from "@/lib/sentry";
 
 interface Profile {
   id: string;
-  organisation_id: string;
+  organisation_id: string | null;
   full_name: string | null;
   department: string | null;
   phone: string | null;
@@ -69,6 +69,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .eq("id", userId)
       .maybeSingle();
     setProfile(prof as Profile | null);
+
     if (prof?.organisation_id) {
       const { data: org } = await supabase
         .from("organisations")

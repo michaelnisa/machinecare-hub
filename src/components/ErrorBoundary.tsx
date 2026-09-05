@@ -52,6 +52,10 @@ export class ErrorBoundary extends Component<Props, State> {
             <p className="mt-1 max-w-sm text-sm text-slate-600">
               An unexpected error occurred. Try reloading the page — if it keeps happening, contact support.
             </p>
+            <div className="mt-3 max-w-xl text-left bg-red-950/10 border border-red-500/20 text-red-700 dark:text-red-300 p-3 rounded text-xs font-mono overflow-auto max-h-48">
+              <strong>Error:</strong> {this.state.error?.message}<br/>
+              <pre className="mt-1 text-[10px] whitespace-pre-wrap">{this.state.error?.stack}</pre>
+            </div>
             <Button className="mt-6" onClick={() => window.location.reload()}>
               Reload page
             </Button>
