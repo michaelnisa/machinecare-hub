@@ -241,7 +241,7 @@ export function Sidebar() {
         label: isLite ? "Account" : "System",
         items: [
           ...(isLite ? [{ to: "/team", label: t.nav.team, icon: Users }] : []),
-          { to: "/integrations", label: "ERP Integrations", icon: Layers },
+          { to: "/integrations", label: "Integrations", icon: Layers },
           { to: "/settings", label: t.nav.settings, icon: Settings },
           ...(isAdmin ? [{ to: "/admin", label: "Admin Portal", icon: ShieldAlert }] : []),
         ],
@@ -323,7 +323,7 @@ export function Sidebar() {
         id: "system",
         label: "System",
         items: [
-          { to: "/integrations", label: "ERP Integrations", icon: Layers },
+          { to: "/integrations", label: "Integrations", icon: Layers },
           { to: "/settings", label: t.nav.settings, icon: Settings },
           ...(isAdmin ? [{ to: "/admin", label: "Admin Portal", icon: ShieldAlert }] : []),
         ],
@@ -391,7 +391,7 @@ export function Sidebar() {
         id: "system",
         label: "System",
         items: [
-          { to: "/integrations", label: "ERP Integrations", icon: Layers },
+          { to: "/integrations", label: "Integrations", icon: Layers },
           { to: "/settings", label: t.nav.settings, icon: Settings },
           ...(isAdmin ? [{ to: "/admin", label: "Admin Portal", icon: ShieldAlert }] : []),
         ],

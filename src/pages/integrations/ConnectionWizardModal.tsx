@@ -118,7 +118,7 @@ export function ConnectionWizardModal({ open, onOpenChange, initialConnectorSlug
           <div className="flex items-center justify-between pb-2 border-b border-border">
             <div>
               <DialogTitle className="text-xl font-bold flex items-center gap-2">
-                <Plug className="h-5 w-5 text-primary" /> Connect ERP to MachineCare
+                <Plug className="h-5 w-5 text-primary" /> Connect System to MachineCare
               </DialogTitle>
               <DialogDescription>
                 Step {step} of 7 — {
@@ -137,13 +137,13 @@ export function ConnectionWizardModal({ open, onOpenChange, initialConnectorSlug
           </div>
         </DialogHeader>
 
-        {/* STEP 1: Choose ERP */}
+        {/* STEP 1: Choose System */}
         {step === 1 && (
           <div className="space-y-4 py-3">
             <p className="text-sm text-muted-foreground">
-              Select your enterprise business system of record to integrate with MachineCare.
+              Select your enterprise business system of record or EAM to integrate with MachineCare.
             </p>
-            <div className="grid gap-3 sm:grid-cols-3">
+            <div className="grid gap-3 sm:grid-cols-2">
               {CONNECTOR_CATALOG.filter(c => c.status === "available").map((connector) => (
                 <div
                   key={connector.slug}
@@ -377,7 +377,7 @@ export function ConnectionWizardModal({ open, onOpenChange, initialConnectorSlug
           <div className="space-y-4 py-3">
             <div className="p-4 rounded-lg border border-border bg-muted/20 space-y-3">
               <div className="flex items-center justify-between border-b border-border pb-2">
-                <span className="text-xs text-muted-foreground">ERP Connector:</span>
+                <span className="text-xs text-muted-foreground">System Connector:</span>
                 <span className="text-sm font-bold">{selectedConnector.name}</span>
               </div>
               <div className="flex items-center justify-between border-b border-border pb-2">

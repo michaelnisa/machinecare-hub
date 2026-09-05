@@ -7,7 +7,7 @@ import { Search, ExternalLink, Plug, CheckCircle2, Clock, Sparkles, Building2, L
 import { CONNECTOR_CATALOG, integrationsService } from "@/services/integrationsService";
 import { ConnectionWizardModal } from "./ConnectionWizardModal";
 
-const CATEGORIES = ["All", "ERP", "EAM", "Accounting", "Inventory", "Procurement", "CRM", "IoT", "Analytics", "Custom API"];
+const CATEGORIES = ["All", "ERP", "EAM"];
 
 export function IntegrationsMarketplace() {
   const [selectedCategory, setSelectedCategory] = useState("All");
@@ -56,7 +56,7 @@ export function IntegrationsMarketplace() {
           <Input
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search ERP connectors..."
+            placeholder="Search connectors (Odoo, SAP, Dynamics, Maximo)..."
             className="pl-9 text-xs h-9"
           />
         </div>

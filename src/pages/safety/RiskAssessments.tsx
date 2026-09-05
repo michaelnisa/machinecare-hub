@@ -18,7 +18,6 @@ import {
 import {
   ClipboardList,
   QrCode,
-  Tv,
   CheckCircle2,
   XCircle,
   AlertTriangle,
@@ -157,12 +156,6 @@ export default function RiskAssessments() {
           >
             <QrCode className="h-4 w-4" /> Vendor QR Gate Poster
           </Button>
-
-          <Link to="/safety/live-tv">
-            <Button size="sm" className="gap-1.5 bg-slate-900 hover:bg-slate-800 text-white dark:bg-emerald-600 dark:hover:bg-emerald-500">
-              <Tv className="h-4 w-4 text-emerald-400 dark:text-white" /> Safety Live TV
-            </Button>
-          </Link>
         </div>
       </div>
 

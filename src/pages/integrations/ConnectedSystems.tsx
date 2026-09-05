@@ -58,7 +58,7 @@ export function ConnectedSystems() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-lg font-bold text-foreground">Active ERP & Business System Connections</h2>
+          <h2 className="text-lg font-bold text-foreground">Active Connections</h2>
           <p className="text-xs text-muted-foreground">
             Operational connections communicating bidirectionally with MachineCare Canonical Store.
           </p>
@@ -70,7 +70,7 @@ export function ConnectedSystems() {
           <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10 text-primary mb-4">
             <Layers className="h-7 w-7" />
           </div>
-          <h3 className="text-base font-semibold text-foreground mb-1">No Active ERP or EAM Connections</h3>
+          <h3 className="text-base font-semibold text-foreground mb-1">No Active Connections</h3>
           <p className="text-xs text-muted-foreground max-w-md mx-auto mb-6">
             Connect your enterprise ERP (Odoo, SAP Business One, Microsoft Dynamics 365) or EAM (IBM Maximo) to enable bi-directional sync of assets, spare parts, inventory, and work orders.
           </p>

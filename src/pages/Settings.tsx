@@ -326,13 +326,13 @@ export default function Settings() {
           </div>
           <div>
             <div className="text-sm font-bold text-foreground flex items-center gap-2">
-              ERP & Business Systems Integration
+              Integrations
               <span className="rounded bg-emerald-500/10 text-emerald-600 px-1.5 py-0.2 text-[10px] font-bold border border-emerald-500/20">
                 ACTIVE
               </span>
             </div>
             <p className="text-xs text-muted-foreground mt-0.5">
-              Connect MachineCare operational intelligence with Odoo, SAP Business One, Microsoft Dynamics 365, or custom ERPs.
+              Connect MachineCare operational intelligence with Odoo, SAP Business One, Microsoft Dynamics 365, and IBM Maximo.
             </p>
           </div>
         </div>

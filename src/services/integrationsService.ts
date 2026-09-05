@@ -173,48 +173,6 @@ export const CONNECTOR_CATALOG: ConnectorCatalogItem[] = [
         { source_field: "reading_date", target_field: "newreadingdate", transform_type: "direct", is_required: true },
       ]
     }
-  },
-  {
-    slug: "tally",
-    name: "TallyPrime",
-    category: "Accounting",
-    description: "Popular accounting and business management solution across East Africa and India. Export ledger costs and import inventory items.",
-    version: "Prime 4.0 XML/JSON Gateway",
-    status: "coming_soon",
-    logo: "tally",
-    docs_url: "https://tallysolutions.com",
-    last_updated: "2026-07-10",
-    config_fields: [],
-    credential_fields: [],
-    capabilities: { read: ["parts", "inventory"], write: ["purchase_requests"] }
-  },
-  {
-    slug: "netsuite",
-    name: "Oracle NetSuite",
-    category: "ERP",
-    description: "Unified cloud ERP suite. SuiteTalk REST web services connector for global enterprise physical asset synchronization.",
-    version: "SuiteTalk 2026.1 REST",
-    status: "coming_soon",
-    logo: "netsuite",
-    docs_url: "https://docs.oracle.com/en/cloud/saas/netsuite/",
-    last_updated: "2026-06-15",
-    config_fields: [],
-    credential_fields: [],
-    capabilities: { read: ["assets", "parts", "inventory", "production_orders"], write: ["purchase_requests"] }
-  },
-  {
-    slug: "zoho",
-    name: "Zoho Inventory & Books",
-    category: "Inventory",
-    description: "Cloud inventory management and order fulfillment sync for maintenance spare parts and vendor orders.",
-    version: "v3 REST",
-    status: "coming_soon",
-    logo: "zoho",
-    docs_url: "https://www.zoho.com/inventory/",
-    last_updated: "2026-05-30",
-    config_fields: [],
-    credential_fields: [],
-    capabilities: { read: ["parts", "inventory"], write: ["purchase_requests"] }
   }
 ];
 
@@ -664,7 +622,7 @@ export const integrationsService = {
     const system: ConnectedIntegration = {
       id: `int_${newConnection.connector_type}_${Date.now().toString(36)}`,
       organisation_id: newConnection.organisation_id || "org_primary",
-      name: newConnection.name || catalogItem?.name || "ERP Integration",
+      name: newConnection.name || catalogItem?.name || "Integration",
       connector_type: newConnection.connector_type || "odoo",
       category: catalogItem?.category || "ERP",
       status: "healthy",
