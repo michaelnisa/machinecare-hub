@@ -4,6 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { PageLoader } from "@/components/PageLoader";
 import { formatTZS } from "@/lib/format";
+import { Button } from "@/components/ui/button";
 import {
   Target, Gauge, AlertTriangle, Star, Zap, CalendarRange, ClipboardList,
   AlertOctagon, Recycle, BarChart2, History, FileText, ArrowRight,
@@ -61,6 +62,7 @@ export default function ProductionOverview() {
   const [oee7d, setOee7d] = useState<any[]>([]);
   const [qualityToday, setQualityToday] = useState<any[]>([]);
   const [utilitiesToday, setUtilitiesToday] = useState<any[]>([]);
+  const [activeOrders, setActiveOrders] = useState<any[]>([]);
 
   useEffect(() => {
     if (!profile) return;
@@ -68,16 +70,18 @@ export default function ProductionOverview() {
       setLoading(true);
       const today = new Date().toISOString().slice(0, 10);
       const d7 = new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10);
-      const [{ data: prod }, { data: oee }, { data: quality }, { data: utils }] = await Promise.all([
+      const [{ data: prod }, { data: oee }, { data: quality }, { data: utils }, { data: orders }] = await Promise.all([
         supabase.from("production_kpis").select("target_units, actual_units, scrap_units, downtime_minutes, production_line").eq("organisation_id", profile.organisation_id).eq("record_date", today),
         supabase.from("oee_records").select("availability, performance, quality").eq("organisation_id", profile.organisation_id).gte("record_date", d7),
         supabase.from("quality_reports").select("units_inspected, units_defective, units_scrap, units_rework, yield_percent").eq("organisation_id", profile.organisation_id).eq("report_date", today),
         (supabase as any).from("utilities_kpis").select("utility_type, consumption, cost, unit").eq("organisation_id", profile.organisation_id).eq("record_date", today),
+        (supabase as any).from("production_orders").select("id, po_number, po_year, product, batch_number, quantity_ordered, quantity_produced, status, priority, due_date").in("status", ["in_progress", "released"]).order("due_date", { ascending: true }).limit(6),
       ]);
       setProdToday(prod ?? []);
       setOee7d(oee ?? []);
       setQualityToday(quality ?? []);
       setUtilitiesToday(utils ?? []);
+      setActiveOrders(orders ?? []);
       setLoading(false);
     })();
   }, [profile]);
@@ -150,6 +154,54 @@ export default function ProductionOverview() {
         <div className="rounded-xl border border-border bg-card p-4 text-sm text-muted-foreground">
           <Zap className="mr-2 inline h-4 w-4 text-amber-500" />
           Utilities cost today: <span className="font-medium text-foreground">{formatTZS(stats.utilCost)}</span>
+        </div>
+      )}
+
+      {activeOrders.length > 0 && (
+        <div className="rounded-xl border border-border bg-card p-5">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h2 className="text-sm font-semibold text-foreground">Active Production Orders</h2>
+              <p className="text-xs text-muted-foreground">Orders currently in progress or released</p>
+            </div>
+            <Button variant="ghost" size="sm" asChild>
+              <Link to="/production/orders" className="text-xs text-primary">
+                View all orders <ArrowRight className="ml-1 h-3.5 w-3.5" />
+              </Link>
+            </Button>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {activeOrders.map((ord: any) => {
+              const progress = Math.min(100, Math.round(((ord.quantity_produced || 0) / (ord.quantity_ordered || 1)) * 100));
+              const poStr = `PO-${ord.po_year ?? new Date().getFullYear()}-${String(ord.po_number).padStart(4, "0")}`;
+              return (
+                <div key={ord.id} className="rounded-lg border border-border bg-muted/20 p-3 space-y-2">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="font-mono font-semibold text-primary">{poStr}</span>
+                    <span className={cn(
+                      "rounded-full px-2 py-0.5 text-[10px] font-medium capitalize",
+                      ord.status === "in_progress" ? "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300" : "bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300"
+                    )}>
+                      {ord.status.replace("_", " ")}
+                    </span>
+                  </div>
+                  <div className="text-sm font-medium truncate">{ord.product}</div>
+                  {ord.batch_number && (
+                    <div className="text-[11px] font-mono text-muted-foreground">Lot: {ord.batch_number}</div>
+                  )}
+                  <div className="space-y-1">
+                    <div className="flex justify-between text-[11px] text-muted-foreground">
+                      <span>Progress</span>
+                      <span>{(ord.quantity_produced || 0).toLocaleString()} / {(ord.quantity_ordered || 0).toLocaleString()} ({progress}%)</span>
+                    </div>
+                    <div className="h-1.5 w-full rounded-full bg-muted overflow-hidden">
+                      <div className="h-full rounded-full bg-primary" style={{ width: `${progress}%` }} />
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
 

@@ -52,15 +52,42 @@ const PPE_OPTIONS = [
 ];
 
 export default function VendorRiskAssessmentPublic() {
-  const { orgId } = useParams<{ orgId?: string }>();
+  const { orgId: paramOrgId } = useParams<{ orgId?: string }>();
   const [searchParams] = useSearchParams();
+  const queryOrgId = searchParams.get("org");
   const machineId = searchParams.get("machine");
 
+  const [activeOrgId, setActiveOrgId] = useState<string | null>(paramOrgId || queryOrgId || null);
   const [step, setStep] = useState<"form" | "submitted">("form");
   const [submitting, setSubmitting] = useState(false);
   const [submittedAssessmentId, setSubmittedAssessmentId] = useState<string | null>(null);
   const [liveStatus, setLiveStatus] = useState<string>("pending_approval");
   const [polling, setPolling] = useState(false);
+
+  useEffect(() => {
+    if (paramOrgId || queryOrgId) {
+      setActiveOrgId(paramOrgId || queryOrgId);
+      return;
+    }
+    if (machineId) {
+      (supabase as any)
+        .rpc("get_machine_public", { _machine_id: machineId })
+        .then(({ data }: any) => {
+          if (data?.[0]?.organisation_id) {
+            setActiveOrgId(data[0].organisation_id);
+          }
+        });
+    } else {
+      supabase
+        .from("organisations")
+        .select("id")
+        .limit(1)
+        .maybeSingle()
+        .then(({ data }: any) => {
+          if (data?.id) setActiveOrgId(data.id);
+        });
+    }
+  }, [paramOrgId, queryOrgId, machineId]);
 
   // Vendor Details
   const [vendorDetails, setVendorDetails] = useState({
@@ -159,40 +186,77 @@ export default function VendorRiskAssessmentPublic() {
       const hasHighRiskPermit = vendorDetails.selectedHighRisk.length > 0;
       const overallRisk = hasHighRiskPermit ? "high" : "medium";
 
-      // Insert record into risk_assessments
-      const { data, error } = await (supabase as any)
-        .from("risk_assessments")
-        .insert({
+      const reviewNotePayload = JSON.stringify({
+        vendor_company: vendorDetails.companyName,
+        rep_name: vendorDetails.repName,
+        phone: vendorDetails.phone,
+        email: vendorDetails.email,
+        location: vendorDetails.location,
+        scope: vendorDetails.scopeOfWork,
+        high_risk_activities: vendorDetails.selectedHighRisk,
+        mandatory_ppe: vendorDetails.selectedPpe,
+        workers_count: vendorDetails.workersCount,
+        sign_off: vendorDetails.supervisorSignOff,
+        hazard_matrix: hazardItems,
+      });
+
+      let newId: string | null = null;
+      let submissionError: any = null;
+
+      // 1. Try secure RPC first
+      if (activeOrgId) {
+        const { data: rpcData, error: rpcError } = await (supabase as any).rpc(
+          "submit_vendor_risk_assessment_public",
+          {
+            _org_id: activeOrgId,
+            _title: assessmentTitle,
+            _activity: `Vendor Job Safety Analysis (${vendorDetails.companyName})`,
+            _overall_risk: overallRisk,
+            _review_note: reviewNotePayload,
+            _machine_id: machineId || null,
+          }
+        );
+
+        if (!rpcError && rpcData) {
+          newId = rpcData;
+        } else if (rpcError) {
+          console.warn("RPC submit error, trying direct insert fallback:", rpcError);
+        }
+      }
+
+      // 2. Fallback to direct insert with activeOrgId if RPC didn't return an ID
+      if (!newId) {
+        const insertPayload: any = {
           title: assessmentTitle,
           activity: `Vendor Job Safety Analysis (${vendorDetails.companyName})`,
           status: "pending_approval",
           overall_risk: overallRisk,
           submitted_at: new Date().toISOString(),
-          review_note: JSON.stringify({
-            vendor_company: vendorDetails.companyName,
-            rep_name: vendorDetails.repName,
-            phone: vendorDetails.phone,
-            email: vendorDetails.email,
-            location: vendorDetails.location,
-            scope: vendorDetails.scopeOfWork,
-            high_risk_activities: vendorDetails.selectedHighRisk,
-            mandatory_ppe: vendorDetails.selectedPpe,
-            workers_count: vendorDetails.workersCount,
-            sign_off: vendorDetails.supervisorSignOff,
-            hazard_matrix: hazardItems,
-          }),
-        })
-        .select("id")
-        .single();
+          review_note: reviewNotePayload,
+          machine_id: machineId || null,
+        };
+        if (activeOrgId) {
+          insertPayload.organisation_id = activeOrgId;
+        }
 
-      if (error) {
-        // Fallback for demo when public RLS is strict
-        const mockId = `ram_${Date.now().toString(36)}`;
-        setSubmittedAssessmentId(mockId);
-      } else if (data) {
-        setSubmittedAssessmentId(data.id);
+        const { data: insertData, error: insertError } = await (supabase as any)
+          .from("risk_assessments")
+          .insert(insertPayload)
+          .select("id")
+          .single();
+
+        if (insertError) {
+          submissionError = insertError;
+        } else if (insertData) {
+          newId = insertData.id;
+        }
       }
 
+      if (submissionError || !newId) {
+        throw new Error(submissionError?.message || "Failed to submit risk assessment. Please verify details and try again.");
+      }
+
+      setSubmittedAssessmentId(newId);
       setStep("submitted");
       toast.success("Risk assessment submitted! Awaiting Safety Officer approval.");
     } catch (err: any) {
@@ -209,11 +273,25 @@ export default function VendorRiskAssessmentPublic() {
     const checkStatus = async () => {
       setPolling(true);
       try {
+        // Try public RPC first
+        const { data: rpcRows } = await (supabase as any)
+          .rpc("get_vendor_risk_assessment_status_public", { _id: submittedAssessmentId });
+
+        if (rpcRows && rpcRows.length > 0) {
+          const row = rpcRows[0];
+          setLiveStatus(row.status);
+          if (row.status === "approved") {
+            toast.success("🎉 Your Risk Assessment & Permit have been APPROVED!");
+          }
+          return;
+        }
+
+        // Fallback to direct select
         const { data } = await (supabase as any)
           .from("risk_assessments")
           .select("status, reviewed_at, reviewed_by")
           .eq("id", submittedAssessmentId)
-          .single();
+          .maybeSingle();
 
         if (data && data.status) {
           setLiveStatus(data.status);

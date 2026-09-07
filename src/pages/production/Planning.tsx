@@ -23,6 +23,8 @@ export default function ProductionPlanning() {
   const [date, setDate] = useState(() => toDateKey(new Date()));
   const [plans, setPlans] = useState<any[]>([]);
   const [actuals, setActuals] = useState<any[]>([]);
+  const [products, setProducts] = useState<any[]>([]);
+  const [prodLines, setProdLines] = useState<any[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<any>(null);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
@@ -30,13 +32,17 @@ export default function ProductionPlanning() {
   const load = async () => {
     if (!profile) return;
     setLoading(true);
-    const [{ data: p, error }, { data: a }] = await Promise.all([
+    const [{ data: p, error }, { data: a }, { data: prData }, { data: plData }] = await Promise.all([
       supabase.from("production_plans").select("*").eq("plan_date", date).order("production_line").order("shift"),
       supabase.from("production_kpis").select("production_line, shift, product, actual_units").eq("organisation_id", profile.organisation_id).eq("record_date", date),
+      (supabase as any).from("products").select("id, name, sku").eq("is_active", true).order("name"),
+      (supabase as any).from("production_lines").select("*").eq("is_active", true).order("name"),
     ]);
     if (error) toast.error(error.message);
     setPlans(p ?? []);
     setActuals(a ?? []);
+    setProducts(prData ?? []);
+    setProdLines(plData ?? []);
     setLoading(false);
   };
 
@@ -192,6 +198,8 @@ export default function ProductionPlanning() {
         defaultDate={date}
         orgId={profile?.organisation_id}
         userId={profile?.id}
+        products={products}
+        prodLines={prodLines}
         onSaved={load}
       />
       <ConfirmDialog
@@ -205,7 +213,7 @@ export default function ProductionPlanning() {
   );
 }
 
-function PlanDialog({ open, onOpenChange, plan, defaultDate, orgId, userId, onSaved }: any) {
+function PlanDialog({ open, onOpenChange, plan, defaultDate, orgId, userId, products = [], prodLines = [], onSaved }: any) {
   const [submitting, setSubmitting] = useState(false);
   const [form, setForm] = useState<any>({});
   const isEdit = !!plan;
@@ -216,8 +224,10 @@ function PlanDialog({ open, onOpenChange, plan, defaultDate, orgId, userId, onSa
         plan ?? {
           plan_date: defaultDate,
           production_line: "",
+          production_line_id: "",
           shift: "Day",
           product: "",
+          product_id: "",
           target_units: "",
           planned_minutes: "",
           notes: "",
@@ -234,8 +244,10 @@ function PlanDialog({ open, onOpenChange, plan, defaultDate, orgId, userId, onSa
     const payload: any = {
       plan_date: form.plan_date,
       production_line: form.production_line?.trim() || null,
+      production_line_id: form.production_line_id || null,
       shift: form.shift?.trim() || null,
       product: form.product?.trim() || null,
+      product_id: form.product_id || null,
       target_units: Number(form.target_units),
       planned_minutes: form.planned_minutes === "" || form.planned_minutes == null ? null : Number(form.planned_minutes),
       notes: form.notes?.trim() || null,
@@ -252,7 +264,7 @@ function PlanDialog({ open, onOpenChange, plan, defaultDate, orgId, userId, onSa
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">
         <DialogHeader><DialogTitle>{isEdit ? "Edit plan" : "New production plan"}</DialogTitle></DialogHeader>
         <form onSubmit={submit} className="space-y-4">
           <div className="grid gap-4 sm:grid-cols-2">
@@ -266,11 +278,57 @@ function PlanDialog({ open, onOpenChange, plan, defaultDate, orgId, userId, onSa
             </div>
             <div className="space-y-1.5">
               <Label>Production line</Label>
-              <Input value={form.production_line ?? ""} onChange={(e) => setForm({ ...form, production_line: e.target.value })} placeholder="e.g. Line 1" />
+              <select
+                value={form.production_line_id ?? ""}
+                onChange={(e) => {
+                  const lineId = e.target.value;
+                  const found = prodLines.find((l: any) => l.id === lineId);
+                  setForm({
+                    ...form,
+                    production_line_id: lineId || null,
+                    production_line: found ? found.name : form.production_line,
+                  });
+                }}
+                className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+              >
+                <option value="">— Registered line or type below —</option>
+                {prodLines.map((l: any) => (
+                  <option key={l.id} value={l.id}>{l.name} ({l.code})</option>
+                ))}
+              </select>
+              <Input
+                value={form.production_line ?? ""}
+                onChange={(e) => setForm({ ...form, production_line: e.target.value, production_line_id: "" })}
+                placeholder="Or custom line name"
+                className="mt-1"
+              />
             </div>
             <div className="space-y-1.5">
               <Label>Product</Label>
-              <Input value={form.product ?? ""} onChange={(e) => setForm({ ...form, product: e.target.value })} placeholder="Optional" />
+              <select
+                value={form.product_id ?? ""}
+                onChange={(e) => {
+                  const pId = e.target.value;
+                  const found = products.find((p: any) => p.id === pId);
+                  setForm({
+                    ...form,
+                    product_id: pId || null,
+                    product: found ? found.name : form.product,
+                  });
+                }}
+                className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+              >
+                <option value="">— Select product or type below —</option>
+                {products.map((p: any) => (
+                  <option key={p.id} value={p.id}>{p.name}{p.sku ? ` (${p.sku})` : ""}</option>
+                ))}
+              </select>
+              <Input
+                value={form.product ?? ""}
+                onChange={(e) => setForm({ ...form, product: e.target.value, product_id: "" })}
+                placeholder="Or custom product name"
+                className="mt-1"
+              />
             </div>
             <div className="space-y-1.5">
               <Label>Target units *</Label>

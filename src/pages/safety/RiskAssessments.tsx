@@ -50,6 +50,34 @@ const RISK_CLASS: Record<string, string> = {
   critical: "bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300 font-bold",
 };
 
+export function getCompletedBy(assessment: any): { name: string; subtitle?: string } {
+  if (!assessment) return { name: "—" };
+
+  if (assessment.review_note && typeof assessment.review_note === "string") {
+    try {
+      const trimmed = assessment.review_note.trim();
+      if (trimmed.startsWith("{")) {
+        const parsed = JSON.parse(trimmed);
+        const rep = parsed.rep_name?.trim();
+        const company = parsed.vendor_company?.trim();
+        const signOff = parsed.sign_off?.trim();
+
+        const name = rep || signOff || company || "Contractor";
+        const subtitle = company && rep ? company : undefined;
+        return { name, subtitle };
+      }
+    } catch {
+      // not JSON
+    }
+  }
+
+  if (assessment.creator?.full_name) {
+    return { name: assessment.creator.full_name, subtitle: "Internal Staff" };
+  }
+
+  return { name: "Internal Staff" };
+}
+
 export default function RiskAssessments() {
   const { profile } = useAuth();
   const [loading, setLoading] = useState(true);
@@ -65,11 +93,19 @@ export default function RiskAssessments() {
     setLoading(true);
     const { data, error } = await (supabase as any)
       .from("risk_assessments")
-      .select("*, work_orders(id, title, wo_number, wo_year), machines(name)")
+      .select("*, work_orders(id, title, wo_number, wo_year), machines(name), creator:profiles!risk_assessments_created_by_fkey(full_name)")
       .order("created_at", { ascending: false });
 
-    if (error) toast.error(error.message);
-    setItems(data ?? []);
+    if (error) {
+      const { data: fallbackData, error: fbErr } = await (supabase as any)
+        .from("risk_assessments")
+        .select("*, work_orders(id, title, wo_number, wo_year), machines(name)")
+        .order("created_at", { ascending: false });
+      if (fbErr) toast.error(fbErr.message);
+      setItems(fallbackData ?? []);
+    } else {
+      setItems(data ?? []);
+    }
     setLoading(false);
   };
 
@@ -196,6 +232,7 @@ export default function RiskAssessments() {
               <thead className="text-left text-xs uppercase tracking-wider text-muted-foreground bg-muted/30 border-b border-border">
                 <tr>
                   <th className="px-5 py-3.5 font-semibold">Title / Contractor</th>
+                  <th className="px-5 py-3.5 font-semibold">Completed By</th>
                   <th className="px-5 py-3.5 font-semibold">Type / Source</th>
                   <th className="px-5 py-3.5 font-semibold">Location / Machine</th>
                   <th className="px-5 py-3.5 font-semibold">Overall Risk</th>
@@ -208,6 +245,7 @@ export default function RiskAssessments() {
                 {filtered.map((x) => {
                   const isVendor = x.title.includes("[VENDOR") || x.activity?.includes("Vendor");
                   const isPending = x.status === "pending_approval";
+                  const completedInfo = getCompletedBy(x);
 
                   return (
                     <tr key={x.id} className={`hover:bg-muted/40 transition-colors ${isPending ? "bg-amber-500/5" : ""}`}>
@@ -215,12 +253,27 @@ export default function RiskAssessments() {
                         <div className="font-semibold text-foreground flex items-center gap-1.5">
                           {x.title}
                         </div>
+                        <div className="text-[11px] text-muted-foreground mt-0.5">
+                          Completed by: <span className="font-medium text-foreground">{completedInfo.name}</span>
+                          {completedInfo.subtitle ? ` (${completedInfo.subtitle})` : ""}
+                        </div>
                         {x.work_orders && (
                           <div className="text-xs text-muted-foreground mt-0.5">
                             WO:{" "}
                             <Link to={`/work-orders/${x.work_orders.id}`} className="text-primary hover:underline">
                               {formatWoNumber(x.work_orders.wo_year, x.work_orders.wo_number)}
                             </Link>
+                          </div>
+                        )}
+                      </td>
+                      <td className="px-5 py-3.5">
+                        <div className="flex items-center gap-1.5 font-semibold text-foreground">
+                          <UserCheck className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+                          <span>{completedInfo.name}</span>
+                        </div>
+                        {completedInfo.subtitle && (
+                          <div className="text-xs text-muted-foreground mt-0.5 font-normal">
+                            {completedInfo.subtitle}
                           </div>
                         )}
                       </td>
@@ -301,7 +354,12 @@ export default function RiskAssessments() {
               {/* Summary Card */}
               <div className="rounded-xl border border-border bg-muted/40 p-4 space-y-2">
                 <div className="text-sm font-bold text-foreground">{selectedAssessment.title}</div>
-                <div className="grid grid-cols-2 gap-2 text-xs text-muted-foreground">
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs text-muted-foreground pt-1 border-t border-border/60">
+                  <div>
+                    <span className="font-semibold text-foreground">Completed by:</span>{" "}
+                    <span className="font-medium text-foreground">{getCompletedBy(selectedAssessment).name}</span>
+                    {getCompletedBy(selectedAssessment).subtitle ? ` (${getCompletedBy(selectedAssessment).subtitle})` : ""}
+                  </div>
                   <div><span className="font-semibold text-foreground">Activity:</span> {selectedAssessment.activity ?? "—"}</div>
                   <div><span className="font-semibold text-foreground">Risk Level:</span> <span className="uppercase font-bold text-amber-600">{selectedAssessment.overall_risk ?? "medium"}</span></div>
                 </div>

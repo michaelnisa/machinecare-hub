@@ -5,12 +5,16 @@ import { CoverImage } from "@/components/CoverImage";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { PageLoader } from "@/components/PageLoader";
-import { Wrench, ArrowRight, AlertTriangle, Gauge, Fuel, BookOpen, ClipboardList, LogIn, CheckCircle2, ClipboardCheck, Route, Siren } from "lucide-react";
+import { Wrench, ArrowRight, AlertTriangle, Gauge, Fuel, BookOpen, ClipboardList, LogIn, CheckCircle2, ClipboardCheck, Route, Siren, AlertOctagon, Receipt, DollarSign } from "lucide-react";
 import { ServiceLogDialog } from "@/components/ServiceLogDialog";
 import { UpdateReadingDialog } from "@/components/UpdateReadingDialog";
 import { QuickFuelDialog } from "@/components/QuickFuelDialog";
 import { QuickStartTripDialog } from "@/components/QuickStartTripDialog";
 import { StartInspectionDialog } from "@/components/StartInspectionDialog";
+import { TripExpenseDialog } from "@/components/TripExpenseDialog";
+import { TripExpensesListDialog } from "@/components/TripExpensesListDialog";
+import { Badge } from "@/components/ui/badge";
+import { formatMoney } from "@/lib/format";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { useI18n } from "@/i18n/I18nProvider";
 import { toast } from "sonner";
@@ -70,6 +74,17 @@ const T = {
     whoWasInvolved: "Who was involved? (optional)",
     whereItHappened: "Where did it happen? (optional)",
     accidentSubmitted: "Thanks — this has been reported to the safety team immediately.",
+    activeTripTitle: "Active Trip & Driver Costs",
+    noActiveTrip: "No active trip in progress for this vehicle.",
+    tripRoute: "Route",
+    driver: "Driver",
+    fuelCost: "Fuel cost",
+    finesCost: "Traffic fines",
+    receiptsCost: "Receipts & other",
+    totalTripCost: "Total Driver Cost Used",
+    uploadFine: "Upload Traffic Fine",
+    uploadReceipt: "Upload Receipt",
+    viewExpenses: "View Trip Expenses",
   },
   sw: {
     notFound: "Mashine haijapatikana.",
@@ -116,6 +131,17 @@ const T = {
     whoWasInvolved: "Nani alihusika? (hiari)",
     whereItHappened: "Ilitokea wapi? (hiari)",
     accidentSubmitted: "Asante — hii imeripotiwa kwa timu ya usalama mara moja.",
+    activeTripTitle: "Safari Inayoendelea na Gharama",
+    noActiveTrip: "Hakuna safari inayoendelea kwa gari hili.",
+    tripRoute: "Njia",
+    driver: "Dereva",
+    fuelCost: "Gharama ya mafuta",
+    finesCost: "Faini za barabarani",
+    receiptsCost: "Stakabadhi na nyinginezo",
+    totalTripCost: "Jumla ya Gharama Zilizotumika",
+    uploadFine: "Weka Faini ya Trafiki",
+    uploadReceipt: "Weka Risiti/Stakabadhi",
+    viewExpenses: "Tazama Gharama Zote",
   },
 };
 
@@ -132,6 +158,13 @@ export default function MobileMachine() {
   const [fuelOpen, setFuelOpen] = useState(false);
   const [inspectOpen, setInspectOpen] = useState(false);
   const [tripOpen, setTripOpen] = useState(false);
+
+  // Active trip & driver expenses/fines tracking
+  const [activeTrip, setActiveTrip] = useState<any>(null);
+  const [loadingTrip, setLoadingTrip] = useState(false);
+  const [expenseDialogOpen, setExpenseDialogOpen] = useState(false);
+  const [expensesListOpen, setExpensesListOpen] = useState(false);
+  const [expenseDialogType, setExpenseDialogType] = useState<"fine" | "receipt" | "toll" | "parking" | "fuel" | "repair" | "other">("receipt");
 
   // fault report form (visible when not signed in, different org, or when a signed-in own-org user clicks "Report fault")
   const [reporterName, setReporterName] = useState("");
@@ -163,11 +196,91 @@ export default function MobileMachine() {
 
   const isOwnOrg = !!profile && machine && profile.organisation_id === machine.organisation_id;
 
+  const loadActiveTrip = async () => {
+    if (!id) return;
+    setLoadingTrip(true);
+    try {
+      // 1. Try public RPC
+      const { data, error } = await (supabase as any).rpc("get_active_trip_for_machine_public", {
+        _machine_id: id,
+      });
+      if (!error && data && data.length > 0) {
+        setActiveTrip(data[0]);
+        setLoadingTrip(false);
+        return;
+      }
+
+      // 2. Fallback direct query if authenticated
+      const { data: tripData } = await (supabase as any)
+        .from("trips")
+        .select(`
+          id,
+          organisation_id,
+          machine_id,
+          driver_id,
+          purpose,
+          origin,
+          destination,
+          start_odo,
+          start_at,
+          fuel_used_l,
+          cost,
+          status,
+          driver:drivers(full_name)
+        `)
+        .eq("machine_id", id)
+        .eq("status", "in_progress")
+        .order("start_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (tripData) {
+        // Query expenses
+        const { data: expData } = await (supabase as any)
+          .from("trip_expenses")
+          .select("amount, expense_type")
+          .eq("trip_id", tripData.id);
+
+        const expList = expData || [];
+        const totalExpenses = expList.reduce((sum: number, e: any) => sum + (Number(e.amount) || 0), 0);
+        const totalFines = expList.filter((e: any) => e.expense_type === "fine").reduce((sum: number, e: any) => sum + (Number(e.amount) || 0), 0);
+        const totalReceipts = expList.filter((e: any) => e.expense_type !== "fine").reduce((sum: number, e: any) => sum + (Number(e.amount) || 0), 0);
+
+        setActiveTrip({
+          trip_id: tripData.id,
+          organisation_id: tripData.organisation_id,
+          machine_id: tripData.machine_id,
+          driver_id: tripData.driver_id,
+          driver_name: tripData.driver?.full_name ?? null,
+          purpose: tripData.purpose,
+          origin: tripData.origin,
+          destination: tripData.destination,
+          start_odo: tripData.start_odo,
+          start_at: tripData.start_at,
+          fuel_used_l: tripData.fuel_used_l,
+          fuel_cost: tripData.cost,
+          status: tripData.status,
+          total_expenses_cost: totalExpenses,
+          total_fines_cost: totalFines,
+          total_receipts_cost: totalReceipts,
+          expenses_count: expList.length,
+        });
+      } else {
+        setActiveTrip(null);
+      }
+    } catch (err) {
+      console.error("Failed to load active trip", err);
+    } finally {
+      setLoadingTrip(false);
+    }
+  };
+
   const refreshMachineAndHistory = () => {
     if (!machine) return;
     (supabase as any).rpc("get_machine_public", { _machine_id: machine.id }).then(({ data }: any) => {
       if (data?.[0]) setMachine(data[0]);
     });
+    loadActiveTrip();
     supabase
       .from("service_logs")
       .select("id, title, performed_at, service_type")
@@ -195,6 +308,7 @@ export default function MobileMachine() {
       }
       setLoading(false);
     });
+    loadActiveTrip();
   }, [id]);
 
   useEffect(() => {
@@ -436,6 +550,136 @@ export default function MobileMachine() {
           </span>
           <ArrowRight className="h-4 w-4" />
         </Link>
+
+        {/* Active Trip & Driver Cost Tracking (for vehicles) */}
+        {machine.category === "Vehicle" && (
+          <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
+            <div className="border-b border-border/60 bg-muted/40 p-4">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <Route className="h-5 w-5 text-primary" />
+                  <span className="font-semibold text-sm">{t.activeTripTitle}</span>
+                </div>
+                {activeTrip ? (
+                  <Badge className="bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-500/20 border-0 text-xs">
+                    In progress
+                  </Badge>
+                ) : (
+                  <Badge variant="outline" className="text-xs text-muted-foreground">
+                    No active trip
+                  </Badge>
+                )}
+              </div>
+            </div>
+
+            {activeTrip ? (
+              <div className="p-4 space-y-4">
+                {/* Route and Driver details */}
+                <div className="space-y-1.5 text-sm">
+                  {(activeTrip.origin || activeTrip.destination) && (
+                    <div className="flex items-center justify-between">
+                      <span className="text-muted-foreground text-xs">{t.tripRoute}:</span>
+                      <span className="font-medium">{activeTrip.origin || "—"} → {activeTrip.destination || "—"}</span>
+                    </div>
+                  )}
+                  {activeTrip.purpose && (
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-muted-foreground">Purpose:</span>
+                      <span className="text-foreground">{activeTrip.purpose}</span>
+                    </div>
+                  )}
+                  {activeTrip.driver_name && (
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-muted-foreground">{t.driver}:</span>
+                      <span className="font-medium text-foreground">{activeTrip.driver_name}</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Cost Calculation Summary */}
+                <div className="rounded-xl border border-border bg-muted/20 p-3 space-y-2">
+                  <div className="flex items-center justify-between text-xs text-muted-foreground">
+                    <span>{t.fuelCost}:</span>
+                    <span className="font-medium text-foreground">{formatMoney(Number(activeTrip.fuel_cost) || 0)}</span>
+                  </div>
+                  <div className="flex items-center justify-between text-xs text-muted-foreground">
+                    <span className="flex items-center gap-1">
+                      <AlertOctagon className="h-3.5 w-3.5 text-rose-500" /> {t.finesCost}:
+                    </span>
+                    <span className="font-medium text-rose-600 dark:text-rose-400">
+                      {formatMoney(Number(activeTrip.total_fines_cost) || 0)}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between text-xs text-muted-foreground">
+                    <span className="flex items-center gap-1">
+                      <Receipt className="h-3.5 w-3.5 text-blue-500" /> {t.receiptsCost}:
+                    </span>
+                    <span className="font-medium text-blue-600 dark:text-blue-400">
+                      {formatMoney(Number(activeTrip.total_receipts_cost) || 0)}
+                    </span>
+                  </div>
+                  <div className="border-t border-border pt-2 flex items-center justify-between">
+                    <span className="font-semibold text-xs text-foreground">{t.totalTripCost}:</span>
+                    <span className="font-bold text-base text-primary">
+                      {formatMoney(
+                        (Number(activeTrip.fuel_cost) || 0) +
+                        (Number(activeTrip.total_expenses_cost) || 0)
+                      )}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Action Buttons: Add Fine, Add Receipt, View List */}
+                <div className="grid grid-cols-2 gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="border-rose-200 hover:bg-rose-50 dark:border-rose-900/60 dark:hover:bg-rose-950/40 text-rose-700 dark:text-rose-400 h-11 text-xs gap-1.5"
+                    onClick={() => {
+                      setExpenseDialogType("fine");
+                      setExpenseDialogOpen(true);
+                    }}
+                  >
+                    <AlertOctagon className="h-4 w-4 shrink-0 text-rose-600" />
+                    <span className="truncate">{t.uploadFine}</span>
+                  </Button>
+
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="border-blue-200 hover:bg-blue-50 dark:border-blue-900/60 dark:hover:bg-blue-950/40 text-blue-700 dark:text-blue-400 h-11 text-xs gap-1.5"
+                    onClick={() => {
+                      setExpenseDialogType("receipt");
+                      setExpenseDialogOpen(true);
+                    }}
+                  >
+                    <Receipt className="h-4 w-4 shrink-0 text-blue-600" />
+                    <span className="truncate">{t.uploadReceipt}</span>
+                  </Button>
+
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    className="col-span-2 h-10 text-xs gap-1.5"
+                    onClick={() => setExpensesListOpen(true)}
+                  >
+                    <DollarSign className="h-3.5 w-3.5" />
+                    {t.viewExpenses} ({activeTrip.expenses_count || 0})
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <div className="p-4 text-center space-y-3">
+                <p className="text-xs text-muted-foreground">{t.noActiveTrip}</p>
+                {user && isOwnOrg && (
+                  <Button size="sm" variant="outline" className="gap-1.5 text-xs" onClick={() => setTripOpen(true)}>
+                    <Route className="h-3.5 w-3.5" /> {t.startTrip}
+                  </Button>
+                )}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Signed-in: role-aware quick actions */}
         {user && isOwnOrg && (
@@ -767,6 +1011,32 @@ export default function MobileMachine() {
               onSaved={refreshMachineAndHistory}
             />
           )}
+        </>
+      )}
+
+      {machine && activeTrip && (
+        <>
+          <TripExpenseDialog
+            open={expenseDialogOpen}
+            onOpenChange={setExpenseDialogOpen}
+            tripId={activeTrip.trip_id}
+            machineId={machine.id}
+            orgId={machine.organisation_id}
+            defaultType={expenseDialogType}
+            onSaved={loadActiveTrip}
+          />
+          <TripExpensesListDialog
+            open={expensesListOpen}
+            onOpenChange={setExpensesListOpen}
+            tripId={activeTrip.trip_id}
+            machineId={machine.id}
+            machineName={machine.name}
+            driverName={activeTrip.driver_name}
+            fuelCost={activeTrip.fuel_cost}
+            orgId={machine.organisation_id}
+            canManage={isOwnOrg}
+            onExpenseChanged={loadActiveTrip}
+          />
         </>
       )}
     </div>

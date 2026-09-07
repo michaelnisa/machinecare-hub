@@ -9,7 +9,8 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { PageLoader, EmptyState } from "@/components/PageLoader";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
-import { Route, Plus, Play, Square, Ban, Loader2 } from "lucide-react";
+import { Route, Plus, Play, Square, Ban, Loader2, Receipt, AlertOctagon } from "lucide-react";
+import { TripExpensesListDialog } from "@/components/TripExpensesListDialog";
 import { toast } from "sonner";
 import { formatDate, formatNumber, formatMoney } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -17,6 +18,13 @@ import { useI18n } from "@/i18n/I18nProvider";
 
 type Machine = { id: string; name: string; plate_number: string | null; current_odometer_km: number | null };
 type Driver = { id: string; full_name: string };
+
+type ExpenseSummary = {
+  total: number;
+  fines: number;
+  receipts: number;
+  count: number;
+};
 
 type Trip = {
   id: string;
@@ -63,19 +71,38 @@ export default function Trips() {
   const [newOpen, setNewOpen] = useState(false);
   const [closeTrip, setCloseTrip] = useState<Trip | null>(null);
   const [confirmCancel, setConfirmCancel] = useState<string | null>(null);
+  const [expenseSummaries, setExpenseSummaries] = useState<Map<string, ExpenseSummary>>(new Map());
+  const [expensesTrip, setExpensesTrip] = useState<Trip | null>(null);
 
   const load = async () => {
     if (!profile) return;
     setLoading(true);
-    const [{ data: t, error: tErr }, { data: m }, { data: d }] = await Promise.all([
+    const [{ data: t, error: tErr }, { data: m }, { data: d }, { data: exp }] = await Promise.all([
       supabase.from("trips").select("*").order("created_at", { ascending: false }),
       supabase.from("machines").select("id, name, plate_number, current_odometer_km").order("name"),
       supabase.from("drivers").select("id, full_name").eq("status", "active").order("full_name"),
+      (supabase as any).from("trip_expenses").select("id, trip_id, expense_type, amount"),
     ]);
     if (tErr) toast.error(tErr.message);
     setTrips((t ?? []) as Trip[]);
     setMachines((m ?? []) as Machine[]);
     setDrivers((d ?? []) as Driver[]);
+
+    const expMap = new Map<string, ExpenseSummary>();
+    (exp ?? []).forEach((e: any) => {
+      const current = expMap.get(e.trip_id) || { total: 0, fines: 0, receipts: 0, count: 0 };
+      const amt = Number(e.amount) || 0;
+      current.total += amt;
+      current.count += 1;
+      if (e.expense_type === "fine") {
+        current.fines += amt;
+      } else {
+        current.receipts += amt;
+      }
+      expMap.set(e.trip_id, current);
+    });
+    setExpenseSummaries(expMap);
+
     setLoading(false);
   };
 
@@ -156,7 +183,7 @@ export default function Trips() {
       ) : (
         <div className="overflow-hidden rounded-xl border border-border bg-card">
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[900px] text-sm">
+            <table className="w-full min-w-[1000px] text-sm">
               <thead className="text-left text-xs uppercase tracking-wide text-muted-foreground">
                 <tr>
                   <th className="px-5 py-3 font-medium">Vehicle</th>
@@ -165,13 +192,15 @@ export default function Trips() {
                   <th className="px-5 py-3 font-medium">Start</th>
                   <th className="px-5 py-3 font-medium">Odo (start → end)</th>
                   <th className="px-5 py-3 font-medium">Fuel / Cost</th>
+                  <th className="px-5 py-3 font-medium">Fines & Receipts</th>
+                  <th className="px-5 py-3 font-medium">Total Driver Cost</th>
                   <th className="px-5 py-3 font-medium">Status</th>
-                  <th className="px-5 py-3"></th>
+                  <th className="px-5 py-3 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {filtered.map((t) => (
-                  <tr key={t.id} className="border-t border-border">
+                  <tr key={t.id} className="border-t border-border hover:bg-muted/30 transition-colors">
                     <td className="px-5 py-3 font-medium">{vehicleLabel(t.machine_id)}</td>
                     <td className="px-5 py-3 text-muted-foreground">{t.driver_id ? driverMap.get(t.driver_id)?.full_name ?? "—" : "—"}</td>
                     <td className="px-5 py-3 text-muted-foreground">
@@ -186,11 +215,81 @@ export default function Trips() {
                       {t.fuel_used_l != null ? `${formatNumber(t.fuel_used_l)} L` : "—"} {t.cost != null ? `· ${formatMoney(t.cost)}` : ""}
                     </td>
                     <td className="px-5 py-3">
+                      {(() => {
+                        const summary = expenseSummaries.get(t.id);
+                        if (!summary || summary.count === 0) {
+                          return (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
+                              onClick={() => setExpensesTrip(t)}
+                            >
+                              <Plus className="mr-1 h-3 w-3" /> Add
+                            </Button>
+                          );
+                        }
+                        return (
+                          <button
+                            type="button"
+                            onClick={() => setExpensesTrip(t)}
+                            className="text-left group cursor-pointer"
+                            title="Click to view or add trip expenses and fines"
+                          >
+                            <div className="font-semibold text-xs group-hover:text-primary transition-colors flex items-center gap-1">
+                              <Receipt className="h-3 w-3 text-muted-foreground" />
+                              {formatMoney(summary.total)}
+                            </div>
+                            <div className="text-[11px] text-muted-foreground flex flex-wrap items-center gap-x-2">
+                              {summary.fines > 0 && (
+                                <span className="text-rose-600 dark:text-rose-400 font-medium">
+                                  Fines: {formatMoney(summary.fines)}
+                                </span>
+                              )}
+                              {summary.receipts > 0 && (
+                                <span className="text-blue-600 dark:text-blue-400 font-medium">
+                                  Receipts: {formatMoney(summary.receipts)}
+                                </span>
+                              )}
+                            </div>
+                          </button>
+                        );
+                      })()}
+                    </td>
+                    <td className="px-5 py-3">
+                      {(() => {
+                        const fuelCost = Number(t.cost) || 0;
+                        const expCost = expenseSummaries.get(t.id)?.total || 0;
+                        const grandTotal = fuelCost + expCost;
+                        if (grandTotal === 0 && !t.cost && (!expenseSummaries.get(t.id) || expenseSummaries.get(t.id)?.count === 0)) {
+                          return <span className="text-muted-foreground font-normal">—</span>;
+                        }
+                        return (
+                          <div>
+                            <span className="font-bold text-foreground">{formatMoney(grandTotal)}</span>
+                            {expCost > 0 && fuelCost > 0 && (
+                              <div className="text-[10px] text-muted-foreground">
+                                Fuel ({formatMoney(fuelCost)}) + Exp ({formatMoney(expCost)})
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })()}
+                    </td>
+                    <td className="px-5 py-3">
                       <span className={`rounded-md px-2 py-0.5 text-xs font-medium capitalize ${STATUS_CLASS[t.status]}`}>
                         {t.status.replace("_", " ")}
                       </span>
                     </td>
                     <td className="px-5 py-3 text-right">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        title="View / Add fines & receipts"
+                        onClick={() => setExpensesTrip(t)}
+                      >
+                        <Receipt className="h-4 w-4 text-muted-foreground hover:text-foreground" />
+                      </Button>
                       {canWrite && t.status === "planned" && (
                         <>
                           <Button variant="ghost" size="icon" title={i18n.fleet.startTrip} onClick={() => startTrip(t)}>
@@ -221,7 +320,26 @@ export default function Trips() {
       )}
 
       <NewTripDialog open={newOpen} onOpenChange={setNewOpen} machines={machines} drivers={drivers} onSaved={load} />
-      <CloseTripDialog trip={closeTrip} onOpenChange={(v) => !v && setCloseTrip(null)} onSaved={load} />
+      <CloseTripDialog
+        trip={closeTrip}
+        onOpenChange={(v) => !v && setCloseTrip(null)}
+        onSaved={load}
+        expensesSummary={closeTrip ? expenseSummaries.get(closeTrip.id) : undefined}
+      />
+      {expensesTrip && (
+        <TripExpensesListDialog
+          open={!!expensesTrip}
+          onOpenChange={(v) => !v && setExpensesTrip(null)}
+          tripId={expensesTrip.id}
+          machineId={expensesTrip.machine_id}
+          machineName={machineMap.get(expensesTrip.machine_id)?.name}
+          driverName={driverMap.get(expensesTrip.driver_id ?? "")?.full_name}
+          fuelCost={expensesTrip.cost}
+          orgId={profile?.organisation_id}
+          canManage={canWrite}
+          onExpenseChanged={load}
+        />
+      )}
       <ConfirmDialog
         open={!!confirmCancel}
         onOpenChange={(v) => !v && setConfirmCancel(null)}
@@ -367,10 +485,11 @@ function NewTripDialog({ open, onOpenChange, machines, drivers, onSaved }: {
 
 type CloseTripForm = { end_odo: string | number; fuel_used_l: string; cost: string };
 
-function CloseTripDialog({ trip, onOpenChange, onSaved }: {
+function CloseTripDialog({ trip, onOpenChange, onSaved, expensesSummary }: {
   trip: Trip | null;
   onOpenChange: (v: boolean) => void;
   onSaved: () => void;
+  expensesSummary?: ExpenseSummary;
 }) {
   const [submitting, setSubmitting] = useState(false);
   const [form, setForm] = useState<CloseTripForm>({ end_odo: "", fuel_used_l: "", cost: "" });
@@ -461,6 +580,41 @@ function CloseTripDialog({ trip, onOpenChange, onSaved }: {
           <p className="text-xs text-muted-foreground">
             If fuel used is greater than 0, a fuel log is created automatically for this vehicle.
           </p>
+
+          {/* Driver Cost Calculation Breakdown */}
+          <div className="rounded-xl border border-border bg-muted/40 p-3 space-y-1.5 text-xs">
+            <div className="flex justify-between text-muted-foreground">
+              <span>Fuel cost:</span>
+              <span className="font-medium text-foreground">{formatMoney(Number(form.cost) || 0)}</span>
+            </div>
+            {expensesSummary && expensesSummary.total > 0 ? (
+              <>
+                <div className="flex justify-between text-muted-foreground">
+                  <span className="flex items-center gap-1">
+                    <Receipt className="h-3 w-3 text-blue-500" /> Receipts & other:
+                  </span>
+                  <span className="font-medium text-blue-600 dark:text-blue-400">
+                    {formatMoney(expensesSummary.receipts)}
+                  </span>
+                </div>
+                <div className="flex justify-between text-muted-foreground">
+                  <span className="flex items-center gap-1">
+                    <AlertOctagon className="h-3 w-3 text-rose-500" /> Traffic fines:
+                  </span>
+                  <span className="font-medium text-rose-600 dark:text-rose-400">
+                    {formatMoney(expensesSummary.fines)}
+                  </span>
+                </div>
+              </>
+            ) : null}
+            <div className="flex justify-between border-t border-border pt-1.5 font-semibold text-sm">
+              <span className="text-foreground">Total Driver Cost Used:</span>
+              <span className="text-primary font-bold">
+                {formatMoney((Number(form.cost) || 0) + (expensesSummary?.total || 0))}
+              </span>
+            </div>
+          </div>
+
           <DialogFooter>
             <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>Cancel</Button>
             <Button type="submit" disabled={submitting}>

@@ -28,6 +28,8 @@ export default function ChecklistExecutionRun() {
   const [loading, setLoading] = useState(true);
   const [confirmComplete, setConfirmComplete] = useState(false);
   const [completing, setCompleting] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [notes, setNotes] = useState("");
   const [pendingSync, setPendingSync] = useState(0);
 
@@ -128,6 +130,22 @@ export default function ChecklistExecutionRun() {
     }
   };
 
+  const handleDeleteDraft = async () => {
+    if (!exec) return;
+    setDeleting(true);
+    try {
+      const { error } = await supabase.from("checklist_executions").delete().eq("id", exec.id);
+      if (error) throw error;
+      toast.success("Inspection draft discarded");
+      navigate(machine ? `/machines/${machine.id}` : "/checklist-templates");
+    } catch (err) {
+      toast.error(errorMessage(err, "Failed to delete inspection"));
+    } finally {
+      setDeleting(false);
+      setConfirmDelete(false);
+    }
+  };
+
   return (
     <div className="space-y-6 animate-fade-in">
       <Link to={machine ? `/machines/${machine.id}` : "/checklist-templates"} className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
@@ -154,9 +172,20 @@ export default function ChecklistExecutionRun() {
           </p>
         </div>
         {!isCompleted && (
-          <Button onClick={() => setConfirmComplete(true)} disabled={totals.pending > 0}>
-            <CheckCircle2 className="mr-2 h-4 w-4" /> Complete inspection
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setConfirmDelete(true)}
+              className="text-muted-foreground hover:text-destructive"
+              disabled={completing || deleting}
+            >
+              Discard draft
+            </Button>
+            <Button onClick={() => setConfirmComplete(true)} disabled={totals.pending > 0 || completing || deleting}>
+              <CheckCircle2 className="mr-2 h-4 w-4" /> Complete inspection
+            </Button>
+          </div>
         )}
       </div>
 
@@ -256,7 +285,19 @@ export default function ChecklistExecutionRun() {
         description={totals.fail > 0
           ? `${totals.fail} failed item(s) will automatically create open work orders. This cannot be undone.`
           : "Mark this inspection as complete. This cannot be undone."}
+        confirmLabel="OK"
+        confirmVariant="default"
         onConfirm={async () => { await complete(); }}
+      />
+
+      <ConfirmDialog
+        open={confirmDelete}
+        onOpenChange={setConfirmDelete}
+        title="Discard inspection draft?"
+        description="This will delete this in-progress inspection run and its recorded responses. This cannot be undone."
+        confirmLabel="Delete"
+        confirmVariant="destructive"
+        onConfirm={async () => { await handleDeleteDraft(); }}
       />
     </div>
   );

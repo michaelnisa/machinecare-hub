@@ -10,9 +10,18 @@ interface Props {
   description?: string;
   onConfirm: () => Promise<void> | void;
   confirmLabel?: string;
+  confirmVariant?: "default" | "destructive" | "outline" | "secondary" | "ghost" | "link";
 }
 
-export function ConfirmDialog({ open, onOpenChange, title, description, onConfirm, confirmLabel = "Delete" }: Props) {
+export function ConfirmDialog({
+  open,
+  onOpenChange,
+  title,
+  description,
+  onConfirm,
+  confirmLabel = "Delete",
+  confirmVariant = "destructive",
+}: Props) {
   const [busy, setBusy] = useState(false);
   const handle = async () => {
     setBusy(true);
@@ -27,7 +36,7 @@ export function ConfirmDialog({ open, onOpenChange, title, description, onConfir
         </DialogHeader>
         <DialogFooter>
           <Button variant="ghost" onClick={() => onOpenChange(false)}>Cancel</Button>
-          <Button variant="destructive" onClick={handle} disabled={busy}>
+          <Button variant={confirmVariant} onClick={handle} disabled={busy}>
             {busy && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             {confirmLabel}
           </Button>

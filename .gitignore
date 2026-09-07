@@ -28,3 +28,11 @@ supabase/.temp
 *.sln
 *.sw?
 index.html
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Scratch / local scripts
+create-user.js
