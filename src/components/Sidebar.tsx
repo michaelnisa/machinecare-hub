@@ -114,6 +114,7 @@ export function Sidebar() {
             ? [
                 { to: "/maintenance/calendar", label: "Maintenance Calendar", icon: Calendar },
                 { to: "/maintenance/schedules", label: "PM Schedules", icon: ClipboardCheck },
+                { to: "/maintenance/inspections", label: "Inspections", icon: CheckCircle2 },
                 { to: "/maintenance/history", label: "Service History", icon: History },
                 { to: "/maintenance/downtime", label: "Downtime", icon: AlertOctagon },
                 { to: "/maintenance/meter-readings", label: "Meter readings", icon: Activity },

@@ -43,6 +43,7 @@ const InventoryReorder = lazy(() => import("./pages/inventory/Reorder"));
 const FuelLogs = lazy(() => import("./pages/FuelLogs"));
 const Documents = lazy(() => import("./pages/Documents"));
 const PMSchedules = lazy(() => import("./pages/PMSchedules"));
+const MaintenanceInspections = lazy(() => import("./pages/Inspections"));
 const MeterReadings = lazy(() => import("./pages/MeterReadings"));
 const MaintenanceCalendar = lazy(() => import("./pages/MaintenanceCalendar"));
 const Downtime = lazy(() => import("./pages/Downtime"));
@@ -253,6 +254,8 @@ const App = () => (
                   <Route path="/fuel" element={<FuelLogs />} />
                   <Route path="/documents" element={<Documents />} />
                   <Route path="/maintenance/schedules" element={<PMSchedules />} />
+                  <Route path="/maintenance/inspections" element={<MaintenanceInspections />} />
+                  <Route path="/inspections" element={<MaintenanceInspections />} />
                   <Route path="/maintenance/meter-readings" element={<MeterReadings />} />
                   <Route path="/maintenance/calendar" element={<MaintenanceCalendar />} />
                   <Route path="/maintenance/downtime" element={<Downtime />} />
