@@ -118,6 +118,26 @@ export default function Inspections() {
 
   useEffect(() => {
     load();
+
+    // Subscribe to live inspection submissions in real-time
+    const channel = supabase
+      .channel("realtime-checklist-executions")
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "checklist_executions",
+        },
+        () => {
+          load();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [profile]);
 
   // Quick date jumping
@@ -377,41 +397,49 @@ export default function Inspections() {
       {/* KPI Metric Summary Cards */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <div className="rounded-xl border border-border bg-card p-4">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-muted-foreground">Total Inspected</span>
-            <ClipboardCheck className="h-4 w-4 text-primary" />
+          <div className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+            Total Inspected
           </div>
-          <div className="mt-2 text-2xl font-bold">{stats.total}</div>
-          <p className="mt-0.5 text-[11px] text-muted-foreground">
+          <div className="mt-1 text-2xl font-semibold text-foreground">{stats.total}</div>
+          <p className="mt-0.5 text-xs text-muted-foreground">
             {dateMode === "day" ? "Conducted this day" : "In selected range"}
           </p>
         </div>
 
-        <div className="rounded-xl border border-border bg-card p-4">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-emerald-600 dark:text-emerald-400">Passed / OK</span>
-            <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50 dark:border-emerald-900/50 dark:bg-emerald-950/20 p-4">
+          <div className="text-xs font-medium uppercase tracking-wider text-emerald-700 dark:text-emerald-400">
+            Passed / OK
           </div>
-          <div className="mt-2 text-2xl font-bold text-emerald-600 dark:text-emerald-400">{stats.passed}</div>
-          <p className="mt-0.5 text-[11px] text-muted-foreground">Safe for operation</p>
+          <div className="mt-1 text-2xl font-semibold text-emerald-700 dark:text-emerald-400">
+            {stats.passed}
+          </div>
+          <p className="mt-0.5 text-xs text-emerald-700/80 dark:text-emerald-400/80">
+            Safe for operation
+          </p>
         </div>
 
-        <div className="rounded-xl border border-border bg-card p-4">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-red-600 dark:text-red-400">Failed / Defects</span>
-            <AlertTriangle className="h-4 w-4 text-red-500" />
+        <div className="rounded-xl border border-red-200 bg-red-50 dark:border-red-900/50 dark:bg-red-950/20 p-4">
+          <div className="text-xs font-medium uppercase tracking-wider text-red-700 dark:text-red-400">
+            Failed / Defects
           </div>
-          <div className="mt-2 text-2xl font-bold text-red-600 dark:text-red-400">{stats.failed}</div>
-          <p className="mt-0.5 text-[11px] text-muted-foreground">Action required</p>
+          <div className="mt-1 text-2xl font-semibold text-red-700 dark:text-red-400">
+            {stats.failed}
+          </div>
+          <p className="mt-0.5 text-xs text-red-700/80 dark:text-red-400/80">
+            Action required
+          </p>
         </div>
 
-        <div className="rounded-xl border border-border bg-card p-4">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-blue-600 dark:text-blue-400">Inspectors on Duty</span>
-            <User className="h-4 w-4 text-blue-500" />
+        <div className="rounded-xl border border-blue-200 bg-blue-50 dark:border-blue-900/50 dark:bg-blue-950/20 p-4">
+          <div className="text-xs font-medium uppercase tracking-wider text-blue-700 dark:text-blue-400">
+            Inspectors on Duty
           </div>
-          <div className="mt-2 text-2xl font-bold text-blue-600 dark:text-blue-400">{stats.inspectorsCount}</div>
-          <p className="mt-0.5 text-[11px] text-muted-foreground">Technicians & operators</p>
+          <div className="mt-1 text-2xl font-semibold text-blue-700 dark:text-blue-400">
+            {stats.inspectorsCount}
+          </div>
+          <p className="mt-0.5 text-xs text-blue-700/80 dark:text-blue-400/80">
+            Technicians & operators
+          </p>
         </div>
       </div>
 
@@ -463,14 +491,19 @@ export default function Inspections() {
             No inspections found {dateMode === "day" ? `for ${formattedSelectedDay}` : ""}
           </h3>
           <p className="mt-1 text-sm text-muted-foreground max-w-md mx-auto">
-            {dateMode === "day" && !isToday
-              ? `No operator or technician submitted an inspection report on this date.`
-              : `No inspections have been logged yet for the current filter criteria.`}
+            {isToday
+              ? "No operator or technician has logged an inspection yet today."
+              : `No inspection records were found for ${formattedSelectedDay}.`}
+            {executions.length > 0 && dateMode === "day" && (
+              <span className="block mt-1 font-medium text-foreground">
+                There are {executions.length} inspection record{executions.length === 1 ? "" : "s"} logged on other dates.
+              </span>
+            )}
           </p>
           <div className="mt-5 flex items-center justify-center gap-3">
-            {dateMode === "day" && !isToday && (
-              <Button variant="outline" size="sm" onClick={handleSetToday}>
-                View Today's Inspections
+            {executions.length > 0 && dateMode === "day" && (
+              <Button variant="outline" size="sm" onClick={() => setDateMode("all")}>
+                View All Records ({executions.length})
               </Button>
             )}
             <Button size="sm" onClick={() => setStartDialogOpen(true)}>
@@ -574,19 +607,19 @@ export default function Inspections() {
                       {/* Result */}
                       <td className="px-5 py-3.5 whitespace-nowrap">
                         {!isCompleted ? (
-                          <span className="inline-flex items-center gap-1 rounded-full border border-amber-500/20 bg-amber-500/10 px-2.5 py-0.5 text-xs font-medium text-amber-700 dark:text-amber-300">
-                            <Clock className="h-3 w-3" /> In Progress
+                          <span className="status-pill status-due">
+                            <Clock className="h-3 w-3" /> In progress
                           </span>
                         ) : isPass ? (
-                          <span className="inline-flex items-center gap-1 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2.5 py-0.5 text-xs font-medium text-emerald-700 dark:text-emerald-300">
+                          <span className="status-pill status-ok">
                             <CheckCircle2 className="h-3 w-3" /> Passed / OK
                           </span>
                         ) : isFail ? (
-                          <span className="inline-flex items-center gap-1 rounded-full border border-red-500/20 bg-red-500/10 px-2.5 py-0.5 text-xs font-medium text-red-700 dark:text-red-300">
-                            <AlertTriangle className="h-3 w-3" /> Attention Needed
+                          <span className="status-pill status-overdue">
+                            <AlertTriangle className="h-3 w-3" /> Defect / Attention
                           </span>
                         ) : (
-                          <span className="inline-flex items-center rounded-full border border-muted bg-muted/60 px-2.5 py-0.5 text-xs font-medium text-foreground capitalize">
+                          <span className="status-pill status-inactive capitalize">
                             {item.overall_result ?? "Completed"}
                           </span>
                         )}
