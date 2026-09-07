@@ -39,3 +39,6 @@ verify_jwt = true
 [functions.notify-onboarding-request-sms]
 verify_jwt = false
 
+[functions.invite-team-member]
+verify_jwt = true
+

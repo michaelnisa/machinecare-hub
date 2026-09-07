@@ -21,6 +21,8 @@ import {
   Copy,
   Mail,
   Clock,
+  Send,
+  CheckCircle2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { formatDate, initials } from "@/lib/format";
@@ -45,6 +47,7 @@ export default function Team() {
   const [invites, setInvites] = useState<any[]>([]);
   const [inviteOpen, setInviteOpen] = useState(false);
   const [revokeId, setRevokeId] = useState<string | null>(null);
+  const [resendingEmailId, setResendingEmailId] = useState<string | null>(null);
 
   const load = async () => {
     if (!profile) return;
@@ -103,6 +106,35 @@ export default function Team() {
     load();
   };
 
+  const resendInviteEmail = async (inv: any) => {
+    setResendingEmailId(inv.id);
+    try {
+      const appOrigin = window.location.origin;
+      const { data, error } = await supabase.functions.invoke("invite-team-member", {
+        body: {
+          email: inv.email,
+          role: inv.role,
+          origin: appOrigin,
+        },
+      });
+
+      if (error) throw error;
+      if (data?.emailSent) {
+        toast.success(`Automated invitation email sent to ${inv.email}!`);
+      } else if (data?.warning) {
+        toast.info(data.warning);
+      } else {
+        toast.success(`Invite refreshed for ${inv.email}`);
+      }
+    } catch (err: any) {
+      console.warn("Resend email failed:", err);
+      toast.error(err.message || "Failed to trigger email invite");
+    } finally {
+      setResendingEmailId(null);
+      load();
+    }
+  };
+
   if (loading) return <PageLoader />;
 
   return (
@@ -146,7 +178,7 @@ export default function Team() {
                 <th className="px-5 py-3 font-medium">Email</th>
                 <th className="px-5 py-3 font-medium">Role</th>
                 <th className="px-5 py-3 font-medium">Expires</th>
-                <th className="px-5 py-3 font-medium">Link</th>
+                <th className="px-5 py-3 font-medium">Actions</th>
                 <th className="px-5 py-3"></th>
               </tr>
             </thead>
@@ -154,6 +186,7 @@ export default function Team() {
               {invites.map((inv) => {
                 const link = `${window.location.origin}/accept-invite/${inv.token}`;
                 const expired = new Date(inv.expires_at) < new Date();
+                const isResending = resendingEmailId === inv.id;
                 return (
                   <tr key={inv.id} className="border-t border-border">
                     <td className="px-5 py-3">
@@ -170,16 +203,33 @@ export default function Team() {
                       )}
                     </td>
                     <td className="px-5 py-3">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => {
-                          navigator.clipboard.writeText(link);
-                          toast.success("Invite link copied");
-                        }}
-                      >
-                        <Copy className="mr-1 h-3.5 w-3.5" /> Copy link
-                      </Button>
+                      <div className="flex items-center gap-1.5">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          disabled={isResending || expired}
+                          onClick={() => resendInviteEmail(inv)}
+                          title="Trigger automated invitation email"
+                        >
+                          {isResending ? (
+                            <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+                          ) : (
+                            <Send className="mr-1 h-3.5 w-3.5 text-primary" />
+                          )}
+                          Resend email
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            navigator.clipboard.writeText(link);
+                            toast.success("Invite link copied");
+                          }}
+                          title="Copy direct invite link"
+                        >
+                          <Copy className="mr-1 h-3.5 w-3.5" /> Copy link
+                        </Button>
+                      </div>
                     </td>
                     <td className="px-5 py-3 text-right">
                       <Button
@@ -289,11 +339,15 @@ function InviteDialog({
   const [role, setRole] = useState<Role>("technician");
   const [submitting, setSubmitting] = useState(false);
   const [createdLink, setCreatedLink] = useState<string | null>(null);
+  const [emailDispatched, setEmailDispatched] = useState(false);
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
 
   const reset = () => {
     setEmail("");
     setRole("technician");
     setCreatedLink(null);
+    setEmailDispatched(false);
+    setStatusMessage(null);
   };
 
   const create = async () => {
@@ -301,20 +355,60 @@ function InviteDialog({
     if (!email.trim() || !email.includes("@"))
       return toast.error("Enter a valid email");
     setSubmitting(true);
-    const { data, error } = await supabase
-      .from("org_invites")
-      .insert({
-        organisation_id: profile.organisation_id,
-        email: email.trim().toLowerCase(),
-        role,
-        invited_by: profile.id,
-      })
-      .select("token")
-      .single();
+    setStatusMessage(null);
+
+    const normalizedEmail = email.trim().toLowerCase();
+    const appOrigin = window.location.origin;
+    let finalLink = "";
+    let dispatched = false;
+
+    try {
+      const { data, error: fnError } = await supabase.functions.invoke("invite-team-member", {
+        body: {
+          email: normalizedEmail,
+          role,
+          origin: appOrigin,
+        },
+      });
+
+      if (!fnError && data?.success) {
+        finalLink = data.inviteLink || `${appOrigin}/accept-invite/${data.token}`;
+        dispatched = Boolean(data.emailSent);
+        setEmailDispatched(dispatched);
+        setStatusMessage(data.message || (dispatched ? `Invite email sent to ${normalizedEmail}` : null));
+        if (dispatched) {
+          toast.success(`Automated invitation email sent to ${normalizedEmail}!`);
+        } else if (data.warning) {
+          toast.info(data.warning);
+        }
+      } else {
+        throw new Error(fnError?.message || data?.error || "Edge function invocation error");
+      }
+    } catch (e: any) {
+      console.warn("Fallback to direct org_invites table insert:", e);
+      const { data, error } = await supabase
+        .from("org_invites")
+        .insert({
+          organisation_id: profile.organisation_id,
+          email: normalizedEmail,
+          role,
+          invited_by: profile.id,
+        })
+        .select("token")
+        .single();
+
+      if (error) {
+        setSubmitting(false);
+        return toast.error(error.message);
+      }
+      finalLink = `${appOrigin}/accept-invite/${data.token}`;
+      setEmailDispatched(false);
+      setStatusMessage("Invite link created! Share the link below directly with your team member.");
+      toast.success("Invite link generated");
+    }
+
     setSubmitting(false);
-    if (error) return toast.error(error.message);
-    const link = `${window.location.origin}/accept-invite/${data.token}`;
-    setCreatedLink(link);
+    setCreatedLink(finalLink);
     onCreated();
   };
 
@@ -331,28 +425,47 @@ function InviteDialog({
           <DialogTitle>Invite a team member</DialogTitle>
         </DialogHeader>
         {createdLink ? (
-          <div className="space-y-3">
-            <p className="text-sm text-muted-foreground">
-              Share this link with{" "}
-              <span className="font-medium text-foreground">{email}</span>.
-              They'll join your organisation as{" "}
-              <span className="font-medium capitalize text-foreground">
-                {role}
-              </span>
-              . The link expires in 14 days.
-            </p>
-            <div className="flex gap-2">
-              <Input value={createdLink} readOnly />
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => {
-                  navigator.clipboard.writeText(createdLink);
-                  toast.success("Copied");
-                }}
-              >
-                <Copy className="h-4 w-4" />
-              </Button>
+          <div className="space-y-4">
+            {emailDispatched ? (
+              <div className="flex items-start gap-3 rounded-xl border border-emerald-500/20 bg-emerald-500/10 p-3 text-emerald-900 dark:text-emerald-200">
+                <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-emerald-600 dark:text-emerald-400" />
+                <div className="space-y-0.5 text-sm">
+                  <p className="font-semibold">Automated Email Dispatched</p>
+                  <p className="text-xs text-muted-foreground dark:text-emerald-300/80">
+                    Supabase Auth sent an official invite email directly to{" "}
+                    <span className="font-medium text-foreground">{email}</span> with their activation link.
+                  </p>
+                </div>
+              </div>
+            ) : statusMessage ? (
+              <div className="flex items-start gap-3 rounded-xl border border-amber-500/20 bg-amber-500/10 p-3 text-amber-900 dark:text-amber-200">
+                <Mail className="mt-0.5 h-5 w-5 shrink-0 text-amber-600 dark:text-amber-400" />
+                <div className="space-y-0.5 text-sm">
+                  <p className="font-semibold">Invite Ready</p>
+                  <p className="text-xs text-muted-foreground dark:text-amber-300/80">
+                    {statusMessage}
+                  </p>
+                </div>
+              </div>
+            ) : null}
+
+            <div className="space-y-2">
+              <p className="text-xs text-muted-foreground">
+                You can also copy the direct invitation link below to share manually via WhatsApp, Slack, or SMS:
+              </p>
+              <div className="flex gap-2">
+                <Input value={createdLink} readOnly className="font-mono text-xs" />
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    navigator.clipboard.writeText(createdLink);
+                    toast.success("Invite link copied");
+                  }}
+                >
+                  <Copy className="h-4 w-4" />
+                </Button>
+              </div>
             </div>
           </div>
         ) : (
@@ -401,10 +514,12 @@ function InviteDialog({
                 Cancel
               </Button>
               <Button onClick={create} disabled={submitting}>
-                {submitting && (
+                {submitting ? (
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <Send className="mr-2 h-4 w-4" />
                 )}
-                Create invite link
+                Send invite
               </Button>
             </>
           )}
