@@ -24,7 +24,7 @@ type SafetyKpis = {
   daysWithoutLti: number;
   recordLtiDays: number;
   activeContractors: number;
-  pendingRiskAssessments: number;
+  toolboxTalksToday: number;
   activeApprovedPermits: number;
   ppeComplianceRate: number;
   openIncidents: number;
@@ -51,7 +51,7 @@ const initialKpis: SafetyKpis = {
   daysWithoutLti: 0,
   recordLtiDays: 0,
   activeContractors: 0,
-  pendingRiskAssessments: 0,
+  toolboxTalksToday: 0,
   activeApprovedPermits: 0,
   ppeComplianceRate: 100,
   openIncidents: 0,
@@ -186,7 +186,7 @@ export default function SafetyLiveTV() {
 
       const [
         { data: incidents },
-        { count: pendingRaCount },
+        { count: tbtTodayCount },
         { count: approvedRaCount },
         { count: approvedPtwCount },
         { count: expCount },
@@ -202,10 +202,10 @@ export default function SafetyLiveTV() {
           .eq("organisation_id", orgId)
           .order("occurred_at", { ascending: false }),
         (supabase as any)
-          .from("risk_assessments")
+          .from("contractor_toolbox_talks")
           .select("id", { count: "exact", head: true })
           .eq("organisation_id", orgId)
-          .eq("status", "pending_approval"),
+          .eq("talk_date", today),
         (supabase as any)
           .from("risk_assessments")
           .select("id", { count: "exact", head: true })
@@ -328,7 +328,7 @@ export default function SafetyLiveTV() {
         daysWithoutLti,
         recordLtiDays,
         activeContractors,
-        pendingRiskAssessments: pendingRaCount ?? 0,
+        toolboxTalksToday: tbtTodayCount ?? 0,
         activeApprovedPermits,
         ppeComplianceRate: complianceRate,
         openIncidents: (incidents ?? []).filter((x: any) => x.status !== "closed").length,
@@ -530,13 +530,13 @@ export default function SafetyLiveTV() {
 
           <div className="rounded-2xl border border-white/10 bg-gradient-to-br from-white/5 to-white/[0.02] p-5 shadow-2xl backdrop-blur">
             <div className="flex items-center justify-between text-white/60 text-xs font-bold uppercase">
-              <span>Pending RAMS</span>
-              <FileWarning className="h-4 w-4 text-amber-400" />
+              <span>Toolbox Talks</span>
+              <ClipboardCheck className="h-4 w-4 text-emerald-400" />
             </div>
-            <div className={`mt-2 text-3xl font-extrabold ${kpis.pendingRiskAssessments > 0 ? "text-amber-400 animate-pulse" : "text-white"}`}>
-              {kpis.pendingRiskAssessments}
+            <div className="mt-2 text-3xl font-extrabold text-emerald-400">
+              {kpis.toolboxTalksToday}
             </div>
-            <div className="text-[11px] text-amber-400 font-medium mt-1">Awaiting Safety review</div>
+            <div className="text-[11px] text-emerald-300 font-medium mt-1">Shift briefings today</div>
           </div>
 
           <div className="rounded-2xl border border-white/10 bg-gradient-to-br from-white/5 to-white/[0.02] p-5 shadow-2xl backdrop-blur">

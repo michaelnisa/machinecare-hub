@@ -7,12 +7,15 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { PageLoader, EmptyState } from "@/components/PageLoader";
-import { ShieldAlert, Plus, Loader2, CheckCircle2, XCircle, ClipboardList, ListChecks, ClipboardCheck, GraduationCap, Tv, Settings2 } from "lucide-react";
+import { ShieldAlert, Plus, Loader2, CheckCircle2, XCircle, ClipboardList, ListChecks, ClipboardCheck, GraduationCap, Tv, Settings2, QrCode, MapPin, Users, HardHat, FileWarning } from "lucide-react";
 import { toast } from "sonner";
 import { formatDate } from "@/lib/format";
 import { Link } from "react-router-dom";
 import { formatWoNumber } from "@/components/WorkOrderPreview";
 import { SafetyLiveFeedModal } from "@/components/safety/SafetyLiveFeedModal";
+import { SafetyDepartmentQrPosterModal } from "@/components/safety/SafetyDepartmentQrPosterModal";
+import { FiveWhysModal } from "@/components/safety/FiveWhysModal";
+import { Trophy, FlaskConical, GitBranch } from "lucide-react";
 
 const TYPES = ["near_miss", "accident", "hazard", "first_aid", "lost_time"];
 const SEVERITIES = ["low", "medium", "high", "critical"];
@@ -39,7 +42,12 @@ export default function Safety() {
   const [feedOpen, setFeedOpen] = useState(false);
   const [filter, setFilter] = useState("all");
   const [pendingPtw, setPendingPtw] = useState<any[]>([]);
+  const [pendingRams, setPendingRams] = useState<any[]>([]);
   const [reviewingId, setReviewingId] = useState<string | null>(null);
+  const [reviewingRamsId, setReviewingRamsId] = useState<string | null>(null);
+  const [qrPosterOpen, setQrPosterOpen] = useState(false);
+  const [fiveWhysOpen, setFiveWhysOpen] = useState(false);
+  const [selectedIncidentForRca, setSelectedIncidentForRca] = useState<any>(null);
   const [dash, setDash] = useState({
     pendingRiskAssessments: 0,
     activeLoto: 0,
@@ -53,7 +61,7 @@ export default function Safety() {
     setLoading(true);
     const today = new Date().toISOString().slice(0, 10);
     const in30 = new Date(Date.now() + 30 * 86400000).toISOString();
-    const [{ data: i, error: e1 }, { data: m, error: e2 }, { data: ptw, error: e3 }, { count: raCount }, { count: lotoCount }, { data: ca }, { count: expCount }] = await Promise.all([
+    const [{ data: i, error: e1 }, { data: m, error: e2 }, { data: ptw, error: e3 }, { data: raList, count: raCount }, { count: lotoCount }, { data: ca }, { count: expCount }] = await Promise.all([
       supabase.from("safety_incidents").select("*, machines(name)").order("occurred_at", { ascending: false }),
       supabase.from("machines").select("id, name").order("name"),
       (supabase as any)
@@ -61,7 +69,11 @@ export default function Safety() {
         .select("*, work_orders(id, title, wo_number, wo_year)")
         .eq("status", "pending")
         .order("requested_at", { ascending: true }),
-      (supabase as any).from("risk_assessments").select("id", { count: "exact", head: true }).eq("status", "pending_approval"),
+      (supabase as any)
+        .from("risk_assessments")
+        .select("id, title, activity, initial_risk_level, status, created_at, machines(name)")
+        .eq("status", "pending_approval")
+        .order("created_at", { ascending: false }),
       (supabase as any).from("wo_loto_checklists").select("id", { count: "exact", head: true }).in("status", ["not_started", "in_progress"]),
       (supabase as any).from("corrective_actions").select("id, due_date, status").neq("status", "closed"),
       (supabase as any).from("induction_records").select("id", { count: "exact", head: true }).lte("expires_at", in30).gte("expires_at", today),
@@ -71,10 +83,11 @@ export default function Safety() {
     setItems(i ?? []);
     setMachines(m ?? []);
     setPendingPtw(ptw ?? []);
+    setPendingRams(raList ?? []);
     const openCa = (ca ?? []).length;
     const overdueCa = (ca ?? []).filter((x: any) => x.due_date && x.due_date < today).length;
     setDash({
-      pendingRiskAssessments: raCount ?? 0,
+      pendingRiskAssessments: raCount ?? (raList ?? []).length,
       activeLoto: lotoCount ?? 0,
       openCorrectiveActions: openCa,
       overdueCorrectiveActions: overdueCa,
@@ -93,6 +106,18 @@ export default function Safety() {
     setReviewingId(null);
     if (error) return toast.error(error.message);
     toast.success(status === "approved" ? "Permit approved" : "Permit rejected");
+    load();
+  };
+
+  const reviewRams = async (id: string, status: "approved" | "rejected") => {
+    setReviewingRamsId(id);
+    const { error } = await (supabase as any)
+      .from("risk_assessments")
+      .update({ status, approved_by: profile?.id, approved_at: new Date().toISOString() })
+      .eq("id", id);
+    setReviewingRamsId(null);
+    if (error) return toast.error(error.message);
+    toast.success(status === "approved" ? "RAMS approved" : "RAMS rejected");
     load();
   };
 
@@ -123,27 +148,53 @@ export default function Safety() {
           <h1 className="text-2xl font-semibold tracking-tight">Safety dashboard</h1>
           <p className="text-sm text-muted-foreground">Incidents, permits, risk assessments, LOTO and corrective actions in one place.</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <Link to="/safety/leaderboard">
+            <Button variant="outline" className="gap-1.5 border-emerald-600/30 text-[#00A651] text-xs font-bold">
+              <Trophy className="h-4 w-4" /> Safety Leaderboard
+            </Button>
+          </Link>
+          <Link to="/safety/chemicals">
+            <Button variant="outline" className="gap-1.5 border-emerald-600/30 text-[#00A651] text-xs font-bold">
+              <FlaskConical className="h-4 w-4" /> Chemicals & Drum QR
+            </Button>
+          </Link>
+          <Button
+            onClick={() => setQrPosterOpen(true)}
+            className="gap-1.5 bg-[#00A651] hover:bg-[#008f45] text-white text-xs font-bold"
+          >
+            <QrCode className="h-4 w-4" /> Safety QR Poster
+          </Button>
+          <Link to="/safety/supervisor-radar">
+            <Button variant="outline" className="gap-1.5 border-emerald-600/30 text-[#00A651] text-xs font-bold">
+              <MapPin className="h-4 w-4" /> Supervisor Radar
+            </Button>
+          </Link>
+          <Link to="/safety/team">
+            <Button variant="outline" className="gap-1.5 border-emerald-600/30 text-[#00A651] text-xs font-bold">
+              <Users className="h-4 w-4" /> Safety Team
+            </Button>
+          </Link>
           <Button
             variant="outline"
             onClick={() => setFeedOpen(true)}
-            className="gap-1.5 border-emerald-600/30 text-emerald-700 dark:text-emerald-400"
+            className="gap-1.5 border-emerald-600/30 text-emerald-700 dark:text-emerald-400 text-xs"
           >
-            <Settings2 className="h-4 w-4" /> Feed Live TV & Roster
+            <Settings2 className="h-4 w-4" /> Live TV Config
           </Button>
           <Link to="/safety/live-tv">
-            <Button variant="outline" className="gap-1.5 border-emerald-600/30 text-emerald-700 dark:text-emerald-400">
+            <Button variant="outline" className="gap-1.5 border-emerald-600/30 text-emerald-700 dark:text-emerald-400 text-xs">
               <Tv className="h-4 w-4" /> Safety Live TV
             </Button>
           </Link>
-          <Button onClick={() => setOpen(true)}><Plus className="mr-2 h-4 w-4" />Report incident</Button>
+          <Button onClick={() => setOpen(true)} className="text-xs"><Plus className="mr-1.5 h-4 w-4" />Report incident</Button>
         </div>
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
         {[
           { label: "Pending permits", value: pendingPtw.length, tone: pendingPtw.length > 0 ? "amber" : "green" },
-          { label: "Risk assessments awaiting approval", value: dash.pendingRiskAssessments, tone: dash.pendingRiskAssessments > 0 ? "amber" : "green" },
+          { label: "Pending RAMS awaiting approval", value: pendingRams.length, tone: pendingRams.length > 0 ? "amber" : "green" },
           { label: "Active LOTO", value: dash.activeLoto, tone: dash.activeLoto > 0 ? "blue" : "green" },
           { label: "Open corrective actions", value: dash.openCorrectiveActions, tone: dash.overdueCorrectiveActions > 0 ? "red" : dash.openCorrectiveActions > 0 ? "amber" : "green" },
           { label: "Inductions expiring ≤30d", value: dash.expiringInductions, tone: dash.expiringInductions > 0 ? "amber" : "green" },
@@ -156,7 +207,12 @@ export default function Safety() {
       </div>
 
       <div className="flex flex-wrap gap-2">
-        <Link to="/safety/risk-assessments" className="flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1.5 text-xs hover:bg-muted/60"><ClipboardList className="h-3.5 w-3.5" /> Risk assessments</Link>
+        <Link to="/safety/leaderboard" className="flex items-center gap-1.5 rounded-full border border-[#00A651]/40 bg-emerald-50/50 dark:bg-emerald-950/20 px-3 py-1.5 text-xs text-[#00A651] font-bold hover:bg-emerald-100/50"><Trophy className="h-3.5 w-3.5" /> Safety Leaderboard</Link>
+        <Link to="/safety/chemicals" className="flex items-center gap-1.5 rounded-full border border-[#00A651]/40 bg-emerald-50/50 dark:bg-emerald-950/20 px-3 py-1.5 text-xs text-[#00A651] font-bold hover:bg-emerald-100/50"><FlaskConical className="h-3.5 w-3.5" /> Chemicals &amp; Drum QR</Link>
+        <Link to="/safety/supervisor-radar" className="flex items-center gap-1.5 rounded-full border border-[#00A651]/40 bg-emerald-50/50 dark:bg-emerald-950/20 px-3 py-1.5 text-xs text-[#00A651] font-bold hover:bg-emerald-100/50"><MapPin className="h-3.5 w-3.5" /> Daily Supervisor Radar</Link>
+        <Link to="/contractor/portal" className="flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1.5 text-xs hover:bg-muted/60"><HardHat className="h-3.5 w-3.5 text-[#00A651]" /> Contractor Portal</Link>
+        <Link to="/safety/team" className="flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1.5 text-xs hover:bg-muted/60"><Users className="h-3.5 w-3.5 text-[#00A651]" /> Safety Team</Link>
+        <Link to="/safety/risk-assessments" className="flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1.5 text-xs hover:bg-muted/60"><ClipboardList className="h-3.5 w-3.5" /> Risk assessments (RAMS)</Link>
         <Link to="/safety/inspections" className="flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1.5 text-xs hover:bg-muted/60"><ClipboardCheck className="h-3.5 w-3.5" /> Safety inspections</Link>
         <Link to="/safety/corrective-actions" className="flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1.5 text-xs hover:bg-muted/60"><ListChecks className="h-3.5 w-3.5" /> Corrective actions</Link>
         <Link to="/induction/dashboard" className="flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1.5 text-xs hover:bg-muted/60"><GraduationCap className="h-3.5 w-3.5" /> Induction</Link>
@@ -170,30 +226,74 @@ export default function Safety() {
         <Link to="/safety/rules" className="flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1.5 text-xs hover:bg-muted/60"><ClipboardCheck className="h-3.5 w-3.5" /> Safety rules</Link>
       </div>
 
-      {pendingPtw.length > 0 && (
-        <div className="rounded-xl border border-amber-300 bg-amber-50 p-4">
-          <div className="mb-3 text-sm font-semibold text-amber-900">
-            Pending Permits to Work ({pendingPtw.length})
-          </div>
-          <div className="space-y-2">
-            {pendingPtw.map((p) => (
-              <div key={p.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-200 bg-white p-3">
-                <Link to={`/work-orders/${p.work_orders?.id}`} className="text-sm font-medium text-primary hover:underline">
-                  {p.work_orders ? `${formatWoNumber(p.work_orders.wo_year, p.work_orders.wo_number)} — ${p.work_orders.title}` : "Work order"}
-                </Link>
-                <div className="flex gap-2">
-                  <Button size="sm" onClick={() => reviewPtw(p.id, "approved")} disabled={reviewingId === p.id} className="gap-1.5">
-                    <CheckCircle2 className="h-3.5 w-3.5" /> Approve
-                  </Button>
-                  <Button size="sm" variant="outline" onClick={() => reviewPtw(p.id, "rejected")} disabled={reviewingId === p.id} className="gap-1.5">
-                    <XCircle className="h-3.5 w-3.5" /> Reject
-                  </Button>
+      {/* PENDING APPROVALS GRID: PTW & RAMS SIDE-BY-SIDE */}
+      <div className="grid gap-4 md:grid-cols-2">
+        {/* Pending Permits to Work */}
+        {pendingPtw.length > 0 ? (
+          <div className="rounded-xl border border-amber-300 bg-amber-50/50 dark:bg-amber-950/20 p-4 space-y-3">
+            <div className="text-sm font-bold text-amber-900 dark:text-amber-300 flex items-center justify-between">
+              <span>Pending Permits to Work ({pendingPtw.length})</span>
+              <span className="text-xs font-normal text-muted-foreground">Requires EHS Review</span>
+            </div>
+            <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+              {pendingPtw.map((p) => (
+                <div key={p.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-200 bg-white dark:bg-slate-900 p-3 shadow-sm">
+                  <div className="min-w-0 flex-1">
+                    <Link to={`/work-orders/${p.work_orders?.id}`} className="text-xs font-bold text-primary hover:underline line-clamp-1">
+                      {p.work_orders ? `${formatWoNumber(p.work_orders.wo_year, p.work_orders.wo_number)} — ${p.work_orders.title}` : "Work order"}
+                    </Link>
+                    <div className="text-[11px] text-muted-foreground mt-0.5">Requested {formatDate(p.requested_at)}</div>
+                  </div>
+                  <div className="flex gap-1.5">
+                    <Button size="sm" onClick={() => reviewPtw(p.id, "approved")} disabled={reviewingId === p.id} className="h-7 text-xs bg-[#00A651] hover:bg-[#008f45] text-white gap-1 font-bold">
+                      <CheckCircle2 className="h-3 w-3" /> Approve
+                    </Button>
+                    <Button size="sm" variant="outline" onClick={() => reviewPtw(p.id, "rejected")} disabled={reviewingId === p.id} className="h-7 text-xs gap-1">
+                      <XCircle className="h-3 w-3" /> Reject
+                    </Button>
+                  </div>
                 </div>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
-        </div>
-      )}
+        ) : null}
+
+        {/* Pending RAMS (Risk Assessments) */}
+        {pendingRams.length > 0 ? (
+          <div className="rounded-xl border border-amber-300 bg-amber-50/50 dark:bg-amber-950/20 p-4 space-y-3">
+            <div className="text-sm font-bold text-amber-900 dark:text-amber-300 flex items-center justify-between">
+              <span className="flex items-center gap-1.5">
+                <FileWarning className="h-4 w-4 text-amber-600" /> Pending RAMS / Risk Assessments ({pendingRams.length})
+              </span>
+              <Link to="/safety/risk-assessments" className="text-xs text-[#00A651] font-semibold hover:underline">
+                View All
+              </Link>
+            </div>
+            <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+              {pendingRams.map((r) => (
+                <div key={r.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-200 bg-white dark:bg-slate-900 p-3 shadow-sm">
+                  <div className="min-w-0 flex-1">
+                    <Link to="/safety/risk-assessments" className="text-xs font-bold text-foreground hover:underline line-clamp-1">
+                      {r.title}
+                    </Link>
+                    <div className="text-[11px] text-muted-foreground mt-0.5">
+                      Activity: {r.activity || "Hazard Analysis"} • Risk: <span className="font-semibold uppercase text-amber-700">{r.initial_risk_level || "Medium"}</span>
+                    </div>
+                  </div>
+                  <div className="flex gap-1.5">
+                    <Button size="sm" onClick={() => reviewRams(r.id, "approved")} disabled={reviewingRamsId === r.id} className="h-7 text-xs bg-[#00A651] hover:bg-[#008f45] text-white gap-1 font-bold">
+                      <CheckCircle2 className="h-3 w-3" /> Approve
+                    </Button>
+                    <Button size="sm" variant="outline" onClick={() => reviewRams(r.id, "rejected")} disabled={reviewingRamsId === r.id} className="h-7 text-xs gap-1">
+                      <XCircle className="h-3 w-3" /> Reject
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
+      </div>
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {[
@@ -244,12 +344,26 @@ export default function Safety() {
                   <td className="px-5 py-3 text-muted-foreground">{x.machines?.name ?? "—"}</td>
                   <td className="px-5 py-3"><span className={`rounded-full px-2 py-0.5 text-xs capitalize ${STAT_CLASS[x.status]}`}>{x.status}</span></td>
                   <td className="px-5 py-3 text-right">
-                    {x.status !== "closed" && (
-                      <select value={x.status} onChange={(e) => updateStatus(x.id, e.target.value)}
-                        className="rounded border border-input bg-background px-2 py-1 text-xs">
-                        {STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
-                      </select>
-                    )}
+                    <div className="flex items-center justify-end gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          setSelectedIncidentForRca(x);
+                          setFiveWhysOpen(true);
+                        }}
+                        className="h-7 text-xs gap-1 border-emerald-600/30 text-[#00A651] hover:bg-emerald-50"
+                        title="Investigate with 5-Whys Root Cause Analysis"
+                      >
+                        <GitBranch className="h-3.5 w-3.5" /> 5-Whys RCA
+                      </Button>
+                      {x.status !== "closed" && (
+                        <select value={x.status} onChange={(e) => updateStatus(x.id, e.target.value)}
+                          className="rounded border border-input bg-background px-2 py-1 text-xs">
+                          {STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
+                        </select>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -260,6 +374,13 @@ export default function Safety() {
 
       <ReportDialog open={open} setOpen={setOpen} machines={machines} userId={user?.id} orgId={profile?.organisation_id} onSaved={load} />
       <SafetyLiveFeedModal open={feedOpen} onOpenChange={setFeedOpen} onSaved={load} />
+      <SafetyDepartmentQrPosterModal open={qrPosterOpen} onOpenChange={setQrPosterOpen} />
+      <FiveWhysModal
+        open={fiveWhysOpen}
+        onOpenChange={setFiveWhysOpen}
+        incident={selectedIncidentForRca}
+        onSaved={load}
+      />
     </div>
   );
 }

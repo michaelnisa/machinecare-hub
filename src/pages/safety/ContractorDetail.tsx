@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { PageLoader, EmptyState } from "@/components/PageLoader";
-import { ArrowLeft, Plus, Loader2, Users, FileText, CheckCircle2, XCircle } from "lucide-react";
+import { ArrowLeft, Plus, Loader2, Users, FileText, CheckCircle2, XCircle, HardHat } from "lucide-react";
 import { toast } from "sonner";
 import { formatDate } from "@/lib/format";
 import { formatWoNumber } from "@/components/WorkOrderPreview";
@@ -83,7 +83,14 @@ export default function ContractorDetail() {
           <h1 className="text-2xl font-semibold tracking-tight">{contractor.company_name}</h1>
           <p className="text-sm text-muted-foreground">{contractor.contact_name}{contractor.contact_phone && ` · ${contractor.contact_phone}`}{contractor.contact_email && ` · ${contractor.contact_email}`}</p>
         </div>
-        <span className={`rounded-full px-2 py-1 text-xs capitalize ${contractor.status === "active" ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-600"}`}>{contractor.status}</span>
+        <div className="flex items-center gap-2">
+          <Link to={`/safety/contractors/${id}/portal`}>
+            <Button size="sm" className="bg-[#00A651] hover:bg-[#008f45] text-white text-xs font-bold gap-1.5">
+              <HardHat className="h-4 w-4" /> Open Contractor Portal
+            </Button>
+          </Link>
+          <span className={`rounded-full px-2.5 py-1 text-xs font-semibold capitalize ${contractor.status === "active" ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-600"}`}>{contractor.status}</span>
+        </div>
       </div>
 
       {insuranceExpired && (

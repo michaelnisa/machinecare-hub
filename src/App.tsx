@@ -90,6 +90,13 @@ const Live = lazy(() => import("./pages/Live"));
 const LiveProduction = lazy(() => import("./pages/LiveProduction"));
 const SafetyLiveTV = lazy(() => import("./pages/safety/SafetyLiveTV"));
 const VendorRiskAssessmentPublic = lazy(() => import("./pages/safety/VendorRiskAssessmentPublic"));
+const SafetyDepartmentGateway = lazy(() => import("./pages/safety/SafetyDepartmentGateway"));
+const SafetySupervisorRadar = lazy(() => import("./pages/safety/SafetySupervisorRadar"));
+const SafetyTeam = lazy(() => import("./pages/safety/SafetyTeam"));
+const ContractorPortal = lazy(() => import("./pages/safety/ContractorPortal"));
+const SafetyLeaderboard = lazy(() => import("./pages/safety/SafetyLeaderboard"));
+const ChemicalRegistry = lazy(() => import("./pages/safety/ChemicalRegistry"));
+const ChemicalDetailPublic = lazy(() => import("./pages/safety/ChemicalDetailPublic"));
 const Vendors = lazy(() => import("./pages/Vendors"));
 const WorkOrderPrint = lazy(() => import("./pages/WorkOrderPrint"));
 const ChecklistTemplatePrint = lazy(() => import("./pages/ChecklistTemplatePrint"));
@@ -168,6 +175,9 @@ const App = () => (
                 <Route path="/live" element={<Live />} />
                 <Route path="/live/production" element={<LiveProduction />} />
                 <Route path="/safety/live-tv" element={<SafetyLiveTV />} />
+                <Route path="/safety/gateway" element={<SafetyDepartmentGateway />} />
+                <Route path="/safety/gateway/:orgId" element={<SafetyDepartmentGateway />} />
+                <Route path="/safety/chemical/:id" element={<ChemicalDetailPublic />} />
                 <Route path="/safety/qr-rams" element={<VendorRiskAssessmentPublic />} />
                 <Route path="/safety/qr-rams/:orgId" element={<VendorRiskAssessmentPublic />} />
                 <Route path="/unsubscribe" element={<Unsubscribe />} />
@@ -211,12 +221,18 @@ const App = () => (
                   <Route path="/oee" element={<OEE />} />
                   <Route path="/reports" element={<Reports />} />
                   <Route path="/safety" element={<Safety />} />
+                  <Route path="/safety/leaderboard" element={<SafetyLeaderboard />} />
+                  <Route path="/safety/chemicals" element={<ChemicalRegistry />} />
+                  <Route path="/safety/supervisor-radar" element={<SafetySupervisorRadar />} />
+                  <Route path="/safety/team" element={<SafetyTeam />} />
+                  <Route path="/contractor/portal" element={<ContractorPortal />} />
                   <Route path="/safety/risk-assessments" element={<RiskAssessments />} />
                   <Route path="/safety/inspections" element={<SafetyInspections />} />
                   <Route path="/safety/corrective-actions" element={<CorrectiveActions />} />
                   <Route path="/safety/ppe" element={<PPE />} />
                   <Route path="/safety/contractors" element={<Contractors />} />
                   <Route path="/safety/contractors/:id" element={<ContractorDetail />} />
+                  <Route path="/safety/contractors/:id/portal" element={<ContractorPortal />} />
                   <Route path="/safety/competency" element={<Competency />} />
                   <Route path="/safety/equipment" element={<SafetyEquipment />} />
                   <Route path="/safety/certificates" element={<Certificates />} />

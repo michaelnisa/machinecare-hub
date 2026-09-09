@@ -52,6 +52,9 @@ import {
   CalendarRange,
   Recycle,
   Layers,
+  HardHat,
+  Trophy,
+  FlaskConical,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { initials } from "@/lib/format";
@@ -157,6 +160,11 @@ export function Sidebar() {
               label: "Safety & People",
               items: [
                 { to: "/safety", label: t.nav.safety, icon: ShieldAlert },
+                { to: "/safety/leaderboard", label: "Safety Leaderboard", icon: Trophy },
+                { to: "/safety/chemicals", label: "Chemicals & Drum QR", icon: FlaskConical },
+                { to: "/safety/supervisor-radar", label: "Supervisor Radar", icon: MapPin },
+                { to: "/contractor/portal", label: "Contractor Portal", icon: HardHat },
+                { to: "/safety/team", label: "Safety Team", icon: Users },
                 { to: "/safety/live-tv", label: "Safety Live TV", icon: Tv },
                 { to: "/safety/risk-assessments", label: "Risk assessments", icon: ClipboardList },
                 { to: "/safety/inspections", label: "Safety inspections", icon: CheckCircle2 },
@@ -401,10 +409,62 @@ export function Sidebar() {
     [t, isAdmin],
   );
 
-  // "mixed" orgs run more than one business line — show all three nav sets
-  // merged (deduping the repeated "System" group) rather than defaulting to
-  // manufacturing-only and leaving garage/fleet routes unreachable.
-  const groups = isMixed
+  const isSafetyDept = profile?.department === "safety";
+
+  const safetyDeptGroups: NavGroup[] = useMemo(
+    () => [
+      {
+        id: "safety-overview",
+        label: "Safety Overview",
+        items: [
+          { to: "/safety", label: "Safety Dashboard", icon: ShieldAlert },
+          { to: "/safety/supervisor-radar", label: "Supervisor Radar", icon: MapPin },
+          { to: "/safety/live-tv", label: "Safety Live TV", icon: Tv },
+          { to: "/notifications", label: t.nav.notifications, icon: Bell },
+        ],
+      },
+      {
+        id: "contractor-ops",
+        label: "Contractors & Operations",
+        items: [
+          { to: "/contractor/portal", label: "Contractor Portal", icon: HardHat },
+          { to: "/safety/contractors", label: "Contractor Registry", icon: Building2 },
+          { to: "/safety/team", label: "Safety Department Team", icon: Users },
+        ],
+      },
+      {
+        id: "safety-governance",
+        label: "Safety Governance",
+        items: [
+          { to: "/safety/risk-assessments", label: "Risk assessments (RAMS)", icon: ClipboardList },
+          { to: "/safety/inspections", label: "Safety inspections", icon: CheckCircle2 },
+          { to: "/safety/corrective-actions", label: "Corrective actions", icon: AlertTriangle },
+          { to: "/safety/ppe", label: "PPE Management", icon: Package },
+          { to: "/safety/competency", label: "Training & competency", icon: GraduationCap },
+          { to: "/safety/equipment", label: "Safety equipment", icon: ShieldAlert },
+          { to: "/safety/certificates", label: "Certificates", icon: ClipboardCheck },
+          { to: "/safety/controlled-tools", label: "Controlled tools", icon: Wrench },
+          { to: "/safety/documents", label: "Safety documents", icon: FileText },
+          { to: "/safety/rules", label: "Safety rules", icon: Settings },
+          { to: "/induction/dashboard", label: t.nav.induction, icon: GraduationCap },
+        ],
+      },
+      {
+        id: "account",
+        label: "Account",
+        items: [
+          { to: "/settings", label: t.nav.settings, icon: Settings },
+        ],
+      },
+    ],
+    [t]
+  );
+
+  // When a user belongs to the Safety Department, isolate their view to Safety & People only.
+  // Otherwise, fallback to mixed, fleet, garage, or manufacturing nav trees.
+  const groups = isSafetyDept
+    ? safetyDeptGroups
+    : isMixed
     ? [
         ...manufacturingGroups.filter((g) => g.id !== "system"),
         ...fleetGroups.filter((g) => g.id !== "system"),

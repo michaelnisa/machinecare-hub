@@ -50,6 +50,8 @@ Deno.serve(async (req) => {
     const body = await req.json()
     const rawEmail = body.email
     const role = body.role || 'technician'
+    const department = body.department || null
+    const safetyRole = body.safety_role || body.safetyRole || (department === 'safety' ? 'officer' : null)
     const fullName = body.full_name || body.fullName || ''
     const appOrigin = body.origin || 'https://machinecarehub.com'
 
@@ -88,6 +90,8 @@ Deno.serve(async (req) => {
         organisation_id: profile.organisation_id,
         email: normalizedEmail,
         role,
+        department,
+        safety_role: safetyRole,
         invited_by: profile.id,
         token,
       })
@@ -113,6 +117,8 @@ Deno.serve(async (req) => {
           data: {
             organisation_id: profile.organisation_id,
             role,
+            department,
+            safety_role: safetyRole,
             invited_by: profile.id,
             invite_token: token,
             organisation_name: orgName,
