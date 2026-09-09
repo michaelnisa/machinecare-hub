@@ -104,7 +104,11 @@ export default function ChemicalRegistry() {
       if (error) throw error;
       setChemicals(data || []);
     } catch (e: any) {
-      toast.error(e.message || "Failed to load chemical registry");
+      if (e.message?.toLowerCase().includes("schema cache") || e.code === "PGRST205") {
+        console.warn("safety_chemicals table not yet migrated or cached:", e.message);
+      } else {
+        toast.error(e.message || "Failed to load chemical registry");
+      }
     } finally {
       setLoading(false);
     }

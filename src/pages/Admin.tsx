@@ -94,23 +94,6 @@ export default function Admin() {
   const { t, currentLang } = useI18n();
   const isSwahili = currentLang === "sw";
 
-  if (!isAdmin) {
-    return (
-      <div className="flex min-h-[60vh] flex-col items-center justify-center text-center p-6">
-        <ShieldCheck className="h-16 w-16 text-destructive mb-4" />
-        <h1 className="text-2xl font-bold">Access Restricted / Hauna Ruhusa</h1>
-        <p className="text-muted-foreground mt-2 max-w-md">
-          {isSwahili 
-            ? "Ukurasa huu wa usimamizi wa jukwaa unapatikana kwa Admin wa mfumo pekee."
-            : `The Admin Portal is restricted to platform administrators (${PLATFORM_ADMIN_EMAILS.join(", ")}).`}
-        </p>
-        <Button asChild className="mt-6">
-          <Link to="/dashboard">{isSwahili ? "Rudi Kwenye Dashboard" : "Return to Dashboard"}</Link>
-        </Button>
-      </div>
-    );
-  }
-
   const [loading, setLoading] = useState(true);
   const [requests, setRequests] = useState<OnboardingRequest[]>([]);
   const [organisations, setOrganisations] = useState<Organisation[]>([]);
@@ -148,12 +131,20 @@ export default function Admin() {
         return;
       }
 
-      // 2. Fallback to direct table select queries
-      const [{ data: reqData }, { data: orgData }, { data: profData }] = await Promise.all([
+      // 2. Fallback: direct table queries (service-role or super-admin RLS)
+      const [
+        { data: reqData, error: reqErr },
+        { data: orgData, error: orgErr },
+        { data: profData, error: profErr },
+      ] = await Promise.all([
         (supabase as any).from("onboarding_requests").select("*").order("created_at", { ascending: false }),
-        supabase.from("organisations").select("*").order("created_at", { ascending: false }),
+        supabase.from("organisations").select("id, name, industry_profile, plan, created_at").order("created_at", { ascending: false }),
         supabase.from("profiles").select("id, organisation_id, full_name, email, created_at"),
       ]);
+
+      if (reqErr) console.warn("Admin requests query:", reqErr.message);
+      if (orgErr) console.warn("Admin orgs query:", orgErr.message);
+      if (profErr) console.warn("Admin profiles query:", profErr.message);
 
       setRequests((reqData as OnboardingRequest[]) || []);
       setOrganisations((orgData as Organisation[]) || []);
@@ -166,8 +157,12 @@ export default function Admin() {
   };
 
   useEffect(() => {
-    fetchData();
-  }, []);
+    if (isAdmin) {
+      fetchData();
+    } else {
+      setLoading(false);
+    }
+  }, [isAdmin]);
 
   // Compute metrics
   const stats = useMemo(() => {
@@ -212,6 +207,23 @@ export default function Admin() {
       org.name.toLowerCase().includes(searchQuery.toLowerCase())
     );
   }, [organisations, searchQuery]);
+
+  if (!isAdmin) {
+    return (
+      <div className="flex min-h-[60vh] flex-col items-center justify-center text-center p-6">
+        <ShieldCheck className="h-16 w-16 text-destructive mb-4" />
+        <h1 className="text-2xl font-bold">Access Restricted / Hauna Ruhusa</h1>
+        <p className="text-muted-foreground mt-2 max-w-md">
+          {isSwahili 
+            ? "Ukurasa huu wa usimamizi wa jukwaa unapatikana kwa Admin wa mfumo pekee."
+            : `The Admin Portal is restricted to platform administrators (${PLATFORM_ADMIN_EMAILS.join(", ")}).`}
+        </p>
+        <Button asChild className="mt-6">
+          <Link to="/dashboard">{isSwahili ? "Rudi Kwenye Dashboard" : "Return to Dashboard"}</Link>
+        </Button>
+      </div>
+    );
+  }
 
   // Handle Request Status Update
   const updateRequestStatus = async (

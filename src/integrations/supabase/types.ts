@@ -637,6 +637,155 @@ export type Database = {
           },
         ]
       }
+      contractor_toolbox_talks: {
+        Row: {
+          attendee_count: number
+          attendees: Json
+          contractor_id: string
+          controls_agreed: string | null
+          created_at: string
+          created_by: string | null
+          hazards_discussed: string | null
+          id: string
+          location: string | null
+          man_hours: number | null
+          organisation_id: string
+          supervisor_name: string
+          supervisor_signature: string | null
+          talk_date: string
+          topic: string
+          work_order_id: string | null
+        }
+        Insert: {
+          attendee_count?: number
+          attendees?: Json
+          contractor_id: string
+          controls_agreed?: string | null
+          created_at?: string
+          created_by?: string | null
+          hazards_discussed?: string | null
+          id?: string
+          location?: string | null
+          man_hours?: number | null
+          organisation_id: string
+          supervisor_name: string
+          supervisor_signature?: string | null
+          talk_date?: string
+          topic: string
+          work_order_id?: string | null
+        }
+        Update: {
+          attendee_count?: number
+          attendees?: Json
+          contractor_id?: string
+          controls_agreed?: string | null
+          created_at?: string
+          created_by?: string | null
+          hazards_discussed?: string | null
+          id?: string
+          location?: string | null
+          man_hours?: number | null
+          organisation_id?: string
+          supervisor_name?: string
+          supervisor_signature?: string | null
+          talk_date?: string
+          topic?: string
+          work_order_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "contractor_toolbox_talks_contractor_id_fkey"
+            columns: ["contractor_id"]
+            isOneToOne: false
+            referencedRelation: "contractors"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "contractor_toolbox_talks_organisation_id_fkey"
+            columns: ["organisation_id"]
+            isOneToOne: false
+            referencedRelation: "organisations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "contractor_toolbox_talks_work_order_id_fkey"
+            columns: ["work_order_id"]
+            isOneToOne: false
+            referencedRelation: "work_orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      contractor_work_suspensions: {
+        Row: {
+          category: string
+          contractor_id: string | null
+          corrective_action_taken: string | null
+          id: string
+          organisation_id: string
+          resumed_at: string | null
+          resumed_by_name: string | null
+          status: string
+          suspended_at: string
+          suspended_by_name: string
+          suspended_by_type: string
+          suspension_reason: string
+          work_order_id: string
+        }
+        Insert: {
+          category?: string
+          contractor_id?: string | null
+          corrective_action_taken?: string | null
+          id?: string
+          organisation_id: string
+          resumed_at?: string | null
+          resumed_by_name?: string | null
+          status?: string
+          suspended_at?: string
+          suspended_by_name: string
+          suspended_by_type?: string
+          suspension_reason: string
+          work_order_id: string
+        }
+        Update: {
+          category?: string
+          contractor_id?: string | null
+          corrective_action_taken?: string | null
+          id?: string
+          organisation_id?: string
+          resumed_at?: string | null
+          resumed_by_name?: string | null
+          status?: string
+          suspended_at?: string
+          suspended_by_name?: string
+          suspended_by_type?: string
+          suspension_reason?: string
+          work_order_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "contractor_work_suspensions_contractor_id_fkey"
+            columns: ["contractor_id"]
+            isOneToOne: false
+            referencedRelation: "contractors"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "contractor_work_suspensions_organisation_id_fkey"
+            columns: ["organisation_id"]
+            isOneToOne: false
+            referencedRelation: "organisations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "contractor_work_suspensions_work_order_id_fkey"
+            columns: ["work_order_id"]
+            isOneToOne: false
+            referencedRelation: "work_orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       contractors: {
         Row: {
           company_name: string
@@ -7131,6 +7280,8 @@ export type Database = {
           inspected_at: string | null
           inspected_by_name: string | null
           is_outsourced: boolean
+          is_suspended: boolean | null
+          suspension_reason: string | null
           labor_cost: number | null
           machine_id: string
           model_no: string | null
@@ -7191,6 +7342,8 @@ export type Database = {
           inspected_at?: string | null
           inspected_by_name?: string | null
           is_outsourced?: boolean
+          is_suspended?: boolean | null
+          suspension_reason?: string | null
           labor_cost?: number | null
           machine_id: string
           model_no?: string | null
@@ -7251,6 +7404,8 @@ export type Database = {
           inspected_at?: string | null
           inspected_by_name?: string | null
           is_outsourced?: boolean
+          is_suspended?: boolean | null
+          suspension_reason?: string | null
           labor_cost?: number | null
           machine_id?: string
           model_no?: string | null

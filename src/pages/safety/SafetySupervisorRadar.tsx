@@ -69,10 +69,31 @@ export default function SafetySupervisorRadar() {
         .eq("status", "active"),
     ]);
 
-    if (woErr) toast.error(woErr.message);
-    if (suspErr) toast.error(suspErr.message);
+    let workOrdersData = wo;
+    if (woErr) {
+      if (woErr.message?.toLowerCase().includes("is_suspended") || woErr.message?.toLowerCase().includes("does not exist")) {
+        console.warn("work_orders.is_suspended column missing, falling back to standard select:", woErr.message);
+        const { data: fallbackWo } = await supabase
+          .from("work_orders")
+          .select("id, title, wo_number, wo_year, status, plant_area, machine_id, contractor_id, machines(name), permit_hot_work, permit_confined_space, permit_isolation, contractors(company_name, contact_name, contact_phone)")
+          .eq("organisation_id", orgId)
+          .not("contractor_id", "is", null)
+          .order("created_at", { ascending: false });
+        workOrdersData = fallbackWo ?? [];
+      } else {
+        toast.error(woErr.message);
+      }
+    }
 
-    setActiveWorks(wo || []);
+    if (suspErr) {
+      if (suspErr.message?.toLowerCase().includes("schema cache") || suspErr.code === "PGRST205") {
+        console.warn("contractor_work_suspensions table is not yet migrated or cached:", suspErr.message);
+      } else {
+        toast.error(suspErr.message);
+      }
+    }
+
+    setActiveWorks(workOrdersData || []);
     setSuspensions(susp || []);
     setContractors(ctr || []);
     setLoading(false);
@@ -88,13 +109,13 @@ export default function SafetySupervisorRadar() {
       const q = searchQuery.toLowerCase();
       const contractorName = w.contractors?.company_name?.toLowerCase() || "";
       const machineName = w.machines?.name?.toLowerCase() || "";
-      const area = w.plant_area?.toLowerCase() || "";
-      const title = w.title?.toLowerCase() || "";
+      const woNum = `wo-${w.wo_year || ""}-${w.wo_number || ""}`.toLowerCase();
       return (
+        w.title?.toLowerCase().includes(q) ||
         contractorName.includes(q) ||
         machineName.includes(q) ||
-        area.includes(q) ||
-        title.includes(q)
+        woNum.includes(q) ||
+        w.plant_area?.toLowerCase().includes(q)
       );
     });
   }, [activeWorks, searchQuery]);
@@ -102,7 +123,7 @@ export default function SafetySupervisorRadar() {
   const handleClearSuspension = async (susp: any) => {
     try {
       // 1. Mark suspension resumed
-      await supabase
+      const { error: suspErr } = await supabase
         .from("contractor_work_suspensions")
         .update({
           status: "resumed",
@@ -112,14 +133,20 @@ export default function SafetySupervisorRadar() {
         })
         .eq("id", susp.id);
 
+      if (suspErr && !suspErr.message?.toLowerCase().includes("schema cache")) {
+        throw suspErr;
+      }
+
       // 2. Unsuspend work order
-      await supabase
+      const { error: woErr } = await supabase
         .from("work_orders")
         .update({
           is_suspended: false,
           suspension_reason: null,
         })
         .eq("id", susp.work_order_id);
+
+      if (woErr) throw woErr;
 
       toast.success("Suspension cleared. Contractor authorized to resume work.");
       loadData();

@@ -148,7 +148,9 @@ export default function Inspections() {
         setSelectedDate(format(subDays(d, 1), "yyyy-MM-dd"));
         setDateMode("day");
       }
-    } catch {}
+    } catch (_e) {
+      // ignore invalid date format
+    }
   };
 
   const handleNextDay = () => {
@@ -158,7 +160,9 @@ export default function Inspections() {
         setSelectedDate(format(addDays(d, 1), "yyyy-MM-dd"));
         setDateMode("day");
       }
-    } catch {}
+    } catch (_e) {
+      // ignore invalid date format
+    }
   };
 
   const handleSetToday = () => {

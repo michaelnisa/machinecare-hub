@@ -184,7 +184,7 @@ export default function SafetyLeaderboard() {
         (c) => c.verified_by === emp.id || c.responsible_person?.toLowerCase() === emp.full_name?.toLowerCase()
       ).length;
 
-      let score = nearMisses * 25 + tbtAttendance * 15 + capasResolved * 20;
+      const score = nearMisses * 25 + tbtAttendance * 15 + capasResolved * 20;
 
       let badge = "Safety Contributor";
       if (score >= 150) badge = "Safety Master";

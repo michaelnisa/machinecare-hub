@@ -113,7 +113,7 @@ export default function ContractorPortal() {
     const [
       { data: tbt },
       { data: workers },
-      { data: wo },
+      woRes,
       { data: susp },
     ] = await Promise.all([
       supabase
@@ -139,9 +139,21 @@ export default function ContractorPortal() {
         .order("suspended_at", { ascending: false }),
     ]);
 
+    let woData = woRes?.data;
+    if (woRes?.error) {
+      if (woRes.error.message?.toLowerCase().includes("is_suspended") || woRes.error.message?.toLowerCase().includes("does not exist")) {
+        const { data: fallbackWo } = await supabase
+          .from("work_orders")
+          .select("id, title, wo_number, wo_year, status, plant_area, machine_id, machines(name), permit_hot_work, permit_confined_space, permit_isolation")
+          .eq("contractor_id", selectedContractorId)
+          .order("created_at", { ascending: false });
+        woData = fallbackWo;
+      }
+    }
+
     setToolboxTalks(tbt || []);
     setContractorWorkers(workers || []);
-    setWorkOrders(wo || []);
+    setWorkOrders(woData || []);
     setSuspensions(susp || []);
   };
 
@@ -577,7 +589,7 @@ export default function ContractorPortal() {
     if (error) return toast.error(error.message);
 
     // Update active suspension records
-    await supabase
+    const { error: suspErr } = await supabase
       .from("contractor_work_suspensions")
       .update({
         status: "resumed",
@@ -586,6 +598,10 @@ export default function ContractorPortal() {
       })
       .eq("work_order_id", wo.id)
       .eq("status", "suspended");
+
+    if (suspErr && !suspErr.message?.toLowerCase().includes("schema cache")) {
+      console.warn("contractor_work_suspensions update error:", suspErr.message);
+    }
 
     toast.success("Work resumed. Safety Supervisor notified.");
     loadContractorData();
@@ -826,7 +842,15 @@ function SuspendWorkDialog({ open, onOpenChange, workOrder, contractor, onSuspen
           status: "suspended",
         });
 
-      if (suspErr) throw suspErr;
+      if (suspErr) {
+        if (suspErr.message?.toLowerCase().includes("schema cache") || (suspErr as any).code === "PGRST205") {
+          toast.warning("Work order marked suspended on site. Run the latest database migration to enable full suspension logs.");
+          onOpenChange(false);
+          onSuspended();
+          return;
+        }
+        throw suspErr;
+      }
 
       toast.success("Work stopped. Safety Supervisor alerted of suspension.");
       onOpenChange(false);

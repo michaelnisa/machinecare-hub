@@ -79,27 +79,61 @@ export default function SafetyTeam() {
     setLoading(true);
 
     // Fetch members in safety department
-    const [{ data: m, error: mErr }, { data: inv, error: iErr }] = await Promise.all([
-      supabase
+    let memberData: any[] = [];
+    let inviteData: any[] = [];
+
+    try {
+      const { data: m, error: mErr } = await supabase
         .from("profiles")
         .select("id, full_name, role, department, safety_role, phone, created_at")
         .eq("organisation_id", profile.organisation_id)
         .eq("department", "safety")
-        .order("created_at"),
-      supabase
+        .order("created_at");
+
+      if (mErr) {
+        if (mErr.message?.toLowerCase().includes("does not exist")) {
+          console.warn("SafetyTeam profiles columns missing, using fallback query:", mErr.message);
+          const { data: fallbackM } = await supabase
+            .from("profiles")
+            .select("id, full_name, phone, created_at")
+            .eq("organisation_id", profile.organisation_id)
+            .order("created_at");
+          memberData = fallbackM ?? [];
+        } else {
+          toast.error(mErr.message);
+        }
+      } else {
+        memberData = m ?? [];
+      }
+    } catch (e: any) {
+      console.warn("SafetyTeam profiles query exception:", e);
+    }
+
+    try {
+      const { data: inv, error: iErr } = await supabase
         .from("org_invites")
         .select("*")
         .eq("organisation_id", profile.organisation_id)
         .eq("department", "safety")
         .eq("status", "pending")
-        .order("created_at", { ascending: false }),
-    ]);
+        .order("created_at", { ascending: false });
 
-    if (mErr) toast.error(mErr.message);
-    if (iErr) toast.error(iErr.message);
+      if (iErr) {
+        if (iErr.message?.toLowerCase().includes("does not exist")) {
+          console.warn("org_invites department column missing:", iErr.message);
+          inviteData = [];
+        } else {
+          toast.error(iErr.message);
+        }
+      } else {
+        inviteData = inv ?? [];
+      }
+    } catch (e: any) {
+      console.warn("SafetyTeam org_invites query exception:", e);
+    }
 
-    setMembers(m ?? []);
-    setInvites(inv ?? []);
+    setMembers(memberData);
+    setInvites(inviteData);
     setLoading(false);
   };
 

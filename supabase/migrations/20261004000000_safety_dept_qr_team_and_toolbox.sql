@@ -115,22 +115,27 @@ GRANT ALL ON public.contractor_toolbox_talks TO service_role;
 
 ALTER TABLE public.contractor_toolbox_talks ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "ctt select auth" ON public.contractor_toolbox_talks;
 CREATE POLICY "ctt select auth" ON public.contractor_toolbox_talks
   FOR SELECT TO authenticated
   USING (organisation_id = current_org_id() OR current_org_id() IS NULL);
 
+DROP POLICY IF EXISTS "ctt insert auth" ON public.contractor_toolbox_talks;
 CREATE POLICY "ctt insert auth" ON public.contractor_toolbox_talks
   FOR INSERT TO authenticated
   WITH CHECK (organisation_id = current_org_id() OR current_org_id() IS NULL);
 
+DROP POLICY IF EXISTS "ctt update auth" ON public.contractor_toolbox_talks;
 CREATE POLICY "ctt update auth" ON public.contractor_toolbox_talks
   FOR UPDATE TO authenticated
   USING (organisation_id = current_org_id());
 
+DROP POLICY IF EXISTS "ctt anon select" ON public.contractor_toolbox_talks;
 CREATE POLICY "ctt anon select" ON public.contractor_toolbox_talks
   FOR SELECT TO anon
   USING (true);
 
+DROP POLICY IF EXISTS "ctt anon insert" ON public.contractor_toolbox_talks;
 CREATE POLICY "ctt anon insert" ON public.contractor_toolbox_talks
   FOR INSERT TO anon
   WITH CHECK (true);
@@ -158,22 +163,27 @@ GRANT ALL ON public.contractor_work_suspensions TO service_role;
 
 ALTER TABLE public.contractor_work_suspensions ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "cws select auth" ON public.contractor_work_suspensions;
 CREATE POLICY "cws select auth" ON public.contractor_work_suspensions
   FOR SELECT TO authenticated
   USING (organisation_id = current_org_id() OR current_org_id() IS NULL);
 
+DROP POLICY IF EXISTS "cws insert auth" ON public.contractor_work_suspensions;
 CREATE POLICY "cws insert auth" ON public.contractor_work_suspensions
   FOR INSERT TO authenticated
   WITH CHECK (organisation_id = current_org_id() OR current_org_id() IS NULL);
 
+DROP POLICY IF EXISTS "cws update auth" ON public.contractor_work_suspensions;
 CREATE POLICY "cws update auth" ON public.contractor_work_suspensions
   FOR UPDATE TO authenticated
   USING (organisation_id = current_org_id() OR current_org_id() IS NULL);
 
+DROP POLICY IF EXISTS "cws anon select" ON public.contractor_work_suspensions;
 CREATE POLICY "cws anon select" ON public.contractor_work_suspensions
   FOR SELECT TO anon
   USING (true);
 
+DROP POLICY IF EXISTS "cws anon insert" ON public.contractor_work_suspensions;
 CREATE POLICY "cws anon insert" ON public.contractor_work_suspensions
   FOR INSERT TO anon
   WITH CHECK (true);
@@ -184,6 +194,7 @@ ALTER TABLE public.work_orders
   ADD COLUMN IF NOT EXISTS suspension_reason TEXT;
 
 -- 7. Allow anonymous inspection of safety gateway settings
+DROP POLICY IF EXISTS "org anon gateway select" ON public.organisations;
 CREATE POLICY "org anon gateway select" ON public.organisations
   FOR SELECT TO anon
   USING (true);

@@ -7,7 +7,12 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { PageLoader, EmptyState } from "@/components/PageLoader";
-import { ShieldAlert, Plus, Loader2, CheckCircle2, XCircle, ClipboardList, ListChecks, ClipboardCheck, GraduationCap, Tv, Settings2, QrCode, MapPin, Users, HardHat, FileWarning } from "lucide-react";
+import {
+  ShieldAlert, Plus, Loader2, CheckCircle2, XCircle, ClipboardList,
+  ListChecks, ClipboardCheck, GraduationCap, Tv, Settings2, QrCode,
+  MapPin, Users, HardHat, FileWarning, Trophy, FlaskConical, GitBranch,
+  Building2, Package, Wrench, FileText, Settings, ShieldCheck, ChevronRight
+} from "lucide-react";
 import { toast } from "sonner";
 import { formatDate } from "@/lib/format";
 import { Link } from "react-router-dom";
@@ -15,7 +20,6 @@ import { formatWoNumber } from "@/components/WorkOrderPreview";
 import { SafetyLiveFeedModal } from "@/components/safety/SafetyLiveFeedModal";
 import { SafetyDepartmentQrPosterModal } from "@/components/safety/SafetyDepartmentQrPosterModal";
 import { FiveWhysModal } from "@/components/safety/FiveWhysModal";
-import { Trophy, FlaskConical, GitBranch } from "lucide-react";
 
 const TYPES = ["near_miss", "accident", "hazard", "first_aid", "lost_time"];
 const SEVERITIES = ["low", "medium", "high", "critical"];
@@ -143,87 +147,259 @@ export default function Safety() {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      <div className="flex items-start justify-between gap-3">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Safety dashboard</h1>
-          <p className="text-sm text-muted-foreground">Incidents, permits, risk assessments, LOTO and corrective actions in one place.</p>
+          <div className="flex items-center gap-2">
+            <ShieldAlert className="h-6 w-6 text-[#00A651]" />
+            <h1 className="text-2xl font-bold tracking-tight">Safety &amp; EHS Hub</h1>
+          </div>
+          <p className="text-sm text-muted-foreground mt-0.5">
+            Operational safety control, high-risk permits, ISO 45001 compliance &amp; contractor governance.
+          </p>
         </div>
+
         <div className="flex flex-wrap items-center gap-2">
-          <Link to="/safety/leaderboard">
-            <Button variant="outline" className="gap-1.5 border-emerald-600/30 text-[#00A651] text-xs font-bold">
-              <Trophy className="h-4 w-4" /> Safety Leaderboard
-            </Button>
-          </Link>
-          <Link to="/safety/chemicals">
-            <Button variant="outline" className="gap-1.5 border-emerald-600/30 text-[#00A651] text-xs font-bold">
-              <FlaskConical className="h-4 w-4" /> Chemicals & Drum QR
-            </Button>
-          </Link>
           <Button
             onClick={() => setQrPosterOpen(true)}
-            className="gap-1.5 bg-[#00A651] hover:bg-[#008f45] text-white text-xs font-bold"
+            variant="outline"
+            className="text-xs gap-1.5 font-semibold border-[#00A651]/40 text-[#00A651] hover:bg-emerald-50 dark:hover:bg-emerald-950/20"
           >
             <QrCode className="h-4 w-4" /> Safety QR Poster
           </Button>
-          <Link to="/safety/supervisor-radar">
-            <Button variant="outline" className="gap-1.5 border-emerald-600/30 text-[#00A651] text-xs font-bold">
-              <MapPin className="h-4 w-4" /> Supervisor Radar
-            </Button>
-          </Link>
-          <Link to="/safety/team">
-            <Button variant="outline" className="gap-1.5 border-emerald-600/30 text-[#00A651] text-xs font-bold">
-              <Users className="h-4 w-4" /> Safety Team
-            </Button>
-          </Link>
-          <Button
-            variant="outline"
-            onClick={() => setFeedOpen(true)}
-            className="gap-1.5 border-emerald-600/30 text-emerald-700 dark:text-emerald-400 text-xs"
-          >
-            <Settings2 className="h-4 w-4" /> Live TV Config
-          </Button>
+
           <Link to="/safety/live-tv">
-            <Button variant="outline" className="gap-1.5 border-emerald-600/30 text-emerald-700 dark:text-emerald-400 text-xs">
-              <Tv className="h-4 w-4" /> Safety Live TV
+            <Button
+              variant="outline"
+              className="text-xs gap-1.5 font-semibold"
+            >
+              <Tv className="h-4 w-4 text-[#00A651]" /> Live TV Display
             </Button>
           </Link>
-          <Button onClick={() => setOpen(true)} className="text-xs"><Plus className="mr-1.5 h-4 w-4" />Report incident</Button>
+
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setFeedOpen(true)}
+            className="h-8 w-8 text-muted-foreground hover:text-foreground"
+            title="Configure Live TV Bulletin & Feed"
+          >
+            <Settings2 className="h-4 w-4" />
+          </Button>
+
+          <Button
+            onClick={() => setOpen(true)}
+            className="bg-[#00A651] hover:bg-[#008f45] text-white text-xs font-bold gap-1.5 shadow-sm"
+          >
+            <Plus className="h-4 w-4" /> Report Incident
+          </Button>
         </div>
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
         {[
-          { label: "Pending permits", value: pendingPtw.length, tone: pendingPtw.length > 0 ? "amber" : "green" },
-          { label: "Pending RAMS awaiting approval", value: pendingRams.length, tone: pendingRams.length > 0 ? "amber" : "green" },
-          { label: "Active LOTO", value: dash.activeLoto, tone: dash.activeLoto > 0 ? "blue" : "green" },
-          { label: "Open corrective actions", value: dash.openCorrectiveActions, tone: dash.overdueCorrectiveActions > 0 ? "red" : dash.openCorrectiveActions > 0 ? "amber" : "green" },
-          { label: "Inductions expiring ≤30d", value: dash.expiringInductions, tone: dash.expiringInductions > 0 ? "amber" : "green" },
+          { label: "Pending permits", value: pendingPtw.length, tone: pendingPtw.length > 0 ? "amber" : "green", sub: "Requires Safety Review" },
+          { label: "Pending RAMS", value: pendingRams.length, tone: pendingRams.length > 0 ? "amber" : "green", sub: "Awaiting Risk Approval" },
+          { label: "Active LOTO", value: dash.activeLoto, tone: dash.activeLoto > 0 ? "blue" : "green", sub: "Energy Isolation Active" },
+          { label: "Open CAPA Actions", value: dash.openCorrectiveActions, tone: dash.overdueCorrectiveActions > 0 ? "red" : dash.openCorrectiveActions > 0 ? "amber" : "green", sub: dash.overdueCorrectiveActions > 0 ? `${dash.overdueCorrectiveActions} Overdue` : "On Schedule" },
+          { label: "Expiring Inductions", value: dash.expiringInductions, tone: dash.expiringInductions > 0 ? "amber" : "green", sub: "Renewal Due ≤30d" },
         ].map((s) => (
-          <div key={s.label} className="rounded-xl border border-border bg-card p-4">
-            <div className="text-xs uppercase tracking-wide text-muted-foreground">{s.label}</div>
-            <div className={`mt-1 text-2xl font-semibold ${s.tone === "red" ? "text-red-600" : s.tone === "amber" ? "text-amber-600" : s.tone === "blue" ? "text-blue-600" : "text-emerald-600"}`}>{s.value}</div>
+          <div key={s.label} className="rounded-xl border border-border bg-card p-4 shadow-sm">
+            <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{s.label}</div>
+            <div className={`mt-1 text-2xl font-bold ${s.tone === "red" ? "text-red-600" : s.tone === "amber" ? "text-amber-600" : s.tone === "blue" ? "text-blue-600" : "text-[#00A651]"}`}>{s.value}</div>
+            <div className="text-[11px] text-muted-foreground mt-0.5">{s.sub}</div>
           </div>
         ))}
       </div>
 
-      <div className="flex flex-wrap gap-2">
-        <Link to="/safety/leaderboard" className="flex items-center gap-1.5 rounded-full border border-[#00A651]/40 bg-emerald-50/50 dark:bg-emerald-950/20 px-3 py-1.5 text-xs text-[#00A651] font-bold hover:bg-emerald-100/50"><Trophy className="h-3.5 w-3.5" /> Safety Leaderboard</Link>
-        <Link to="/safety/chemicals" className="flex items-center gap-1.5 rounded-full border border-[#00A651]/40 bg-emerald-50/50 dark:bg-emerald-950/20 px-3 py-1.5 text-xs text-[#00A651] font-bold hover:bg-emerald-100/50"><FlaskConical className="h-3.5 w-3.5" /> Chemicals &amp; Drum QR</Link>
-        <Link to="/safety/supervisor-radar" className="flex items-center gap-1.5 rounded-full border border-[#00A651]/40 bg-emerald-50/50 dark:bg-emerald-950/20 px-3 py-1.5 text-xs text-[#00A651] font-bold hover:bg-emerald-100/50"><MapPin className="h-3.5 w-3.5" /> Daily Supervisor Radar</Link>
-        <Link to="/contractor/portal" className="flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1.5 text-xs hover:bg-muted/60"><HardHat className="h-3.5 w-3.5 text-[#00A651]" /> Contractor Portal</Link>
-        <Link to="/safety/team" className="flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1.5 text-xs hover:bg-muted/60"><Users className="h-3.5 w-3.5 text-[#00A651]" /> Safety Team</Link>
-        <Link to="/safety/risk-assessments" className="flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1.5 text-xs hover:bg-muted/60"><ClipboardList className="h-3.5 w-3.5" /> Risk assessments (RAMS)</Link>
-        <Link to="/safety/inspections" className="flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1.5 text-xs hover:bg-muted/60"><ClipboardCheck className="h-3.5 w-3.5" /> Safety inspections</Link>
-        <Link to="/safety/corrective-actions" className="flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1.5 text-xs hover:bg-muted/60"><ListChecks className="h-3.5 w-3.5" /> Corrective actions</Link>
-        <Link to="/induction/dashboard" className="flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1.5 text-xs hover:bg-muted/60"><GraduationCap className="h-3.5 w-3.5" /> Induction</Link>
-        <Link to="/safety/competency" className="flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1.5 text-xs hover:bg-muted/60"><GraduationCap className="h-3.5 w-3.5" /> Training &amp; competency</Link>
-        <Link to="/safety/equipment" className="flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1.5 text-xs hover:bg-muted/60"><ClipboardCheck className="h-3.5 w-3.5" /> Safety equipment</Link>
-        <Link to="/safety/certificates" className="flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1.5 text-xs hover:bg-muted/60"><ClipboardCheck className="h-3.5 w-3.5" /> Certificates</Link>
-        <Link to="/safety/ppe" className="flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1.5 text-xs hover:bg-muted/60"><ClipboardCheck className="h-3.5 w-3.5" /> PPE</Link>
-        <Link to="/safety/contractors" className="flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1.5 text-xs hover:bg-muted/60"><ClipboardCheck className="h-3.5 w-3.5" /> Contractors</Link>
-        <Link to="/safety/controlled-tools" className="flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1.5 text-xs hover:bg-muted/60"><ClipboardCheck className="h-3.5 w-3.5" /> Controlled tools</Link>
-        <Link to="/safety/documents" className="flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1.5 text-xs hover:bg-muted/60"><ClipboardCheck className="h-3.5 w-3.5" /> Documents &amp; knowledge</Link>
-        <Link to="/safety/rules" className="flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1.5 text-xs hover:bg-muted/60"><ClipboardCheck className="h-3.5 w-3.5" /> Safety rules</Link>
+      {/* 3 LOGICAL EHS PRESENTATION PILLARS */}
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-bold uppercase tracking-wider text-muted-foreground">
+            EHS Operational Pillars &amp; Workflows
+          </h2>
+          <span className="text-xs text-muted-foreground">
+            Structured for daily plant operations &amp; audit compliance
+          </span>
+        </div>
+
+        <div className="grid gap-4 lg:grid-cols-3">
+          {/* PILLAR 1: Plant Operations & High-Risk Control */}
+          <div className="rounded-xl border border-border bg-card p-4 flex flex-col justify-between space-y-3 shadow-sm">
+            <div>
+              <div className="flex items-center gap-2 text-foreground font-bold text-sm mb-1">
+                <div className="p-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-[#00A651]">
+                  <HardHat className="h-4 w-4" />
+                </div>
+                <h3>1. Operations &amp; High-Risk Controls</h3>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Boots-on-ground site walks, contractor Stop Work Authority &amp; high-risk job execution.
+              </p>
+            </div>
+
+            <div className="space-y-1.5">
+              <Link to="/safety/supervisor-radar" className="group flex items-center justify-between p-2 rounded-lg border border-transparent hover:border-border hover:bg-muted/50 transition-colors">
+                <div className="flex items-center gap-2 min-w-0">
+                  <MapPin className="h-4 w-4 text-[#00A651] shrink-0" />
+                  <div>
+                    <div className="text-xs font-semibold text-foreground group-hover:text-[#00A651]">Supervisor Radar</div>
+                    <div className="text-[11px] text-muted-foreground">Boots-on-ground site walks &amp; suspensions</div>
+                  </div>
+                </div>
+                <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:text-foreground" />
+              </Link>
+
+              <Link to="/contractor/portal" className="group flex items-center justify-between p-2 rounded-lg border border-transparent hover:border-border hover:bg-muted/50 transition-colors">
+                <div className="flex items-center gap-2 min-w-0">
+                  <HardHat className="h-4 w-4 text-[#00A651] shrink-0" />
+                  <div>
+                    <div className="text-xs font-semibold text-foreground group-hover:text-[#00A651]">Contractor Safety Portal</div>
+                    <div className="text-[11px] text-muted-foreground">Toolbox talks, JSEA &amp; Stop Work Authority</div>
+                  </div>
+                </div>
+                <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:text-foreground" />
+              </Link>
+
+              <Link to="/safety/contractors" className="group flex items-center justify-between p-2 rounded-lg border border-transparent hover:border-border hover:bg-muted/50 transition-colors">
+                <div className="flex items-center gap-2 min-w-0">
+                  <Building2 className="h-4 w-4 text-[#00A651] shrink-0" />
+                  <div>
+                    <div className="text-xs font-semibold text-foreground group-hover:text-[#00A651]">Contractor Registry &amp; Insurances</div>
+                    <div className="text-[11px] text-muted-foreground">Pre-qualification &amp; vendor certifications</div>
+                  </div>
+                </div>
+                <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:text-foreground" />
+              </Link>
+
+              <div className="grid grid-cols-2 gap-1.5 pt-1 border-t border-border">
+                <Link to="/safety/controlled-tools" className="flex items-center gap-1.5 p-1.5 rounded text-xs text-muted-foreground hover:text-foreground hover:bg-muted/40">
+                  <Wrench className="h-3.5 w-3.5 text-[#00A651]" /> Controlled Tools
+                </Link>
+                <Link to="/safety/ppe" className="flex items-center gap-1.5 p-1.5 rounded text-xs text-muted-foreground hover:text-foreground hover:bg-muted/40">
+                  <Package className="h-3.5 w-3.5 text-[#00A651]" /> PPE Register
+                </Link>
+              </div>
+            </div>
+          </div>
+
+          {/* PILLAR 2: Hazard Prevention & Incident RCA */}
+          <div className="rounded-xl border border-border bg-card p-4 flex flex-col justify-between space-y-3 shadow-sm">
+            <div>
+              <div className="flex items-center gap-2 text-foreground font-bold text-sm mb-1">
+                <div className="p-1.5 rounded-lg bg-blue-50 dark:bg-blue-950/40 text-blue-600">
+                  <FlaskConical className="h-4 w-4" />
+                </div>
+                <h3>2. Hazard Prevention &amp; Incident RCA</h3>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Chemical HazCom / GHS, pre-task risk assessments &amp; ISO 45001 root cause problem solving.
+              </p>
+            </div>
+
+            <div className="space-y-1.5">
+              <Link to="/safety/chemicals" className="group flex items-center justify-between p-2 rounded-lg border border-transparent hover:border-border hover:bg-muted/50 transition-colors">
+                <div className="flex items-center gap-2 min-w-0">
+                  <FlaskConical className="h-4 w-4 text-blue-600 shrink-0" />
+                  <div>
+                    <div className="text-xs font-semibold text-foreground group-hover:text-blue-600">Chemicals &amp; Drum QR</div>
+                    <div className="text-[11px] text-muted-foreground">GHS pictograms, SDS registry &amp; spill kits</div>
+                  </div>
+                </div>
+                <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:text-foreground" />
+              </Link>
+
+              <Link to="/safety/risk-assessments" className="group flex items-center justify-between p-2 rounded-lg border border-transparent hover:border-border hover:bg-muted/50 transition-colors">
+                <div className="flex items-center gap-2 min-w-0">
+                  <ClipboardList className="h-4 w-4 text-blue-600 shrink-0" />
+                  <div>
+                    <div className="text-xs font-semibold text-foreground group-hover:text-blue-600">Risk Assessments (RAMS)</div>
+                    <div className="text-[11px] text-muted-foreground">Task risk evaluation &amp; control hierarchy</div>
+                  </div>
+                </div>
+                <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:text-foreground" />
+              </Link>
+
+              <Link to="/safety/corrective-actions" className="group flex items-center justify-between p-2 rounded-lg border border-transparent hover:border-border hover:bg-muted/50 transition-colors">
+                <div className="flex items-center gap-2 min-w-0">
+                  <ListChecks className="h-4 w-4 text-blue-600 shrink-0" />
+                  <div>
+                    <div className="text-xs font-semibold text-foreground group-hover:text-blue-600">Corrective Actions (CAPA)</div>
+                    <div className="text-[11px] text-muted-foreground">Closed-loop hazard non-conformance fixes</div>
+                  </div>
+                </div>
+                <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:text-foreground" />
+              </Link>
+
+              <div className="grid grid-cols-2 gap-1.5 pt-1 border-t border-border">
+                <Link to="/safety/inspections" className="flex items-center gap-1.5 p-1.5 rounded text-xs text-muted-foreground hover:text-foreground hover:bg-muted/40">
+                  <ClipboardCheck className="h-3.5 w-3.5 text-blue-600" /> Safety Audits
+                </Link>
+                <Link to="/safety/equipment" className="flex items-center gap-1.5 p-1.5 rounded text-xs text-muted-foreground hover:text-foreground hover:bg-muted/40">
+                  <ShieldCheck className="h-3.5 w-3.5 text-blue-600" /> Safety Equipment
+                </Link>
+              </div>
+            </div>
+          </div>
+
+          {/* PILLAR 3: Workforce Safety Culture & Compliance */}
+          <div className="rounded-xl border border-border bg-card p-4 flex flex-col justify-between space-y-3 shadow-sm">
+            <div>
+              <div className="flex items-center gap-2 text-foreground font-bold text-sm mb-1">
+                <div className="p-1.5 rounded-lg bg-amber-50 dark:bg-amber-950/40 text-amber-600">
+                  <Trophy className="h-4 w-4" />
+                </div>
+                <h3>3. Safety Culture &amp; Compliance</h3>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Workforce recognition, safety committee governance &amp; digital workforce inductions.
+              </p>
+            </div>
+
+            <div className="space-y-1.5">
+              <Link to="/safety/leaderboard" className="group flex items-center justify-between p-2 rounded-lg border border-transparent hover:border-border hover:bg-muted/50 transition-colors">
+                <div className="flex items-center gap-2 min-w-0">
+                  <Trophy className="h-4 w-4 text-amber-600 shrink-0" />
+                  <div>
+                    <div className="text-xs font-semibold text-foreground group-hover:text-amber-600">Safety Leaderboard</div>
+                    <div className="text-[11px] text-muted-foreground">Incident-free streaks, TBT bonuses &amp; rankings</div>
+                  </div>
+                </div>
+                <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:text-foreground" />
+              </Link>
+
+              <Link to="/safety/team" className="group flex items-center justify-between p-2 rounded-lg border border-transparent hover:border-border hover:bg-muted/50 transition-colors">
+                <div className="flex items-center gap-2 min-w-0">
+                  <Users className="h-4 w-4 text-amber-600 shrink-0" />
+                  <div>
+                    <div className="text-xs font-semibold text-foreground group-hover:text-amber-600">Safety Department Team</div>
+                    <div className="text-[11px] text-muted-foreground">Designated HSE officers &amp; certified first aiders</div>
+                  </div>
+                </div>
+                <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:text-foreground" />
+              </Link>
+
+              <Link to="/induction/dashboard" className="group flex items-center justify-between p-2 rounded-lg border border-transparent hover:border-border hover:bg-muted/50 transition-colors">
+                <div className="flex items-center gap-2 min-w-0">
+                  <GraduationCap className="h-4 w-4 text-amber-600 shrink-0" />
+                  <div>
+                    <div className="text-xs font-semibold text-foreground group-hover:text-amber-600">Inductions &amp; Training</div>
+                    <div className="text-[11px] text-muted-foreground">Digital induction tests &amp; skills competency</div>
+                  </div>
+                </div>
+                <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:text-foreground" />
+              </Link>
+
+              <div className="grid grid-cols-2 gap-1.5 pt-1 border-t border-border">
+                <Link to="/safety/rules" className="flex items-center gap-1.5 p-1.5 rounded text-xs text-muted-foreground hover:text-foreground hover:bg-muted/40">
+                  <Settings className="h-3.5 w-3.5 text-amber-600" /> Safety Rules
+                </Link>
+                <Link to="/safety/documents" className="flex items-center gap-1.5 p-1.5 rounded text-xs text-muted-foreground hover:text-foreground hover:bg-muted/40">
+                  <FileText className="h-3.5 w-3.5 text-amber-600" /> Documents &amp; ISO
+                </Link>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* PENDING APPROVALS GRID: PTW & RAMS SIDE-BY-SIDE */}
