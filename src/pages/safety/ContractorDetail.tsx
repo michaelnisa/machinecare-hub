@@ -7,10 +7,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { PageLoader, EmptyState } from "@/components/PageLoader";
-import { ArrowLeft, Plus, Loader2, Users, FileText, CheckCircle2, XCircle, HardHat } from "lucide-react";
+import { ArrowLeft, Plus, Loader2, Users, FileText, CheckCircle2, XCircle, HardHat, FileBarChart } from "lucide-react";
 import { toast } from "sonner";
 import { formatDate } from "@/lib/format";
 import { formatWoNumber } from "@/components/WorkOrderPreview";
+import { HsePerformanceReport } from "@/components/safety/HsePerformanceReport";
 
 const DOC_TYPES = ["insurance", "certificate", "licence", "other"];
 
@@ -25,6 +26,7 @@ export default function ContractorDetail() {
   const [workOrders, setWorkOrders] = useState<any[]>([]);
   const [workerOpen, setWorkerOpen] = useState(false);
   const [docOpen, setDocOpen] = useState(false);
+  const [hseReportOpen, setHseReportOpen] = useState(false);
 
   const load = async () => {
     if (!profile || !id) return;
@@ -84,6 +86,14 @@ export default function ContractorDetail() {
           <p className="text-sm text-muted-foreground">{contractor.contact_name}{contractor.contact_phone && ` · ${contractor.contact_phone}`}{contractor.contact_email && ` · ${contractor.contact_email}`}</p>
         </div>
         <div className="flex items-center gap-2">
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => setHseReportOpen(true)}
+            className="border-emerald-600/30 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 text-xs font-bold gap-1.5"
+          >
+            <FileBarChart className="h-4 w-4" /> HSE Performance Report
+          </Button>
           <Link to={`/safety/contractors/${id}/portal`}>
             <Button size="sm" className="bg-[#00A651] hover:bg-[#008f45] text-white text-xs font-bold gap-1.5">
               <HardHat className="h-4 w-4" /> Open Contractor Portal
@@ -195,6 +205,21 @@ export default function ContractorDetail() {
 
       <AddWorkerDialog open={workerOpen} setOpen={setWorkerOpen} contractorId={id} orgId={profile?.organisation_id} onSaved={load} />
       <AddDocumentDialog open={docOpen} setOpen={setDocOpen} contractorId={id} orgId={profile?.organisation_id} onSaved={load} />
+
+      <Dialog open={hseReportOpen} onOpenChange={setHseReportOpen}>
+        <DialogContent className="max-w-6xl max-h-[92vh] overflow-y-auto p-4 sm:p-6">
+          <DialogHeader>
+            <DialogTitle className="text-base font-bold">
+              Contractor HSE Performance Evaluation
+            </DialogTitle>
+          </DialogHeader>
+          <HsePerformanceReport
+            contractorId={id}
+            contractorName={contractor.company_name}
+            onRefreshParent={load}
+          />
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

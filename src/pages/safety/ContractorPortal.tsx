@@ -38,6 +38,7 @@ import {
 import { toast } from "sonner";
 import { formatDate } from "@/lib/format";
 import { formatWoNumber } from "@/components/WorkOrderPreview";
+import { HsePerformanceReport } from "@/components/safety/HsePerformanceReport";
 
 const TBT_TOPICS = [
   "Working at Heights & Fall Protection",
@@ -467,95 +468,11 @@ export default function ContractorPortal() {
 
       {/* TAB 3: AUTOMATED HSE PERFORMANCE REPORT */}
       {activeTab === "hse_report" && (
-        <div className="space-y-6">
-          <div className="flex flex-wrap items-center justify-between gap-3 bg-card border border-border p-4 rounded-2xl shadow-sm">
-            <div>
-              <div className="flex items-center gap-2">
-                <h2 className="text-base font-black uppercase tracking-tight text-foreground">
-                  {currentContractor?.company_name} • HSE Performance Scorecard
-                </h2>
-                <Badge className="bg-[#00A651]/15 text-[#00A651] border-[#00A651]/30 text-[10px] font-bold">
-                  AUTO-FULFILLED
-                </Badge>
-              </div>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                Calculated automatically from logged Toolbox Talks, man-hours, worker inductions, and stop-work events.
-              </p>
-            </div>
-
-            <Button
-              onClick={() => window.print()}
-              variant="outline"
-              className="text-xs gap-1.5 border-emerald-600/30 text-[#00A651]"
-            >
-              <Printer className="h-3.5 w-3.5" /> Print / Export HSE Report
-            </Button>
-          </div>
-
-          {/* Key Metric Scorecards */}
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <div className="rounded-2xl border border-border bg-card p-4 space-y-1 shadow-sm">
-              <div className="text-xs uppercase font-bold text-muted-foreground tracking-wider">
-                Total Safe Man-Hours
-              </div>
-              <div className="text-3xl font-black text-[#00A651]">
-                {hseMetrics.totalManHours} hrs
-              </div>
-              <div className="text-[11px] text-muted-foreground">Logged from shift Toolbox Talks</div>
-            </div>
-
-            <div className="rounded-2xl border border-border bg-card p-4 space-y-1 shadow-sm">
-              <div className="text-xs uppercase font-bold text-muted-foreground tracking-wider">
-                Toolbox Talks Completed
-              </div>
-              <div className="text-3xl font-black text-foreground">
-                {hseMetrics.totalTbt}
-              </div>
-              <div className="text-[11px] text-muted-foreground">Pre-start risk briefings</div>
-            </div>
-
-            <div className="rounded-2xl border border-border bg-card p-4 space-y-1 shadow-sm">
-              <div className="text-xs uppercase font-bold text-muted-foreground tracking-wider">
-                Suspended Work Events
-              </div>
-              <div className={`text-3xl font-black ${hseMetrics.suspendedJobs > 0 ? "text-amber-600" : "text-foreground"}`}>
-                {hseMetrics.suspendedJobs}
-              </div>
-              <div className="text-[11px] text-muted-foreground">Active stop work orders</div>
-            </div>
-
-            <div className="rounded-2xl border border-border bg-card p-4 space-y-1 shadow-sm">
-              <div className="text-xs uppercase font-bold text-muted-foreground tracking-wider">
-                EHS Compliance Grade
-              </div>
-              <div className="text-3xl font-black text-emerald-600">
-                {hseMetrics.complianceScore}%
-              </div>
-              <div className="text-[11px] text-emerald-600 font-medium">Standard Qualified Vendor</div>
-            </div>
-          </div>
-
-          {/* Detailed HSE Summary Box */}
-          <div className="rounded-2xl border border-emerald-500/30 bg-emerald-50/20 dark:bg-emerald-950/10 p-6 space-y-4">
-            <h3 className="text-sm font-bold uppercase tracking-wider text-foreground flex items-center gap-2">
-              <ShieldCheck className="h-4 w-4 text-[#00A651]" /> EHS Safety Verification Statement
-            </h3>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs text-muted-foreground">
-              <div className="p-3 bg-card rounded-xl border border-border">
-                <div className="font-bold text-foreground mb-1">Zero Harm Compliance</div>
-                All contractor personnel on site have received mandatory daily hazard inductions and PPE verification before work commencement.
-              </div>
-              <div className="p-3 bg-card rounded-xl border border-border">
-                <div className="font-bold text-foreground mb-1">Stop Work Authority</div>
-                Contractor personnel are fully authorized to pause or suspend any task whenever an uncontrolled safety condition is observed.
-              </div>
-              <div className="p-3 bg-card rounded-xl border border-border">
-                <div className="font-bold text-foreground mb-1">Audit Trail Record</div>
-                Every completed Toolbox Talk is digitally logged and archived for internal EHS audits and ISO 45001 compliance.
-              </div>
-            </div>
-          </div>
-        </div>
+        <HsePerformanceReport
+          contractorId={selectedContractorId}
+          contractorName={currentContractor?.company_name}
+          onRefreshParent={loadContractorData}
+        />
       )}
         </>
       )}
