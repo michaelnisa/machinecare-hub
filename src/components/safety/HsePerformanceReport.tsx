@@ -348,26 +348,27 @@ export function HsePerformanceReport({
     const seriousInjuriesMonthly = monthlyIncidents.filter((i) => i.severity === "critical" && i.incident_type !== "fatality").length;
     const seriousInjuriesCumulative = cumulativeIncidents.filter((i) => i.severity === "critical" && i.incident_type !== "fatality").length;
 
-    const mtiMonthly = monthlyIncidents.filter((i) => i.incident_type === "accident" && i.severity === "high").length;
-    const mtiCumulative = cumulativeIncidents.filter((i) => i.incident_type === "accident" && i.severity === "high").length;
+    const mtiMonthly = monthlyIncidents.filter((i) => i.incident_type === "accident" && (i.severity === "high" || i.severity === "medium")).length;
+    const mtiCumulative = cumulativeIncidents.filter((i) => i.incident_type === "accident" && (i.severity === "high" || i.severity === "medium")).length;
 
-    const facMonthly = monthlyIncidents.filter((i) => i.incident_type === "first_aid").length;
-    const facCumulative = cumulativeIncidents.filter((i) => i.incident_type === "first_aid").length;
+    const facMonthly = monthlyIncidents.filter((i) => i.incident_type === "first_aid" || i.description?.toLowerCase().includes("first aid")).length;
+    const facCumulative = cumulativeIncidents.filter((i) => i.incident_type === "first_aid" || i.description?.toLowerCase().includes("first aid")).length;
 
-    const ltiMonthly = monthlyIncidents.filter((i) => i.incident_type === "lost_time" || Number(i.lost_time_hours || 0) > 0).length;
-    const ltiCumulative = cumulativeIncidents.filter((i) => i.incident_type === "lost_time" || Number(i.lost_time_hours || 0) > 0).length;
+    const envMonthly = monthlyIncidents.filter((i) => i.incident_type === "environmental" || i.description?.toLowerCase().includes("spill") || i.description?.toLowerCase().includes("environmental")).length;
+    const envCumulative = cumulativeIncidents.filter((i) => i.incident_type === "environmental" || i.description?.toLowerCase().includes("spill") || i.description?.toLowerCase().includes("environmental")).length;
 
-    const rwcMonthly = monthlyIncidents.filter((i) => i.incident_type === "restricted_work" || i.description?.toLowerCase().includes("restricted")).length;
-    const rwcCumulative = cumulativeIncidents.filter((i) => i.incident_type === "restricted_work" || i.description?.toLowerCase().includes("restricted")).length;
+    const assetDamageMonthly = monthlyIncidents.filter((i) => i.incident_type === "property_damage" || i.incident_type === "asset_damage" || i.description?.toLowerCase().includes("damage") || i.description?.toLowerCase().includes("asset")).length;
+    const assetDamageCumulative = cumulativeIncidents.filter((i) => i.incident_type === "property_damage" || i.incident_type === "asset_damage" || i.description?.toLowerCase().includes("damage") || i.description?.toLowerCase().includes("asset")).length;
 
-    const nearMissMonthly = monthlyIncidents.filter((i) => i.incident_type === "near_miss").length;
-    const nearMissCumulative = cumulativeIncidents.filter((i) => i.incident_type === "near_miss").length;
+    const nearMissMonthly = monthlyIncidents.filter((i) => i.incident_type === "near_miss" || i.description?.toLowerCase().includes("near miss")).length;
+    const nearMissCumulative = cumulativeIncidents.filter((i) => i.incident_type === "near_miss" || i.description?.toLowerCase().includes("near miss")).length;
 
-    const envMonthly = monthlyIncidents.filter((i) => i.incident_type === "environmental" || i.description?.toLowerCase().includes("spill")).length;
-    const envCumulative = cumulativeIncidents.filter((i) => i.incident_type === "environmental" || i.description?.toLowerCase().includes("spill")).length;
+    const ltiMonthly = monthlyIncidents.filter((i) => i.incident_type === "lost_time" || Number(i.lost_time_hours || 0) > 0 || i.description?.toLowerCase().includes("lti")).length;
+    const ltiCumulative = cumulativeIncidents.filter((i) => i.incident_type === "lost_time" || Number(i.lost_time_hours || 0) > 0 || i.description?.toLowerCase().includes("lti")).length;
 
-    const propertyDamageMonthly = monthlyIncidents.filter((i) => i.incident_type === "property_damage" || i.description?.toLowerCase().includes("damage")).length;
-    const propertyDamageCumulative = cumulativeIncidents.filter((i) => i.incident_type === "property_damage" || i.description?.toLowerCase().includes("damage")).length;
+    // Lost Time Injury Frequency Rate (LTIFR) = (LTIs * 1,000,000) / Total Man-hours
+    const ltifrMonthly = totalManhoursMonthly > 0 ? Number(((ltiMonthly * 1000000) / totalManhoursMonthly).toFixed(2)) : 0;
+    const ltifrCumulative = totalManhoursCumulative > 0 ? Number(((ltiCumulative * 1000000) / totalManhoursCumulative).toFixed(2)) : 0;
 
     return {
       leading: [
@@ -392,11 +393,11 @@ export function HsePerformanceReport({
         { label: "Serious Injuries", monthly: seriousInjuriesMonthly, cumulative: seriousInjuriesCumulative },
         { label: "Medical Treatment Injury (MTI)", monthly: mtiMonthly, cumulative: mtiCumulative },
         { label: "First Aid Case (FAC)", monthly: facMonthly, cumulative: facCumulative },
-        { label: "Lost Time Injury (LTI)", monthly: ltiMonthly, cumulative: ltiCumulative },
-        { label: "Restricted Work Case (RWC)", monthly: rwcMonthly, cumulative: rwcCumulative },
-        { label: "Near Misses", monthly: nearMissMonthly, cumulative: nearMissCumulative },
-        { label: "Environmental Incidents", monthly: envMonthly, cumulative: envCumulative },
-        { label: "Property Damage Cases", monthly: propertyDamageMonthly, cumulative: propertyDamageCumulative },
+        { label: "Environmental Incident", monthly: envMonthly, cumulative: envCumulative },
+        { label: "Asset Damage", monthly: assetDamageMonthly, cumulative: assetDamageCumulative },
+        { label: "Near Miss", monthly: nearMissMonthly, cumulative: nearMissCumulative },
+        { label: "Lost Time Injuries (LTI's)", monthly: ltiMonthly, cumulative: ltiCumulative },
+        { label: "Lost Time Injury Frequency Rate (LTIFR)", monthly: ltifrMonthly, cumulative: ltifrCumulative },
       ],
       summary: {
         tbtCountMonthly,
@@ -800,6 +801,19 @@ export function HsePerformanceReport({
               })}
             </div>
             <div className="text-[10px] text-slate-500 mt-1">Audit Trail Timestamp</div>
+          </div>
+        </div>
+
+        {/* Official Document Control Footer */}
+        <div className="mt-8 pt-2.5 border-t-2 border-[#1E293B] text-[11px] text-slate-800 flex items-start justify-between">
+          <div className="space-y-0.5">
+            <div>Document Title: HSE Performance Report</div>
+            <div>Version Number: 1.0</div>
+          </div>
+          <div className="text-right space-y-0.5">
+            <div>Issue Date: 30 April 2026</div>
+            <div>Review Date: 30 April 2028</div>
+            <div className="text-slate-600 font-medium">Page 1 of 4</div>
           </div>
         </div>
       </div>
