@@ -55,7 +55,7 @@ export default function Team() {
     const [{ data: m }, { data: r }, { data: inv }] = await Promise.all([
       supabase
         .from("profiles")
-        .select("id, full_name, created_at")
+        .select("id, full_name, phone, department, created_at")
         .eq("organisation_id", profile.organisation_id)
         .order("created_at"),
       supabase
@@ -256,7 +256,9 @@ export default function Team() {
           <thead className="text-left text-xs uppercase tracking-wide text-muted-foreground">
             <tr>
               <th className="px-5 py-3 font-medium">Name</th>
+              <th className="px-5 py-3 font-medium">Department</th>
               <th className="px-5 py-3 font-medium">Role</th>
+              <th className="px-5 py-3 font-medium">Contact</th>
               <th className="px-5 py-3 font-medium">Joined</th>
             </tr>
           </thead>
@@ -279,6 +281,11 @@ export default function Team() {
                     </div>
                   </td>
                   <td className="px-5 py-3">
+                    <span className="capitalize inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-muted/60 text-foreground border border-border">
+                      {m.department || "Operations"}
+                    </span>
+                  </td>
+                  <td className="px-5 py-3">
                     {canEdit ? (
                       <select
                         value={primary}
@@ -296,6 +303,9 @@ export default function Team() {
                     ) : (
                       <span className="capitalize">{primary}</span>
                     )}
+                  </td>
+                  <td className="px-5 py-3 text-muted-foreground text-xs font-mono">
+                    {m.phone || "—"}
                   </td>
                   <td className="px-5 py-3 text-muted-foreground">
                     {formatDate(m.created_at)}
@@ -337,6 +347,7 @@ function InviteDialog({
   const { profile } = useAuth();
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<Role>("technician");
+  const [department, setDepartment] = useState("maintenance");
   const [submitting, setSubmitting] = useState(false);
   const [createdLink, setCreatedLink] = useState<string | null>(null);
   const [emailDispatched, setEmailDispatched] = useState(false);
@@ -345,6 +356,7 @@ function InviteDialog({
   const reset = () => {
     setEmail("");
     setRole("technician");
+    setDepartment("maintenance");
     setCreatedLink(null);
     setEmailDispatched(false);
     setStatusMessage(null);
@@ -367,6 +379,7 @@ function InviteDialog({
         body: {
           email: normalizedEmail,
           role,
+          department,
           origin: appOrigin,
         },
       });
@@ -386,16 +399,29 @@ function InviteDialog({
       }
     } catch (e: any) {
       console.warn("Fallback to direct org_invites table insert:", e);
-      const { data, error } = await supabase
+      const insertObj: any = {
+        organisation_id: profile.organisation_id,
+        email: normalizedEmail,
+        role,
+        department,
+        invited_by: profile.id,
+      };
+      let { data, error } = await supabase
         .from("org_invites")
-        .insert({
-          organisation_id: profile.organisation_id,
-          email: normalizedEmail,
-          role,
-          invited_by: profile.id,
-        })
+        .insert(insertObj)
         .select("token")
         .single();
+
+      if (error && error.message?.toLowerCase().includes("department")) {
+        delete insertObj.department;
+        const res2 = await supabase
+          .from("org_invites")
+          .insert(insertObj)
+          .select("token")
+          .single();
+        data = res2.data;
+        error = res2.error;
+      }
 
       if (error) {
         setSubmitting(false);
@@ -495,6 +521,20 @@ function InviteDialog({
                 ))}
               </select>
               <p className="text-xs text-muted-foreground">{ROLE_DESC[role]}</p>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="invite_department">Department</Label>
+              <select
+                id="invite_department"
+                value={department}
+                onChange={(e) => setDepartment(e.target.value)}
+                className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+              >
+                <option value="maintenance">Maintenance & Engineering</option>
+                <option value="safety">Safety & EHS</option>
+                <option value="production">Production & Operations</option>
+                <option value="management">Management & Leadership</option>
+              </select>
             </div>
           </div>
         )}

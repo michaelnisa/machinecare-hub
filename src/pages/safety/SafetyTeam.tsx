@@ -83,27 +83,33 @@ export default function SafetyTeam() {
     let inviteData: any[] = [];
 
     try {
-      const { data: m, error: mErr } = await supabase
-        .from("profiles")
-        .select("id, full_name, role, department, safety_role, phone, created_at")
-        .eq("organisation_id", profile.organisation_id)
-        .eq("department", "safety")
-        .order("created_at");
+      const [{ data: m, error: mErr }, { data: userRoles }] = await Promise.all([
+        supabase
+          .from("profiles")
+          .select("id, full_name, department, safety_role, phone, created_at")
+          .eq("organisation_id", profile.organisation_id)
+          .eq("department", "safety")
+          .order("created_at"),
+        supabase
+          .from("user_roles")
+          .select("user_id, role")
+          .eq("organisation_id", profile.organisation_id),
+      ]);
 
       if (mErr) {
-        if (mErr.message?.toLowerCase().includes("does not exist")) {
-          console.warn("SafetyTeam profiles columns missing, using fallback query:", mErr.message);
-          const { data: fallbackM } = await supabase
-            .from("profiles")
-            .select("id, full_name, phone, created_at")
-            .eq("organisation_id", profile.organisation_id)
-            .order("created_at");
-          memberData = fallbackM ?? [];
-        } else {
-          toast.error(mErr.message);
-        }
+        console.warn("SafetyTeam profiles query fallback:", mErr.message);
+        const { data: fallbackM } = await supabase
+          .from("profiles")
+          .select("id, full_name, phone, created_at")
+          .eq("organisation_id", profile.organisation_id)
+          .order("created_at");
+        memberData = fallbackM ?? [];
       } else {
-        memberData = m ?? [];
+        const roleMap = new Map((userRoles || []).map((r: any) => [r.user_id, r.role]));
+        memberData = (m ?? []).map((member: any) => ({
+          ...member,
+          role: roleMap.get(member.id) || "officer",
+        }));
       }
     } catch (e: any) {
       console.warn("SafetyTeam profiles query exception:", e);
