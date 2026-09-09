@@ -26,6 +26,7 @@ type SafetyKpis = {
   activeContractors: number;
   toolboxTalksToday: number;
   activeApprovedPermits: number;
+  pendingPermitsToWork: number;
   ppeComplianceRate: number;
   openIncidents: number;
   expiringInductions: number;
@@ -53,6 +54,7 @@ const initialKpis: SafetyKpis = {
   activeContractors: 0,
   toolboxTalksToday: 0,
   activeApprovedPermits: 0,
+  pendingPermitsToWork: 0,
   ppeComplianceRate: 100,
   openIncidents: 0,
   expiringInductions: 0,
@@ -186,7 +188,7 @@ export default function SafetyLiveTV() {
 
       const [
         { data: incidents },
-        { count: tbtTodayCount },
+        { count: pendingPtwCount },
         { count: approvedRaCount },
         { count: approvedPtwCount },
         { count: expCount },
@@ -202,10 +204,10 @@ export default function SafetyLiveTV() {
           .eq("organisation_id", orgId)
           .order("occurred_at", { ascending: false }),
         (supabase as any)
-          .from("contractor_toolbox_talks")
+          .from("wo_safety_approvals")
           .select("id", { count: "exact", head: true })
           .eq("organisation_id", orgId)
-          .eq("talk_date", today),
+          .eq("status", "pending"),
         (supabase as any)
           .from("risk_assessments")
           .select("id", { count: "exact", head: true })
@@ -328,8 +330,9 @@ export default function SafetyLiveTV() {
         daysWithoutLti,
         recordLtiDays,
         activeContractors,
-        toolboxTalksToday: tbtTodayCount ?? 0,
+        toolboxTalksToday: 0,
         activeApprovedPermits,
+        pendingPermitsToWork: pendingPtwCount ?? 0,
         ppeComplianceRate: complianceRate,
         openIncidents: (incidents ?? []).filter((x: any) => x.status !== "closed").length,
         expiringInductions: expCount ?? 0,
@@ -367,6 +370,7 @@ export default function SafetyLiveTV() {
       .on("postgres_changes", { event: "*", schema: "public", table: "safety_incidents", filter: `organisation_id=eq.${orgId}` }, () => refreshData())
       .on("postgres_changes", { event: "*", schema: "public", table: "risk_assessments", filter: `organisation_id=eq.${orgId}` }, () => refreshData())
       .on("postgres_changes", { event: "*", schema: "public", table: "safety_inspections", filter: `organisation_id=eq.${orgId}` }, () => refreshData())
+      .on("postgres_changes", { event: "*", schema: "public", table: "wo_safety_approvals", filter: `organisation_id=eq.${orgId}` }, () => refreshData())
       .subscribe();
 
     return () => {
@@ -379,7 +383,7 @@ export default function SafetyLiveTV() {
     if (bulletinMessages.length > 0) return bulletinMessages;
     return [
       `🚨 ZERO HARM: ${organisation?.name ?? "Workplace"} operating incident-free today (${kpis.daysWithoutLti} days without LTI).`,
-      `📋 PERMITS TO WORK: ${kpis.activeApprovedPermits} active authorized permits on site today.`,
+      `📋 PERMITS TO WORK: ${kpis.activeApprovedPermits} active authorized permits (${kpis.pendingPermitsToWork} pending review).`,
       `👷 CONTRACTORS: ${kpis.activeContractors} contractor personnel verified and active on site.`,
       `🛡️ DUTY ROSTER: Chief Safety: ${roster.chiefSafetyOfficer.name || "EHS Dept"} (${roster.chiefSafetyOfficer.phone || "On duty"}) | Officer on Duty: ${roster.safetyOfficerOnDuty.name || "Safety Desk"} (${roster.safetyOfficerOnDuty.phone || "Radio ch 1"}).`,
       `⚠️ HAZARD ALERT: Report all near misses, hazards and unisolated machinery immediately via MachineCare Hub.`,
@@ -505,20 +509,20 @@ export default function SafetyLiveTV() {
             </div>
 
             <div className="rounded-2xl border border-white/10 bg-gradient-to-br from-white/5 to-white/[0.02] p-6 shadow-2xl backdrop-blur relative overflow-hidden">
-              <div className="flex items-center justify-between text-purple-400 text-xs font-bold uppercase tracking-wider">
-                <span>Verified Site Contractors</span>
-                <Users className="h-5 w-5 text-purple-400" />
+              <div className="flex items-center justify-between text-amber-400 text-xs font-bold uppercase tracking-wider">
+                <span>Pending Permit to Work</span>
+                <Clock className="h-5 w-5 text-amber-400" />
               </div>
-              <div className="mt-2 text-5xl font-black text-purple-300">{kpis.activeContractors}</div>
+              <div className="mt-2 text-5xl font-black text-amber-300">{kpis.pendingPermitsToWork}</div>
               <div className="mt-2 text-xs text-white/60">
-                Badge scanned & inducted personnel across workshops and plant gates
+                Awaiting EHS supervisor safety authorization & verification
               </div>
             </div>
           </div>
         </div>
 
         {/* SECONDARY METRIC GRID */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <div className="rounded-2xl border border-white/10 bg-gradient-to-br from-white/5 to-white/[0.02] p-5 shadow-2xl backdrop-blur">
             <div className="flex items-center justify-between text-white/60 text-xs font-bold uppercase">
               <span>Contractors</span>
@@ -526,17 +530,6 @@ export default function SafetyLiveTV() {
             </div>
             <div className="mt-2 text-3xl font-extrabold text-white">{kpis.activeContractors}</div>
             <div className="text-[11px] text-purple-300 font-medium mt-1">Verified on site</div>
-          </div>
-
-          <div className="rounded-2xl border border-white/10 bg-gradient-to-br from-white/5 to-white/[0.02] p-5 shadow-2xl backdrop-blur">
-            <div className="flex items-center justify-between text-white/60 text-xs font-bold uppercase">
-              <span>Toolbox Talks</span>
-              <ClipboardCheck className="h-4 w-4 text-emerald-400" />
-            </div>
-            <div className="mt-2 text-3xl font-extrabold text-emerald-400">
-              {kpis.toolboxTalksToday}
-            </div>
-            <div className="text-[11px] text-emerald-300 font-medium mt-1">Shift briefings today</div>
           </div>
 
           <div className="rounded-2xl border border-white/10 bg-gradient-to-br from-white/5 to-white/[0.02] p-5 shadow-2xl backdrop-blur">
