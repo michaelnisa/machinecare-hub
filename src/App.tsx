@@ -133,6 +133,8 @@ const GarageEstimates = lazy(() => import("./pages/garage/Estimates"));
 const GarageEstimatePrint = lazy(() => import("./pages/garage/EstimatePrint"));
 const GarageInvoicePrint = lazy(() => import("./pages/garage/InvoicePrint"));
 const GarageJobStatusPublic = lazy(() => import("./pages/garage/JobStatusPublic"));
+const GarageDashboard = lazy(() => import("./pages/garage/GarageDashboard"));
+const GarageIntakePrint = lazy(() => import("./pages/garage/IntakePrint"));
 
 const IntegrationsLayout = lazy(() => import("./pages/integrations/IntegrationsLayout"));
 const IntegrationsMarketplace = lazy(() => import("./pages/integrations/IntegrationsMarketplace"));
@@ -190,11 +192,14 @@ const App = () => (
                   <Route path="/fleet/tyres" element={<Tyres />} />
                   <Route path="/fleet/inspections" element={<FleetInspections />} />
                   <Route path="/fleet/insights" element={<FleetInsights />} />
+                  <Route path="/garage" element={<GarageDashboard />} />
+                  <Route path="/garage/dashboard" element={<GarageDashboard />} />
                   <Route path="/garage/customers" element={<GarageCustomers />} />
                   <Route path="/garage/vehicles" element={<GarageVehicles />} />
-                                    <Route path="/garage/vehicles/:id" element={<GarageVehicleDetail />} />
+                  <Route path="/garage/vehicles/:id" element={<GarageVehicleDetail />} />
                   <Route path="/garage/jobs" element={<GarageJobs />} />
                   <Route path="/garage/jobs/:id" element={<GarageJobDetail />} />
+                  <Route path="/garage/jobs/:id/intake-print" element={<GarageIntakePrint />} />
                   <Route path="/garage/calendar" element={<GarageCalendar />} />
                   <Route path="/garage/reminders" element={<GarageReminders />} />
                   <Route path="/garage/estimates" element={<GarageEstimates />} />

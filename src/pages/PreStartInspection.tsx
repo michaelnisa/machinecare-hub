@@ -3,6 +3,7 @@ import { useParams, Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { PageLoader } from "@/components/PageLoader";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ArrowLeft, CheckCircle2, XCircle, MinusCircle, Wrench, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
@@ -23,6 +24,15 @@ type InspectionItem = {
   item_severity: string;
 };
 
+const DEFAULT_FLEET_CHECKLIST: InspectionItem[] = [
+  { item_id: "item-brakes", item_text: "Foot Brake & Parking Handbrake Operation", item_sort_order: 1, item_severity: "critical" },
+  { item_id: "item-tyres", item_text: "Tyres Tread Depth, Inflation & Wheel Lug Nuts", item_sort_order: 2, item_severity: "critical" },
+  { item_id: "item-fluids", item_text: "Engine Oil, Coolant & Brake Fluid Levels", item_sort_order: 3, item_severity: "major" },
+  { item_id: "item-lights", item_text: "Headlights, Tail Lights, Brake Lights & Indicators", item_sort_order: 4, item_severity: "major" },
+  { item_id: "item-mirrors", item_text: "Mirrors, Windscreen, Wipers & Washer Fluid", item_sort_order: 5, item_severity: "minor" },
+  { item_id: "item-safety", item_text: "Seatbelt, Fire Extinguisher & Warning Triangles", item_sort_order: 6, item_severity: "critical" },
+];
+
 type Driver = { id: string; full_name: string };
 
 type Result = "ok" | "not_ok" | "not_relevant";
@@ -35,6 +45,8 @@ export default function PreStartInspection() {
   const [items, setItems] = useState<InspectionItem[]>([]);
   const [drivers, setDrivers] = useState<Driver[]>([]);
   const [driverId, setDriverId] = useState<string>("");
+  const [driverPin, setDriverPin] = useState("");
+  const [rememberedDriver, setRememberedDriver] = useState<{ id: string; name: string } | null>(null);
   const [step, setStep] = useState<"driver" | "checklist" | "confirm" | "done">("driver");
   const [responses, setResponses] = useState<Record<string, { result: Result; comment: string }>>({});
   const [submitting, setSubmitting] = useState(false);
@@ -43,23 +55,89 @@ export default function PreStartInspection() {
   useEffect(() => {
     if (!id) return;
     (async () => {
-      setLoading(true);
-      const [{ data: m }, { data: tmpl }, { data: d }] = await Promise.all([
-        supabase.rpc("get_machine_public", { _machine_id: id }),
-        supabase.rpc("get_fleet_pre_start_template", { _machine_id: id }),
-        supabase.rpc("get_org_active_drivers_public", { _machine_id: id }),
-      ]);
-      if (m?.[0]) setMachine(m[0]);
-      if (tmpl && tmpl.length > 0) {
-        setTemplate({ id: tmpl[0].template_id, name: tmpl[0].template_name, version: tmpl[0].template_version });
-        setItems(
-          tmpl
-            .map((r) => ({ item_id: r.item_id, item_text: r.item_text, item_sort_order: r.item_sort_order, item_severity: r.item_severity }))
-            .sort((a: InspectionItem, b: InspectionItem) => a.item_sort_order - b.item_sort_order),
-        );
+      // 1. Instant offline hydration from QR query parameters or local cache
+      const searchParams = new URLSearchParams(window.location.search);
+      const cachedMachineStr = localStorage.getItem(`mc_machine_cache_${id}`);
+      let initialMachine: any = null;
+
+      if (cachedMachineStr) {
+        try { initialMachine = JSON.parse(cachedMachineStr); } catch {}
+      } else if (searchParams.get("n")) {
+        initialMachine = {
+          id,
+          name: searchParams.get("n"),
+          plate_number: searchParams.get("p") || null,
+          organisation_id: searchParams.get("o") || "default_org",
+        };
       }
-      setDrivers((d ?? []) as Driver[]);
-      setLoading(false);
+      if (initialMachine) setMachine(initialMachine);
+
+      // Check remembered driver on this device
+      const lastId = localStorage.getItem("mc_last_driver_id");
+      const lastName = localStorage.getItem("mc_last_driver_name");
+      if (lastId && lastName) {
+        setRememberedDriver({ id: lastId, name: lastName });
+        setDriverId(lastId);
+      }
+
+      // Check cached inspection template
+      const cachedTmplStr = localStorage.getItem(`mc_tmpl_cache_${id}`);
+      if (cachedTmplStr) {
+        try {
+          const parsed = JSON.parse(cachedTmplStr);
+          setTemplate(parsed.template);
+          setItems(parsed.items);
+        } catch {}
+      }
+
+      // Check cached driver directory
+      const cachedDriversStr = localStorage.getItem("mc_drivers_cache");
+      if (cachedDriversStr) {
+        try { setDrivers(JSON.parse(cachedDriversStr)); } catch {}
+      }
+
+      // 2. Fetch fresh from network
+      try {
+        const [{ data: m }, { data: tmpl }, { data: d }] = await Promise.all([
+          supabase.rpc("get_machine_public", { _machine_id: id }),
+          supabase.rpc("get_fleet_pre_start_template", { _machine_id: id }),
+          supabase.rpc("get_org_active_drivers_public", { _machine_id: id }),
+        ]);
+
+        if (m?.[0]) {
+          setMachine(m[0]);
+          try { localStorage.setItem(`mc_machine_cache_${id}`, JSON.stringify(m[0])); } catch {}
+        }
+
+        if (tmpl && tmpl.length > 0) {
+          const tmplData = { id: tmpl[0].template_id, name: tmpl[0].template_name, version: tmpl[0].template_version };
+          const itemsData = tmpl
+            .map((r: any) => ({ item_id: r.item_id, item_text: r.item_text, item_sort_order: r.item_sort_order, item_severity: r.item_severity }))
+            .sort((a: InspectionItem, b: InspectionItem) => a.item_sort_order - b.item_sort_order);
+          setTemplate(tmplData);
+          setItems(itemsData);
+          try {
+            localStorage.setItem(`mc_tmpl_cache_${id}`, JSON.stringify({ template: tmplData, items: itemsData }));
+          } catch {}
+        } else if (!cachedTmplStr) {
+          // Fallback built-in vehicle inspection
+          setTemplate({ id: "std-fleet-walkaround", name: "Daily Vehicle Pre-Trip Walkaround", version: 1 });
+          setItems(DEFAULT_FLEET_CHECKLIST);
+        }
+
+        if (d && d.length > 0) {
+          setDrivers(d as Driver[]);
+          try { localStorage.setItem("mc_drivers_cache", JSON.stringify(d)); } catch {}
+        }
+      } catch (err) {
+        console.warn("Offline fallback activated for inspection:", err);
+        if (!template && items.length === 0) {
+          setTemplate({ id: "std-fleet-walkaround", name: "Daily Vehicle Pre-Trip Walkaround", version: 1 });
+          setItems(DEFAULT_FLEET_CHECKLIST);
+        }
+      } finally {
+        setLoading(false);
+      }
     })();
   }, [id]);
 
@@ -107,6 +185,12 @@ export default function PreStartInspection() {
     }));
 
     try {
+      if (driverId && driverName) {
+        try {
+          localStorage.setItem("mc_last_driver_id", driverId);
+          localStorage.setItem("mc_last_driver_name", driverName);
+        } catch {}
+      }
       const { error: execErr } = await supabase.from("checklist_executions").insert(executionPayload);
       if (execErr) throw execErr;
       const { error: respErr } = await supabase.from("checklist_execution_responses").insert(responseRows);
@@ -168,17 +252,68 @@ export default function PreStartInspection() {
 
         {step === "driver" && (
           <div className="space-y-4 rounded-2xl border border-border bg-card p-5">
-            <p className="text-sm text-muted-foreground">Who's doing this inspection?</p>
-            {drivers.length > 0 && (
-              <Select value={driverId} onValueChange={setDriverId}>
-                <SelectTrigger><SelectValue placeholder="Pick your name" /></SelectTrigger>
-                <SelectContent>
-                  {drivers.map((d) => <SelectItem key={d.id} value={d.id}>{d.full_name}</SelectItem>)}
-                </SelectContent>
-              </Select>
+            <p className="text-sm text-muted-foreground">Who's conducting this inspection?</p>
+
+            {rememberedDriver && (
+              <div className="rounded-xl border border-primary/30 bg-primary/5 p-3.5 space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-primary">Quick Sign-In</span>
+                    <p className="text-sm font-semibold text-foreground">{rememberedDriver.name}</p>
+                  </div>
+                  <Badge variant="outline" className="text-[10px] text-primary border-primary/30">Remembered</Badge>
+                </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="password"
+                    maxLength={4}
+                    placeholder="4-digit PIN (optional)"
+                    value={driverPin}
+                    onChange={(e) => setDriverPin(e.target.value)}
+                    className="h-9 w-full rounded-md border border-input bg-background px-3 text-xs"
+                  />
+                  <Button
+                    size="sm"
+                    className="whitespace-nowrap h-9 text-xs font-semibold"
+                    onClick={() => {
+                      setDriverId(rememberedDriver.id);
+                      setStep("checklist");
+                    }}
+                  >
+                    Continue as {rememberedDriver.name.split(" ")[0]} →
+                  </Button>
+                </div>
+              </div>
             )}
-            <Button className="h-12 w-full" onClick={() => setStep("checklist")}>
-              {driverId ? "Continue" : "Continue as guest"}
+
+            <div className="space-y-2">
+              <label className="text-xs font-medium text-muted-foreground">Or select from driver roster:</label>
+              {drivers.length > 0 ? (
+                <Select value={driverId} onValueChange={(val) => {
+                  setDriverId(val);
+                  const selected = drivers.find(d => d.id === val);
+                  if (selected) {
+                    setRememberedDriver({ id: selected.id, name: selected.full_name });
+                  }
+                }}>
+                  <SelectTrigger className="h-11"><SelectValue placeholder="Select driver name" /></SelectTrigger>
+                  <SelectContent>
+                    {drivers.map((d) => <SelectItem key={d.id} value={d.id}>{d.full_name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              ) : (
+                <input
+                  type="text"
+                  placeholder="Enter your full name"
+                  value={driverName !== "Guest" ? driverName : ""}
+                  onChange={(e) => setDriverId(e.target.value)}
+                  className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+                />
+              )}
+            </div>
+
+            <Button className="h-12 w-full font-semibold" onClick={() => setStep("checklist")}>
+              {driverId ? "Proceed to Walkaround Checklist" : "Continue as Guest Driver"}
             </Button>
           </div>
         )}

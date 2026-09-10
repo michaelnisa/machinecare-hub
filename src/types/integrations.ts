@@ -23,6 +23,7 @@ export type IntegrationCategory =
   | 'CRM'
   | 'IoT'
   | 'Analytics'
+  | 'Database'
   | 'Custom API';
 
 export type SyncFrequency = 'manual' | '5m' | '15m' | '30m' | '1h' | 'daily' | 'event_driven';

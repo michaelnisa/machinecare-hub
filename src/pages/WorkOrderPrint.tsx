@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
-import { useParams, useSearchParams, Link } from "react-router-dom";
+import { useParams, useSearchParams, Link, Navigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { PageLoader } from "@/components/PageLoader";
 import { Printer, ArrowLeft, Download } from "lucide-react";
@@ -16,6 +17,7 @@ function formatWoNumber(year: number | null | undefined, n: number | null | unde
 }
 
 export default function WorkOrderPrint() {
+  const { user, loading: authLoading } = useAuth();
   const { id } = useParams<{ id: string }>();
   const [searchParams, setSearchParams] = useSearchParams();
   const isJobCard = searchParams.get("view") === "jobcard";
@@ -89,7 +91,8 @@ export default function WorkOrderPrint() {
     })();
   }, [id]);
 
-  if (loading) return <PageLoader />;
+  if (authLoading || loading) return <PageLoader />;
+  if (!user) return <Navigate to="/login" replace />;
   if (!data?.wo) {
     return (
       <div className="p-8 text-center">

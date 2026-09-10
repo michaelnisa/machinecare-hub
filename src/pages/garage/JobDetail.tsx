@@ -8,8 +8,10 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { PageLoader } from "@/components/PageLoader";
-import { ArrowLeft, Loader2, Plus, Trash2, Printer, QrCode, Camera, X, ClipboardCheck } from "lucide-react";
+import { ArrowLeft, Loader2, Plus, Trash2, Printer, QrCode, Camera, X, ClipboardCheck, CheckCircle2, Smartphone } from "lucide-react";
 import { GarageJobStatusQrDialog } from "@/components/GarageJobStatusQrDialog";
+import { QualityControlDialog } from "@/components/garage/QualityControlDialog";
+import { SelcomPaymentModal } from "@/components/garage/SelcomPaymentModal";
 import { toast } from "sonner";
 import { formatDate, formatMoney } from "@/lib/format";
 import { STATUS_FLOW, STATUS_LABEL, STATUS_BADGE, formatJobNumber } from "@/lib/garage-constants";
@@ -31,6 +33,7 @@ export default function GarageJobDetail() {
   const [decisionMode, setDecisionMode] = useState<"approve" | "decline" | null>(null);
   const [qrOpen, setQrOpen] = useState(false);
   const [intakeOpen, setIntakeOpen] = useState(false);
+  const [qcOpen, setQcOpen] = useState(false);
 
   const load = async () => {
     if (!id) return;
@@ -115,9 +118,32 @@ export default function GarageJobDetail() {
           <Button size="sm" variant="outline" className="gap-1.5" onClick={() => setQrOpen(true)}>
             <QrCode className="h-3.5 w-3.5" /> Status link
           </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            className="gap-1.5"
+            onClick={() => window.open(`/garage/jobs/${job.id}/intake-print`, "_blank")}
+          >
+            <Printer className="h-3.5 w-3.5" /> Intake slip
+          </Button>
           {job.status !== "closed" && job.status !== "cancelled" && (
             <>
-              {nextStatus && <Button size="sm" onClick={() => setStatus(nextStatus)} disabled={busy}>Move to {STATUS_LABEL[nextStatus]}</Button>}
+              {job.status === "quality_check" ? (
+                <Button
+                  size="sm"
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white gap-1.5"
+                  onClick={() => setQcOpen(true)}
+                  disabled={busy}
+                >
+                  <CheckCircle2 className="h-3.5 w-3.5" /> Conduct QC sign-off
+                </Button>
+              ) : (
+                nextStatus && (
+                  <Button size="sm" onClick={() => setStatus(nextStatus)} disabled={busy}>
+                    Move to {STATUS_LABEL[nextStatus]}
+                  </Button>
+                )
+              )}
               <Button size="sm" variant="outline" className="text-destructive" onClick={() => setStatus("cancelled")} disabled={busy}>Cancel job</Button>
             </>
           )}
@@ -125,6 +151,7 @@ export default function GarageJobDetail() {
       </div>
 
       <GarageJobStatusQrDialog open={qrOpen} onOpenChange={setQrOpen} jobId={job.id} jobLabel={formatJobNumber(job)} />
+      <QualityControlDialog open={qcOpen} onOpenChange={setQcOpen} job={job} onQCPassed={load} />
 
       {/* ── Status pipeline ── */}
       <JobStatusPipeline status={job.status} />
@@ -318,7 +345,7 @@ function EstimateCard({ job, estimate, onChanged, decisionMode, setDecisionMode 
       {estimate.status === "draft" || estimate.status === "changes_requested" ? (
         <EstimateEditor estimate={estimate} job={job} onChanged={onChanged} />
       ) : (
-        <EstimateReadOnly estimate={estimate} />
+        <EstimateReadOnly estimate={estimate} job={job} onChanged={onChanged} />
       )}
 
       {estimate.status === "sent" && (
@@ -363,8 +390,46 @@ function JobCosting({ estimate }: any) {
   );
 }
 
-function EstimateReadOnly({ estimate }: any) {
+function EstimateReadOnly({ estimate, job, onChanged }: any) {
   const totals = estimateTotals(estimate);
+  const [stockParts, setStockParts] = useState<any[]>([]);
+  const [showRequisition, setShowRequisition] = useState(false);
+  const [reqPartId, setReqPartId] = useState("");
+  const [reqQty, setReqQty] = useState("1");
+  const [adding, setAdding] = useState(false);
+
+  useEffect(() => {
+    if (showRequisition) {
+      supabase.from("inventory_items").select("id, name, unit_cost, selling_price").eq("status", "active").order("name")
+        .then(({ data }) => setStockParts(data ?? []));
+    }
+  }, [showRequisition]);
+
+  const addFloorPart = async () => {
+    if (!reqPartId) return toast.error("Select a part from inventory");
+    const p = stockParts.find((x) => x.id === reqPartId);
+    if (!p) return;
+    setAdding(true);
+    const qty = Math.max(1, Number(reqQty) || 1);
+    const { error } = await (supabase as any).from("garage_estimate_items").insert({
+      estimate_id: estimate.id,
+      item_id: p.id,
+      description: p.name,
+      quantity: qty,
+      unit_price: Number(p.selling_price || p.unit_cost || 0),
+      unit_cost: Number(p.unit_cost || 0),
+    });
+    setAdding(false);
+    if (error) return toast.error(error.message);
+    toast.success(`Requisitioned ${qty}x ${p.name} from stock`);
+    setShowRequisition(false);
+    setReqPartId("");
+    setReqQty("1");
+    if (onChanged) onChanged();
+  };
+
+  const canRequisition = ["approved", "in_progress", "quality_check"].includes(job?.status);
+
   return (
     <div className="space-y-2 text-sm">
       {(estimate.garage_estimate_items ?? []).map((it: any) => (
@@ -378,6 +443,55 @@ function EstimateReadOnly({ estimate }: any) {
       {Number(estimate.discount) > 0 && <div className="flex justify-between text-muted-foreground"><span>Discount</span><span>-{formatMoney(estimate.discount)}</span></div>}
       {Number(estimate.tax_rate_percent) > 0 && <div className="flex justify-between text-muted-foreground"><span>Tax ({estimate.tax_rate_percent}%)</span><span>{formatMoney(totals.taxAmount)}</span></div>}
       <div className="flex justify-between border-t border-border pt-2 font-medium"><span>Total</span><span>{formatMoney(totals.total)}</span></div>
+
+      {canRequisition && (
+        <div className="pt-2 border-t border-border">
+          {!showRequisition ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setShowRequisition(true)}
+              className="text-xs h-7 gap-1"
+            >
+              <Plus className="h-3 w-3" /> Requisition floor part from stock
+            </Button>
+          ) : (
+            <div className="space-y-2 rounded-lg border border-border bg-muted/30 p-2.5">
+              <div className="text-xs font-medium">Issue Additional Part During Work:</div>
+              <div className="flex gap-2">
+                <select
+                  value={reqPartId}
+                  onChange={(e) => setReqPartId(e.target.value)}
+                  className="h-8 flex-1 rounded-md border border-input bg-background px-2 text-xs"
+                >
+                  <option value="">Select stocked part…</option>
+                  {stockParts.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name} ({formatMoney(Number(p.selling_price || p.unit_cost || 0))})
+                    </option>
+                  ))}
+                </select>
+                <Input
+                  type="number"
+                  min={1}
+                  value={reqQty}
+                  onChange={(e) => setReqQty(e.target.value)}
+                  className="h-8 w-16 text-xs text-center"
+                />
+              </div>
+              <div className="flex justify-end gap-2">
+                <Button variant="ghost" size="sm" onClick={() => setShowRequisition(false)} className="h-7 text-xs">
+                  Cancel
+                </Button>
+                <Button size="sm" onClick={addFloorPart} disabled={adding || !reqPartId} className="h-7 text-xs">
+                  {adding ? <Loader2 className="h-3 w-3 animate-spin" /> : "Requisition & Deduct Stock"}
+                </Button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -659,6 +773,7 @@ const INVOICE_ELIGIBLE = new Set(["ready", "delivered", "closed"]);
 function InvoiceCard({ job, invoice, payments, onChanged }: any) {
   const [generating, setGenerating] = useState(false);
   const [payMode, setPayMode] = useState<"payment" | "refund" | null>(null);
+  const [selcomOpen, setSelcomOpen] = useState(false);
 
   const generate = async () => {
     setGenerating(true);
@@ -713,10 +828,20 @@ function InvoiceCard({ job, invoice, payments, onChanged }: any) {
         <div className="flex justify-between font-medium"><span>Outstanding</span><span>{formatMoney(outstanding)}</span></div>
       </div>
 
-      <div className="mt-3 flex gap-2">
-        {outstanding > 0 && <Button size="sm" onClick={() => setPayMode("payment")}>Record payment</Button>}
+      {/* Payment collection buttons temporarily hidden per workflow preference */}
+      {/* <div className="mt-3 flex flex-wrap gap-2">
+        {outstanding > 0 && (
+          <Button
+            size="sm"
+            className="bg-emerald-600 hover:bg-emerald-700 text-white gap-1.5"
+            onClick={() => setSelcomOpen(true)}
+          >
+            <Smartphone className="h-3.5 w-3.5" /> Pay via Selcom
+          </Button>
+        )}
+        {outstanding > 0 && <Button size="sm" variant="outline" onClick={() => setPayMode("payment")}>Record manual</Button>}
         {paid > 0 && <Button size="sm" variant="outline" onClick={() => setPayMode("refund")}>Record refund</Button>}
-      </div>
+      </div> */}
 
       {payments.length > 0 && (
         <div className="mt-4">
@@ -729,6 +854,17 @@ function InvoiceCard({ job, invoice, payments, onChanged }: any) {
         </div>
       )}
 
+      <SelcomPaymentModal
+        open={selcomOpen}
+        onOpenChange={setSelcomOpen}
+        invoiceId={invoice.id}
+        invoiceNumber={`INV-${invoice.invoice_year}-${String(invoice.invoice_number).padStart(4, "0")}`}
+        jobId={job.id}
+        amount={outstanding}
+        customerPhone={job?.garage_customers?.phone || ""}
+        customerName={job?.garage_customers?.name || ""}
+        onSuccess={onChanged}
+      />
       <RecordPaymentDialog mode={payMode} setMode={setPayMode} invoice={invoice} outstanding={outstanding} paid={paid} onChanged={onChanged} />
     </div>
   );

@@ -21,6 +21,8 @@ from backend.integrations.connectors.maximo.connector import MaximoConnector
 from backend.integrations.connectors.maximo.capabilities import get_maximo_capabilities
 from backend.integrations.connectors.maximo.mapper import get_maximo_default_mappings
 
+from backend.integrations.connectors.database.connector import ReadOnlyDatabaseConnector
+
 class ConnectorRegistry:
     """Registry maintaining metadata, schemas, and classes for all supported ERPs and EAMs."""
 
@@ -29,6 +31,7 @@ class ConnectorRegistry:
         "sap_business_one": SapBusinessOneConnector,
         "dynamics_365": Dynamics365Connector,
         "maximo": MaximoConnector,
+        "database": ReadOnlyDatabaseConnector,
     }
 
     _catalog: Dict[str, Dict[str, Any]] = {
@@ -154,6 +157,43 @@ class ConnectorRegistry:
             "config_fields": [],
             "credential_fields": [],
             "capabilities": {"read": ["parts", "inventory"], "write": ["purchase_requests"]},
+        },
+        "database": {
+            "slug": "database",
+            "name": "Direct SQL Database (Postgres / MySQL / SQL Server)",
+            "category": "Database",
+            "description": "Safe, read-only connector streaming assets and sensor meters directly from on-premise or cloud SQL databases.",
+            "version": "1.0.0 Read-Only",
+            "status": "available",
+            "logo": "database",
+            "docs_url": "https://machinecare.io/docs/integrations/database",
+            "config_fields": [
+                {"key": "host", "label": "Database Host", "type": "text", "placeholder": "db.internal.corp", "required": True},
+                {"key": "port", "label": "Port", "type": "number", "placeholder": "5432", "required": True},
+                {"key": "database", "label": "Database Name", "type": "text", "placeholder": "prod_db", "required": True},
+                {"key": "database_type", "label": "Type (postgres, mysql, sqlserver)", "type": "text", "placeholder": "postgres", "required": True},
+            ],
+            "credential_fields": [
+                {"key": "username", "label": "Read-Only User", "type": "text", "required": True},
+                {"key": "password", "label": "Password", "type": "password", "required": True},
+            ],
+            "capabilities": ReadOnlyDatabaseConnector({}, {}).get_capabilities().to_dict(),
+            "default_mappings": {
+                "asset": [
+                    {"source_field": "id", "target_field": "id", "transform_type": "direct", "is_required": True},
+                    {"source_field": "asset_code", "target_field": "asset_code", "transform_type": "direct", "is_required": True},
+                    {"source_field": "name", "target_field": "name", "transform_type": "direct", "is_required": True},
+                    {"source_field": "status", "target_field": "status", "transform_type": "direct"},
+                    {"source_field": "location", "target_field": "location", "transform_type": "direct"},
+                ],
+                "part": [
+                    {"source_field": "id", "target_field": "id", "transform_type": "direct", "is_required": True},
+                    {"source_field": "part_number", "target_field": "part_number", "transform_type": "direct", "is_required": True},
+                    {"source_field": "name", "target_field": "name", "transform_type": "direct", "is_required": True},
+                    {"source_field": "available_quantity", "target_field": "available_quantity", "transform_type": "direct", "default_value": 0},
+                    {"source_field": "unit_cost", "target_field": "unit_cost", "transform_type": "direct", "default_value": 0},
+                ],
+            },
         },
     }
 

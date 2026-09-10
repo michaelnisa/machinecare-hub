@@ -8,9 +8,10 @@ import { Input } from "@/components/ui/input";
 import { StatusBadge } from "@/components/StatusBadge";
 import { PageLoader, EmptyState } from "@/components/PageLoader";
 import { CATEGORIES, CATEGORY_ICONS } from "@/lib/machine-constants";
-import { Plus, Search, Wrench } from "lucide-react";
+import { Plus, Search, Wrench, FileSpreadsheet } from "lucide-react";
 import { toast } from "sonner";
 import { MachineFormDialog } from "@/components/MachineFormDialog";
+import { BulkImporterModal } from "@/components/BulkImporterModal";
 import { CoverImage } from "@/components/CoverImage";
 import { formatNumber } from "@/lib/format";
 
@@ -36,6 +37,7 @@ export default function Machines() {
   const [status, setStatus] = useState<string>("all");
   const [department, setDepartment] = useState<string>("");
   const [dialog, setDialog] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
 
   // Auto-scope viewers and technicians to their own department
   useEffect(() => {
@@ -91,9 +93,14 @@ export default function Machines() {
             Every vehicle, generator and piece of equipment in your fleet.
           </p>
         </div>
-        <Button onClick={() => setDialog(true)}>
-          <Plus className="mr-2 h-4 w-4" /> Add machine
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" onClick={() => setImportOpen(true)}>
+            <FileSpreadsheet className="mr-2 h-4 w-4" /> Import Excel / CSV
+          </Button>
+          <Button onClick={() => setDialog(true)}>
+            <Plus className="mr-2 h-4 w-4" /> Add machine
+          </Button>
+        </div>
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
@@ -219,6 +226,13 @@ export default function Machines() {
         open={dialog}
         onOpenChange={setDialog}
         onSaved={load}
+      />
+
+      <BulkImporterModal
+        entity="machine"
+        open={importOpen}
+        onOpenChange={setImportOpen}
+        onImported={load}
       />
     </div>
   );

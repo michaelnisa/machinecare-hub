@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useParams, Link } from "react-router-dom";
+import { useParams, Link, Navigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
@@ -16,7 +16,7 @@ const RESPONSE_LABEL: Record<string, string> = {
 
 export default function ChecklistTemplatePrint() {
   const { id } = useParams<{ id: string }>();
-  const { organisation } = useAuth();
+  const { user, organisation, loading: authLoading } = useAuth();
   const [template, setTemplate] = useState<any>(null);
   const [items, setItems] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -35,7 +35,8 @@ export default function ChecklistTemplatePrint() {
     })();
   }, [id]);
 
-  if (loading) return <PageLoader />;
+  if (authLoading || loading) return <PageLoader />;
+  if (!user) return <Navigate to="/login" replace />;
   if (!template) {
     return (
       <div className="p-8 text-center">

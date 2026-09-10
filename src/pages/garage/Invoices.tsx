@@ -3,8 +3,11 @@ import { Link, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import { PageLoader, EmptyState } from "@/components/PageLoader";
-import { Receipt } from "lucide-react";
+import { Receipt, ShoppingCart, Smartphone } from "lucide-react";
+import { QuickCounterSaleModal } from "@/components/garage/QuickCounterSaleModal";
+import { SelcomPaymentModal } from "@/components/garage/SelcomPaymentModal";
 import { toast } from "sonner";
 import { formatDate, formatMoney } from "@/lib/format";
 import { invoiceTotal } from "@/lib/garage-money";
@@ -24,23 +27,27 @@ export default function GarageInvoices() {
   const [payments, setPayments] = useState<any[]>([]);
   const [tab, setTab] = useState(params.get("status") ?? "all");
   const [search, setSearch] = useState("");
+  const [counterSaleOpen, setCounterSaleOpen] = useState(false);
+  const [selectedForSelcom, setSelectedForSelcom] = useState<{ inv: any; outstanding: number } | null>(null);
 
   const changeTab = (v: string) => { setTab(v); setParams(v === "all" ? {} : { status: v }); };
 
-  useEffect(() => {
+  const load = async () => {
     if (!profile) return;
-    (async () => {
-      setLoading(true);
-      const [{ data: inv, error: e1 }, { data: pay, error: e2 }] = await Promise.all([
-        (supabase as any).from("garage_invoices").select("*, garage_invoice_items(*), garage_jobs(id, job_number, job_year, garage_customers(name), garage_vehicles(make, model, registration_number))").order("issued_at", { ascending: false }),
-        (supabase as any).from("garage_payments").select("invoice_id, amount, type"),
-      ]);
-      const err = e1 || e2;
-      if (err) toast.error(err.message);
-      setInvoices(inv ?? []);
-      setPayments(pay ?? []);
-      setLoading(false);
-    })();
+    setLoading(true);
+    const [{ data: inv, error: e1 }, { data: pay, error: e2 }] = await Promise.all([
+      (supabase as any).from("garage_invoices").select("*, garage_invoice_items(*), garage_jobs(id, job_number, job_year, garage_customers(name, phone), garage_vehicles(make, model, registration_number))").order("issued_at", { ascending: false }),
+      (supabase as any).from("garage_payments").select("invoice_id, amount, type"),
+    ]);
+    const err = e1 || e2;
+    if (err) toast.error(err.message);
+    setInvoices(inv ?? []);
+    setPayments(pay ?? []);
+    setLoading(false);
+  };
+
+  useEffect(() => {
+    load();
   }, [profile]);
 
   const paidByInvoice = useMemo(() => {
@@ -73,9 +80,14 @@ export default function GarageInvoices() {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Invoices</h1>
-        <p className="text-sm text-muted-foreground">Every invoice issued — total, paid, and outstanding.</p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">Invoices</h1>
+          <p className="text-sm text-muted-foreground">Every invoice issued — total, paid, and outstanding.</p>
+        </div>
+        <Button onClick={() => setCounterSaleOpen(true)} className="bg-primary text-primary-foreground gap-1.5 shadow-sm">
+          <ShoppingCart className="h-4 w-4" /> Quick Counter Sale
+        </Button>
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
@@ -121,7 +133,20 @@ export default function GarageInvoices() {
                   </td>
                   <td className="px-5 py-3 text-muted-foreground">{formatDate(inv.issued_at)}</td>
                   <td className="px-5 py-3 text-right">
-                    <Link to={`/garage/invoices/${inv.id}/print`} target="_blank" rel="noreferrer" className="text-xs text-primary hover:underline">Print</Link>
+                    <div className="flex items-center justify-end gap-2">
+                      {/* Selcom Pay button temporarily hidden per workflow preference */}
+                      {/* {outstanding > 0 && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-7 text-xs border-emerald-500/40 text-emerald-600 hover:bg-emerald-500/10 gap-1"
+                          onClick={() => setSelectedForSelcom({ inv, outstanding })}
+                        >
+                          <Smartphone className="h-3 w-3" /> Selcom Pay
+                        </Button>
+                      )} */}
+                      <Link to={`/garage/invoices/${inv.id}/print`} target="_blank" rel="noreferrer" className="text-xs text-primary hover:underline">Print</Link>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -129,6 +154,26 @@ export default function GarageInvoices() {
           </table>
         </div>
       )}
+
+      {selectedForSelcom && (
+        <SelcomPaymentModal
+          open={!!selectedForSelcom}
+          onOpenChange={(open) => !open && setSelectedForSelcom(null)}
+          invoiceId={selectedForSelcom.inv.id}
+          invoiceNumber={`INV-${selectedForSelcom.inv.invoice_year}-${String(selectedForSelcom.inv.invoice_number).padStart(4, "0")}`}
+          jobId={selectedForSelcom.inv.job_id}
+          amount={selectedForSelcom.outstanding}
+          customerPhone={selectedForSelcom.inv.garage_jobs?.garage_customers?.phone || ""}
+          customerName={selectedForSelcom.inv.garage_jobs?.garage_customers?.name || ""}
+          onSuccess={load}
+        />
+      )}
+
+      <QuickCounterSaleModal
+        open={counterSaleOpen}
+        onOpenChange={setCounterSaleOpen}
+        onSaleCompleted={load}
+      />
     </div>
   );
 }

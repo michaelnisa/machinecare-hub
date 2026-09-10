@@ -29,8 +29,13 @@ import {
   X,
   Target,
   Layers,
+  Sparkles,
+  Smartphone,
+  ShieldCheck,
 } from "lucide-react";
 import { Link } from "react-router-dom";
+import { DemoDataLoaderModal } from "@/components/DemoDataLoaderModal";
+import { testSelcomConnection } from "@/services/selcomService";
 import { Switch } from "@/components/ui/switch";
 import {
   AlertDialog,
@@ -89,6 +94,16 @@ export default function Settings() {
   const [labourRate, setLabourRate] = useState("0");
   const [messageChannel, setMessageChannel] = useState("whatsapp");
   const [savingWorkshopSettings, setSavingWorkshopSettings] = useState(false);
+  const [demoModalOpen, setDemoModalOpen] = useState(false);
+
+  // Selcom Payment Gateway
+  const [selcomEnabled, setSelcomEnabled] = useState(false);
+  const [selcomSandbox, setSelcomSandbox] = useState(true);
+  const [selcomVendorId, setSelcomVendorId] = useState("");
+  const [selcomApiKey, setSelcomApiKey] = useState("");
+  const [selcomApiSecret, setSelcomApiSecret] = useState("");
+  const [testingSelcom, setTestingSelcom] = useState(false);
+  const [savingSelcom, setSavingSelcom] = useState(false);
 
   useEffect(() => {
     if (organisation) {
@@ -101,6 +116,11 @@ export default function Settings() {
       setPaymentMethods(organisation.accepted_payment_methods?.length ? organisation.accepted_payment_methods : ["cash", "mobile_money", "bank", "other"]);
       setLabourRate(String(organisation.default_labour_rate_per_hour ?? 0));
       setMessageChannel(organisation.default_message_channel ?? "whatsapp");
+      setSelcomEnabled((organisation as any).selcom_enabled ?? false);
+      setSelcomSandbox((organisation as any).selcom_is_sandbox ?? true);
+      setSelcomVendorId((organisation as any).selcom_vendor_id ?? "");
+      setSelcomApiKey((organisation as any).selcom_api_key ?? "");
+      setSelcomApiSecret((organisation as any).selcom_api_secret ?? "");
     }
     if (profile) {
       setFullName(profile.full_name ?? "");
@@ -259,6 +279,48 @@ export default function Settings() {
     }
   };
 
+  const handleTestSelcom = async () => {
+    setTestingSelcom(true);
+    try {
+      const res = await testSelcomConnection({
+        vendor_id: selcomVendorId.trim(),
+        api_key: selcomApiKey.trim(),
+        api_secret: selcomApiSecret.trim(),
+        is_sandbox: selcomSandbox,
+      });
+      if (res.success) {
+        toast.success(res.message);
+      } else {
+        toast.error(res.message);
+      }
+    } catch (e: any) {
+      toast.error(e.message || "Connection test failed");
+    } finally {
+      setTestingSelcom(false);
+    }
+  };
+
+  const saveSelcomSettings = async () => {
+    if (!organisation) return;
+    setSavingSelcom(true);
+    const { error } = await (supabase as any)
+      .from("organisations")
+      .update({
+        selcom_enabled: selcomEnabled,
+        selcom_is_sandbox: selcomSandbox,
+        selcom_vendor_id: selcomVendorId.trim() || null,
+        selcom_api_key: selcomApiKey.trim() || null,
+        selcom_api_secret: selcomApiSecret.trim() || null,
+      })
+      .eq("id", organisation.id);
+    setSavingSelcom(false);
+    if (error) toast.error(error.message);
+    else {
+      toast.success("Selcom Gateway configuration saved");
+      refresh();
+    }
+  };
+
   const confirmIndustryProfileChange = async () => {
     if (!organisation || !pendingProfile) return;
     setSavingIndustryProfile(true);
@@ -342,6 +404,36 @@ export default function Settings() {
           </Button>
         </Link>
       </div>
+
+      <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="flex items-start gap-3">
+          <div className="p-2.5 rounded-lg bg-amber-500/10 text-amber-600">
+            <Sparkles className="h-5 w-5" />
+          </div>
+          <div>
+            <div className="text-sm font-bold text-foreground flex items-center gap-2">
+              Sandbox & Sample Data
+              <span className="rounded bg-amber-500/10 text-amber-600 px-1.5 py-0.2 text-[10px] font-bold border border-amber-500/20">
+                TRIAL UTILITY
+              </span>
+            </div>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Instantly populate or safely clean sample assets, work orders, telemetry, and safety records for demos and onboarding.
+            </p>
+          </div>
+        </div>
+        <Button 
+          size="sm" 
+          variant="outline"
+          onClick={() => setDemoModalOpen(true)}
+          className="whitespace-nowrap text-xs gap-1.5 font-semibold border-amber-500/30 hover:bg-amber-500/10 text-amber-700 dark:text-amber-400"
+        >
+          <Sparkles className="h-3.5 w-3.5" />
+          Manage Demo Data
+        </Button>
+      </div>
+
+      <DemoDataLoaderModal open={demoModalOpen} onOpenChange={setDemoModalOpen} />
 
       <Section title="Organisation logo">
         <div className="flex items-center gap-5">
@@ -569,6 +661,100 @@ export default function Settings() {
           </div>
         </Section>
       )}
+
+      {/* Payment Gateway (Selcom API) temporarily hidden for Garage module */}
+      {/* {isManager && (isGarage || isMixed) && (
+        <Section title="Payment Gateway (Selcom API)">
+          <div className="space-y-4">
+            <div className="flex items-center justify-between gap-4 rounded-lg border border-border bg-background p-4">
+              <div className="space-y-0.5">
+                <div className="text-sm font-semibold flex items-center gap-2">
+                  <Smartphone className="h-4 w-4 text-emerald-600" />
+                  Enable Selcom Mobile Money &amp; Card Payments
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Accept instant customer payments via M-Pesa, Tigo Pesa, Airtel Money, Halopesa, and cards with automated ledger reconciliation.
+                </p>
+              </div>
+              <Switch checked={selcomEnabled} onCheckedChange={setSelcomEnabled} />
+            </div>
+
+            <div className="flex items-center justify-between gap-4 rounded-lg border border-border bg-background p-4">
+              <div className="space-y-0.5">
+                <div className="text-sm font-semibold">Sandbox / Simulation Mode</div>
+                <p className="text-xs text-muted-foreground">
+                  When enabled, payments run in safe simulation mode for testing checkout and USSD flows without moving real funds.
+                </p>
+              </div>
+              <Switch checked={selcomSandbox} onCheckedChange={setSelcomSandbox} />
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-3 pt-2">
+              <div className="space-y-1.5">
+                <Label className="text-xs">Vendor ID / Merchant ID</Label>
+                <Input
+                  value={selcomVendorId}
+                  onChange={(e) => setSelcomVendorId(e.target.value)}
+                  placeholder="e.g. SELCOM-V-00123"
+                  className="font-mono text-xs"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-xs">API Key</Label>
+                <Input
+                  value={selcomApiKey}
+                  onChange={(e) => setSelcomApiKey(e.target.value)}
+                  placeholder="e.g. key_live_..."
+                  className="font-mono text-xs"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-xs">API Secret</Label>
+                <Input
+                  type="password"
+                  value={selcomApiSecret}
+                  onChange={(e) => setSelcomApiSecret(e.target.value)}
+                  placeholder="••••••••••••••••"
+                  className="font-mono text-xs"
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between pt-3 border-t">
+              <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <ShieldCheck className="h-4 w-4 text-emerald-600" />
+                <span>HMAC-SHA256 Encrypted Gateway Protocol</span>
+              </div>
+
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={handleTestSelcom}
+                  disabled={testingSelcom}
+                  className="text-xs"
+                >
+                  {testingSelcom && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
+                  Test Connection
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  onClick={saveSelcomSettings}
+                  disabled={savingSelcom}
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs"
+                >
+                  {savingSelcom && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
+                  Save Gateway Settings
+                </Button>
+              </div>
+            </div>
+          </div>
+        </Section>
+      )} */}
 
       <Section title="Your profile">
         <div className="grid gap-4 sm:grid-cols-2">

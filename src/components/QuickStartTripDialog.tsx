@@ -28,18 +28,38 @@ export function QuickStartTripDialog({ open, onOpenChange, machineId, onSaved }:
   const [form, setForm] = useState<any>({});
   const [busy, setBusy] = useState(false);
 
+  const [currentOdo, setCurrentOdo] = useState<number | null>(null);
+
   useEffect(() => {
     if (!open) return;
     setForm({ driver_id: "", purpose: "", destination: "", start_odo: "" });
     supabase.from("drivers").select("id, full_name").eq("status", "active").order("full_name").then(({ data }) => setDrivers((data ?? []) as Driver[]));
-    supabase.from("machines").select("current_odometer_km").eq("id", machineId).maybeSingle().then(({ data }) => {
-      if (data?.current_odometer_km != null) setForm((f: any) => ({ ...f, start_odo: String(data.current_odometer_km) }));
+    supabase.from("machines").select("current_odometer_km, current_hours").eq("id", machineId).maybeSingle().then(({ data }: any) => {
+      const odo = data?.current_odometer_km ?? data?.current_hours;
+      if (odo != null) {
+        setCurrentOdo(Number(odo));
+        setForm((f: any) => ({ ...f, start_odo: String(odo) }));
+      }
     });
   }, [open, machineId]);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!profile) return;
+
+    if (form.start_odo !== "" && currentOdo != null) {
+      const entered = Number(form.start_odo);
+      if (entered < currentOdo) {
+        if (!confirm(`Warning: Entered starting odometer (${entered} km) is lower than current odometer (${currentOdo} km). Are you sure?`)) {
+          return;
+        }
+      } else if (entered > currentOdo + 3000) {
+        if (!confirm(`Notice: Starting odometer jumped by ${entered - currentOdo} km from last reading (${currentOdo} km). Please verify no typo.`)) {
+          return;
+        }
+      }
+    }
+
     setBusy(true);
     const payload = {
       organisation_id: profile.organisation_id,
@@ -53,6 +73,9 @@ export function QuickStartTripDialog({ open, onOpenChange, machineId, onSaved }:
       created_by: user?.id ?? null,
     };
     const { error } = await supabase.from("trips").insert(payload);
+    if (!error && payload.start_odo != null) {
+      await supabase.from("machines").update({ current_odometer_km: payload.start_odo, current_hours: payload.start_odo }).eq("id", machineId);
+    }
     setBusy(false);
     if (error) return toast.error(error.message);
     toast.success(t.started);

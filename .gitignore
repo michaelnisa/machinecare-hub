@@ -27,7 +27,6 @@ supabase/.temp
 *.njsproj
 *.sln
 *.sw?
-index.html
 
 # Python
 __pycache__/

@@ -5,7 +5,7 @@ import { CoverImage } from "@/components/CoverImage";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { PageLoader } from "@/components/PageLoader";
-import { Wrench, ArrowRight, AlertTriangle, Gauge, Fuel, BookOpen, ClipboardList, LogIn, CheckCircle2, ClipboardCheck, Route, Siren, AlertOctagon, Receipt, DollarSign } from "lucide-react";
+import { Wrench, ArrowRight, AlertTriangle, Gauge, Fuel, BookOpen, ClipboardList, LogIn, CheckCircle2, ClipboardCheck, Route, Siren, AlertOctagon, Receipt, DollarSign, ShieldCheck, ChevronDown } from "lucide-react";
 import { ServiceLogDialog } from "@/components/ServiceLogDialog";
 import { UpdateReadingDialog } from "@/components/UpdateReadingDialog";
 import { QuickFuelDialog } from "@/components/QuickFuelDialog";
@@ -297,17 +297,126 @@ export default function MobileMachine() {
     }
   }, [user, isOwnOrg, profile]);
 
+  const [roadworthiness, setRoadworthiness] = useState<{
+    state: "fit" | "due" | "grounded";
+    label: string;
+    description: string;
+  }>({
+    state: "due",
+    label: "INSPECTION DUE",
+    description: "Daily pre-trip inspection required before driving.",
+  });
+
+  const loadRoadworthiness = async (m: any) => {
+    if (!id || !m) return;
+    if (m.status === "maintenance" || m.status === "retired") {
+      setRoadworthiness({
+        state: "grounded",
+        label: "GROUNDED / DO NOT DRIVE",
+        description: "Vehicle is currently flagged for maintenance or out of service.",
+      });
+      return;
+    }
+
+    try {
+      const [{ data: openFaults }, { data: recentInsp }] = await Promise.all([
+        (supabase as any)
+          .from("fault_reports")
+          .select("id, severity")
+          .eq("machine_id", id)
+          .eq("severity", "critical")
+          .limit(1),
+        (supabase as any)
+          .from("checklist_executions")
+          .select("performed_at, overall_result")
+          .eq("machine_id", id)
+          .order("performed_at", { ascending: false })
+          .limit(1),
+      ]);
+
+      if (openFaults && openFaults.length > 0) {
+        setRoadworthiness({
+          state: "grounded",
+          label: "GROUNDED / DO NOT DRIVE",
+          description: "Active critical safety breakdown reported on this vehicle.",
+        });
+        return;
+      }
+
+      if (recentInsp && recentInsp.length > 0) {
+        const last = recentInsp[0];
+        const hoursAgo = (Date.now() - new Date(last.performed_at).getTime()) / (1000 * 60 * 60);
+        if (hoursAgo <= 24 && last.overall_result === "ok") {
+          setRoadworthiness({
+            state: "fit",
+            label: "FIT FOR ROAD / PASSED",
+            description: `Passed pre-trip walkaround ${hoursAgo < 1 ? "just now" : `${Math.round(hoursAgo)}h ago`}. Safe to operate.`,
+          });
+          return;
+        }
+      }
+
+      setRoadworthiness({
+        state: "due",
+        label: "INSPECTION DUE",
+        description: "Daily pre-trip inspection required before starting journey.",
+      });
+    } catch {
+      // Fallback offline due state
+    }
+  };
+
   useEffect(() => {
     if (!id) return;
-    setLoading(true);
+
+    // 1. Instant offline hydration from QR search parameters or local device cache
+    const searchParams = new URLSearchParams(window.location.search);
+    const paramName = searchParams.get("n");
+    const cachedStr = localStorage.getItem(`mc_machine_cache_${id}`);
+    let initialMachine: any = null;
+
+    if (cachedStr) {
+      try {
+        initialMachine = JSON.parse(cachedStr);
+      } catch {}
+    } else if (paramName) {
+      initialMachine = {
+        id,
+        name: paramName,
+        plate_number: searchParams.get("p") || null,
+        registration_number: searchParams.get("r") || null,
+        current_hours: searchParams.get("h") ? Number(searchParams.get("h")) : null,
+        category: searchParams.get("c") || "Vehicle",
+        organisation_name: searchParams.get("o") || "Fleet Depot",
+        status: "active",
+      };
+    }
+
+    if (initialMachine) {
+      setMachine(initialMachine);
+      setLoading(false);
+      loadRoadworthiness(initialMachine);
+    } else {
+      setLoading(true);
+    }
+
+    // 2. Fetch fresh record from Supabase
     (supabase as any).rpc("get_machine_public", { _machine_id: id }).then(({ data, error }: any) => {
-      if (error || !data || data.length === 0) {
-        setMachine(null);
-      } else {
+      if (!error && data && data.length > 0) {
         setMachine(data[0]);
+        loadRoadworthiness(data[0]);
+        try {
+          localStorage.setItem(`mc_machine_cache_${id}`, JSON.stringify(data[0]));
+        } catch {}
+      } else if (!initialMachine) {
+        setMachine(null);
       }
       setLoading(false);
+    }).catch(() => {
+      if (!initialMachine) setMachine(null);
+      setLoading(false);
     });
+
     loadActiveTrip();
   }, [id]);
 
@@ -502,6 +611,47 @@ export default function MobileMachine() {
           <LanguageSwitcher />
         </div>
 
+        {/* Roadworthiness Status Banner (for Vehicles) */}
+        {machine.category === "Vehicle" && (
+          <div
+            className={`rounded-2xl border p-4 flex items-center gap-3.5 shadow-sm transition-all ${
+              roadworthiness.state === "fit"
+                ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-950 dark:text-emerald-100"
+                : roadworthiness.state === "grounded"
+                ? "border-rose-500/40 bg-rose-500/15 text-rose-950 dark:text-rose-100"
+                : "border-amber-500/30 bg-amber-500/10 text-amber-950 dark:text-amber-100"
+            }`}
+          >
+            <div
+              className={`p-2.5 rounded-xl shrink-0 ${
+                roadworthiness.state === "fit"
+                  ? "bg-emerald-500/20 text-emerald-600 dark:text-emerald-400"
+                  : roadworthiness.state === "grounded"
+                  ? "bg-rose-500/20 text-rose-600 dark:text-rose-400"
+                  : "bg-amber-500/20 text-amber-600 dark:text-amber-400"
+              }`}
+            >
+              {roadworthiness.state === "fit" ? (
+                <ShieldCheck className="h-6 w-6" />
+              ) : roadworthiness.state === "grounded" ? (
+                <AlertOctagon className="h-6 w-6" />
+              ) : (
+                <AlertTriangle className="h-6 w-6" />
+              )}
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2">
+                <span className="font-bold text-xs tracking-wider uppercase">
+                  {roadworthiness.label}
+                </span>
+              </div>
+              <p className="text-xs opacity-90 mt-0.5 leading-snug">
+                {roadworthiness.description}
+              </p>
+            </div>
+          </div>
+        )}
+
         {/* Identity card */}
         <div className="overflow-hidden rounded-2xl border border-border bg-card">
           {machine.cover_image_url && (
@@ -531,7 +681,7 @@ export default function MobileMachine() {
                 <p><span className="text-muted-foreground">Plate:</span> {machine.plate_number}</p>
               )}
               {machine.current_hours != null && (
-                <p className="col-span-2"><span className="text-muted-foreground">{t.hours}:</span> {Number(machine.current_hours).toLocaleString()}</p>
+                <p className="col-span-2"><span className="text-muted-foreground">{machine.category === "Vehicle" ? "Odometer" : t.hours}:</span> {Number(machine.current_hours).toLocaleString()} {machine.category === "Vehicle" ? "km" : "hrs"}</p>
               )}
               {machine.last_service_date && (
                 <p className="col-span-2"><span className="text-muted-foreground">Last service:</span> {format(new Date(machine.last_service_date), "d MMM yyyy")}</p>
@@ -540,16 +690,111 @@ export default function MobileMachine() {
           </div>
         </div>
 
-        {/* Pre-start inspection — no login required */}
-        <Link
-          to={`/m/${machine.id}/inspect`}
-          className="flex items-center justify-between rounded-2xl border border-primary/30 bg-primary-soft p-4 text-sm font-medium text-primary hover:border-primary/50"
-        >
-          <span className="flex items-center gap-2">
-            <ClipboardCheck className="h-5 w-5" /> Daily Inspection
-          </span>
-          <ArrowRight className="h-4 w-4" />
-        </Link>
+        {/* Dedicated Driver Mode 4-Tile Hub (for vehicles) */}
+        {machine.category === "Vehicle" ? (
+          <div className="space-y-3">
+            <div className="flex items-center justify-between px-1">
+              <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                <Route className="h-3.5 w-3.5 text-primary" /> Driver Action Hub
+              </span>
+              <span className="text-[10px] text-muted-foreground uppercase font-semibold">Touch-Optimized</span>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2.5">
+              {/* Tile 1: Pre-Trip Inspection */}
+              <Link
+                to={`/m/${machine.id}/inspect`}
+                className={`flex flex-col justify-between p-3.5 rounded-2xl border transition-all text-left group ${
+                  roadworthiness.state === "fit"
+                    ? "border-emerald-500/30 bg-emerald-500/5 hover:bg-emerald-500/10"
+                    : "border-amber-500/40 bg-amber-500/10 hover:bg-amber-500/15"
+                }`}
+              >
+                <div className="flex items-start justify-between w-full">
+                  <div className={`p-2 rounded-xl ${roadworthiness.state === "fit" ? "bg-emerald-500/15 text-emerald-600" : "bg-amber-500/20 text-amber-600"}`}>
+                    <ClipboardCheck className="h-5 w-5" />
+                  </div>
+                  <Badge variant="outline" className={`text-[10px] font-semibold ${roadworthiness.state === "fit" ? "border-emerald-500/30 text-emerald-600" : "border-amber-500/40 text-amber-600"}`}>
+                    {roadworthiness.state === "fit" ? "Passed" : "Due"}
+                  </Badge>
+                </div>
+                <div className="mt-2.5">
+                  <div className="font-bold text-sm text-foreground">Pre-Trip Check</div>
+                  <p className="text-[11px] text-muted-foreground mt-0.5">Walkaround checklist</p>
+                </div>
+              </Link>
+
+              {/* Tile 2: Trip Dispatch */}
+              <button
+                type="button"
+                onClick={() => setTripOpen(true)}
+                className="flex flex-col justify-between p-3.5 rounded-2xl border border-border bg-card hover:bg-muted/50 transition-all text-left group"
+              >
+                <div className="flex items-start justify-between w-full">
+                  <div className="p-2 rounded-xl bg-primary/10 text-primary">
+                    <Route className="h-5 w-5" />
+                  </div>
+                  <Badge variant="outline" className="text-[10px] font-semibold text-primary border-primary/30">
+                    {activeTrip ? "In Route" : "Dispatch"}
+                  </Badge>
+                </div>
+                <div className="mt-2.5">
+                  <div className="font-bold text-sm text-foreground">{activeTrip ? "Trip Active" : "Start Trip"}</div>
+                  <p className="text-[11px] text-muted-foreground mt-0.5 truncate">
+                    {activeTrip ? `${activeTrip.origin || "Origin"} → ${activeTrip.destination || "Dest"}` : "Log departure odo"}
+                  </p>
+                </div>
+              </button>
+
+              {/* Tile 3: Fuel & Receipts */}
+              <button
+                type="button"
+                onClick={() => setFuelOpen(true)}
+                className="flex flex-col justify-between p-3.5 rounded-2xl border border-border bg-card hover:bg-muted/50 transition-all text-left group"
+              >
+                <div className="flex items-start justify-between w-full">
+                  <div className="p-2 rounded-xl bg-blue-500/10 text-blue-600 dark:text-blue-400">
+                    <Fuel className="h-5 w-5" />
+                  </div>
+                  <DollarSign className="h-4 w-4 text-muted-foreground" />
+                </div>
+                <div className="mt-2.5">
+                  <div className="font-bold text-sm text-foreground">Log Fuel & Litres</div>
+                  <p className="text-[11px] text-muted-foreground mt-0.5">Pump receipt & cost</p>
+                </div>
+              </button>
+
+              {/* Tile 4: Breakdown / Accident SOS */}
+              <button
+                type="button"
+                onClick={() => { setShowFaultForm(true); setShowAccidentForm(false); }}
+                className="flex flex-col justify-between p-3.5 rounded-2xl border border-rose-500/20 bg-rose-500/5 hover:bg-rose-500/10 transition-all text-left group"
+              >
+                <div className="flex items-start justify-between w-full">
+                  <div className="p-2 rounded-xl bg-rose-500/15 text-rose-600 dark:text-rose-400">
+                    <Siren className="h-5 w-5" />
+                  </div>
+                  <span className="text-[10px] font-bold text-rose-600 bg-rose-500/10 px-1.5 py-0.5 rounded">SOS</span>
+                </div>
+                <div className="mt-2.5">
+                  <div className="font-bold text-sm text-foreground">Breakdown / SOS</div>
+                  <p className="text-[11px] text-muted-foreground mt-0.5">Report fault or collision</p>
+                </div>
+              </button>
+            </div>
+          </div>
+        ) : (
+          /* Standard Pre-start inspection link for fixed factory machines */
+          <Link
+            to={`/m/${machine.id}/inspect`}
+            className="flex items-center justify-between rounded-2xl border border-primary/30 bg-primary-soft p-4 text-sm font-medium text-primary hover:border-primary/50"
+          >
+            <span className="flex items-center gap-2">
+              <ClipboardCheck className="h-5 w-5" /> Daily Inspection
+            </span>
+            <ArrowRight className="h-4 w-4" />
+          </Link>
+        )}
 
         {/* Active Trip & Driver Cost Tracking (for vehicles) */}
         {machine.category === "Vehicle" && (
@@ -684,38 +929,54 @@ export default function MobileMachine() {
         {/* Signed-in: role-aware quick actions */}
         {user && isOwnOrg && (
           <>
-            <div className="grid grid-cols-2 gap-2">
-              <Button className="h-14 flex-col gap-1" onClick={() => setInspectOpen(true)}>
-                <ClipboardCheck className="h-4 w-4" />
-                <span className="text-[11px] leading-tight">{t.quickInspect}</span>
-              </Button>
-              <Button className="h-14 flex-col gap-1" onClick={() => setLogOpen(true)}>
-                <Wrench className="h-4 w-4" />
-                <span className="text-[11px] leading-tight">{t.logService}</span>
-              </Button>
-              <Button variant="outline" className="h-14 flex-col gap-1" onClick={() => setReadingOpen(true)}>
-                <Gauge className="h-4 w-4" />
-                <span className="text-[11px] leading-tight">{t.updateReading}</span>
-              </Button>
-              <Button variant="outline" className="h-14 flex-col gap-1" onClick={() => setFuelOpen(true)}>
-                <Fuel className="h-4 w-4" />
-                <span className="text-[11px] leading-tight">{t.logFuel}</span>
-              </Button>
-              <Button variant="outline" className="h-14 flex-col gap-1" onClick={() => { setShowFaultForm((v) => !v); setSubmitted(false); setSubmittedOffline(false); }}>
-                <AlertTriangle className="h-4 w-4 text-amber-500" />
-                <span className="text-[11px] leading-tight">{t.reportFault}</span>
-              </Button>
-              <Button variant="outline" className="h-14 flex-col gap-1 border-red-200 dark:border-red-900" onClick={() => { setShowAccidentForm((v) => !v); setIncidentSubmitted(false); setIncidentSubmittedOffline(false); }}>
-                <Siren className="h-4 w-4 text-red-600" />
-                <span className="text-[11px] leading-tight">{t.reportAccident}</span>
-              </Button>
-              {machine.category === "Vehicle" && (
-                <Button variant="outline" className="col-span-2 h-12 gap-2" onClick={() => setTripOpen(true)}>
-                  <Route className="h-4 w-4" />
-                  <span className="text-sm">{t.startTrip}</span>
+            {machine.category === "Vehicle" ? (
+              <details className="group rounded-2xl border border-border bg-card overflow-hidden">
+                <summary className="cursor-pointer p-4 font-semibold text-xs text-muted-foreground flex items-center justify-between hover:bg-muted/40 transition-colors">
+                  <span className="flex items-center gap-2">
+                    <Wrench className="h-4 w-4 text-primary" />
+                    Technician & Workshop Management Tools
+                  </span>
+                  <ChevronDown className="h-4 w-4 transition-transform group-open:rotate-180" />
+                </summary>
+                <div className="p-4 pt-1 border-t border-border space-y-3">
+                  <div className="grid grid-cols-2 gap-2">
+                    <Button variant="outline" size="sm" className="gap-1.5 text-xs h-10" onClick={() => setLogOpen(true)}>
+                      <Wrench className="h-3.5 w-3.5" /> Log Workshop Service
+                    </Button>
+                    <Button variant="outline" size="sm" className="gap-1.5 text-xs h-10" onClick={() => setReadingOpen(true)}>
+                      <Gauge className="h-3.5 w-3.5" /> Calibrate Odometer
+                    </Button>
+                  </div>
+                </div>
+              </details>
+            ) : (
+              <div className="grid grid-cols-2 gap-2">
+                <Button className="h-14 flex-col gap-1" onClick={() => setInspectOpen(true)}>
+                  <ClipboardCheck className="h-4 w-4" />
+                  <span className="text-[11px] leading-tight">{t.quickInspect}</span>
                 </Button>
-              )}
-            </div>
+                <Button className="h-14 flex-col gap-1" onClick={() => setLogOpen(true)}>
+                  <Wrench className="h-4 w-4" />
+                  <span className="text-[11px] leading-tight">{t.logService}</span>
+                </Button>
+                <Button variant="outline" className="h-14 flex-col gap-1" onClick={() => setReadingOpen(true)}>
+                  <Gauge className="h-4 w-4" />
+                  <span className="text-[11px] leading-tight">{t.updateReading}</span>
+                </Button>
+                <Button variant="outline" className="h-14 flex-col gap-1" onClick={() => setFuelOpen(true)}>
+                  <Fuel className="h-4 w-4" />
+                  <span className="text-[11px] leading-tight">{t.logFuel}</span>
+                </Button>
+                <Button variant="outline" className="h-14 flex-col gap-1" onClick={() => { setShowFaultForm((v) => !v); setSubmitted(false); setSubmittedOffline(false); }}>
+                  <AlertTriangle className="h-4 w-4 text-amber-500" />
+                  <span className="text-[11px] leading-tight">{t.reportFault}</span>
+                </Button>
+                <Button variant="outline" className="h-14 flex-col gap-1 border-red-200 dark:border-red-900" onClick={() => { setShowAccidentForm((v) => !v); setIncidentSubmitted(false); setIncidentSubmittedOffline(false); }}>
+                  <Siren className="h-4 w-4 text-red-600" />
+                  <span className="text-[11px] leading-tight">{t.reportAccident}</span>
+                </Button>
+              </div>
+            )}
 
             {myWOs.length > 0 && (
               <Section icon={<ClipboardList className="h-4 w-4" />} title={t.myWOs}>

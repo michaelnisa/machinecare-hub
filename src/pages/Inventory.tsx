@@ -24,10 +24,12 @@ import {
   AlertTriangle,
   Wrench,
   X,
+  FileSpreadsheet,
 } from "lucide-react";
 import { toast } from "sonner";
 import { formatMoney, formatNumber } from "@/lib/format";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { BulkImporterModal } from "@/components/BulkImporterModal";
 
 const CATEGORIES = [
   "filter",
@@ -77,6 +79,7 @@ export default function Inventory() {
   const [editing, setEditing] = useState<any>(null);
   const [confirm, setConfirm] = useState<string | null>(null);
   const [machinesFor, setMachinesFor] = useState<any>(null);
+  const [importOpen, setImportOpen] = useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -161,14 +164,19 @@ export default function Inventory() {
           </p>
         </div>
         {isManager && (
-          <Button
-            onClick={() => {
-              setEditing(null);
-              setOpen(true);
-            }}
-          >
-            <Plus className="mr-2 h-4 w-4" /> Add part
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" onClick={() => setImportOpen(true)}>
+              <FileSpreadsheet className="mr-2 h-4 w-4" /> Import Excel / CSV
+            </Button>
+            <Button
+              onClick={() => {
+                setEditing(null);
+                setOpen(true);
+              }}
+            >
+              <Plus className="mr-2 h-4 w-4" /> Add part
+            </Button>
+          </div>
         )}
       </div>
 
@@ -359,6 +367,12 @@ export default function Inventory() {
       <ItemMachinesDialog
         item={machinesFor}
         onClose={() => setMachinesFor(null)}
+      />
+      <BulkImporterModal
+        entity="inventory"
+        open={importOpen}
+        onOpenChange={setImportOpen}
+        onImported={load}
       />
     </div>
   );

@@ -8,7 +8,8 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { PageLoader, EmptyState } from "@/components/PageLoader";
-import { ClipboardList, Plus, Loader2, Search } from "lucide-react";
+import { ClipboardList, Plus, Loader2, Search, ClipboardCheck, LayoutGrid, List, Wrench, User } from "lucide-react";
+import { GarageIntakeWizardModal } from "@/components/garage/GarageIntakeWizardModal";
 import { toast } from "sonner";
 import { formatDate } from "@/lib/format";
 import { STATUS_FLOW, STATUS_LABEL, STATUS_BADGE, PRIORITY_BORDER, formatJobNumber } from "@/lib/garage-constants";
@@ -26,6 +27,8 @@ export default function GarageJobs() {
   const [search, setSearch] = useState("");
   const [mechanicFilter, setMechanicFilter] = useState("all");
   const [newOpen, setNewOpen] = useState(false);
+  const [intakeWizardOpen, setIntakeWizardOpen] = useState(false);
+  const [viewMode, setViewMode] = useState<"table" | "technician">("table");
 
   const changeTab = (v: string) => { setTab(v); setParams(v === "all" ? {} : { status: v }); };
 
@@ -85,7 +88,17 @@ export default function GarageJobs() {
           <h1 className="text-2xl font-semibold tracking-tight">Jobs</h1>
           <p className="text-sm text-muted-foreground">Every repair and service job, start to finish.</p>
         </div>
-        <Button onClick={() => setNewOpen(true)}><Plus className="mr-2 h-4 w-4" />Create job</Button>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            onClick={() => setIntakeWizardOpen(true)}
+            className="bg-primary text-primary-foreground gap-1.5 shadow-sm"
+          >
+            <ClipboardCheck className="h-4 w-4" /> Fast Walk-In Intake
+          </Button>
+          <Button variant="outline" onClick={() => setNewOpen(true)} className="gap-1.5">
+            <Plus className="h-4 w-4" /> Standard Job
+          </Button>
+        </div>
       </div>
 
       {/* Status tabs */}
@@ -99,7 +112,7 @@ export default function GarageJobs() {
       </div>
 
       {/* Filters row */}
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         <div className="relative min-w-[200px] flex-1">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
@@ -118,15 +131,83 @@ export default function GarageJobs() {
           <option value="">Unassigned</option>
           {mechanics.map((m: any) => <option key={m.id} value={m.id}>{m.name}</option>)}
         </select>
+        <div className="flex items-center rounded-lg border border-border bg-card p-0.5">
+          <button
+            type="button"
+            onClick={() => setViewMode("table")}
+            className={`p-2 rounded-md text-xs transition-colors ${
+              viewMode === "table" ? "bg-primary text-primary-foreground shadow-xs" : "text-muted-foreground hover:bg-muted"
+            }`}
+            title="Table View"
+          >
+            <List className="h-4 w-4" />
+          </button>
+          <button
+            type="button"
+            onClick={() => setViewMode("technician")}
+            className={`p-2 rounded-md text-xs transition-colors ${
+              viewMode === "technician" ? "bg-primary text-primary-foreground shadow-xs" : "text-muted-foreground hover:bg-muted"
+            }`}
+            title="Technician Card View"
+          >
+            <LayoutGrid className="h-4 w-4" />
+          </button>
+        </div>
       </div>
 
-      {/* Table */}
+      {/* Content: Table or Technician Cards */}
       {filtered.length === 0 ? (
         <EmptyState
           icon={<ClipboardList className="h-5 w-5" />}
           title={jobs.length === 0 ? "No jobs yet" : "Nothing matches your filters"}
           description={jobs.length === 0 ? "Create your first job when a customer's vehicle comes in." : "Try clearing filters."}
         />
+      ) : viewMode === "technician" ? (
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {filtered.map((j) => (
+            <div
+              key={j.id}
+              onClick={() => navigate(`/garage/jobs/${j.id}`)}
+              className={`group cursor-pointer rounded-xl border border-l-4 border-border bg-card p-4 transition-all hover:border-primary hover:shadow-sm ${
+                PRIORITY_BORDER[j.priority] ?? "border-l-slate-300"
+              }`}
+            >
+              <div className="flex items-center justify-between gap-2">
+                <span className="font-mono text-xs font-semibold text-muted-foreground">
+                  {formatJobNumber(j)}
+                </span>
+                <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_BADGE[j.status] ?? ""}`}>
+                  {STATUS_LABEL[j.status] ?? j.status}
+                </span>
+              </div>
+
+              <div className="mt-2.5">
+                <div className="text-base font-bold text-foreground">
+                  {j.garage_vehicles?.registration_number || "No Plate"}
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  {[j.garage_vehicles?.make, j.garage_vehicles?.model].filter(Boolean).join(" ") || "Vehicle"} · {j.garage_customers?.name}
+                </div>
+              </div>
+
+              <div className="mt-2.5 rounded-lg bg-muted/40 p-2.5 text-xs text-foreground line-clamp-2">
+                {j.reported_problem}
+              </div>
+
+              <div className="mt-3 flex items-center justify-between border-t border-border pt-2.5 text-xs text-muted-foreground">
+                <span className="flex items-center gap-1.5 font-medium">
+                  <User className="h-3.5 w-3.5 text-muted-foreground" />
+                  {j.garage_mechanics?.name ?? <span className="italic text-muted-foreground/70">Unassigned</span>}
+                </span>
+                {isOverdue(j) ? (
+                  <span className="font-semibold text-destructive uppercase text-[10px]">Overdue</span>
+                ) : (
+                  <span>{formatDate(j.created_at)}</span>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
       ) : (
         <div className="overflow-hidden rounded-xl border border-border bg-card">
           <table className="w-full text-sm">
@@ -184,6 +265,12 @@ export default function GarageJobs() {
           )}
         </div>
       )}
+
+      <GarageIntakeWizardModal
+        open={intakeWizardOpen}
+        onOpenChange={setIntakeWizardOpen}
+        onJobCreated={load}
+      />
 
       <NewJobDialog
         open={newOpen}

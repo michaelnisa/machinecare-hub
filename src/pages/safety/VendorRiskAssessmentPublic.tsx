@@ -78,13 +78,12 @@ export default function VendorRiskAssessmentPublic() {
           }
         });
     } else {
-      supabase
-        .from("organisations")
-        .select("id")
-        .limit(1)
-        .maybeSingle()
+      (supabase as any)
+        .rpc("get_safety_gateway_org_public")
         .then(({ data }: any) => {
-          if (data?.id) setActiveOrgId(data.id);
+          if (data && data.length > 0 && data[0]?.id) {
+            setActiveOrgId(data[0].id);
+          }
         });
     }
   }, [paramOrgId, queryOrgId, machineId]);

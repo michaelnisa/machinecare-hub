@@ -13,10 +13,11 @@ import { StatusBadge } from "@/components/StatusBadge";
 import { CoverImage } from "@/components/CoverImage";
 import { scheduleStatus } from "@/lib/machine-constants";
 import { formatNumber } from "@/lib/format";
-import { errorMessage } from "@/lib/offlineQueue";
-import { Truck, Search, Plus, Pencil, Loader2, Upload, ClipboardList } from "lucide-react";
+import { Truck, Search, Plus, Pencil, Loader2, Upload, ClipboardList, QrCode, FileSpreadsheet } from "lucide-react";
 import { toast } from "sonner";
 import { useI18n } from "@/i18n/I18nProvider";
+import { MachineQrDialog } from "@/components/MachineQrDialog";
+import { BulkImporterModal } from "@/components/BulkImporterModal";
 
 type Machine = {
   id: string;
@@ -83,6 +84,9 @@ export default function Vehicles() {
   const [status, setStatus] = useState("all");
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Machine | null>(null);
+  const [qrOpen, setQrOpen] = useState(false);
+  const [qrMachine, setQrMachine] = useState<Machine | null>(null);
+  const [importOpen, setImportOpen] = useState(false);
 
   const load = async () => {
     if (!profile) return;
@@ -170,9 +174,14 @@ export default function Vehicles() {
           <p className="text-sm text-muted-foreground">{t.fleet.vehiclesSub}</p>
         </div>
         {canWrite && (
-          <Button onClick={() => { setEditing(null); setOpen(true); }}>
-            <Plus className="mr-2 h-4 w-4" /> {t.fleet.addVehicle}
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" onClick={() => setImportOpen(true)}>
+              <FileSpreadsheet className="mr-2 h-4 w-4" /> Import Excel / CSV
+            </Button>
+            <Button onClick={() => { setEditing(null); setOpen(true); }}>
+              <Plus className="mr-2 h-4 w-4" /> {t.fleet.addVehicle}
+            </Button>
+          </div>
         )}
       </div>
 
@@ -278,6 +287,14 @@ export default function Vehicles() {
                       <td className="px-5 py-3"><StatusBadge status={m.status} /></td>
                       <td className="px-5 py-3 text-right">
                         <div className="flex items-center justify-end gap-1">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => { setQrMachine(m); setQrOpen(true); }}
+                            title="Vehicle QR Code"
+                          >
+                            <QrCode className="h-4 w-4 text-primary" />
+                          </Button>
                           {canWrite && (
                             <Button variant="ghost" size="icon" asChild title={t.fleet.newJobCard}>
                               <Link to={`/work-orders/new?machine=${m.id}`}>
@@ -302,6 +319,27 @@ export default function Vehicles() {
       )}
 
       <VehicleDialog open={open} onOpenChange={setOpen} machine={editing} onSaved={load} />
+
+      {qrMachine && (
+        <MachineQrDialog
+          open={qrOpen}
+          onOpenChange={setQrOpen}
+          machineId={qrMachine.id}
+          machineName={qrMachine.name}
+          qrEnabled={true}
+          plateNumber={qrMachine.plate_number}
+          currentHours={qrMachine.current_odometer_km}
+          category="Vehicle"
+          organisationName={profile?.organisation_id}
+        />
+      )}
+
+      <BulkImporterModal
+        entity="vehicle"
+        open={importOpen}
+        onOpenChange={setImportOpen}
+        onImported={load}
+      />
     </div>
   );
 }

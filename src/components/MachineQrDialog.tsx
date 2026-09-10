@@ -15,10 +15,36 @@ interface Props {
   machineName: string;
   qrEnabled: boolean;
   onQrEnabledChange?: (v: boolean) => void;
+  plateNumber?: string | null;
+  registrationNumber?: string | null;
+  currentHours?: number | null;
+  category?: string | null;
+  organisationName?: string | null;
 }
 
-export function MachineQrDialog({ open, onOpenChange, machineId, machineName, qrEnabled, onQrEnabledChange }: Props) {
-  const url = `${window.location.origin}/m/${machineId}`;
+export function MachineQrDialog({
+  open,
+  onOpenChange,
+  machineId,
+  machineName,
+  qrEnabled,
+  onQrEnabledChange,
+  plateNumber,
+  registrationNumber,
+  currentHours,
+  category,
+  organisationName,
+}: Props) {
+  const queryParams = new URLSearchParams();
+  queryParams.set("n", machineName);
+  if (plateNumber) queryParams.set("p", plateNumber);
+  if (registrationNumber) queryParams.set("r", registrationNumber);
+  if (currentHours != null) queryParams.set("h", String(currentHours));
+  if (category) queryParams.set("c", category);
+  if (organisationName) queryParams.set("o", organisationName);
+
+  const queryString = queryParams.toString();
+  const url = `${window.location.origin}/m/${machineId}${queryString ? `?${queryString}` : ""}`;
   const [toggling, setToggling] = useState(false);
 
   const toggleQrEnabled = async (v: boolean) => {

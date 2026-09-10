@@ -173,6 +173,47 @@ export const CONNECTOR_CATALOG: ConnectorCatalogItem[] = [
         { source_field: "reading_date", target_field: "newreadingdate", transform_type: "direct", is_required: true },
       ]
     }
+  },
+  {
+    slug: "database",
+    name: "Direct SQL Database (Postgres / MySQL / SQL Server)",
+    category: "Database",
+    description: "Connect to legacy databases or internal SQL data stores. Safe, read-only connector strictly preventing drop, truncate, and delete queries.",
+    version: "1.0.0 Read-Only",
+    status: "available",
+    logo: "database",
+    docs_url: "https://machinecare.io/docs/integrations/database",
+    last_updated: "2026-09-10",
+    config_fields: [
+      { key: "base_url", label: "Database Host / Connection String", type: "text", placeholder: "postgres://db.internal:5432/main", required: true },
+      { key: "company_identifier", label: "Database / Schema Name", type: "text", placeholder: "public", required: true },
+    ],
+    credential_fields: [
+      { key: "username", label: "Read-Only Database User", type: "text", placeholder: "machinecare_ro", required: true },
+      { key: "password", label: "Database Password", type: "password", placeholder: "••••••••", required: true },
+    ],
+    capabilities: {
+      read: ["assets", "parts", "inventory", "customers", "suppliers", "production_orders"],
+      write: [],
+      supports_webhooks: false,
+      supports_delta_sync: true,
+    },
+    default_mappings: {
+      asset: [
+        { source_field: "id", target_field: "id", transform_type: "direct", is_required: true },
+        { source_field: "asset_code", target_field: "asset_code", transform_type: "direct", is_required: true },
+        { source_field: "name", target_field: "name", transform_type: "direct", is_required: true },
+        { source_field: "status", target_field: "status", transform_type: "direct" },
+        { source_field: "location", target_field: "location", transform_type: "direct" },
+      ],
+      part: [
+        { source_field: "id", target_field: "id", transform_type: "direct", is_required: true },
+        { source_field: "part_number", target_field: "part_number", transform_type: "direct", is_required: true },
+        { source_field: "name", target_field: "name", transform_type: "direct", is_required: true },
+        { source_field: "available_quantity", target_field: "available_quantity", transform_type: "direct", default_value: 0 },
+        { source_field: "unit_cost", target_field: "unit_cost", transform_type: "direct", default_value: 0 },
+      ],
+    }
   }
 ];
 
@@ -607,6 +648,19 @@ export const integrationsService = {
         latency_ms: 118,
         company_name: `Maximo Site: ${payload.company_identifier || "BEDFORD"} (EAM)`,
         version: "IBM Maximo Application Suite (MAS) 8.11+ / Manage OSLC",
+      };
+    }
+
+    if (payload.connector_type === "database") {
+      if (!payload.credentials.username || !payload.credentials.password) {
+        return { success: false, message: "Read-only database user and password required", latency_ms: 70 };
+      }
+      return {
+        success: true,
+        message: `Connected to read-only SQL database '${payload.company_identifier || "main"}' (strict non-destructive mode)`,
+        latency_ms: 45,
+        company_name: `SQL DB (${payload.company_identifier || "public"})`,
+        version: "PostgreSQL 15.2 (Read-Only Replica)",
       };
     }
 

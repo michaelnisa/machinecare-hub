@@ -7,6 +7,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import type { IndustryProfile } from "@/hooks/useIndustry";
 import { IndustryPicker } from "@/components/IndustryPicker";
+import { SolutionSuitePicker, SOLUTION_SUITES, type SolutionSuite } from "@/components/SolutionSuitePicker";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -50,6 +51,8 @@ export default function Signup() {
   const [emailSent, setEmailSent] = useState<string | null>(null);
   const [requestSubmitted, setRequestSubmitted] = useState(false);
   const [industryProfile, setIndustryProfile] = useState<IndustryProfile>("manufacturing");
+  const [selectedSuite, setSelectedSuite] = useState<SolutionSuite>(SOLUTION_SUITES[0]);
+  const [accountTier, setAccountTier] = useState<"standard" | "enterprise">("standard");
 
   useEffect(() => {
     if (user && isAccessGranted) {
@@ -82,15 +85,15 @@ export default function Signup() {
 
     const signupMetaData: Record<string, any> = {
       full_name: values.full_name,
+      plan: accountTier,
+      enabled_modules: selectedSuite.modules,
+      industry_profile: params.get("industry") || selectedSuite.recommendedIndustry,
     };
     if (orgInviteToken) {
       signupMetaData.invite_token = orgInviteToken;
     }
     if (params.get("company")) {
       signupMetaData.company_name = params.get("company");
-    }
-    if (params.get("industry")) {
-      signupMetaData.industry_profile = params.get("industry");
     }
 
     const { error } = await supabase.auth.signUp({
@@ -120,7 +123,9 @@ export default function Signup() {
         name: values.name,
         contact: values.contact,
         company: values.company,
-        industry: industryProfile,
+        industry: selectedSuite.recommendedIndustry,
+        plan: accountTier,
+        enabled_modules: selectedSuite.modules,
         status: "pending",
       });
 
@@ -135,7 +140,7 @@ export default function Signup() {
             name: values.name,
             contact: values.contact,
             company: values.company,
-            industry: industryProfile,
+            industry: `${selectedSuite.name} (${accountTier.toUpperCase()})`,
           },
         });
       } catch (smsErr) {
@@ -379,11 +384,12 @@ export default function Signup() {
                   )}
                 </div>
 
-                <div className="space-y-2">
-                  <Label>{isSwahili ? "Sekta Yenu" : "Industry type"}</Label>
-                  <IndustryPicker
-                    value={industryProfile}
-                    onChange={setIndustryProfile}
+                <div className="pt-1">
+                  <SolutionSuitePicker
+                    selectedSuiteId={selectedSuite.id}
+                    onSelectSuite={setSelectedSuite}
+                    accountTier={accountTier}
+                    onChangeAccountTier={setAccountTier}
                   />
                 </div>
 

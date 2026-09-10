@@ -24,13 +24,37 @@ export function QuickFuelDialog({ open, onOpenChange, machineId, onSaved }: Prop
   const t = T[lang];
   const [form, setForm] = useState<any>({});
   const [busy, setBusy] = useState(false);
+  const [currentOdo, setCurrentOdo] = useState<number | null>(null);
 
   useEffect(() => {
-    if (open) setForm({ recorded_at: new Date().toISOString().slice(0, 10), fuel_litres: "", fuel_cost: "", currency: "TZS", odometer: "", station: "" });
-  }, [open]);
+    if (open) {
+      setForm({ recorded_at: new Date().toISOString().slice(0, 10), fuel_litres: "", fuel_cost: "", currency: "TZS", odometer: "", station: "" });
+      supabase.from("machines").select("current_hours, current_odometer_km").eq("id", machineId).maybeSingle().then(({ data }: any) => {
+        const odo = data?.current_odometer_km ?? data?.current_hours;
+        if (odo != null) {
+          setCurrentOdo(Number(odo));
+          setForm((prev: any) => ({ ...prev, odometer: String(odo) }));
+        }
+      });
+    }
+  }, [open, machineId]);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (form.odometer !== "" && currentOdo != null) {
+      const entered = Number(form.odometer);
+      if (entered < currentOdo) {
+        if (!confirm(`Warning: Entered odometer (${entered} km) is lower than current vehicle odometer (${currentOdo} km). Are you sure?`)) {
+          return;
+        }
+      } else if (entered > currentOdo + 3000) {
+        if (!confirm(`Notice: Odometer jumped by ${entered - currentOdo} km from last reading (${currentOdo} km). Please check for typos.`)) {
+          return;
+        }
+      }
+    }
+
     setBusy(true);
     const payload: any = {
       machine_id: machineId,
@@ -44,7 +68,7 @@ export function QuickFuelDialog({ open, onOpenChange, machineId, onSaved }: Prop
     };
     const { error } = await supabase.from("fuel_logs").insert(payload);
     if (!error && payload.odometer != null) {
-      await supabase.from("machines").update({ current_hours: payload.odometer }).eq("id", machineId);
+      await supabase.from("machines").update({ current_hours: payload.odometer, current_odometer_km: payload.odometer }).eq("id", machineId);
     }
     setBusy(false);
     if (error) return toast.error(error.message);

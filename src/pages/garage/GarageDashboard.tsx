@@ -3,7 +3,10 @@ import { Link, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { PageLoader, EmptyState } from "@/components/PageLoader";
-import { ClipboardList } from "lucide-react";
+import { ClipboardList, ClipboardCheck, ShoppingCart } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { GarageIntakeWizardModal } from "@/components/garage/GarageIntakeWizardModal";
+import { QuickCounterSaleModal } from "@/components/garage/QuickCounterSaleModal";
 import { toast } from "sonner";
 import { formatMoney } from "@/lib/format";
 import { STATUS_LABEL, STATUS_BADGE, formatJobNumber } from "@/lib/garage-constants";
@@ -19,6 +22,8 @@ export default function GarageDashboard() {
   const [invoicesToday, setInvoicesToday] = useState<any[]>([]);
   const [outstandingInvoices, setOutstandingInvoices] = useState<any[]>([]);
   const [lowStock, setLowStock] = useState(0);
+  const [intakeOpen, setIntakeOpen] = useState(false);
+  const [counterSaleOpen, setCounterSaleOpen] = useState(false);
 
   useEffect(() => {
     if (!profile) return;
@@ -86,9 +91,26 @@ export default function GarageDashboard() {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">{organisation?.name ?? "Workshop"} dashboard</h1>
-        <p className="text-sm text-muted-foreground">What's happening in your workshop today.</p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">{organisation?.name ?? "Workshop"} dashboard</h1>
+          <p className="text-sm text-muted-foreground">What's happening in your workshop today.</p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            onClick={() => setIntakeOpen(true)}
+            className="bg-primary text-primary-foreground gap-1.5 shadow-sm"
+          >
+            <ClipboardCheck className="h-4 w-4" /> Fast Walk-In Intake
+          </Button>
+          <Button
+            variant="outline"
+            onClick={() => setCounterSaleOpen(true)}
+            className="gap-1.5"
+          >
+            <ShoppingCart className="h-4 w-4" /> Quick Counter Sale
+          </Button>
+        </div>
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -134,6 +156,18 @@ export default function GarageDashboard() {
           </div>
         )}
       </div>
+
+      <GarageIntakeWizardModal
+        open={intakeOpen}
+        onOpenChange={setIntakeOpen}
+        onJobCreated={() => navigate("/garage/jobs")}
+      />
+
+      <QuickCounterSaleModal
+        open={counterSaleOpen}
+        onOpenChange={setCounterSaleOpen}
+        onSaleCompleted={() => navigate("/garage/invoices")}
+      />
     </div>
   );
 }

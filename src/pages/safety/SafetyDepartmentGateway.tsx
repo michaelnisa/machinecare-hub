@@ -66,23 +66,17 @@ export default function SafetyDepartmentGateway() {
   useEffect(() => {
     async function loadOrg() {
       setLoadingOrg(true);
-      if (orgIdParam) {
-        const { data } = await supabase
-          .from("organisations")
-          .select("id, name, logo_url, safety_emergency_phone, safety_first_aid_phone")
-          .eq("id", orgIdParam)
-          .maybeSingle();
-        if (data) setOrganisation(data);
-      } else {
-        // Fetch first organisation or default
-        const { data } = await supabase
-          .from("organisations")
-          .select("id, name, logo_url, safety_emergency_phone, safety_first_aid_phone")
-          .limit(1)
-          .maybeSingle();
-        if (data) setOrganisation(data);
+      try {
+        const { data } = await (supabase as any)
+          .rpc("get_safety_gateway_org_public", { p_org_id: orgIdParam || null });
+        if (data && data.length > 0) {
+          setOrganisation(data[0]);
+        }
+      } catch (err) {
+        console.error("Failed to load organisation info:", err);
+      } finally {
+        setLoadingOrg(false);
       }
-      setLoadingOrg(false);
     }
     loadOrg();
   }, [orgIdParam]);

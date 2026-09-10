@@ -55,6 +55,8 @@ import {
   HardHat,
   Trophy,
   FlaskConical,
+  Cpu,
+  Sliders,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { initials } from "@/lib/format";
@@ -249,7 +251,7 @@ export function Sidebar() {
         id: "system",
         label: isLite ? "Account" : "System",
         items: [
-          ...(isLite ? [{ to: "/team", label: t.nav.team, icon: Users }] : []),
+          { to: "/team", label: t.nav.team, icon: Users },
           { to: "/integrations", label: "Integrations", icon: Layers },
           { to: "/settings", label: t.nav.settings, icon: Settings },
           ...(isAdmin ? [{ to: "/admin", label: "Admin Portal", icon: ShieldAlert }] : []),
@@ -352,6 +354,7 @@ export function Sidebar() {
         label: "Overview",
         items: [
           { to: "/dashboard", label: "Workshop Dashboard", icon: LayoutDashboard },
+          { to: "/live", label: "Live Workshop TV", icon: Tv },
           { to: "/notifications", label: t.nav.notifications, icon: Bell },
         ],
       },
@@ -372,7 +375,7 @@ export function Sidebar() {
         items: [
           { to: "/garage/estimates", label: "Estimates", icon: FileText },
           { to: "/garage/invoices", label: "Invoices", icon: Receipt },
-          { to: "/garage/payments", label: "Payments", icon: CreditCard },
+          // { to: "/garage/payments", label: "Payments", icon: CreditCard },
         ],
       },
       {
@@ -400,6 +403,7 @@ export function Sidebar() {
         id: "system",
         label: "System",
         items: [
+          { to: "/team", label: t.nav.team, icon: Users },
           { to: "/integrations", label: "Integrations", icon: Layers },
           { to: "/settings", label: t.nav.settings, icon: Settings },
           ...(isAdmin ? [{ to: "/admin", label: "Admin Portal", icon: ShieldAlert }] : []),
@@ -430,6 +434,7 @@ export function Sidebar() {
           { to: "/contractor/portal", label: "Contractor Portal", icon: HardHat },
           { to: "/safety/contractors", label: "Contractor Registry", icon: Building2 },
           { to: "/safety/team", label: "Safety Department Team", icon: Users },
+          { to: "/team", label: "Organization Team", icon: Users },
         ],
       },
       {
@@ -451,26 +456,254 @@ export function Sidebar() {
       },
       {
         id: "account",
-        label: "Account",
+        label: "Account & System",
         items: [
+          { to: "/team", label: t.nav.team, icon: Users },
           { to: "/settings", label: t.nav.settings, icon: Settings },
+          ...(isAdmin ? [{ to: "/admin", label: "Admin Portal", icon: ShieldAlert }] : []),
         ],
       },
     ],
-    [t]
+    [t, isAdmin],
+  );
+
+  const iotGroups: NavGroup[] = useMemo(
+    () => [
+      {
+        id: "iot-overview",
+        label: "Overview",
+        items: [
+          { to: "/dashboard", label: "IoT Dashboard", icon: LayoutDashboard },
+          { to: "/live", label: "Live Telemetry TV", icon: Tv },
+          { to: "/notifications", label: t.nav.notifications, icon: Bell },
+        ],
+      },
+      {
+        id: "connected-data",
+        label: "Connected Data & IoT",
+        items: [
+          { to: "/integrations/connected", label: "Connected Devices & IoT", icon: Cpu },
+          { to: "/maintenance/meter-readings", label: "Telemetry & Meters", icon: Activity },
+          { to: "/integrations/mapping", label: "Data Mapping", icon: Sliders },
+          { to: "/integrations/jobs", label: "Sync & Stream Jobs", icon: Layers },
+        ],
+      },
+      {
+        id: "monitored-assets",
+        label: "Monitored Assets",
+        items: [
+          { to: "/machines", label: "Monitored Equipment", icon: Wrench },
+          { to: "/maintenance/downtime", label: "Telemetry Alarms & Downtime", icon: AlertOctagon },
+          { to: "/analytics", label: "Sensor Analytics", icon: BarChart2 },
+        ],
+      },
+      {
+        id: "system",
+        label: "System",
+        items: [
+          { to: "/team", label: t.nav.team, icon: Users },
+          { to: "/integrations", label: "Integrations Catalog", icon: Layers },
+          { to: "/settings", label: t.nav.settings, icon: Settings },
+          ...(isAdmin ? [{ to: "/admin", label: "Admin Portal", icon: ShieldAlert }] : []),
+        ],
+      },
+    ],
+    [t, isAdmin],
   );
 
   // When a user belongs to the Safety Department, isolate their view to Safety & People only.
-  // Otherwise, fallback to mixed, fleet, garage, or manufacturing nav trees.
-  const groups = isSafetyDept
-    ? safetyDeptGroups
-    : isMixed
-    ? [
-        ...manufacturingGroups.filter((g) => g.id !== "system"),
-        ...fleetGroups.filter((g) => g.id !== "system"),
-        ...garageGroups,
-      ]
-    : isFleet ? fleetGroups : isGarage ? garageGroups : manufacturingGroups;
+  // Otherwise, respect organisation.enabled_modules or fallback to legacy industry profiles.
+  const groups = useMemo(() => {
+    if (isSafetyDept) return safetyDeptGroups;
+
+    const enabledMods = organisation?.enabled_modules;
+    if (enabledMods && Array.isArray(enabledMods) && enabledMods.length > 0) {
+      // 1. Standalone Safety & HSE
+      if (enabledMods.length === 1 && enabledMods[0] === "safety") {
+        return safetyDeptGroups;
+      }
+
+      // 2. Standalone IoT & Connected Data
+      if (
+        enabledMods.includes("connected_data") &&
+        !enabledMods.includes("fleet") &&
+        !enabledMods.includes("workshop") &&
+        !enabledMods.includes("production") &&
+        !enabledMods.includes("maintenance")
+      ) {
+        return iotGroups;
+      }
+
+      // 3. Standalone Fleet & Logistics
+      if (
+        enabledMods.includes("fleet") &&
+        !enabledMods.includes("workshop") &&
+        !enabledMods.includes("production") &&
+        !enabledMods.includes("maintenance")
+      ) {
+        return fleetGroups;
+      }
+
+      // 4. Standalone Workshop & Garage
+      if (
+        enabledMods.includes("workshop") &&
+        !enabledMods.includes("fleet") &&
+        !enabledMods.includes("production") &&
+        !enabledMods.includes("maintenance")
+      ) {
+        return garageGroups;
+      }
+
+      // 5. Modular Composition (Maintenance Suite, Production Suite, Enterprise, or Custom combinations)
+      const dynamicGroups: NavGroup[] = [];
+
+      // Overview
+      const isProductionOnly = enabledMods.includes("production") && !enabledMods.includes("maintenance");
+      dynamicGroups.push({
+        id: "overview",
+        label: "Overview",
+        items: [
+          { to: "/dashboard", label: t.nav.dashboard, icon: LayoutDashboard },
+          ...(!isLite ? [{
+            to: isProductionOnly ? "/live/production" : "/live",
+            label: isProductionOnly ? "Live Production TV" : "Live TV",
+            icon: Tv,
+          }] : []),
+          { to: "/notifications", label: t.nav.notifications, icon: Bell },
+        ],
+      });
+
+      // Maintenance / Assets
+      if (enabledMods.includes("maintenance") || enabledMods.includes("assets")) {
+        const mGroup = manufacturingGroups.find((g) => g.id === "assets");
+        if (mGroup) dynamicGroups.push(mGroup);
+      }
+
+      // Production
+      if (enabledMods.includes("production")) {
+        const pGroup = manufacturingGroups.find((g) => g.id === "production");
+        if (pGroup) {
+          dynamicGroups.push(pGroup);
+        } else if (!isLite) {
+          dynamicGroups.push({
+            id: "production",
+            label: "Production",
+            items: [
+              { to: "/live/production", label: "Live TV", icon: Tv },
+              { to: "/production/overview", label: "Production Overview", icon: LayoutDashboard },
+              { to: "/production/planning", label: "Production Planning", icon: CalendarRange },
+              { to: "/production/orders", label: "Production Orders", icon: ClipboardList },
+              { to: "/production", label: "Production KPI", icon: Target },
+              { to: "/oee", label: t.nav.oee, icon: Gauge },
+              { to: "/production/downtime", label: "Downtime", icon: AlertOctagon },
+              { to: "/quality", label: t.nav.quality, icon: CheckCircle2 },
+              { to: "/production/material-waste", label: "Material & Waste", icon: Recycle },
+              { to: "/utilities", label: t.nav.utilities, icon: Zap },
+              { to: "/production/analytics", label: "Analytics", icon: BarChart2 },
+              { to: "/production/history", label: "Production History", icon: History },
+              { to: "/reports", label: t.nav.reports, icon: FileBarChart },
+            ],
+          });
+        }
+      }
+
+      // Inventory
+      if (enabledMods.includes("inventory")) {
+        const iGroup = manufacturingGroups.find((g) => g.id === "inventory");
+        if (iGroup) dynamicGroups.push(iGroup);
+      }
+
+      // Safety
+      if (enabledMods.includes("safety")) {
+        const sGroup = manufacturingGroups.find((g) => g.id === "safety");
+        if (sGroup) {
+          dynamicGroups.push(sGroup);
+        } else if (!isLite) {
+          const sGovGroup = safetyDeptGroups.find((g) => g.id === "safety-governance");
+          if (sGovGroup) dynamicGroups.push(sGovGroup);
+        }
+      }
+
+      // Connected Data & IoT
+      if (enabledMods.includes("connected_data")) {
+        dynamicGroups.push({
+          id: "connected-data",
+          label: "Connected Data & IoT",
+          items: [
+            { to: "/integrations/connected", label: "Connected Devices & IoT", icon: Cpu },
+            { to: "/maintenance/meter-readings", label: "Telemetry & Meters", icon: Activity },
+            { to: "/integrations/mapping", label: "Data Mapping", icon: Sliders },
+            { to: "/integrations/jobs", label: "Sync & Stream Jobs", icon: Layers },
+          ],
+        });
+      }
+
+      // Fleet
+      if (enabledMods.includes("fleet")) {
+        const fGroup = fleetGroups.find((g) => g.id === "fleet");
+        if (fGroup) dynamicGroups.push(fGroup);
+        const fiGroup = fleetGroups.find((g) => g.id === "fleet-insights");
+        if (fiGroup) dynamicGroups.push(fiGroup);
+      }
+
+      // Workshop & Garage
+      if (enabledMods.includes("workshop")) {
+        const wGroup = garageGroups.find((g) => g.id === "garage-workshop");
+        if (wGroup) dynamicGroups.push(wGroup);
+        const cGroup = garageGroups.find((g) => g.id === "garage-commercial");
+        if (cGroup) dynamicGroups.push(cGroup);
+      }
+
+      // Insights & Vendors
+      if (!isLite && (enabledMods.includes("maintenance") || enabledMods.includes("inventory"))) {
+        const vGroup = manufacturingGroups.find((g) => g.id === "vendors");
+        if (vGroup) dynamicGroups.push(vGroup);
+        const insGroup = manufacturingGroups.find((g) => g.id === "insights");
+        if (insGroup) dynamicGroups.push(insGroup);
+      }
+
+      // System
+      dynamicGroups.push({
+        id: "system",
+        label: isLite ? "Account" : "System",
+        items: [
+          { to: "/team", label: t.nav.team, icon: Users },
+          { to: "/integrations", label: "Integrations", icon: Layers },
+          { to: "/settings", label: t.nav.settings, icon: Settings },
+          ...(isAdmin ? [{ to: "/admin", label: "Admin Portal", icon: ShieldAlert }] : []),
+        ],
+      });
+
+      return dynamicGroups;
+    }
+
+    // Legacy fallback for existing database accounts:
+    return isMixed
+      ? [
+          ...manufacturingGroups.filter((g) => g.id !== "system"),
+          ...fleetGroups.filter((g) => g.id !== "system"),
+          ...garageGroups,
+        ]
+      : isFleet
+      ? fleetGroups
+      : isGarage
+      ? garageGroups
+      : manufacturingGroups;
+  }, [
+    isSafetyDept,
+    organisation?.enabled_modules,
+    isMixed,
+    isFleet,
+    isGarage,
+    manufacturingGroups,
+    fleetGroups,
+    garageGroups,
+    safetyDeptGroups,
+    iotGroups,
+    isLite,
+    isAdmin,
+    t,
+  ]);
 
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>(() => {
     try {
@@ -508,11 +741,43 @@ export function Sidebar() {
             <div className="text-lg font-semibold leading-tight tracking-tight text-sidebar-foreground">
               {t.common.appName}
             </div>
-            {(isGarage || isFleet) && (
-              <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-                {isGarage ? "Workshop" : "Fleet"}
-              </div>
-            )}
+            {(() => {
+              const enabledMods = organisation?.enabled_modules;
+              if (enabledMods && Array.isArray(enabledMods) && enabledMods.length > 0) {
+                if (enabledMods.length === 1 && enabledMods[0] === "safety") {
+                  return <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Safety HSE</div>;
+                }
+                if (
+                  enabledMods.includes("connected_data") &&
+                  !enabledMods.includes("fleet") &&
+                  !enabledMods.includes("workshop") &&
+                  !enabledMods.includes("production") &&
+                  !enabledMods.includes("maintenance")
+                ) {
+                  return <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">IoT & Telemetry</div>;
+                }
+                if (enabledMods.includes("workshop") && !enabledMods.includes("fleet") && !enabledMods.includes("production")) {
+                  return <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Workshop</div>;
+                }
+                if (enabledMods.includes("fleet") && !enabledMods.includes("workshop") && !enabledMods.includes("production")) {
+                  return <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Fleet</div>;
+                }
+                if (organisation.plan === "enterprise" || enabledMods.length >= 7) {
+                  return <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Enterprise</div>;
+                }
+                if (enabledMods.includes("production") && !enabledMods.includes("maintenance")) {
+                  return <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Production</div>;
+                }
+                if (enabledMods.includes("maintenance") && !enabledMods.includes("production")) {
+                  return <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Maintenance</div>;
+                }
+              }
+              return (isGarage || isFleet) ? (
+                <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+                  {isGarage ? "Workshop" : "Fleet"}
+                </div>
+              ) : null;
+            })()}
           </div>
         </div>
         <LanguageSwitcher compact />
@@ -521,7 +786,12 @@ export function Sidebar() {
       <nav className="flex-1 space-y-1 overflow-y-auto px-3 pb-3">
         {groups.map((g, idx) => {
           const open = openGroups[g.id] ?? true;
-          const isOverview = g.id === "overview" || g.id === "fleet-overview" || g.id === "garage-overview";
+          const isOverview =
+            g.id === "overview" ||
+            g.id === "fleet-overview" ||
+            g.id === "garage-overview" ||
+            g.id === "safety-overview" ||
+            g.id === "iot-overview";
 
           if (isOverview) {
             return (

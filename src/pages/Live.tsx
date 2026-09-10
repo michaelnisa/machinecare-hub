@@ -18,6 +18,24 @@ type FleetKpis = {
 
 const emptyFleet: FleetKpis = { onRoad: 0, idle: 0, workshop: 0, offRoad: 0, vehicles: [] };
 
+type GarageKpis = {
+  inProgress: number;
+  estimate: number;
+  awaitingApproval: number;
+  readyForPickup: number;
+  completedToday: number;
+  jobs: { label: string; vehicle: string; customer: string; status: string }[];
+};
+
+const emptyGarage: GarageKpis = {
+  inProgress: 0,
+  estimate: 0,
+  awaitingApproval: 0,
+  readyForPickup: 0,
+  completedToday: 0,
+  jobs: [],
+};
+
 type Kpis = {
   availableMachines: number;
   inOperationMachines: number;
@@ -63,9 +81,10 @@ function Tile({
 
 export default function Live() {
   const { user, loading, organisation } = useAuth();
-  const { isFleet } = useIndustry();
+  const { isFleet, isGarage } = useIndustry();
   const [kpis, setKpis] = useState<Kpis>(empty);
   const [fleetKpis, setFleetKpis] = useState<FleetKpis>(emptyFleet);
+  const [garageKpis, setGarageKpis] = useState<GarageKpis>(emptyGarage);
   const [now, setNow] = useState(new Date());
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
@@ -182,13 +201,59 @@ export default function Live() {
     setLastUpdated(new Date());
   }, [organisation?.id]);
 
+  const loadGarage = useCallback(async () => {
+    if (!organisation?.id) return;
+    const orgId = organisation.id;
+    const today = new Date().toISOString().slice(0, 10);
+    const { data: jobs } = await (supabase as any)
+      .from("garage_jobs")
+      .select("id, job_number, job_year, status, created_at, garage_customers(name), garage_vehicles(make, model, registration_number)")
+      .eq("organisation_id", orgId)
+      .order("created_at", { ascending: false })
+      .limit(50);
+
+    const allJobs = jobs ?? [];
+    let inProgress = 0, estimate = 0, awaitingApproval = 0, readyForPickup = 0, completedToday = 0;
+    const recentJobs: GarageKpis["jobs"] = [];
+
+    for (const j of allJobs) {
+      if (j.status === "in_progress") inProgress++;
+      else if (j.status === "estimate") estimate++;
+      else if (j.status === "awaiting_approval") awaitingApproval++;
+      else if (j.status === "completed" || j.status === "invoiced") {
+        readyForPickup++;
+        if (j.created_at?.slice(0, 10) === today) completedToday++;
+      }
+
+      if (recentJobs.length < 16) {
+        const v = j.garage_vehicles;
+        const vStr = v ? `${v.registration_number || ""}${v.make ? ` (${v.make})` : ""}` : "Vehicle";
+        recentJobs.push({
+          label: `JOB-${j.job_year || new Date().getFullYear()}-${String(j.job_number || 1).padStart(4, "0")}`,
+          vehicle: vStr,
+          customer: j.garage_customers?.name || "Walk-in Client",
+          status: j.status || "in_progress",
+        });
+      }
+    }
+    setGarageKpis({ inProgress, estimate, awaitingApproval, readyForPickup, completedToday, jobs: recentJobs });
+    setLastUpdated(new Date());
+  }, [organisation?.id]);
+
   // Initial + polling fallback
   useEffect(() => {
     if (!organisation?.id) return;
-    if (isFleet) loadFleet(); else load();
-    const t = setInterval(() => (isFleet ? loadFleet() : load()), 30000);
+    if (isFleet) loadFleet();
+    else if (isGarage) loadGarage();
+    else load();
+
+    const t = setInterval(() => {
+      if (isFleet) loadFleet();
+      else if (isGarage) loadGarage();
+      else load();
+    }, 30000);
     return () => clearInterval(t);
-  }, [organisation?.id, isFleet, load, loadFleet]);
+  }, [organisation?.id, isFleet, isGarage, load, loadFleet, loadGarage]);
 
   // Realtime subscriptions
   useEffect(() => {
@@ -198,6 +263,9 @@ export default function Live() {
       channel
         .on("postgres_changes", { event: "*", schema: "public", table: "machines", filter: `organisation_id=eq.${organisation.id}` }, () => loadFleet())
         .on("postgres_changes", { event: "*", schema: "public", table: "trips", filter: `organisation_id=eq.${organisation.id}` }, () => loadFleet());
+    } else if (isGarage) {
+      channel
+        .on("postgres_changes", { event: "*", schema: "public", table: "garage_jobs", filter: `organisation_id=eq.${organisation.id}` }, () => loadGarage());
     } else {
       channel
         .on("postgres_changes", { event: "*", schema: "public", table: "machines", filter: `organisation_id=eq.${organisation.id}` }, () => load())
@@ -209,7 +277,7 @@ export default function Live() {
     }
     channel.subscribe();
     return () => { supabase.removeChannel(channel); };
-  }, [organisation?.id, isFleet, load, loadFleet]);
+  }, [organisation?.id, isFleet, isGarage, load, loadFleet, loadGarage]);
 
   const toggleFullscreen = () => {
     if (!document.fullscreenElement) document.documentElement.requestFullscreen?.().catch(() => {});
@@ -226,7 +294,13 @@ export default function Live() {
         <div className="mb-8 flex items-center justify-between">
           <div>
             <h1 className="text-4xl font-bold tracking-tight">{organisation?.name ?? "Live Operations"}</h1>
-            <p className="mt-1 text-white/50">{isFleet ? "Real-time KPI dashboard" : "Maintenance — live KPI dashboard"}</p>
+            <p className="mt-1 text-white/50">
+              {isFleet
+                ? "Real-time KPI dashboard"
+                : isGarage
+                ? "Workshop & Garage — live service bay board"
+                : "Maintenance — live KPI dashboard"}
+            </p>
           </div>
           <div className="flex items-center gap-4">
             <Button variant="ghost" size="icon" onClick={toggleFullscreen} className="text-white/70 hover:text-white hover:bg-white/10" title="Fullscreen">
@@ -273,6 +347,49 @@ export default function Live() {
                   </span>
                 </div>
               ))}
+            </div>
+          </>
+        ) : isGarage ? (
+          <>
+            {/* WORKSHOP SERVICE BAYS */}
+            <SectionTitle icon={<Wrench className="h-5 w-5" />} title="Workshop Service Bays & Work Orders" />
+            <div className="grid grid-cols-2 gap-5 md:grid-cols-4">
+              <Tile icon={<Wrench className="h-6 w-6" />} label="In Progress" value={String(garageKpis.inProgress)} accent="text-amber-400" />
+              <Tile icon={<ClipboardList className="h-6 w-6" />} label="Pending Estimates" value={String(garageKpis.estimate)} accent="text-sky-400" />
+              <Tile icon={<CalendarClock className="h-6 w-6" />} label="Awaiting Approval" value={String(garageKpis.awaitingApproval)} accent="text-purple-400" />
+              <Tile icon={<ShieldCheck className="h-6 w-6" />} label="Ready / Picked Up" value={String(garageKpis.readyForPickup)} sub={`${garageKpis.completedToday} completed today`} accent="text-emerald-400" />
+            </div>
+
+            {/* LIVE SERVICE BAY BOARD */}
+            <SectionTitle icon={<Activity className="h-5 w-5" />} title="Live Service Bay Board" />
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-4">
+              {garageKpis.jobs.map((j) => (
+                <div
+                  key={j.label}
+                  className="flex flex-col justify-between rounded-xl border border-white/10 bg-white/5 p-4"
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="font-mono text-base font-bold text-white/90">{j.label}</span>
+                    <span
+                      className={
+                        j.status === "in_progress" ? "text-amber-400 font-semibold text-xs uppercase" :
+                        j.status === "estimate" ? "text-sky-400 font-semibold text-xs uppercase" :
+                        j.status === "awaiting_approval" ? "text-purple-400 font-semibold text-xs uppercase" :
+                        "text-emerald-400 font-semibold text-xs uppercase"
+                      }
+                    >
+                      ● {j.status.replace("_", " ")}
+                    </span>
+                  </div>
+                  <div className="mt-2 text-sm font-medium text-white/80 truncate">{j.vehicle}</div>
+                  <div className="text-xs text-white/50 truncate">{j.customer}</div>
+                </div>
+              ))}
+              {garageKpis.jobs.length === 0 && (
+                <div className="col-span-full rounded-xl border border-white/10 bg-white/5 p-8 text-center text-white/50">
+                  No active workshop jobs in progress. Intake vehicles via the Workshop Jobs module.
+                </div>
+              )}
             </div>
           </>
         ) : (

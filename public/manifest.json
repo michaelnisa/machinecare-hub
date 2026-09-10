@@ -1,0 +1,17 @@
+{
+  "short_name": "MachineCare",
+  "name": "MachineCare Hub — Fleet & Operations",
+  "icons": [
+    {
+      "src": "/placeholder.svg",
+      "type": "image/svg+xml",
+      "sizes": "192x192 512x512"
+    }
+  ],
+  "start_url": "/",
+  "background_color": "#090d16",
+  "theme_color": "#0284c7",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "scope": "/"
+}
