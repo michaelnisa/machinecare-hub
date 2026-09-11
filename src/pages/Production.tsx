@@ -5,11 +5,11 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useUserRole } from "@/hooks/useUserRole";
 import { Button } from "@/components/ui/button";
 import { PageLoader, EmptyState } from "@/components/PageLoader";
-import { Target, AlertTriangle, Wrench, ClipboardList, BookOpen, BarChart2, TrendingUp, TrendingDown, Clock, Factory } from "lucide-react";
+import { Target, AlertTriangle, Wrench, ClipboardList, BookOpen, BarChart2, TrendingUp, TrendingDown, Clock, Factory, RefreshCw, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { formatDate, formatTZS } from "@/lib/format";
 import { REASON_MAP, SCRAP_REASON_MAP } from "@/lib/production-constants";
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend } from "recharts";
 
 const toneClasses: Record<string, string> = {
   default: "bg-primary/10 text-primary",
@@ -116,7 +116,23 @@ export default function Production() {
     }
     setLoading(false);
   };
-  useEffect(() => { load(); }, [profile, month]);
+  useEffect(() => {
+    load();
+    const timer = setInterval(() => {
+      if (document.visibilityState === "visible") {
+        load();
+      }
+    }, 30000);
+    const handleVis = () => {
+      if (document.visibilityState === "visible") load();
+    };
+    document.addEventListener("visibilitychange", handleVis);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener("visibilitychange", handleVis);
+    };
+  }, [profile, month]);
+
 
   const filteredItems = useMemo(
     () => (machineFilter === "all" ? items : items.filter((x) => x.machine_id === machineFilter)),
@@ -370,18 +386,20 @@ export default function Production() {
                 <BarChart2 className="h-4 w-4 text-muted-foreground" />
                 <h2 className="text-sm font-medium text-foreground">Target vs Actual</h2>
               </div>
-              <div className="h-56">
+              <div className="h-64">
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={trend}>
                     <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
                     <XAxis dataKey="date" tick={{ fontSize: 10 }} />
                     <YAxis tick={{ fontSize: 10 }} />
                     <Tooltip />
-                    <Bar dataKey="target" fill="hsl(var(--muted-foreground))" name="Target" radius={[2,2,0,0]} />
-                    <Bar dataKey="actual" fill="hsl(var(--primary))" name="Actual" radius={[2,2,0,0]} />
+                    <Legend verticalAlign="top" height={36} wrapperStyle={{ fontSize: "12px" }} />
+                    <Bar dataKey="target" fill="hsl(var(--muted-foreground))" name="Target Units" radius={[2,2,0,0]} />
+                    <Bar dataKey="actual" fill="hsl(var(--primary))" name="Actual Units" radius={[2,2,0,0]} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
+
             </div>
           )}
 
@@ -550,18 +568,43 @@ export default function Production() {
         </div>
       )}
 
+      {filteredItems.length === 0 && (
+        <div className="rounded-xl border border-dashed border-border bg-card/50 p-8 text-center flex flex-col items-center justify-center">
+          <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-primary mb-3">
+            <Target className="h-6 w-6" />
+          </div>
+          <h3 className="text-base font-semibold">No production records for {month}</h3>
+          <p className="text-sm text-muted-foreground mt-1 max-w-md">
+            Start tracking daily plant output, target attainment, scrap causes, and downtime reasons by recording your first shift log.
+          </p>
+          <div className="mt-4 flex flex-wrap gap-2 justify-center">
+            <Button asChild>
+              <Link to="/production/log">
+                <Plus className="mr-1.5 h-4 w-4" /> Record First Shift Log
+              </Link>
+            </Button>
+            <Button variant="outline" asChild>
+              <Link to="/production/orders">
+                <ClipboardList className="mr-1.5 h-4 w-4" /> View Production Orders
+              </Link>
+            </Button>
+          </div>
+        </div>
+      )}
+
       {/* Log page link card */}
-      <div className="rounded-xl border border-border bg-card p-5 flex items-center justify-between">
+      <div className="rounded-xl border border-border bg-card p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <div className="text-sm font-medium">Shift logs for {month}</div>
           <div className="text-xs text-muted-foreground mt-0.5">
             {filteredItems.length} {filteredItems.length === 1 ? "entry" : "entries"} recorded — add, edit, approve and export on the Production Log page.
           </div>
         </div>
-        <Button asChild>
+        <Button asChild className="shrink-0">
           <Link to="/production/log"><BookOpen className="mr-2 h-4 w-4" /> Open Production Log</Link>
         </Button>
       </div>
     </div>
   );
 }
+

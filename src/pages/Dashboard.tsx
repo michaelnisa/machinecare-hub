@@ -112,8 +112,21 @@ export default function Dashboard() {
   };
 
   useEffect(() => {
-    if (profile) load();
+    if (!profile) return;
+    load();
+    const timer = setInterval(() => {
+      if (document.visibilityState === "visible") load();
+    }, 30000);
+    const handleVis = () => {
+      if (document.visibilityState === "visible") load();
+    };
+    document.addEventListener("visibilitychange", handleVis);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener("visibilitychange", handleVis);
+    };
   }, [profile]);
+
 
   if (loading) return <PageLoader />;
 
@@ -251,8 +264,27 @@ export default function Dashboard() {
         </div>
       </div>
 
+      {/* Onboarding card when no machines exist */}
+      {stats.total === 0 && (
+        <div className="rounded-xl border border-dashed border-border bg-card/50 p-8 text-center flex flex-col items-center justify-center">
+          <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-primary mb-3">
+            <Wrench className="h-6 w-6" />
+          </div>
+          <h3 className="text-base font-semibold">No equipment registered yet</h3>
+          <p className="text-sm text-muted-foreground mt-1 max-w-md">
+            Register your industrial equipment, fleet vehicles, or machines to start tracking preventive maintenance schedules and work orders.
+          </p>
+          <div className="mt-4 flex flex-wrap gap-2 justify-center">
+            <Button onClick={() => setMachineDialog(true)}>
+              <Plus className="mr-1.5 h-4 w-4" /> Add First Machine / Asset
+            </Button>
+          </div>
+        </div>
+      )}
+
       <MachineFormDialog open={machineDialog} onOpenChange={setMachineDialog} onSaved={load} />
       <ServiceLogDialog open={logDialog} onOpenChange={setLogDialog} machines={machines} onSaved={load} />
     </div>
   );
 }
+

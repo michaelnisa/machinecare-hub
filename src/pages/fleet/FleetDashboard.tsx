@@ -61,75 +61,89 @@ export default function FleetDashboard() {
   const [recentFaults, setRecentFaults] = useState<FaultReportRow[]>([]);
   const [inspectionsToday, setInspectionsToday] = useState<{ machine_id: string }[]>([]);
 
-  useEffect(() => {
+  const load = async () => {
     if (!profile) return;
-    (async () => {
-      setLoading(true);
-      const todayStartISO = new Date(new Date().setHours(0, 0, 0, 0)).toISOString();
-      const [
-        { data: docs },
-        { data: m },
-        { data: driverRows },
-        { data: t },
-        { data: fl },
-        { data: ty },
-        { data: sched },
-        { data: wo },
-        { data: fr },
-        { data: fleetTemplates },
-      ] = await Promise.all([
-        supabase.from("vehicle_documents").select("id, machine_id, doc_type, expires_on").not("expires_on", "is", null),
-        supabase.from("machines").select("id, name, plate_number, status, current_odometer_km"),
-        supabase.from("drivers").select("id, full_name, licence_expiry, medical_expiry").eq("status", "active"),
-        supabase.from("trips").select("id, machine_id, driver_id, status, start_at, end_at, start_odo, end_odo, fuel_used_l"),
-        supabase.from("fuel_logs").select("machine_id, recorded_at, fuel_cost"),
-        supabase.from("tyres").select("id, machine_id, position, brand, target_replace_km, fitted_odo, removed_at").is("removed_at", null),
-        supabase.from("service_schedules").select("machine_id, next_due_date"),
-        supabase.from("work_orders").select("id, machine_id, status, title, wo_number, wo_year, priority").in("status", Array.from(OPEN_WO_STATUSES)),
-        supabase.from("fault_reports").select("id, machine_id, reporter_name, description, status, created_at").order("created_at", { ascending: false }).limit(5),
-        supabase.from("checklist_templates").select("id").eq("is_fleet_pre_start", true),
-      ]);
+    setLoading(true);
+    const todayStartISO = new Date(new Date().setHours(0, 0, 0, 0)).toISOString();
+    const [
+      { data: docs },
+      { data: m },
+      { data: driverRows },
+      { data: t },
+      { data: fl },
+      { data: ty },
+      { data: sched },
+      { data: wo },
+      { data: fr },
+      { data: fleetTemplates },
+    ] = await Promise.all([
+      supabase.from("vehicle_documents").select("id, machine_id, doc_type, expires_on").not("expires_on", "is", null),
+      supabase.from("machines").select("id, name, plate_number, status, current_odometer_km"),
+      supabase.from("drivers").select("id, full_name, licence_expiry, medical_expiry").eq("status", "active"),
+      supabase.from("trips").select("id, machine_id, driver_id, status, start_at, end_at, start_odo, end_odo, fuel_used_l"),
+      supabase.from("fuel_logs").select("machine_id, recorded_at, fuel_cost"),
+      supabase.from("tyres").select("id, machine_id, position, brand, target_replace_km, fitted_odo, removed_at").is("removed_at", null),
+      supabase.from("service_schedules").select("machine_id, next_due_date"),
+      supabase.from("work_orders").select("id, machine_id, status, title, wo_number, wo_year, priority").in("status", Array.from(OPEN_WO_STATUSES)),
+      supabase.from("fault_reports").select("id, machine_id, reporter_name, description, status, created_at").order("created_at", { ascending: false }).limit(5),
+      supabase.from("checklist_templates").select("id").eq("is_fleet_pre_start", true),
+    ]);
 
-      const templateIds = (fleetTemplates ?? []).map((t: any) => t.id);
-      let todaysInspections: { machine_id: string }[] = [];
-      if (templateIds.length > 0) {
-        const { data: ex } = await supabase
-          .from("checklist_executions")
-          .select("machine_id")
-          .in("template_id", templateIds)
-          .gte("performed_at", todayStartISO);
-        todaysInspections = (ex ?? []) as { machine_id: string }[];
-      }
+    const templateIds = (fleetTemplates ?? []).map((t: any) => t.id);
+    let todaysInspections: { machine_id: string }[] = [];
+    if (templateIds.length > 0) {
+      const { data: ex } = await supabase
+        .from("checklist_executions")
+        .select("machine_id")
+        .in("template_id", templateIds)
+        .gte("performed_at", todayStartISO);
+      todaysInspections = (ex ?? []) as { machine_id: string }[];
+    }
 
-      type DocRow = { id: string; machine_id: string; doc_type: string; expires_on: string };
+    type DocRow = { id: string; machine_id: string; doc_type: string; expires_on: string };
 
-      const machineList = (m ?? []) as MachineRow[];
-      const machineMap = new Map(machineList.map((mm) => [mm.id, mm]));
-      const rows: ExpiryRow[] = [];
-      for (const d of (docs ?? []) as DocRow[]) {
-        const mm = machineMap.get(d.machine_id);
-        const label = mm ? (mm.plate_number ? `${mm.name} (${mm.plate_number})` : mm.name) : "Vehicle";
-        rows.push({ key: `doc-${d.id}`, typeLabel: d.doc_type, holderLabel: label, expiresOn: d.expires_on });
-      }
-      for (const dr of (driverRows ?? []) as DriverRow[]) {
-        if (dr.licence_expiry) rows.push({ key: `dl-${dr.id}`, typeLabel: "Driving licence", holderLabel: dr.full_name, expiresOn: dr.licence_expiry });
-        if (dr.medical_expiry) rows.push({ key: `dm-${dr.id}`, typeLabel: "Medical certificate", holderLabel: dr.full_name, expiresOn: dr.medical_expiry });
-      }
-      rows.sort((a, b) => new Date(a.expiresOn).getTime() - new Date(b.expiresOn).getTime());
+    const machineList = (m ?? []) as MachineRow[];
+    const machineMap = new Map(machineList.map((mm) => [mm.id, mm]));
+    const rows: ExpiryRow[] = [];
+    for (const d of (docs ?? []) as DocRow[]) {
+      const mm = machineMap.get(d.machine_id);
+      const label = mm ? (mm.plate_number ? `${mm.name} (${mm.plate_number})` : mm.name) : "Vehicle";
+      rows.push({ key: `doc-${d.id}`, typeLabel: d.doc_type, holderLabel: label, expiresOn: d.expires_on });
+    }
+    for (const dr of (driverRows ?? []) as DriverRow[]) {
+      if (dr.licence_expiry) rows.push({ key: `dl-${dr.id}`, typeLabel: "Driving licence", holderLabel: dr.full_name, expiresOn: dr.licence_expiry });
+      if (dr.medical_expiry) rows.push({ key: `dm-${dr.id}`, typeLabel: "Medical certificate", holderLabel: dr.full_name, expiresOn: dr.medical_expiry });
+    }
+    rows.sort((a, b) => new Date(a.expiresOn).getTime() - new Date(b.expiresOn).getTime());
 
-      setExpiring(rows);
-      setMachines(machineList);
-      setTrips((t ?? []) as TripRow[]);
-      setFuelLogs((fl ?? []) as FuelLogRow[]);
-      setTyres((ty ?? []) as TyreRow[]);
-      setSchedules((sched ?? []) as ScheduleRow[]);
-      setDrivers((driverRows ?? []) as DriverRow[]);
-      setOpenWorkOrders((wo ?? []) as WorkOrderRow[]);
-      setRecentFaults((fr ?? []) as FaultReportRow[]);
-      setInspectionsToday(todaysInspections);
-      setLoading(false);
-    })();
+    setExpiring(rows);
+    setMachines(machineList);
+    setTrips((t ?? []) as TripRow[]);
+    setFuelLogs((fl ?? []) as FuelLogRow[]);
+    setTyres((ty ?? []) as TyreRow[]);
+    setSchedules((sched ?? []) as ScheduleRow[]);
+    setDrivers((driverRows ?? []) as DriverRow[]);
+    setOpenWorkOrders((wo ?? []) as WorkOrderRow[]);
+    setRecentFaults((fr ?? []) as FaultReportRow[]);
+    setInspectionsToday(todaysInspections);
+    setLoading(false);
+  };
+
+  useEffect(() => {
+    load();
+    const timer = setInterval(() => {
+      if (document.visibilityState === "visible") load();
+    }, 30000);
+    const handleVis = () => {
+      if (document.visibilityState === "visible") load();
+    };
+    document.addEventListener("visibilitychange", handleVis);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener("visibilitychange", handleVis);
+    };
   }, [profile]);
+
 
   const machineMap = useMemo(() => new Map(machines.map((m) => [m.id, m])), [machines]);
   const vehicleLabel = (machineId: string) => {

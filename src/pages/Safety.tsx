@@ -64,6 +64,7 @@ export default function Safety() {
     lastIncidentDate: null as string | null,
   });
 
+  const [activeTab, setActiveTab] = useState<"overview" | "workflows" | "incidents">("overview");
 
   const load = async () => {
     if (!profile) return;
@@ -121,7 +122,21 @@ export default function Safety() {
     setLoading(false);
 
   };
-  useEffect(() => { load(); }, [profile]);
+
+  useEffect(() => {
+    load();
+    const timer = setInterval(() => {
+      if (document.visibilityState === "visible") load();
+    }, 30000);
+    const handleVis = () => {
+      if (document.visibilityState === "visible") load();
+    };
+    document.addEventListener("visibilitychange", handleVis);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener("visibilitychange", handleVis);
+    };
+  }, [profile]);
 
   const reviewPtw = async (id: string, status: "approved" | "rejected") => {
     setReviewingId(id);
@@ -217,6 +232,45 @@ export default function Safety() {
         </div>
       </div>
 
+      {/* Navigation Tabs */}
+      <div className="flex border-b border-border gap-2">
+        <button
+          onClick={() => setActiveTab("overview")}
+          className={`pb-2.5 px-3 text-sm font-medium border-b-2 transition-colors ${
+            activeTab === "overview"
+              ? "border-[#00A651] text-[#00A651] font-semibold"
+              : "border-transparent text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          Overview & KPIs
+        </button>
+        <button
+          onClick={() => setActiveTab("workflows")}
+          className={`pb-2.5 px-3 text-sm font-medium border-b-2 transition-colors ${
+            activeTab === "workflows"
+              ? "border-[#00A651] text-[#00A651] font-semibold"
+              : "border-transparent text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          EHS Workflows & Modules
+        </button>
+        <button
+          onClick={() => setActiveTab("incidents")}
+          className={`pb-2.5 px-3 text-sm font-medium border-b-2 transition-colors flex items-center gap-1.5 ${
+            activeTab === "incidents"
+              ? "border-[#00A651] text-[#00A651] font-semibold"
+              : "border-transparent text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          Incidents Register
+          {stats.open > 0 && (
+            <span className="rounded-full bg-red-100 dark:bg-red-950/40 text-red-700 dark:text-red-400 px-1.5 py-0.2 text-[10px] font-bold">
+              {stats.open}
+            </span>
+          )}
+        </button>
+      </div>
+
       {/* ── DSLI Hero Card ──────────────────────────────────────────────── */}
       <div className={`rounded-xl border p-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 shadow-sm
         ${dash.dsli === null
@@ -275,6 +329,7 @@ export default function Safety() {
         </div>
       </div>
 
+      {/* KPI Cards — Fleet style */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
         {[
           {
@@ -336,342 +391,398 @@ export default function Safety() {
         })}
       </div>
 
-      {/* 3 LOGICAL EHS PRESENTATION PILLARS */}
-      <div className="space-y-3">
-        <div className="flex items-center justify-between">
-          <h2 className="text-sm font-bold uppercase tracking-wider text-muted-foreground">
-            EHS Operational Pillars &amp; Workflows
-          </h2>
-          <span className="text-xs text-muted-foreground">
-            Structured for daily plant operations &amp; audit compliance
-          </span>
-        </div>
-
-        <div className="grid gap-4 lg:grid-cols-3">
-          {/* PILLAR 1: Plant Operations & High-Risk Control */}
-          <div className="rounded-xl border border-border bg-card p-4 flex flex-col justify-between space-y-3 shadow-sm">
-            <div>
-              <div className="flex items-center gap-2 text-foreground font-bold text-sm mb-1">
-                <div className="p-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-[#00A651]">
-                  <HardHat className="h-4 w-4" />
-                </div>
-                <h3>1. Operations &amp; High-Risk Controls</h3>
-              </div>
-              <p className="text-xs text-muted-foreground">
-                Boots-on-ground site walks, contractor Stop Work Authority &amp; high-risk job execution.
-              </p>
-            </div>
-
-            <div className="space-y-1.5">
-              <Link to="/safety/supervisor-radar" className="group flex items-center justify-between p-2 rounded-lg border border-transparent hover:border-border hover:bg-muted/50 transition-colors">
-                <div className="flex items-center gap-2 min-w-0">
-                  <MapPin className="h-4 w-4 text-[#00A651] shrink-0" />
-                  <div>
-                    <div className="text-xs font-semibold text-foreground group-hover:text-[#00A651]">Supervisor Radar</div>
-                    <div className="text-[11px] text-muted-foreground">Boots-on-ground site walks &amp; suspensions</div>
-                  </div>
-                </div>
-                <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:text-foreground" />
-              </Link>
-
-              <Link to="/contractor/portal" className="group flex items-center justify-between p-2 rounded-lg border border-transparent hover:border-border hover:bg-muted/50 transition-colors">
-                <div className="flex items-center gap-2 min-w-0">
-                  <HardHat className="h-4 w-4 text-[#00A651] shrink-0" />
-                  <div>
-                    <div className="text-xs font-semibold text-foreground group-hover:text-[#00A651]">Contractor Safety Portal</div>
-                    <div className="text-[11px] text-muted-foreground">Toolbox talks, JSEA &amp; Stop Work Authority</div>
-                  </div>
-                </div>
-                <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:text-foreground" />
-              </Link>
-
-              <Link to="/safety/contractors" className="group flex items-center justify-between p-2 rounded-lg border border-transparent hover:border-border hover:bg-muted/50 transition-colors">
-                <div className="flex items-center gap-2 min-w-0">
-                  <Building2 className="h-4 w-4 text-[#00A651] shrink-0" />
-                  <div>
-                    <div className="text-xs font-semibold text-foreground group-hover:text-[#00A651]">Contractor Registry &amp; Insurances</div>
-                    <div className="text-[11px] text-muted-foreground">Pre-qualification &amp; vendor certifications</div>
-                  </div>
-                </div>
-                <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:text-foreground" />
-              </Link>
-
-              <div className="grid grid-cols-2 gap-1.5 pt-1 border-t border-border">
-                <Link to="/safety/controlled-tools" className="flex items-center gap-1.5 p-1.5 rounded text-xs text-muted-foreground hover:text-foreground hover:bg-muted/40">
-                  <Wrench className="h-3.5 w-3.5 text-[#00A651]" /> Controlled Tools
-                </Link>
-                <Link to="/safety/ppe" className="flex items-center gap-1.5 p-1.5 rounded text-xs text-muted-foreground hover:text-foreground hover:bg-muted/40">
-                  <Package className="h-3.5 w-3.5 text-[#00A651]" /> PPE Register
-                </Link>
-              </div>
-            </div>
-          </div>
-
-          {/* PILLAR 2: Hazard Prevention & Incident RCA */}
-          <div className="rounded-xl border border-border bg-card p-4 flex flex-col justify-between space-y-3 shadow-sm">
-            <div>
-              <div className="flex items-center gap-2 text-foreground font-bold text-sm mb-1">
-                <div className="p-1.5 rounded-lg bg-blue-50 dark:bg-blue-950/40 text-blue-600">
-                  <FlaskConical className="h-4 w-4" />
-                </div>
-                <h3>2. Hazard Prevention &amp; Incident RCA</h3>
-              </div>
-              <p className="text-xs text-muted-foreground">
-                Chemical HazCom / GHS, pre-task risk assessments &amp; ISO 45001 root cause problem solving.
-              </p>
-            </div>
-
-            <div className="space-y-1.5">
-              <Link to="/safety/chemicals" className="group flex items-center justify-between p-2 rounded-lg border border-transparent hover:border-border hover:bg-muted/50 transition-colors">
-                <div className="flex items-center gap-2 min-w-0">
-                  <FlaskConical className="h-4 w-4 text-blue-600 shrink-0" />
-                  <div>
-                    <div className="text-xs font-semibold text-foreground group-hover:text-blue-600">Chemicals &amp; Drum QR</div>
-                    <div className="text-[11px] text-muted-foreground">GHS pictograms, SDS registry &amp; spill kits</div>
-                  </div>
-                </div>
-                <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:text-foreground" />
-              </Link>
-
-              <Link to="/safety/risk-assessments" className="group flex items-center justify-between p-2 rounded-lg border border-transparent hover:border-border hover:bg-muted/50 transition-colors">
-                <div className="flex items-center gap-2 min-w-0">
-                  <ClipboardList className="h-4 w-4 text-blue-600 shrink-0" />
-                  <div>
-                    <div className="text-xs font-semibold text-foreground group-hover:text-blue-600">Risk Assessments (RAMS)</div>
-                    <div className="text-[11px] text-muted-foreground">Task risk evaluation &amp; control hierarchy</div>
-                  </div>
-                </div>
-                <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:text-foreground" />
-              </Link>
-
-              <Link to="/safety/corrective-actions" className="group flex items-center justify-between p-2 rounded-lg border border-transparent hover:border-border hover:bg-muted/50 transition-colors">
-                <div className="flex items-center gap-2 min-w-0">
-                  <ListChecks className="h-4 w-4 text-blue-600 shrink-0" />
-                  <div>
-                    <div className="text-xs font-semibold text-foreground group-hover:text-blue-600">Corrective Actions (CAPA)</div>
-                    <div className="text-[11px] text-muted-foreground">Closed-loop hazard non-conformance fixes</div>
-                  </div>
-                </div>
-                <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:text-foreground" />
-              </Link>
-
-              <div className="grid grid-cols-2 gap-1.5 pt-1 border-t border-border">
-                <Link to="/safety/inspections" className="flex items-center gap-1.5 p-1.5 rounded text-xs text-muted-foreground hover:text-foreground hover:bg-muted/40">
-                  <ClipboardCheck className="h-3.5 w-3.5 text-blue-600" /> Safety Audits
-                </Link>
-                <Link to="/safety/equipment" className="flex items-center gap-1.5 p-1.5 rounded text-xs text-muted-foreground hover:text-foreground hover:bg-muted/40">
-                  <ShieldCheck className="h-3.5 w-3.5 text-blue-600" /> Safety Equipment
-                </Link>
-              </div>
-            </div>
-          </div>
-
-          {/* PILLAR 3: Workforce Safety Culture & Compliance */}
-          <div className="rounded-xl border border-border bg-card p-4 flex flex-col justify-between space-y-3 shadow-sm">
-            <div>
-              <div className="flex items-center gap-2 text-foreground font-bold text-sm mb-1">
-                <div className="p-1.5 rounded-lg bg-amber-50 dark:bg-amber-950/40 text-amber-600">
-                  <Trophy className="h-4 w-4" />
-                </div>
-                <h3>3. Safety Culture &amp; Compliance</h3>
-              </div>
-              <p className="text-xs text-muted-foreground">
-                Workforce recognition, safety committee governance &amp; digital workforce inductions.
-              </p>
-            </div>
-
-            <div className="space-y-1.5">
-              <Link to="/safety/leaderboard" className="group flex items-center justify-between p-2 rounded-lg border border-transparent hover:border-border hover:bg-muted/50 transition-colors">
-                <div className="flex items-center gap-2 min-w-0">
-                  <Trophy className="h-4 w-4 text-amber-600 shrink-0" />
-                  <div>
-                    <div className="text-xs font-semibold text-foreground group-hover:text-amber-600">Safety Leaderboard</div>
-                    <div className="text-[11px] text-muted-foreground">Incident-free streaks, TBT bonuses &amp; rankings</div>
-                  </div>
-                </div>
-                <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:text-foreground" />
-              </Link>
-
-              <Link to="/safety/team" className="group flex items-center justify-between p-2 rounded-lg border border-transparent hover:border-border hover:bg-muted/50 transition-colors">
-                <div className="flex items-center gap-2 min-w-0">
-                  <Users className="h-4 w-4 text-amber-600 shrink-0" />
-                  <div>
-                    <div className="text-xs font-semibold text-foreground group-hover:text-amber-600">Safety Department Team</div>
-                    <div className="text-[11px] text-muted-foreground">Designated HSE officers &amp; certified first aiders</div>
-                  </div>
-                </div>
-                <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:text-foreground" />
-              </Link>
-
-              <Link to="/induction/dashboard" className="group flex items-center justify-between p-2 rounded-lg border border-transparent hover:border-border hover:bg-muted/50 transition-colors">
-                <div className="flex items-center gap-2 min-w-0">
-                  <GraduationCap className="h-4 w-4 text-amber-600 shrink-0" />
-                  <div>
-                    <div className="text-xs font-semibold text-foreground group-hover:text-amber-600">Inductions &amp; Training</div>
-                    <div className="text-[11px] text-muted-foreground">Digital induction tests &amp; skills competency</div>
-                  </div>
-                </div>
-                <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:text-foreground" />
-              </Link>
-
-              <div className="grid grid-cols-2 gap-1.5 pt-1 border-t border-border">
-                <Link to="/safety/rules" className="flex items-center gap-1.5 p-1.5 rounded text-xs text-muted-foreground hover:text-foreground hover:bg-muted/40">
-                  <Settings className="h-3.5 w-3.5 text-amber-600" /> Safety Rules
-                </Link>
-                <Link to="/safety/documents" className="flex items-center gap-1.5 p-1.5 rounded text-xs text-muted-foreground hover:text-foreground hover:bg-muted/40">
-                  <FileText className="h-3.5 w-3.5 text-amber-600" /> Documents &amp; ISO
-                </Link>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
       {/* PENDING APPROVALS GRID: PTW & RAMS SIDE-BY-SIDE */}
-      <div className="grid gap-4 md:grid-cols-2">
-        {/* Pending Permits to Work */}
-        {pendingPtw.length > 0 ? (
-          <div className="rounded-xl border border-amber-300 bg-amber-50/50 dark:bg-amber-950/20 p-4 space-y-3">
-            <div className="text-sm font-bold text-amber-900 dark:text-amber-300 flex items-center justify-between">
-              <span>Pending Permits to Work ({pendingPtw.length})</span>
-              <span className="text-xs font-normal text-muted-foreground">Requires EHS Review</span>
-            </div>
-            <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
-              {pendingPtw.map((p) => (
-                <div key={p.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-200 bg-white dark:bg-slate-900 p-3 shadow-sm">
-                  <div className="min-w-0 flex-1">
-                    <Link to={`/work-orders/${p.work_orders?.id}`} className="text-xs font-bold text-primary hover:underline line-clamp-1">
-                      {p.work_orders ? `${formatWoNumber(p.work_orders.wo_year, p.work_orders.wo_number)} — ${p.work_orders.title}` : "Work order"}
-                    </Link>
-                    <div className="text-[11px] text-muted-foreground mt-0.5">Requested {formatDate(p.requested_at)}</div>
-                  </div>
-                  <div className="flex gap-1.5">
-                    <Button size="sm" onClick={() => reviewPtw(p.id, "approved")} disabled={reviewingId === p.id} className="h-7 text-xs bg-[#00A651] hover:bg-[#008f45] text-white gap-1 font-bold">
-                      <CheckCircle2 className="h-3 w-3" /> Approve
-                    </Button>
-                    <Button size="sm" variant="outline" onClick={() => reviewPtw(p.id, "rejected")} disabled={reviewingId === p.id} className="h-7 text-xs gap-1">
-                      <XCircle className="h-3 w-3" /> Reject
-                    </Button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        ) : null}
-
-        {/* Pending RAMS (Risk Assessments) */}
-        {pendingRams.length > 0 ? (
-          <div className="rounded-xl border border-amber-300 bg-amber-50/50 dark:bg-amber-950/20 p-4 space-y-3">
-            <div className="text-sm font-bold text-amber-900 dark:text-amber-300 flex items-center justify-between">
-              <span className="flex items-center gap-1.5">
-                <FileWarning className="h-4 w-4 text-amber-600" /> Pending RAMS / Risk Assessments ({pendingRams.length})
-              </span>
-              <Link to="/safety/risk-assessments" className="text-xs text-[#00A651] font-semibold hover:underline">
-                View All
-              </Link>
-            </div>
-            <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
-              {pendingRams.map((r) => (
-                <div key={r.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-200 bg-white dark:bg-slate-900 p-3 shadow-sm">
-                  <div className="min-w-0 flex-1">
-                    <Link to="/safety/risk-assessments" className="text-xs font-bold text-foreground hover:underline line-clamp-1">
-                      {r.title}
-                    </Link>
-                    <div className="text-[11px] text-muted-foreground mt-0.5">
-                      Activity: {r.activity || "Hazard Analysis"} • Risk: <span className="font-semibold uppercase text-amber-700">{r.initial_risk_level || "Medium"}</span>
+      {(pendingPtw.length > 0 || pendingRams.length > 0) && (
+        <div className="grid gap-4 md:grid-cols-2">
+          {/* Pending Permits to Work */}
+          {pendingPtw.length > 0 ? (
+            <div className="rounded-xl border border-amber-300 bg-amber-50/50 dark:bg-amber-950/20 p-4 space-y-3">
+              <div className="text-sm font-bold text-amber-900 dark:text-amber-300 flex items-center justify-between">
+                <span>Pending Permits to Work ({pendingPtw.length})</span>
+                <span className="text-xs font-normal text-muted-foreground">Requires EHS Review</span>
+              </div>
+              <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+                {pendingPtw.map((p) => (
+                  <div key={p.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-200 bg-white dark:bg-slate-900 p-3 shadow-sm">
+                    <div className="min-w-0 flex-1">
+                      <Link to={`/work-orders/${p.work_orders?.id}`} className="text-xs font-bold text-primary hover:underline line-clamp-1">
+                        {p.work_orders ? `${formatWoNumber(p.work_orders.wo_year, p.work_orders.wo_number)} — ${p.work_orders.title}` : "Work order"}
+                      </Link>
+                      <div className="text-[11px] text-muted-foreground mt-0.5">Requested {formatDate(p.requested_at)}</div>
                     </div>
-                  </div>
-                  <div className="flex gap-1.5">
-                    <Button size="sm" onClick={() => reviewRams(r.id, "approved")} disabled={reviewingRamsId === r.id} className="h-7 text-xs bg-[#00A651] hover:bg-[#008f45] text-white gap-1 font-bold">
-                      <CheckCircle2 className="h-3 w-3" /> Approve
-                    </Button>
-                    <Button size="sm" variant="outline" onClick={() => reviewRams(r.id, "rejected")} disabled={reviewingRamsId === r.id} className="h-7 text-xs gap-1">
-                      <XCircle className="h-3 w-3" /> Reject
-                    </Button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        ) : null}
-      </div>
-
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        {[
-          { label: "Total", value: stats.total },
-          { label: "Open", value: stats.open },
-          { label: "Critical", value: stats.critical },
-          { label: "Lost-time hrs", value: stats.lostTime.toFixed(1) },
-        ].map((s) => (
-          <div key={s.label} className="rounded-xl border border-border bg-card p-4">
-            <div className="text-xs uppercase tracking-wide text-muted-foreground">{s.label}</div>
-            <div className="mt-1 text-2xl font-semibold">{s.value}</div>
-          </div>
-        ))}
-      </div>
-
-      <div className="flex flex-wrap gap-2">
-        {["all", ...STATUSES].map((s) => (
-          <button key={s} onClick={() => setFilter(s)}
-            className={`rounded-full border px-3 py-1 text-xs capitalize ${filter === s ? "bg-primary text-primary-foreground" : "border-border bg-card"}`}>
-            {s}
-          </button>
-        ))}
-      </div>
-
-      {filtered.length === 0 ? (
-        <EmptyState icon={<ShieldAlert className="h-5 w-5" />} title="No incidents" description="A safe shift is a good shift." />
-      ) : (
-        <div className="overflow-hidden rounded-xl border border-border bg-card">
-          <table className="w-full text-sm">
-            <thead className="text-left text-xs uppercase tracking-wide text-muted-foreground">
-              <tr>
-                <th className="px-5 py-3 font-medium">Date</th>
-                <th className="px-5 py-3 font-medium">Type</th>
-                <th className="px-5 py-3 font-medium">Severity</th>
-                <th className="px-5 py-3 font-medium">Description</th>
-                <th className="px-5 py-3 font-medium">Machine</th>
-                <th className="px-5 py-3 font-medium">Status</th>
-                <th className="px-5 py-3" />
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.map((x) => (
-                <tr key={x.id} className="border-t border-border">
-                  <td className="px-5 py-3">{formatDate(x.occurred_at)}</td>
-                  <td className="px-5 py-3 capitalize">{x.incident_type?.replace(/_/g, " ")}</td>
-                  <td className="px-5 py-3"><span className={`rounded-full px-2 py-0.5 text-xs capitalize ${SEV_CLASS[x.severity]}`}>{x.severity}</span></td>
-                  <td className="px-5 py-3 max-w-md truncate">{x.description}</td>
-                  <td className="px-5 py-3 text-muted-foreground">{x.machines?.name ?? "—"}</td>
-                  <td className="px-5 py-3"><span className={`rounded-full px-2 py-0.5 text-xs capitalize ${STAT_CLASS[x.status]}`}>{x.status}</span></td>
-                  <td className="px-5 py-3 text-right">
-                    <div className="flex items-center justify-end gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => {
-                          setSelectedIncidentForRca(x);
-                          setFiveWhysOpen(true);
-                        }}
-                        className="h-7 text-xs gap-1 border-emerald-600/30 text-[#00A651] hover:bg-emerald-50"
-                        title="Investigate with 5-Whys Root Cause Analysis"
-                      >
-                        <GitBranch className="h-3.5 w-3.5" /> 5-Whys RCA
+                    <div className="flex gap-1.5">
+                      <Button size="sm" onClick={() => reviewPtw(p.id, "approved")} disabled={reviewingId === p.id} className="h-7 text-xs bg-[#00A651] hover:bg-[#008f45] text-white gap-1 font-bold">
+                        <CheckCircle2 className="h-3 w-3" /> Approve
                       </Button>
-                      {x.status !== "closed" && (
-                        <select value={x.status} onChange={(e) => updateStatus(x.id, e.target.value)}
-                          className="rounded border border-input bg-background px-2 py-1 text-xs">
-                          {STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
-                        </select>
-                      )}
+                      <Button size="sm" variant="outline" onClick={() => reviewPtw(p.id, "rejected")} disabled={reviewingId === p.id} className="h-7 text-xs gap-1">
+                        <XCircle className="h-3 w-3" /> Reject
+                      </Button>
                     </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
+
+          {/* Pending RAMS (Risk Assessments) */}
+          {pendingRams.length > 0 ? (
+            <div className="rounded-xl border border-amber-300 bg-amber-50/50 dark:bg-amber-950/20 p-4 space-y-3">
+              <div className="text-sm font-bold text-amber-900 dark:text-amber-300 flex items-center justify-between">
+                <span className="flex items-center gap-1.5">
+                  <FileWarning className="h-4 w-4 text-amber-600" /> Pending RAMS / Risk Assessments ({pendingRams.length})
+                </span>
+                <Link to="/safety/risk-assessments" className="text-xs text-[#00A651] font-semibold hover:underline">
+                  View All
+                </Link>
+              </div>
+              <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+                {pendingRams.map((r) => (
+                  <div key={r.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-200 bg-white dark:bg-slate-900 p-3 shadow-sm">
+                    <div className="min-w-0 flex-1">
+                      <Link to="/safety/risk-assessments" className="text-xs font-bold text-foreground hover:underline line-clamp-1">
+                        {r.title}
+                      </Link>
+                      <div className="text-[11px] text-muted-foreground mt-0.5">
+                        Activity: {r.activity || "Hazard Analysis"} • Risk: <span className="font-semibold uppercase text-amber-700">{r.initial_risk_level || "Medium"}</span>
+                      </div>
+                    </div>
+                    <div className="flex gap-1.5">
+                      <Button size="sm" onClick={() => reviewRams(r.id, "approved")} disabled={reviewingRamsId === r.id} className="h-7 text-xs bg-[#00A651] hover:bg-[#008f45] text-white gap-1 font-bold">
+                        <CheckCircle2 className="h-3 w-3" /> Approve
+                      </Button>
+                      <Button size="sm" variant="outline" onClick={() => reviewRams(r.id, "rejected")} disabled={reviewingRamsId === r.id} className="h-7 text-xs gap-1">
+                        <XCircle className="h-3 w-3" /> Reject
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
         </div>
       )}
+
+      {/* TAB 1: OVERVIEW OR TAB 2: WORKFLOWS (3 LOGICAL EHS PRESENTATION PILLARS) */}
+      {(activeTab === "overview" || activeTab === "workflows") && (
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-bold uppercase tracking-wider text-muted-foreground">
+              EHS Operational Pillars &amp; Workflows
+            </h2>
+            <span className="text-xs text-muted-foreground">
+              Structured for daily plant operations &amp; audit compliance
+            </span>
+          </div>
+
+          <div className="grid gap-4 lg:grid-cols-3">
+            {/* PILLAR 1: Plant Operations & High-Risk Control */}
+            <div className="rounded-xl border border-border bg-card p-4 flex flex-col justify-between space-y-3 shadow-sm">
+              <div>
+                <div className="flex items-center gap-2 text-foreground font-bold text-sm mb-1">
+                  <div className="p-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-[#00A651]">
+                    <HardHat className="h-4 w-4" />
+                  </div>
+                  <h3>1. Operations &amp; High-Risk Controls</h3>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Boots-on-ground site walks, contractor Stop Work Authority &amp; high-risk job execution.
+                </p>
+              </div>
+
+              <div className="space-y-1.5">
+                <Link to="/safety/supervisor-radar" className="group flex items-center justify-between p-2 rounded-lg border border-transparent hover:border-border hover:bg-muted/50 transition-colors">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <MapPin className="h-4 w-4 text-[#00A651] shrink-0" />
+                    <div>
+                      <div className="text-xs font-semibold text-foreground group-hover:text-[#00A651]">Supervisor Radar</div>
+                      <div className="text-[11px] text-muted-foreground">Boots-on-ground site walks &amp; suspensions</div>
+                    </div>
+                  </div>
+                  <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:text-foreground" />
+                </Link>
+
+                <Link to="/contractor/portal" className="group flex items-center justify-between p-2 rounded-lg border border-transparent hover:border-border hover:bg-muted/50 transition-colors">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <HardHat className="h-4 w-4 text-[#00A651] shrink-0" />
+                    <div>
+                      <div className="text-xs font-semibold text-foreground group-hover:text-[#00A651]">Contractor Safety Portal</div>
+                      <div className="text-[11px] text-muted-foreground">Toolbox talks, JSEA &amp; Stop Work Authority</div>
+                    </div>
+                  </div>
+                  <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:text-foreground" />
+                </Link>
+
+                <Link to="/safety/contractors" className="group flex items-center justify-between p-2 rounded-lg border border-transparent hover:border-border hover:bg-muted/50 transition-colors">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <Building2 className="h-4 w-4 text-[#00A651] shrink-0" />
+                    <div>
+                      <div className="text-xs font-semibold text-foreground group-hover:text-[#00A651]">Contractor Registry &amp; Insurances</div>
+                      <div className="text-[11px] text-muted-foreground">Pre-qualification &amp; vendor certifications</div>
+                    </div>
+                  </div>
+                  <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:text-foreground" />
+                </Link>
+
+                <div className="grid grid-cols-2 gap-1.5 pt-1 border-t border-border">
+                  <Link to="/safety/controlled-tools" className="flex items-center gap-1.5 p-1.5 rounded text-xs text-muted-foreground hover:text-foreground hover:bg-muted/40">
+                    <Wrench className="h-3.5 w-3.5 text-[#00A651]" /> Controlled Tools
+                  </Link>
+                  <Link to="/safety/ppe" className="flex items-center gap-1.5 p-1.5 rounded text-xs text-muted-foreground hover:text-foreground hover:bg-muted/40">
+                    <Package className="h-3.5 w-3.5 text-[#00A651]" /> PPE Register
+                  </Link>
+                </div>
+              </div>
+            </div>
+
+            {/* PILLAR 2: Hazard Prevention & Incident RCA */}
+            <div className="rounded-xl border border-border bg-card p-4 flex flex-col justify-between space-y-3 shadow-sm">
+              <div>
+                <div className="flex items-center gap-2 text-foreground font-bold text-sm mb-1">
+                  <div className="p-1.5 rounded-lg bg-blue-50 dark:bg-blue-950/40 text-blue-600">
+                    <FlaskConical className="h-4 w-4" />
+                  </div>
+                  <h3>2. Hazard Prevention &amp; Incident RCA</h3>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Chemical HazCom / GHS, pre-task risk assessments &amp; ISO 45001 root cause problem solving.
+                </p>
+              </div>
+
+              <div className="space-y-1.5">
+                <Link to="/safety/chemicals" className="group flex items-center justify-between p-2 rounded-lg border border-transparent hover:border-border hover:bg-muted/50 transition-colors">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <FlaskConical className="h-4 w-4 text-blue-600 shrink-0" />
+                    <div>
+                      <div className="text-xs font-semibold text-foreground group-hover:text-blue-600">Chemicals &amp; Drum QR</div>
+                      <div className="text-[11px] text-muted-foreground">GHS pictograms, SDS registry &amp; spill kits</div>
+                    </div>
+                  </div>
+                  <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:text-foreground" />
+                </Link>
+
+                <Link to="/safety/risk-assessments" className="group flex items-center justify-between p-2 rounded-lg border border-transparent hover:border-border hover:bg-muted/50 transition-colors">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <ClipboardList className="h-4 w-4 text-blue-600 shrink-0" />
+                    <div>
+                      <div className="text-xs font-semibold text-foreground group-hover:text-blue-600">Risk Assessments (RAMS)</div>
+                      <div className="text-[11px] text-muted-foreground">Task risk evaluation &amp; control hierarchy</div>
+                    </div>
+                  </div>
+                  <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:text-foreground" />
+                </Link>
+
+                <Link to="/safety/corrective-actions" className="group flex items-center justify-between p-2 rounded-lg border border-transparent hover:border-border hover:bg-muted/50 transition-colors">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <ListChecks className="h-4 w-4 text-blue-600 shrink-0" />
+                    <div>
+                      <div className="text-xs font-semibold text-foreground group-hover:text-blue-600">Corrective Actions (CAPA)</div>
+                      <div className="text-[11px] text-muted-foreground">Closed-loop hazard non-conformance fixes</div>
+                    </div>
+                  </div>
+                  <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:text-foreground" />
+                </Link>
+
+                <div className="grid grid-cols-2 gap-1.5 pt-1 border-t border-border">
+                  <Link to="/safety/inspections" className="flex items-center gap-1.5 p-1.5 rounded text-xs text-muted-foreground hover:text-foreground hover:bg-muted/40">
+                    <ClipboardCheck className="h-3.5 w-3.5 text-blue-600" /> Safety Audits
+                  </Link>
+                  <Link to="/safety/equipment" className="flex items-center gap-1.5 p-1.5 rounded text-xs text-muted-foreground hover:text-foreground hover:bg-muted/40">
+                    <ShieldCheck className="h-3.5 w-3.5 text-blue-600" /> Safety Equipment
+                  </Link>
+                </div>
+              </div>
+            </div>
+
+            {/* PILLAR 3: Workforce Safety Culture & Compliance */}
+            <div className="rounded-xl border border-border bg-card p-4 flex flex-col justify-between space-y-3 shadow-sm">
+              <div>
+                <div className="flex items-center gap-2 text-foreground font-bold text-sm mb-1">
+                  <div className="p-1.5 rounded-lg bg-amber-50 dark:bg-amber-950/40 text-amber-600">
+                    <Trophy className="h-4 w-4" />
+                  </div>
+                  <h3>3. Safety Culture &amp; Compliance</h3>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Workforce recognition, safety committee governance &amp; digital workforce inductions.
+                </p>
+              </div>
+
+              <div className="space-y-1.5">
+                <Link to="/safety/leaderboard" className="group flex items-center justify-between p-2 rounded-lg border border-transparent hover:border-border hover:bg-muted/50 transition-colors">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <Trophy className="h-4 w-4 text-amber-600 shrink-0" />
+                    <div>
+                      <div className="text-xs font-semibold text-foreground group-hover:text-amber-600">Safety Leaderboard</div>
+                      <div className="text-[11px] text-muted-foreground">Incident-free streaks, TBT bonuses &amp; rankings</div>
+                    </div>
+                  </div>
+                  <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:text-foreground" />
+                </Link>
+
+                <Link to="/safety/team" className="group flex items-center justify-between p-2 rounded-lg border border-transparent hover:border-border hover:bg-muted/50 transition-colors">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <Users className="h-4 w-4 text-amber-600 shrink-0" />
+                    <div>
+                      <div className="text-xs font-semibold text-foreground group-hover:text-amber-600">Safety Department Team</div>
+                      <div className="text-[11px] text-muted-foreground">Designated HSE officers &amp; certified first aiders</div>
+                    </div>
+                  </div>
+                  <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:text-foreground" />
+                </Link>
+
+                <Link to="/induction/dashboard" className="group flex items-center justify-between p-2 rounded-lg border border-transparent hover:border-border hover:bg-muted/50 transition-colors">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <GraduationCap className="h-4 w-4 text-amber-600 shrink-0" />
+                    <div>
+                      <div className="text-xs font-semibold text-foreground group-hover:text-amber-600">Inductions &amp; Training</div>
+                      <div className="text-[11px] text-muted-foreground">Digital induction tests &amp; skills competency</div>
+                    </div>
+                  </div>
+                  <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:text-foreground" />
+                </Link>
+
+                <div className="grid grid-cols-2 gap-1.5 pt-1 border-t border-border">
+                  <Link to="/safety/rules" className="flex items-center gap-1.5 p-1.5 rounded text-xs text-muted-foreground hover:text-foreground hover:bg-muted/40">
+                    <Settings className="h-3.5 w-3.5 text-amber-600" /> Safety Rules
+                  </Link>
+                  <Link to="/safety/documents" className="flex items-center gap-1.5 p-1.5 rounded text-xs text-muted-foreground hover:text-foreground hover:bg-muted/40">
+                    <FileText className="h-3.5 w-3.5 text-amber-600" /> Documents &amp; ISO
+                  </Link>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* TAB 1: OVERVIEW (RECENT INCIDENTS PREVIEW) OR TAB 3: INCIDENTS (FULL INCIDENTS REGISTER) */}
+      {(activeTab === "overview" || activeTab === "incidents") && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-sm font-bold uppercase tracking-wider text-muted-foreground">
+                {activeTab === "overview" ? "Recent Safety Incidents" : "Incidents Register & 5-Whys RCA"}
+              </h2>
+            </div>
+            {activeTab === "overview" && items.length > 5 && (
+              <button
+                onClick={() => setActiveTab("incidents")}
+                className="text-xs font-semibold text-[#00A651] hover:underline"
+              >
+                View all {items.length} incidents →
+              </button>
+            )}
+          </div>
+
+          {activeTab === "incidents" && (
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              {[
+                { label: "Total Incidents", value: stats.total },
+                { label: "Open / Under Action", value: stats.open },
+                { label: "Critical Severity", value: stats.critical },
+                { label: "Lost-time Hours", value: `${stats.lostTime.toFixed(1)}h` },
+              ].map((s) => (
+                <div key={s.label} className="rounded-xl border border-border bg-card p-4">
+                  <div className="text-xs uppercase tracking-wide text-muted-foreground">{s.label}</div>
+                  <div className="mt-1 text-2xl font-semibold">{s.value}</div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {activeTab === "incidents" && (
+            <div className="flex flex-wrap gap-2">
+              {["all", ...STATUSES].map((s) => (
+                <button
+                  key={s}
+                  onClick={() => setFilter(s)}
+                  className={`rounded-full border px-3 py-1 text-xs capitalize transition-colors ${
+                    filter === s ? "bg-primary text-primary-foreground border-primary" : "border-border bg-card hover:bg-muted/60"
+                  }`}
+                >
+                  {s}
+                </button>
+              ))}
+            </div>
+          )}
+
+          {(activeTab === "overview" ? items.slice(0, 5) : filtered).length === 0 ? (
+            <EmptyState
+              icon={<ShieldAlert className="h-5 w-5" />}
+              title="No incidents recorded"
+              description="A safe shift is a good shift. Report incidents to track root causes and preventative CAPA."
+            />
+          ) : (
+            <div className="overflow-hidden rounded-xl border border-border bg-card">
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="text-left text-xs uppercase tracking-wide text-muted-foreground">
+                    <tr>
+                      <th className="px-5 py-3 font-medium">Date</th>
+                      <th className="px-5 py-3 font-medium">Type</th>
+                      <th className="px-5 py-3 font-medium">Severity</th>
+                      <th className="px-5 py-3 font-medium">Description</th>
+                      <th className="px-5 py-3 font-medium">Machine</th>
+                      <th className="px-5 py-3 font-medium">Status</th>
+                      <th className="px-5 py-3 text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(activeTab === "overview" ? items.slice(0, 5) : filtered).map((x) => (
+                      <tr key={x.id} className="border-t border-border">
+                        <td className="px-5 py-3 whitespace-nowrap">{formatDate(x.occurred_at)}</td>
+                        <td className="px-5 py-3 capitalize whitespace-nowrap">{x.incident_type?.replace(/_/g, " ")}</td>
+                        <td className="px-5 py-3 whitespace-nowrap">
+                          <span className={`rounded-full px-2 py-0.5 text-xs capitalize ${SEV_CLASS[x.severity]}`}>
+                            {x.severity}
+                          </span>
+                        </td>
+                        <td className="px-5 py-3 max-w-md truncate">{x.description}</td>
+                        <td className="px-5 py-3 text-muted-foreground whitespace-nowrap">{x.machines?.name ?? "—"}</td>
+                        <td className="px-5 py-3 whitespace-nowrap">
+                          <span className={`rounded-full px-2 py-0.5 text-xs capitalize ${STAT_CLASS[x.status]}`}>
+                            {x.status}
+                          </span>
+                        </td>
+                        <td className="px-5 py-3 text-right whitespace-nowrap">
+                          <div className="flex items-center justify-end gap-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => {
+                                setSelectedIncidentForRca(x);
+                                setFiveWhysOpen(true);
+                              }}
+                              className="h-7 text-xs gap-1 border-emerald-600/30 text-[#00A651] hover:bg-emerald-50 dark:hover:bg-emerald-950/30"
+                              title="Investigate with 5-Whys Root Cause Analysis"
+                            >
+                              <GitBranch className="h-3.5 w-3.5" /> 5-Whys RCA
+                            </Button>
+                            {x.status !== "closed" && (
+                              <select
+                                value={x.status}
+                                onChange={(e) => updateStatus(x.id, e.target.value)}
+                                className="rounded border border-input bg-background px-2 py-1 text-xs"
+                              >
+                                {STATUSES.map((s) => (
+                                  <option key={s} value={s}>
+                                    {s}
+                                  </option>
+                                ))}
+                              </select>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
 
       <ReportDialog open={open} setOpen={setOpen} machines={machines} userId={user?.id} orgId={profile?.organisation_id} onSaved={load} />
       <SafetyLiveFeedModal open={feedOpen} onOpenChange={setFeedOpen} onSaved={load} />

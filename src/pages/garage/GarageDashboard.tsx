@@ -32,48 +32,62 @@ export default function GarageDashboard() {
   const [intakeOpen, setIntakeOpen] = useState(false);
   const [counterSaleOpen, setCounterSaleOpen] = useState(false);
 
-  useEffect(() => {
+  const load = async () => {
     if (!profile) return;
-    (async () => {
-      setLoading(true);
-      const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
-      const todayEnd = new Date(); todayEnd.setHours(23, 59, 59, 999);
+    setLoading(true);
+    const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0);
+    const todayEnd = new Date(); todayEnd.setHours(23, 59, 59, 999);
 
-      const [
-        { data: j, error: e1 },
-        { data: invToday, error: e2 },
-        { data: allInv, error: e3 },
-        { data: pay, error: e4 },
-        { data: items, error: e5 },
-        { data: balances, error: e6 },
-      ] = await Promise.all([
-        (supabase as any).from("garage_jobs").select("*, garage_customers(name), garage_vehicles(make, model, registration_number), garage_mechanics(name)").order("created_at", { ascending: false }).limit(200),
-        (supabase as any).from("garage_invoices").select("*, garage_invoice_items(*)").gte("issued_at", todayStart.toISOString()).lte("issued_at", todayEnd.toISOString()),
-        (supabase as any).from("garage_invoices").select("*, garage_invoice_items(*)"),
-        (supabase as any).from("garage_payments").select("invoice_id, amount, type"),
-        supabase.from("inventory_items").select("id, reorder_level").eq("status", "active"),
-        (supabase as any).from("stock_balances").select("item_id, available_stock"),
-      ]);
-      const err = e1 || e2 || e3 || e4 || e5 || e6;
-      if (err) toast.error(err.message);
+    const [
+      { data: j, error: e1 },
+      { data: invToday, error: e2 },
+      { data: allInv, error: e3 },
+      { data: pay, error: e4 },
+      { data: items, error: e5 },
+      { data: balances, error: e6 },
+    ] = await Promise.all([
+      (supabase as any).from("garage_jobs").select("*, garage_customers(name), garage_vehicles(make, model, registration_number), garage_mechanics(name)").order("created_at", { ascending: false }).limit(200),
+      (supabase as any).from("garage_invoices").select("*, garage_invoice_items(*)").gte("issued_at", todayStart.toISOString()).lte("issued_at", todayEnd.toISOString()),
+      (supabase as any).from("garage_invoices").select("*, garage_invoice_items(*)"),
+      (supabase as any).from("garage_payments").select("invoice_id, amount, type"),
+      supabase.from("inventory_items").select("id, reorder_level").eq("status", "active"),
+      (supabase as any).from("stock_balances").select("item_id, available_stock"),
+    ]);
+    const err = e1 || e2 || e3 || e4 || e5 || e6;
+    if (err) toast.error(err.message);
 
-      setJobs(j ?? []);
-      setInvoicesToday(invToday ?? []);
+    setJobs(j ?? []);
+    setInvoicesToday(invToday ?? []);
 
-      const paidByInvoice: Record<string, number> = {};
-      (pay ?? []).forEach((p: any) => {
-        const sign = p.type === "refund" ? -1 : 1;
-        paidByInvoice[p.invoice_id] = (paidByInvoice[p.invoice_id] ?? 0) + sign * Number(p.amount);
-      });
-      setOutstandingInvoices((allInv ?? []).filter((inv: any) => invoiceTotal(inv) - (paidByInvoice[inv.id] ?? 0) > 0));
+    const paidByInvoice: Record<string, number> = {};
+    (pay ?? []).forEach((p: any) => {
+      const sign = p.type === "refund" ? -1 : 1;
+      paidByInvoice[p.invoice_id] = (paidByInvoice[p.invoice_id] ?? 0) + sign * Number(p.amount);
+    });
+    setOutstandingInvoices((allInv ?? []).filter((inv: any) => invoiceTotal(inv) - (paidByInvoice[inv.id] ?? 0) > 0));
 
-      const av: Record<string, number> = {};
-      (balances ?? []).forEach((b: any) => { av[b.item_id] = (av[b.item_id] ?? 0) + Number(b.available_stock); });
-      setLowStock((items ?? []).filter((i: any) => (av[i.id] ?? 0) <= Number(i.reorder_level ?? 0)).length);
+    const av: Record<string, number> = {};
+    (balances ?? []).forEach((b: any) => { av[b.item_id] = (av[b.item_id] ?? 0) + Number(b.available_stock); });
+    setLowStock((items ?? []).filter((i: any) => (av[i.id] ?? 0) <= Number(i.reorder_level ?? 0)).length);
 
-      setLoading(false);
-    })();
+    setLoading(false);
+  };
+
+  useEffect(() => {
+    load();
+    const timer = setInterval(() => {
+      if (document.visibilityState === "visible") load();
+    }, 30000);
+    const handleVis = () => {
+      if (document.visibilityState === "visible") load();
+    };
+    document.addEventListener("visibilitychange", handleVis);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener("visibilitychange", handleVis);
+    };
   }, [profile]);
+
 
   const todayStart = useMemo(() => { const d = new Date(); d.setHours(0, 0, 0, 0); return d; }, []);
   const jobsToday = useMemo(() => jobs.filter((j) => new Date(j.created_at) >= todayStart).length, [jobs, todayStart]);
@@ -217,8 +231,30 @@ export default function GarageDashboard() {
         )}
       </div>
 
+      {/* Onboarding card when no jobs exist */}
+      {jobs.length === 0 && (
+        <div className="rounded-xl border border-dashed border-border bg-card/50 p-8 text-center flex flex-col items-center justify-center">
+          <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10 text-primary mb-3">
+            <Wrench className="h-6 w-6" />
+          </div>
+          <h3 className="text-base font-semibold">Ready to take in your first vehicle job</h3>
+          <p className="text-sm text-muted-foreground mt-1 max-w-md">
+            Record vehicle details, customer requests, initial inspections, and assign mechanics using the quick walk-in intake wizard.
+          </p>
+          <div className="mt-4 flex flex-wrap gap-2 justify-center">
+            <Button onClick={() => setIntakeOpen(true)}>
+              <ClipboardCheck className="mr-1.5 h-4 w-4" /> Start Fast Walk-In Intake
+            </Button>
+            <Button variant="outline" onClick={() => setCounterSaleOpen(true)}>
+              <ShoppingCart className="mr-1.5 h-4 w-4" /> Quick Counter Sale
+            </Button>
+          </div>
+        </div>
+      )}
+
       <GarageIntakeWizardModal open={intakeOpen} onOpenChange={setIntakeOpen} onJobCreated={() => navigate("/garage/jobs")} />
       <QuickCounterSaleModal open={counterSaleOpen} onOpenChange={setCounterSaleOpen} onSaleCompleted={() => navigate("/garage/invoices")} />
     </div>
   );
 }
+
