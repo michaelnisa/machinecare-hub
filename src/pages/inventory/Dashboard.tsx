@@ -140,177 +140,149 @@ export default function InventoryDashboard() {
 
   if (loading) return <PageLoader />;
 
+  const kpiCards = [
+    {
+      label: "Active Items",
+      value: formatNumber(stats.totalItems),
+      sub: stats.inactive > 0 ? `${stats.inactive} inactive / discontinued` : "All items active",
+      icon: Boxes,
+      tone: "default",
+    },
+    {
+      label: "Stock Value",
+      value: formatMoney(stats.stockValue),
+      sub: `${formatNumber(stats.availableTotal)} available units`,
+      icon: TrendingUp,
+      tone: "success",
+    },
+    {
+      label: "Low / Out of Stock",
+      value: String(stats.lowStock + stats.outOfStock),
+      sub: stats.outOfStock > 0 ? `${stats.outOfStock} out of stock — order now` : stats.lowStock > 0 ? `${stats.lowStock} below reorder level` : "All items sufficiently stocked",
+      icon: ShieldAlert,
+      tone: stats.outOfStock > 0 ? "destructive" : stats.lowStock > 0 ? "warning" : "success",
+    },
+    {
+      label: "Critical Spares",
+      value: formatNumber(stats.criticalCount),
+      sub: criticalMissing > 0 ? `${criticalMissing} critical item${criticalMissing === 1 ? "" : "s"} unavailable` : "All critical spares stocked",
+      icon: ShieldAlert,
+      tone: criticalMissing > 0 ? "destructive" : "success",
+    },
+  ] as const;
+
+  const toneClasses: Record<string, string> = {
+    default: "bg-primary/10 text-primary",
+    success: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
+    warning: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400",
+    destructive: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400",
+  };
+
   return (
     <div className="space-y-6 animate-fade-in">
-      <div className="flex items-start justify-between gap-3">
+      {/* Header */}
+      <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">
-            Inventory dashboard
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            What we have, where it is, and what needs attention.
-          </p>
+          <h1 className="text-2xl font-semibold tracking-tight">Inventory Dashboard</h1>
+          <p className="text-sm text-muted-foreground">Stock levels, valuation, and critical spare parts status.</p>
         </div>
-        <div className="flex gap-2">
-          <Link
-            to="/inventory/locations"
-            className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-3 py-2 text-sm hover:bg-muted/60"
-          >
+        <div className="flex flex-wrap gap-2">
+          <Link to="/inventory/locations" className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-3 py-2 text-sm hover:bg-muted/60">
             <MapPin className="h-4 w-4" /> Locations
           </Link>
-          <Link
-            to="/inventory/stock"
-            className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-3 py-2 text-sm hover:bg-muted/60"
-          >
+          <Link to="/inventory/stock" className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-3 py-2 text-sm hover:bg-muted/60">
             <Warehouse className="h-4 w-4" /> Stock
           </Link>
-          <Link
-            to="/inventory/critical-spares"
-            className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-3 py-2 text-sm hover:bg-muted/60"
-          >
+          <Link to="/inventory/critical-spares" className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-3 py-2 text-sm hover:bg-muted/60">
             <ShieldAlert className="h-4 w-4" /> Critical spares
           </Link>
-          <Link
-            to="/inventory/reorder"
-            className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-3 py-2 text-sm hover:bg-muted/60"
-          >
-            <TrendingUp className="h-4 w-4" /> Reorder & insights
+          <Link to="/inventory/reorder" className="inline-flex items-center gap-1.5 rounded-md border border-border bg-card px-3 py-2 text-sm hover:bg-muted/60">
+            <TrendingUp className="h-4 w-4" /> Reorder
           </Link>
-          <Link
-            to="/inventory/items"
-            className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-2 text-sm text-primary-foreground hover:opacity-90"
-          >
+          <Link to="/inventory/items" className="inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-2 text-sm text-primary-foreground hover:opacity-90">
             <Boxes className="h-4 w-4" /> Items & spare parts
           </Link>
         </div>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        {[
-          { label: "Total items", value: formatNumber(stats.totalItems) },
-          { label: "Stock value", value: formatMoney(stats.stockValue) },
-          {
-            label: "Available stock (units)",
-            value: formatNumber(stats.availableTotal),
-          },
-          {
-            label: "Reserved stock (units)",
-            value: formatNumber(stats.reservedTotal),
-          },
-        ].map((s) => (
-          <div
-            key={s.label}
-            className="rounded-xl border border-border bg-card p-4"
-          >
-            <div className="text-xs uppercase tracking-wide text-muted-foreground">
-              {s.label}
+      {/* KPI cards */}
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        {kpiCards.map((c) => (
+          <div key={c.label} className="rounded-xl border border-border bg-card p-5">
+            <div className="flex items-start justify-between">
+              <div>
+                <div className="text-sm text-muted-foreground">{c.label}</div>
+                <div className="mt-2 text-3xl font-semibold tracking-tight">{c.value}</div>
+                <div className="mt-1 text-xs text-muted-foreground">{c.sub}</div>
+              </div>
+              <div className={`flex h-10 w-10 items-center justify-center rounded-lg ${toneClasses[c.tone]}`}>
+                <c.icon className="h-5 w-5" />
+              </div>
             </div>
-            <div className="mt-1 text-2xl font-semibold">{s.value}</div>
           </div>
         ))}
       </div>
 
-      <div>
-        <h2 className="mb-2 text-sm font-medium text-foreground">
-          Stock health
-        </h2>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <Link
-            to="/inventory/items?filter=healthy"
-            className="rounded-xl border border-border bg-card p-4 hover:border-primary/50"
-          >
-            <div className="text-xs uppercase tracking-wide text-muted-foreground">
-              Healthy
-            </div>
-            <div className="mt-1 text-2xl font-semibold text-emerald-600">
-              {formatNumber(stats.healthy)}
-            </div>
-          </Link>
-          <Link
-            to="/inventory/items?filter=low_stock"
-            className="rounded-xl border border-border bg-card p-4 hover:border-primary/50"
-          >
-            <div className="text-xs uppercase tracking-wide text-muted-foreground">
-              Low stock
-            </div>
-            <div className="mt-1 text-2xl font-semibold text-amber-600">
-              {formatNumber(stats.lowStock)}
-            </div>
-          </Link>
-          <Link
-            to="/inventory/items?filter=out_of_stock"
-            className="rounded-xl border border-border bg-card p-4 hover:border-primary/50"
-          >
-            <div className="text-xs uppercase tracking-wide text-muted-foreground">
-              Out of stock
-            </div>
-            <div className="mt-1 text-2xl font-semibold text-red-600">
-              {formatNumber(stats.outOfStock)}
-            </div>
-          </Link>
-          <Link
-            to="/inventory/items?filter=inactive"
-            className="rounded-xl border border-border bg-card p-4 hover:border-primary/50"
-          >
-            <div className="text-xs uppercase tracking-wide text-muted-foreground">
-              Inactive
-            </div>
-            <div className="mt-1 text-2xl font-semibold text-slate-500">
-              {formatNumber(stats.inactive)}
-            </div>
-          </Link>
-        </div>
-      </div>
-
-      <div className="grid gap-3 sm:grid-cols-2">
-        <Link
-          to="/inventory/items?filter=critical"
-          className="rounded-xl border border-border bg-card p-4 hover:border-primary/50"
-        >
-          <div className="text-xs uppercase tracking-wide text-muted-foreground">
-            Critical spare parts
+      {/* Stock health breakdown + Top machines — side by side */}
+      <div className="grid gap-4 lg:grid-cols-2">
+        {/* Stock health */}
+        <div className="rounded-xl border border-border bg-card p-5">
+          <div className="mb-3 flex items-center gap-2">
+            <Warehouse className="h-4 w-4 text-muted-foreground" />
+            <h2 className="text-sm font-medium text-foreground">Stock Health</h2>
           </div>
-          <div className="mt-1 text-2xl font-semibold">
-            {formatNumber(stats.criticalCount)}
-          </div>
-          {criticalMissing > 0 && (
-            <div className="mt-1 text-xs text-red-600">
-              {criticalMissing} critical item{criticalMissing === 1 ? "" : "s"}{" "}
-              unavailable right now
-            </div>
-          )}
-        </Link>
-      </div>
-
-      {topMachines.length > 0 && (
-        <div>
-          <h2 className="mb-2 text-sm font-medium text-foreground">
-            Top machines by spare parts cost (this month)
-          </h2>
-          <div className="overflow-hidden rounded-xl border border-border bg-card">
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <tbody>
-                  {topMachines.map((m, idx) => (
-                    <tr
-                      key={m.name}
-                      className="border-t border-border first:border-t-0"
-                    >
-                      <td className="px-5 py-3 text-muted-foreground">
-                        {idx + 1}.
-                      </td>
-                      <td className="px-5 py-3">{m.name}</td>
-                      <td className="px-5 py-3 text-right font-medium">
-                        {formatMoney(m.cost)}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+          <div className="space-y-2">
+            {[
+              { label: "Healthy", value: stats.healthy, color: "text-emerald-600", bg: "bg-emerald-50 dark:bg-emerald-950/20", href: "/inventory/items?filter=healthy" },
+              { label: "Low stock", value: stats.lowStock, color: "text-amber-600", bg: "bg-amber-50 dark:bg-amber-950/20", href: "/inventory/items?filter=low_stock" },
+              { label: "Out of stock", value: stats.outOfStock, color: "text-red-600", bg: "bg-red-50 dark:bg-red-950/20", href: "/inventory/items?filter=out_of_stock" },
+              { label: "Inactive / discontinued", value: stats.inactive, color: "text-slate-500", bg: "bg-slate-50 dark:bg-slate-900/30", href: "/inventory/items?filter=inactive" },
+            ].map((row) => (
+              <Link
+                key={row.label}
+                to={row.href}
+                className={`flex items-center justify-between rounded-lg border border-border px-3 py-2 text-sm ${row.bg} hover:border-primary/40 transition-colors`}
+              >
+                <span className="font-medium">{row.label}</span>
+                <span className={`text-xl font-bold tabular-nums ${row.color}`}>{formatNumber(row.value)}</span>
+              </Link>
+            ))}
           </div>
         </div>
-      )}
+
+        {/* Top machines by cost */}
+        {topMachines.length > 0 ? (
+          <div className="rounded-xl border border-border bg-card p-5">
+            <div className="mb-3 flex items-center gap-2">
+              <TrendingUp className="h-4 w-4 text-muted-foreground" />
+              <h2 className="text-sm font-medium text-foreground">Top Machines by Parts Cost <span className="text-xs font-normal text-muted-foreground">(this month)</span></h2>
+            </div>
+            <div className="space-y-2">
+              {topMachines.map((m, idx) => (
+                <div key={m.name} className="flex items-center justify-between rounded-lg border border-border px-3 py-2 text-sm">
+                  <div className="flex items-center gap-2">
+                    <span className="flex h-5 w-5 items-center justify-center rounded-full bg-muted text-[10px] font-semibold shrink-0">{idx + 1}</span>
+                    <span className="font-medium">{m.name}</span>
+                  </div>
+                  <span className="text-muted-foreground font-medium">{formatMoney(m.cost)}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : (
+          <div className="rounded-xl border border-border bg-card p-5">
+            <div className="mb-3 flex items-center gap-2">
+              <TrendingUp className="h-4 w-4 text-muted-foreground" />
+              <h2 className="text-sm font-medium text-foreground">Top Machines by Parts Cost</h2>
+            </div>
+            <div className="flex flex-col items-center justify-center py-8 text-center">
+              <TrendingUp className="h-8 w-8 text-muted-foreground/30 mb-2" />
+              <p className="text-sm text-muted-foreground">No parts issued this month</p>
+              <p className="text-xs text-muted-foreground mt-1">Issue stock to machines to see cost rankings here.</p>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

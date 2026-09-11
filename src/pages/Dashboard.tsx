@@ -118,10 +118,34 @@ export default function Dashboard() {
   if (loading) return <PageLoader />;
 
   const cards = [
-    { label: "Total machines", value: stats.total, icon: Wrench, tone: "default" },
-    { label: "Active", value: stats.active, icon: CheckCircle2, tone: "success" },
-    { label: "Due for service", value: stats.due_soon, icon: Clock, tone: "warning" },
-    { label: "Overdue", value: stats.overdue, icon: AlertTriangle, tone: "destructive" },
+    {
+      label: "Total Machines",
+      value: stats.total,
+      sub: `${stats.active} active · ${stats.total - stats.active} inactive`,
+      icon: Wrench,
+      tone: "default",
+    },
+    {
+      label: "Active",
+      value: stats.active,
+      sub: stats.total > 0 ? `${Math.round((stats.active / stats.total) * 100)}% of fleet` : "No machines yet",
+      icon: CheckCircle2,
+      tone: "success",
+    },
+    {
+      label: "Due for Service",
+      value: stats.due_soon,
+      sub: stats.due_soon > 0 ? "Within 30 days — schedule now" : "Nothing due soon",
+      icon: Clock,
+      tone: "warning",
+    },
+    {
+      label: "Overdue",
+      value: stats.overdue,
+      sub: stats.overdue > 0 ? "Immediate attention required" : "All services on track",
+      icon: AlertTriangle,
+      tone: "destructive",
+    },
   ] as const;
 
   const toneClasses: Record<string, string> = {
@@ -133,10 +157,11 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-6 animate-fade-in">
+      {/* Header */}
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Dashboard</h1>
-          <p className="text-sm text-muted-foreground">An overview of your fleet maintenance.</p>
+          <h1 className="text-2xl font-semibold tracking-tight">Assets & Maintenance</h1>
+          <p className="text-sm text-muted-foreground">Fleet overview, service schedules and recent maintenance activity.</p>
         </div>
         <div className="flex gap-2">
           <Button variant="outline" onClick={() => setLogDialog(true)} disabled={machines.length === 0}>
@@ -148,9 +173,9 @@ export default function Dashboard() {
         </div>
       </div>
 
-
       <MaintenanceAlerts />
 
+      {/* KPI cards */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {cards.map((c) => (
           <div key={c.label} className="rounded-xl border border-border bg-card p-5">
@@ -158,6 +183,7 @@ export default function Dashboard() {
               <div>
                 <div className="text-sm text-muted-foreground">{c.label}</div>
                 <div className="mt-2 text-3xl font-semibold tracking-tight">{c.value}</div>
+                <div className="mt-1 text-xs text-muted-foreground">{c.sub}</div>
               </div>
               <div className={`flex h-10 w-10 items-center justify-center rounded-lg ${toneClasses[c.tone]}`}>
                 <c.icon className="h-5 w-5" />
@@ -167,94 +193,66 @@ export default function Dashboard() {
         ))}
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-3">
-        <div className="rounded-xl border border-border bg-card lg:col-span-2">
-          <div className="flex items-center justify-between border-b border-border px-5 py-4">
-            <h2 className="font-semibold">Upcoming services</h2>
+      {/* Upcoming services + Recent activity */}
+      <div className="grid gap-4 lg:grid-cols-3">
+        <div className="rounded-xl border border-border bg-card p-5 lg:col-span-2">
+          <div className="mb-3 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <ShieldCheck className="h-4 w-4 text-muted-foreground" />
+              <h2 className="text-sm font-medium text-foreground">Upcoming Services</h2>
+            </div>
             <Link to="/machines" className="text-xs font-medium text-primary hover:underline">View all machines</Link>
           </div>
           {upcoming.length === 0 ? (
-            <div className="p-6">
-              <EmptyState
-                icon={<Clock className="h-5 w-5" />}
-                title="No upcoming services"
-                description="Add a service schedule to a machine to see it here."
-              />
-            </div>
+            <EmptyState
+              icon={<Clock className="h-5 w-5" />}
+              title="No upcoming services"
+              description="Add a service schedule to a machine to see it here."
+            />
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="text-left text-xs uppercase tracking-wide text-muted-foreground">
-                  <tr>
-                    <th className="px-5 py-3 font-medium">Machine</th>
-                    <th className="px-5 py-3 font-medium">Service</th>
-                    <th className="px-5 py-3 font-medium">Due</th>
-                    <th className="px-5 py-3 font-medium">Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {upcoming.map((r) => (
-                    <tr key={r.id} className="border-t border-border">
-                      <td className="px-5 py-3">
-                        <Link to={`/machines/${r.machine_id}`} className="font-medium hover:text-primary">
-                          {r.machine_name}
-                        </Link>
-                      </td>
-                      <td className="px-5 py-3 text-muted-foreground">{r.name}</td>
-                      <td className="px-5 py-3">{formatDate(r.next_due_date)}</td>
-                      <td className="px-5 py-3"><StatusBadge status={r.status} /></td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            <div className="space-y-2">
+              {upcoming.map((r) => (
+                <div key={r.id} className="flex items-center justify-between rounded-lg border border-border px-3 py-2 text-sm">
+                  <div>
+                    <Link to={`/machines/${r.machine_id}`} className="font-medium hover:text-primary">{r.machine_name}</Link>
+                    <div className="text-xs text-muted-foreground">{r.name}</div>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className="text-xs text-muted-foreground">{formatDate(r.next_due_date)}</span>
+                    <StatusBadge status={r.status} />
+                  </div>
+                </div>
+              ))}
             </div>
           )}
         </div>
 
-        <div className="rounded-xl border border-border bg-card">
-          <div className="border-b border-border px-5 py-4">
-            <h2 className="font-semibold">Recent activity</h2>
+        <div className="rounded-xl border border-border bg-card p-5">
+          <div className="mb-3 flex items-center gap-2">
+            <Activity className="h-4 w-4 text-muted-foreground" />
+            <h2 className="text-sm font-medium text-foreground">Recent Activity</h2>
           </div>
           {activity.length === 0 ? (
-            <div className="p-6">
-              <EmptyState icon={<Activity className="h-5 w-5" />} title="No activity yet" description="Logged services will appear here." />
-            </div>
+            <EmptyState icon={<Activity className="h-5 w-5" />} title="No activity yet" description="Logged services will appear here." />
           ) : (
-            <ul className="divide-y divide-border">
-              {activity.map((a) => {
-                const Icon = CATEGORY_ICONS.Other;
-                return (
-                  <li key={a.id} className="flex gap-3 px-5 py-4">
-                    <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary-soft text-primary">
-                      <Icon className="h-4 w-4" />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="truncate text-sm font-medium">{a.title}</div>
-                      <div className="text-xs text-muted-foreground">
-                        <Link to={`/machines/${a.machine_id}`} className="hover:text-primary">{a.machine_name}</Link>
-                        <span> · {formatDate(a.performed_at)}</span>
-                      </div>
-                      {a.cost ? <div className="mt-1 text-xs">{formatMoney(a.cost, a.currency ?? "TZS")}</div> : null}
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
+            <div className="space-y-2">
+              {activity.map((a) => (
+                <div key={a.id} className="rounded-lg border border-border px-3 py-2 text-sm">
+                  <div className="font-medium truncate">{a.title}</div>
+                  <div className="text-xs text-muted-foreground mt-0.5">
+                    <Link to={`/machines/${a.machine_id}`} className="hover:text-primary">{a.machine_name}</Link>
+                    {" · "}{formatDate(a.performed_at)}
+                    {a.cost ? <span className="ml-1 font-medium text-foreground">{formatMoney(a.cost, a.currency ?? "TZS")}</span> : null}
+                  </div>
+                </div>
+              ))}
+            </div>
           )}
         </div>
       </div>
 
-      <MachineFormDialog
-        open={machineDialog}
-        onOpenChange={setMachineDialog}
-        onSaved={load}
-      />
-      <ServiceLogDialog
-        open={logDialog}
-        onOpenChange={setLogDialog}
-        machines={machines}
-        onSaved={load}
-      />
+      <MachineFormDialog open={machineDialog} onOpenChange={setMachineDialog} onSaved={load} />
+      <ServiceLogDialog open={logDialog} onOpenChange={setLogDialog} machines={machines} onSaved={load} />
     </div>
   );
 }

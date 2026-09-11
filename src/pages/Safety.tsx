@@ -11,8 +11,10 @@ import {
   ShieldAlert, Plus, Loader2, CheckCircle2, XCircle, ClipboardList,
   ListChecks, ClipboardCheck, GraduationCap, Tv, Settings2, QrCode,
   MapPin, Users, HardHat, FileWarning, Trophy, FlaskConical, GitBranch,
-  Building2, Package, Wrench, FileText, Settings, ShieldCheck, ChevronRight
+  Building2, Package, Wrench, FileText, Settings, ShieldCheck, ChevronRight,
+  FileCheck, Lock, UserCheck, AlertTriangle
 } from "lucide-react";
+
 import { toast } from "sonner";
 import { formatDate } from "@/lib/format";
 import { Link } from "react-router-dom";
@@ -58,7 +60,10 @@ export default function Safety() {
     openCorrectiveActions: 0,
     overdueCorrectiveActions: 0,
     expiringInductions: 0,
+    dsli: null as number | null,   // Days Since Last Incident
+    lastIncidentDate: null as string | null,
   });
+
 
   const load = async () => {
     if (!profile) return;
@@ -90,14 +95,31 @@ export default function Safety() {
     setPendingRams(raList ?? []);
     const openCa = (ca ?? []).length;
     const overdueCa = (ca ?? []).filter((x: any) => x.due_date && x.due_date < today).length;
+
+    // DSLI: Days Since Last Incident — find the most recent occurred_at across all incidents
+    const allIncidents = i ?? [];
+    let dsli: number | null = null;
+    let lastIncidentDate: string | null = null;
+    if (allIncidents.length > 0) {
+      const sorted = [...allIncidents].sort((a, b) =>
+        new Date(b.occurred_at).getTime() - new Date(a.occurred_at).getTime()
+      );
+      lastIncidentDate = sorted[0].occurred_at;
+      const msElapsed = Date.now() - new Date(lastIncidentDate).getTime();
+      dsli = Math.floor(msElapsed / 86400000);
+    }
+
     setDash({
       pendingRiskAssessments: raCount ?? (raList ?? []).length,
       activeLoto: lotoCount ?? 0,
       openCorrectiveActions: openCa,
       overdueCorrectiveActions: overdueCa,
       expiringInductions: expCount ?? 0,
+      dsli,
+      lastIncidentDate,
     });
     setLoading(false);
+
   };
   useEffect(() => { load(); }, [profile]);
 
@@ -195,20 +217,123 @@ export default function Safety() {
         </div>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-        {[
-          { label: "Pending permits", value: pendingPtw.length, tone: pendingPtw.length > 0 ? "amber" : "green", sub: "Requires Safety Review" },
-          { label: "Pending RAMS", value: pendingRams.length, tone: pendingRams.length > 0 ? "amber" : "green", sub: "Awaiting Risk Approval" },
-          { label: "Active LOTO", value: dash.activeLoto, tone: dash.activeLoto > 0 ? "blue" : "green", sub: "Energy Isolation Active" },
-          { label: "Open CAPA Actions", value: dash.openCorrectiveActions, tone: dash.overdueCorrectiveActions > 0 ? "red" : dash.openCorrectiveActions > 0 ? "amber" : "green", sub: dash.overdueCorrectiveActions > 0 ? `${dash.overdueCorrectiveActions} Overdue` : "On Schedule" },
-          { label: "Expiring Inductions", value: dash.expiringInductions, tone: dash.expiringInductions > 0 ? "amber" : "green", sub: "Renewal Due ≤30d" },
-        ].map((s) => (
-          <div key={s.label} className="rounded-xl border border-border bg-card p-4 shadow-sm">
-            <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{s.label}</div>
-            <div className={`mt-1 text-2xl font-bold ${s.tone === "red" ? "text-red-600" : s.tone === "amber" ? "text-amber-600" : s.tone === "blue" ? "text-blue-600" : "text-[#00A651]"}`}>{s.value}</div>
-            <div className="text-[11px] text-muted-foreground mt-0.5">{s.sub}</div>
+      {/* ── DSLI Hero Card ──────────────────────────────────────────────── */}
+      <div className={`rounded-xl border p-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 shadow-sm
+        ${dash.dsli === null
+          ? "border-emerald-200 bg-emerald-50/60 dark:border-emerald-800/40 dark:bg-emerald-950/20"
+          : dash.dsli === 0
+            ? "border-red-300 bg-red-50/60 dark:border-red-800/40 dark:bg-red-950/20"
+            : dash.dsli <= 7
+              ? "border-amber-300 bg-amber-50/60 dark:border-amber-800/40 dark:bg-amber-950/20"
+              : "border-emerald-200 bg-emerald-50/60 dark:border-emerald-800/40 dark:bg-emerald-950/20"
+        }`}
+      >
+        <div className="flex items-center gap-4">
+          <div className={`flex h-16 w-16 shrink-0 items-center justify-center rounded-full text-2xl font-bold
+            ${dash.dsli === null || (dash.dsli !== null && dash.dsli > 7)
+              ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300"
+              : dash.dsli === 0
+                ? "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300"
+                : "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300"
+            }`}
+          >
+            {dash.dsli === null ? "∞" : String(dash.dsli)}
           </div>
-        ))}
+          <div>
+            <div className="text-lg font-bold tracking-tight text-foreground">
+              Days Since Last Incident (DSLI)
+            </div>
+            <div className="text-sm text-muted-foreground mt-0.5">
+              {dash.dsli === null
+                ? "No incidents have been recorded yet. Keep it that way."
+                : dash.dsli === 0
+                  ? "An incident occurred today — ensure immediate action has been taken."
+                  : dash.dsli <= 7
+                    ? `Last incident ${dash.dsli} day${dash.dsli === 1 ? "" : "s"} ago — stay vigilant.`
+                    : `Last incident ${dash.dsli} day${dash.dsli === 1 ? "" : "s"} ago — great work keeping the site safe!`
+              }
+            </div>
+            {dash.lastIncidentDate && (
+              <div className="text-xs text-muted-foreground mt-1">
+                Last recorded: {new Date(dash.lastIncidentDate).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" })}
+              </div>
+            )}
+          </div>
+        </div>
+        <div className="flex flex-col items-start sm:items-end gap-1 shrink-0">
+          <div className="text-xs text-muted-foreground uppercase tracking-wide font-semibold">Incident-free streak</div>
+          <div className={`text-4xl font-black tabular-nums
+            ${dash.dsli === null || (dash.dsli !== null && dash.dsli > 7)
+              ? "text-emerald-600 dark:text-emerald-400"
+              : dash.dsli === 0
+                ? "text-red-600 dark:text-red-400"
+                : "text-amber-600 dark:text-amber-400"
+            }`}
+          >
+            {dash.dsli === null ? "—" : `${dash.dsli}d`}
+          </div>
+        </div>
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+        {[
+          {
+            label: "Pending Permits",
+            value: pendingPtw.length,
+            sub: pendingPtw.length > 0 ? "Requires safety review" : "No permits pending",
+            icon: FileCheck,
+            tone: pendingPtw.length > 0 ? "warning" : "success",
+          },
+          {
+            label: "Pending RAMS",
+            value: pendingRams.length,
+            sub: pendingRams.length > 0 ? "Awaiting risk approval" : "All RAMS approved",
+            icon: ClipboardCheck,
+            tone: pendingRams.length > 0 ? "warning" : "success",
+          },
+          {
+            label: "Active LOTO",
+            value: dash.activeLoto,
+            sub: dash.activeLoto > 0 ? "Energy isolation active" : "No active isolations",
+            icon: Lock,
+            tone: dash.activeLoto > 0 ? "default" : "success",
+          },
+          {
+            label: "Open CAPA",
+            value: dash.openCorrectiveActions,
+            sub: dash.overdueCorrectiveActions > 0 ? `${dash.overdueCorrectiveActions} overdue` : "On schedule",
+            icon: AlertTriangle,
+            tone: dash.overdueCorrectiveActions > 0 ? "destructive" : dash.openCorrectiveActions > 0 ? "warning" : "success",
+          },
+          {
+            label: "Expiring Inductions",
+            value: dash.expiringInductions,
+            sub: dash.expiringInductions > 0 ? "Renewal due ≤30d" : "All inductions current",
+            icon: UserCheck,
+            tone: dash.expiringInductions > 0 ? "warning" : "success",
+          },
+        ].map((s) => {
+          const toneClasses: Record<string, string> = {
+            default: "bg-primary/10 text-primary",
+            success: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
+            warning: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400",
+            destructive: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400",
+          };
+          return (
+            <div key={s.label} className="rounded-xl border border-border bg-card p-5">
+              <div className="flex items-start justify-between">
+                <div>
+                  <div className="text-sm text-muted-foreground">{s.label}</div>
+                  <div className="mt-2 text-3xl font-semibold tracking-tight">{s.value}</div>
+                  <div className="mt-1 text-xs text-muted-foreground">{s.sub}</div>
+                </div>
+                <div className={`flex h-10 w-10 items-center justify-center rounded-lg ${toneClasses[s.tone]}`}>
+                  <s.icon className="h-5 w-5" />
+                </div>
+              </div>
+            </div>
+          );
+        })}
       </div>
 
       {/* 3 LOGICAL EHS PRESENTATION PILLARS */}

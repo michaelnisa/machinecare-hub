@@ -84,6 +84,8 @@ const ProductionDowntime = lazy(() => import("./pages/production/Downtime"));
 const ProductionMaterialWaste = lazy(() => import("./pages/production/MaterialWaste"));
 const ProductionHistory = lazy(() => import("./pages/production/History"));
 const ProductionAnalytics = lazy(() => import("./pages/production/Analytics"));
+const ProductionLog = lazy(() => import("./pages/production/Log"));
+
 const MaintenanceKPIs = lazy(() => import("./pages/MaintenanceKPIs"));
 const Utilities = lazy(() => import("./pages/Utilities"));
 const Live = lazy(() => import("./pages/Live"));
@@ -253,6 +255,8 @@ const App = () => (
                   <Route path="/production/material-waste" element={<ProductionMaterialWaste />} />
                   <Route path="/production/history" element={<ProductionHistory />} />
                   <Route path="/production/analytics" element={<ProductionAnalytics />} />
+                  <Route path="/production/log" element={<ProductionLog />} />
+
                   <Route path="/maintenance-kpis" element={<MaintenanceKPIs />} />
                   <Route path="/utilities" element={<Utilities />} />
                   <Route path="/inventory" element={<InventoryDashboard />} />

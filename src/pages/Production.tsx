@@ -4,16 +4,19 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useUserRole } from "@/hooks/useUserRole";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { PageLoader, EmptyState } from "@/components/PageLoader";
-import { ConfirmDialog } from "@/components/ConfirmDialog";
-import { Target, Plus, Loader2, X, CheckCircle2, Pencil, Trash2, Download, AlertTriangle, Wrench, ClipboardList } from "lucide-react";
+import { Target, AlertTriangle, Wrench, ClipboardList, BookOpen, BarChart2, TrendingUp, TrendingDown, Clock, Factory } from "lucide-react";
 import { toast } from "sonner";
 import { formatDate, formatTZS } from "@/lib/format";
-import { DOWNTIME_REASONS, REASON_MAP, SCRAP_REASONS, SCRAP_REASON_MAP } from "@/lib/production-constants";
+import { REASON_MAP, SCRAP_REASON_MAP } from "@/lib/production-constants";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
+
+const toneClasses: Record<string, string> = {
+  default: "bg-primary/10 text-primary",
+  success: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
+  warning: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400",
+  destructive: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400",
+};
 
 function formatPoNumber(year: number | null | undefined, n: number | null | undefined) {
   if (!n) return "—";
@@ -58,11 +61,9 @@ export default function Production() {
     production_cost_per_downtime_minute: number | null;
     production_cost_per_scrap_unit: number | null;
   }>({ production_cost_per_downtime_minute: null, production_cost_per_scrap_unit: null });
-  const [open, setOpen] = useState(false);
-  const [editing, setEditing] = useState<any>(null);
-  const [deleteTarget, setDeleteTarget] = useState<any>(null);
   const [month, setMonth] = useState<string>(() => new Date().toISOString().slice(0, 7));
   const [machineFilter, setMachineFilter] = useState<string>("all");
+
 
   const load = async () => {
     if (!profile) return;
@@ -271,203 +272,239 @@ export default function Production() {
     load();
   };
 
-  const approveLog = async (id: string) => {
-    const { error } = await supabase
-      .from("production_kpis")
-      .update({ log_status: "approved", approved_by: user?.id, approved_at: new Date().toISOString() } as any)
-      .eq("id", id);
-    if (error) return toast.error(error.message);
-    toast.success("Log approved");
-    load();
-  };
-
-  const deleteLog = async () => {
-    if (!deleteTarget) return;
-    const { error } = await supabase.from("production_kpis").delete().eq("id", deleteTarget.id);
-    if (error) return toast.error(error.message);
-    toast.success("Log deleted");
-    load();
-  };
-
-  const exportCSV = () => {
-    const rows: string[][] = [];
-    rows.push(["MachineCare Production Log", organisation?.name ?? "", month]);
-    rows.push([]);
-    rows.push(["Date", "Shift", "Machine", "Line", "Product", "Operator", "Target", "Actual", "Scrap", "Downtime (min)", "Attainment %", "Status"]);
-    filteredItems.forEach((x) => rows.push([
-      x.record_date, x.shift ?? "", x.machines?.name ?? "", x.production_line ?? "", x.product ?? "", x.operator ?? "",
-      String(x.target_units ?? 0), String(x.actual_units ?? 0), String(x.scrap_units ?? 0), String(x.downtime_minutes ?? 0),
-      Number(x.attainment_percent || 0).toFixed(1), x.log_status ?? "",
-    ]));
-    const csv = rows.map((r) => r.map((c) => `"${(c ?? "").toString().replace(/"/g, '""')}"`).join(",")).join("\n");
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `production-log-${month}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
+  const kpiCards = [
+    {
+      label: "Target Units",
+      value: String(stats.target.toLocaleString()),
+      sub: `${month} · ${machineFilter === "all" ? "all machines" : machines.find(m => m.id === machineFilter)?.name ?? ""}`,
+      icon: Target,
+      tone: "default",
+    },
+    {
+      label: "Actual Units",
+      value: String(stats.actual.toLocaleString()),
+      sub: stats.att > 0 ? `${stats.att.toFixed(1)}% of target` : "No target set",
+      icon: BarChart2,
+      tone: stats.att >= 90 ? "success" : stats.att >= 70 ? "warning" : "destructive",
+    },
+    {
+      label: "Attainment",
+      value: `${stats.att.toFixed(1)}%`,
+      sub: stats.target > 0 ? `${(stats.target - stats.actual).toLocaleString()} units short` : "No target set",
+      icon: TrendingUp,
+      tone: stats.att >= 90 ? "success" : stats.att >= 70 ? "warning" : "destructive",
+    },
+    {
+      label: "Scrap",
+      value: String(stats.scrap.toLocaleString()),
+      sub: stats.actual > 0 ? `${((stats.scrap / stats.actual) * 100).toFixed(1)}% scrap rate` : "—",
+      icon: AlertTriangle,
+      tone: stats.scrap === 0 ? "success" : "warning",
+    },
+    stats.costEnabled
+      ? {
+          label: "Cost of Losses",
+          value: formatTZS(stats.costLost),
+          sub: `Downtime + scrap cost for ${month}`,
+          icon: TrendingDown,
+          tone: stats.costLost > 0 ? "destructive" : "success",
+        }
+      : {
+          label: "Total Downtime",
+          value: `${stats.down}m`,
+          sub: stats.down > 0 ? `${(stats.down / 60).toFixed(1)}h lost this period` : "No downtime recorded",
+          icon: Clock,
+          tone: stats.down === 0 ? "success" : stats.down > 120 ? "destructive" : "warning",
+        },
+  ] as const;
 
   if (loading) return <PageLoader />;
 
   return (
     <div className="space-y-6 animate-fade-in">
+      {/* Header */}
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Production KPIs</h1>
-          <p className="text-sm text-muted-foreground">Daily production tracking, targets and scrap.</p>
+          <h1 className="text-2xl font-semibold tracking-tight">Production Dashboard</h1>
+          <p className="text-sm text-muted-foreground">KPIs, attainment trends and machine analytics for {month}.</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <Button variant="outline" size="sm" asChild>
-            <Link to="/production/orders">
-              <ClipboardList className="mr-1.5 h-4 w-4" /> Production Orders
-            </Link>
+            <Link to="/production/orders"><ClipboardList className="mr-1.5 h-4 w-4" /> Orders</Link>
           </Button>
-          <input type="month" value={month} onChange={(e) => setMonth(e.target.value)} className="h-10 rounded-md border border-input bg-background px-3 text-sm" />
-          <select value={machineFilter} onChange={(e) => setMachineFilter(e.target.value)} className="h-10 rounded-md border border-input bg-background px-3 text-sm">
+          <input type="month" value={month} onChange={(e) => setMonth(e.target.value)} className="h-9 rounded-md border border-input bg-background px-3 text-sm" />
+          <select value={machineFilter} onChange={(e) => setMachineFilter(e.target.value)} className="h-9 rounded-md border border-input bg-background px-3 text-sm">
             <option value="all">All machines</option>
             {machines.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
           </select>
-          <Button variant="outline" onClick={exportCSV} disabled={filteredItems.length === 0}><Download className="mr-2 h-4 w-4" />Export CSV</Button>
-          <Button variant="outline" asChild><Link to="/inventory/production-materials">Material readiness</Link></Button>
-          <Button onClick={() => { setEditing(null); setOpen(true); }}><Plus className="mr-2 h-4 w-4" />Log production</Button>
+          <Button asChild>
+            <Link to="/production/log"><BookOpen className="mr-2 h-4 w-4" /> Production Log</Link>
+          </Button>
         </div>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
-        {[
-          { label: "Target units", value: stats.target },
-          { label: "Actual units", value: stats.actual },
-          { label: "Attainment", value: `${stats.att.toFixed(1)}%` },
-          { label: "Scrap", value: stats.scrap },
-          stats.costEnabled
-            ? { label: "Cost lost", value: formatTZS(stats.costLost) }
-            : { label: "Downtime (min)", value: stats.down },
-        ].map((s) => (
-          <div key={s.label} className="rounded-xl border border-border bg-card p-4">
-            <div className="text-xs uppercase tracking-wide text-muted-foreground">{s.label}</div>
-            <div className="mt-1 text-2xl font-semibold">{s.value}</div>
+      {/* KPI Cards — Fleet style */}
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+        {kpiCards.map((c) => (
+          <div key={c.label} className="rounded-xl border border-border bg-card p-5">
+            <div className="flex items-start justify-between">
+              <div>
+                <div className="text-sm text-muted-foreground">{c.label}</div>
+                <div className="mt-2 text-3xl font-semibold tracking-tight">{c.value}</div>
+                <div className="mt-1 text-xs text-muted-foreground">{c.sub}</div>
+              </div>
+              <div className={`flex h-10 w-10 items-center justify-center rounded-lg ${toneClasses[c.tone]}`}>
+                <c.icon className="h-5 w-5" />
+              </div>
+            </div>
           </div>
         ))}
       </div>
 
-      {trend.length > 1 && (
-        <div className="rounded-xl border border-border bg-card p-4">
-          <div className="mb-2 text-sm font-medium">Target vs actual</div>
-          <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={trend}>
-                <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
-                <XAxis dataKey="date" tick={{ fontSize: 11 }} />
-                <YAxis tick={{ fontSize: 11 }} />
-                <Tooltip />
-                <Bar dataKey="target" fill="hsl(var(--muted-foreground))" name="Target" />
-                <Bar dataKey="actual" fill="hsl(var(--primary))" name="Actual" />
-              </BarChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-      )}
-
-      {lineRollup.length > 0 && (
-        <div className="rounded-xl border border-border bg-card p-4">
-          <div className="mb-3 text-sm font-medium">By production line</div>
-          <div className="space-y-3">
-            {lineRollup.map((r) => (
-              <div key={r.line} className="rounded-lg border border-border p-3 text-sm">
-                <div className="flex items-center justify-between">
-                  <div className="font-medium">{r.line}</div>
-                  <div className="text-muted-foreground">{r.actual}/{r.target} units · {r.att.toFixed(1)}%</div>
-                </div>
-                {r.bottleneck && r.machines.size > 1 && (
-                  <div className="mt-1 text-xs text-amber-700">
-                    Bottleneck: {r.bottleneck.name} ({r.bottleneck.att.toFixed(1)}% attainment)
-                  </div>
-                )}
+      {/* Trend + Line Rollup — side by side on large screens */}
+      {(trend.length > 1 || lineRollup.length > 0) && (
+        <div className="grid gap-4 lg:grid-cols-2">
+          {trend.length > 1 && (
+            <div className="rounded-xl border border-border bg-card p-5">
+              <div className="mb-3 flex items-center gap-2">
+                <BarChart2 className="h-4 w-4 text-muted-foreground" />
+                <h2 className="text-sm font-medium text-foreground">Target vs Actual</h2>
               </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {reliability.length > 0 && (
-        <div className="rounded-xl border border-border bg-card p-4">
-          <div className="mb-3 text-sm font-medium">Reliability — breakdown-driven machines</div>
-          <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="text-left text-xs uppercase tracking-wide text-muted-foreground">
-              <tr>
-                <th className="py-2 font-medium">Machine</th>
-                <th className="py-2 font-medium">Breakdowns</th>
-                <th className="py-2 font-medium">MTTR</th>
-                <th className="py-2 font-medium">MTBF</th>
-              </tr>
-            </thead>
-            <tbody>
-              {reliability.map((r) => (
-                <tr key={r.machineId} className="border-t border-border">
-                  <td className="py-2">{r.name}</td>
-                  <td className="py-2">{r.failures}</td>
-                  <td className="py-2">{r.mttr != null ? `${r.mttr.toFixed(1)}h` : "—"}</td>
-                  <td className="py-2">{r.mtbf != null ? `${r.mtbf.toFixed(1)}d` : "—"}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          </div>
-        </div>
-      )}
-
-      {downtimePareto.rows.length > 0 && (
-        <div className="rounded-xl border border-border bg-card p-4">
-          <div className="mb-1 flex items-center justify-between">
-            <div className="text-sm font-medium">Downtime by reason</div>
-            <div className="flex gap-3 text-xs text-muted-foreground">
-              <span><span className="inline-block h-2 w-2 rounded-full bg-amber-500 align-middle" /> Planned {downtimePareto.planned}m</span>
-              <span><span className="inline-block h-2 w-2 rounded-full bg-red-500 align-middle" /> Unplanned {downtimePareto.unplanned}m</span>
+              <div className="h-56">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={trend}>
+                    <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+                    <XAxis dataKey="date" tick={{ fontSize: 10 }} />
+                    <YAxis tick={{ fontSize: 10 }} />
+                    <Tooltip />
+                    <Bar dataKey="target" fill="hsl(var(--muted-foreground))" name="Target" radius={[2,2,0,0]} />
+                    <Bar dataKey="actual" fill="hsl(var(--primary))" name="Actual" radius={[2,2,0,0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
             </div>
-          </div>
-          <div className="mt-3 space-y-2">
-            {downtimePareto.rows.map((r) => {
-              const max = downtimePareto.rows[0]?.minutes || 1;
-              return (
-                <div key={r.code} className="flex items-center gap-3 text-sm">
-                  <div className="w-40 shrink-0 truncate">{r.label}</div>
-                  <div className="h-2 flex-1 overflow-hidden rounded-full bg-muted">
-                    <div
-                      className={`h-full rounded-full ${r.category === "planned" ? "bg-amber-500" : "bg-red-500"}`}
-                      style={{ width: `${Math.max(4, (r.minutes / max) * 100)}%` }}
-                    />
-                  </div>
-                  <div className="w-14 shrink-0 text-right text-muted-foreground">{r.minutes}m</div>
-                  {orgCfg.production_cost_per_downtime_minute != null && (
-                    <div className="w-28 shrink-0 text-right text-muted-foreground">
-                      {formatTZS(r.minutes * Number(orgCfg.production_cost_per_downtime_minute))}
+          )}
+
+          {lineRollup.length > 0 && (
+            <div className="rounded-xl border border-border bg-card p-5">
+              <div className="mb-3 flex items-center gap-2">
+                <Factory className="h-4 w-4 text-muted-foreground" />
+                <h2 className="text-sm font-medium text-foreground">By Production Line</h2>
+              </div>
+              <div className="space-y-2">
+                {lineRollup.map((r) => {
+                  const attPct = r.target > 0 ? (r.actual / r.target) * 100 : 0;
+                  return (
+                    <div key={r.line} className="rounded-lg border border-border px-3 py-2 text-sm">
+                      <div className="flex items-center justify-between">
+                        <span className="font-medium">{r.line}</span>
+                        <span className={`text-xs font-semibold ${attPct >= 90 ? "text-green-600" : attPct >= 70 ? "text-amber-600" : "text-red-600"}`}>
+                          {attPct.toFixed(1)}%
+                        </span>
+                      </div>
+                      <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-muted">
+                        <div
+                          className={`h-full rounded-full ${attPct >= 90 ? "bg-green-500" : attPct >= 70 ? "bg-amber-500" : "bg-red-500"}`}
+                          style={{ width: `${Math.min(100, attPct)}%` }}
+                        />
+                      </div>
+                      <div className="mt-1 text-xs text-muted-foreground">
+                        {r.actual.toLocaleString()} / {r.target.toLocaleString()} units
+                        {r.bottleneck && r.machines.size > 1 && (
+                          <span className="ml-2 text-amber-600">· Bottleneck: {r.bottleneck.name}</span>
+                        )}
+                      </div>
                     </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
+      {/* Reliability + Downtime Pareto — side by side */}
+      {(reliability.length > 0 || downtimePareto.rows.length > 0) && (
+        <div className="grid gap-4 lg:grid-cols-2">
+          {reliability.length > 0 && (
+            <div className="rounded-xl border border-border bg-card p-5">
+              <div className="mb-3 flex items-center gap-2">
+                <Wrench className="h-4 w-4 text-muted-foreground" />
+                <h2 className="text-sm font-medium text-foreground">Machine Reliability</h2>
+              </div>
+              <div className="space-y-2">
+                {reliability.map((r) => (
+                  <div key={r.machineId} className="flex items-center justify-between rounded-lg border border-border px-3 py-2 text-sm">
+                    <span className="font-medium">{r.name}</span>
+                    <div className="flex items-center gap-4 text-xs text-muted-foreground">
+                      <span>{r.failures} breakdowns</span>
+                      <span>MTTR {r.mttr != null ? `${r.mttr.toFixed(1)}h` : "—"}</span>
+                      <span>MTBF {r.mtbf != null ? `${r.mtbf.toFixed(1)}d` : "—"}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {downtimePareto.rows.length > 0 && (
+            <div className="rounded-xl border border-border bg-card p-5">
+              <div className="mb-3 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Clock className="h-4 w-4 text-muted-foreground" />
+                  <h2 className="text-sm font-medium text-foreground">Downtime by Reason</h2>
+                </div>
+                <div className="flex gap-3 text-xs text-muted-foreground">
+                  <span><span className="inline-block h-2 w-2 rounded-full bg-amber-500 align-middle mr-1" />Planned {downtimePareto.planned}m</span>
+                  <span><span className="inline-block h-2 w-2 rounded-full bg-red-500 align-middle mr-1" />Unplanned {downtimePareto.unplanned}m</span>
+                </div>
+              </div>
+              <div className="space-y-2">
+                {downtimePareto.rows.map((r) => {
+                  const max = downtimePareto.rows[0]?.minutes || 1;
+                  return (
+                    <div key={r.code} className="flex items-center gap-3 text-sm">
+                      <div className="w-36 shrink-0 truncate text-xs">{r.label}</div>
+                      <div className="h-2 flex-1 overflow-hidden rounded-full bg-muted">
+                        <div
+                          className={`h-full rounded-full ${r.category === "planned" ? "bg-amber-500" : "bg-red-500"}`}
+                          style={{ width: `${Math.max(4, (r.minutes / max) * 100)}%` }}
+                        />
+                      </div>
+                      <div className="w-12 shrink-0 text-right text-xs text-muted-foreground">{r.minutes}m</div>
+                      {orgCfg.production_cost_per_downtime_minute != null && (
+                        <div className="w-24 shrink-0 text-right text-xs text-muted-foreground">
+                          {formatTZS(r.minutes * Number(orgCfg.production_cost_per_downtime_minute))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Scrap Pareto */}
       {scrapPareto.length > 0 && (
-        <div className="rounded-xl border border-border bg-card p-4">
-          <div className="mb-1 text-sm font-medium">Scrap by reason</div>
-          <div className="mt-3 space-y-2">
+        <div className="rounded-xl border border-border bg-card p-5">
+          <div className="mb-3 flex items-center gap-2">
+            <AlertTriangle className="h-4 w-4 text-muted-foreground" />
+            <h2 className="text-sm font-medium text-foreground">Scrap by Reason</h2>
+          </div>
+          <div className="space-y-2">
             {scrapPareto.map((r) => {
               const max = scrapPareto[0]?.qty || 1;
               return (
                 <div key={r.code} className="flex items-center gap-3 text-sm">
-                  <div className="w-40 shrink-0 truncate">{r.label}</div>
+                  <div className="w-36 shrink-0 truncate text-xs">{r.label}</div>
                   <div className="h-2 flex-1 overflow-hidden rounded-full bg-muted">
                     <div className="h-full rounded-full bg-orange-500" style={{ width: `${Math.max(4, (r.qty / max) * 100)}%` }} />
                   </div>
-                  <div className="w-14 shrink-0 text-right text-muted-foreground">{r.qty}</div>
+                  <div className="w-12 shrink-0 text-right text-xs text-muted-foreground">{r.qty}</div>
                   {orgCfg.production_cost_per_scrap_unit != null && (
-                    <div className="w-28 shrink-0 text-right text-muted-foreground">
+                    <div className="w-24 shrink-0 text-right text-xs text-muted-foreground">
                       {formatTZS(r.qty * Number(orgCfg.production_cost_per_scrap_unit))}
                     </div>
                   )}
@@ -478,31 +515,32 @@ export default function Production() {
         </div>
       )}
 
+      {/* Andon bridge: unlinked breakdowns */}
       {unlinkedBreakdowns.length > 0 && (
-        <div className="rounded-xl border border-amber-500/30 bg-amber-50/60 p-4 dark:bg-amber-950/20">
-          <div className="flex items-center justify-between mb-2">
+        <div className="rounded-xl border border-amber-500/30 bg-amber-50/60 p-5 dark:bg-amber-950/20">
+          <div className="mb-3 flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <AlertTriangle className="h-5 w-5 text-amber-600" />
-              <span className="text-sm font-semibold text-amber-900 dark:text-amber-200">
+              <AlertTriangle className="h-4 w-4 text-amber-600" />
+              <h2 className="text-sm font-medium text-amber-900 dark:text-amber-200">
                 Unplanned Downtime Without Work Orders ({unlinkedBreakdowns.length})
-              </span>
+              </h2>
             </div>
-            <span className="text-xs text-amber-700 dark:text-amber-300 font-medium">Maintenance Andon Bridge</span>
+            <Link to="/production/log" className="text-xs font-medium text-primary hover:underline">View log →</Link>
           </div>
-          <div className="divide-y divide-amber-200/50 dark:divide-amber-800/50">
+          <div className="space-y-2">
             {unlinkedBreakdowns.slice(0, 5).map((evt: any) => {
               const mName = machines.find((m: any) => m.id === evt.machine_id)?.name ?? "Machine";
               const rLabel = REASON_MAP.get(evt.reason_code)?.label ?? evt.reason_code;
               return (
-                <div key={evt.id} className="flex flex-wrap items-center justify-between py-2 text-xs">
+                <div key={evt.id} className="flex flex-wrap items-center justify-between rounded-lg border border-amber-200/60 bg-white/60 px-3 py-2 dark:bg-slate-900/40 text-sm">
                   <div className="flex items-center gap-2">
-                    <span className="font-semibold text-foreground">{mName}</span>
-                    <span className="text-muted-foreground">· {formatDate(evt.record_date)}</span>
-                    <span className="rounded bg-amber-200/70 px-1.5 py-0.5 font-medium text-amber-900 dark:bg-amber-900/50 dark:text-amber-200">
-                      {rLabel} ({evt.duration_minutes}m)
+                    <span className="font-medium">{mName}</span>
+                    <span className="text-xs text-muted-foreground">{formatDate(evt.record_date)}</span>
+                    <span className="rounded bg-amber-100 px-1.5 py-0.5 text-xs font-medium text-amber-800">
+                      {rLabel} · {evt.duration_minutes}m
                     </span>
                   </div>
-                  <Button size="sm" variant="outline" className="h-7 text-xs border-amber-400 bg-background hover:bg-amber-100 dark:hover:bg-amber-900/50" onClick={() => raiseWorkOrderForDowntime(evt)}>
+                  <Button size="sm" variant="outline" className="h-7 text-xs border-amber-400 hover:bg-amber-100" onClick={() => raiseWorkOrderForDowntime(evt)}>
                     <Wrench className="mr-1 h-3 w-3 text-amber-600" /> Raise Work Order
                   </Button>
                 </div>
@@ -512,542 +550,18 @@ export default function Production() {
         </div>
       )}
 
-      {filteredItems.length === 0 ? (
-        <EmptyState icon={<Target className="h-5 w-5" />} title="No production logs" description="Log the first shift to see KPIs." />
-      ) : (
-        <div className="overflow-x-auto rounded-xl border border-border bg-card">
-          <table className="w-full text-sm">
-            <thead className="text-left text-xs uppercase tracking-wide text-muted-foreground">
-              <tr>
-                <th className="px-5 py-3 font-medium">Date</th>
-                <th className="px-5 py-3 font-medium">Shift</th>
-                <th className="px-5 py-3 font-medium">Machine</th>
-                <th className="px-5 py-3 font-medium">Product</th>
-                <th className="px-5 py-3 font-medium">Target</th>
-                <th className="px-5 py-3 font-medium">Actual</th>
-                <th className="px-5 py-3 font-medium">Scrap</th>
-                <th className="px-5 py-3 font-medium">Downtime</th>
-                <th className="px-5 py-3 font-medium">Attainment</th>
-                <th className="px-5 py-3 font-medium">Status</th>
-                <th className="px-5 py-3 font-medium"></th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredItems.map((x) => (
-                <tr key={x.id} className="border-t border-border">
-                  <td className="px-5 py-3">{formatDate(x.record_date)}</td>
-                  <td className="px-5 py-3">{x.shift ?? "—"}</td>
-                  <td className="px-5 py-3 text-muted-foreground">{x.machines?.name ?? "—"}</td>
-                  <td className="px-5 py-3">
-                    <div className="font-medium text-foreground">{x.product ?? "—"}</div>
-                    <div className="flex flex-wrap items-center gap-1.5 mt-0.5 text-xs text-muted-foreground">
-                      {x.production_orders && (
-                        <span className="inline-flex items-center rounded bg-primary/10 px-1.5 py-0.5 font-mono text-[10px] font-medium text-primary">
-                          {formatPoNumber(x.production_orders.po_year, x.production_orders.po_number)}
-                        </span>
-                      )}
-                      {x.batch_number && (
-                        <span className="inline-flex items-center rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
-                          Lot: {x.batch_number}
-                        </span>
-                      )}
-                      {x.production_line && (
-                        <span className="text-[11px] text-muted-foreground/80">
-                          {x.production_line}
-                        </span>
-                      )}
-                    </div>
-                  </td>
-                  <td className="px-5 py-3">{x.target_units}</td>
-                  <td className="px-5 py-3">{x.actual_units}</td>
-                  <td className="px-5 py-3">{x.scrap_units}</td>
-                  <td className="px-5 py-3">{x.downtime_minutes}m</td>
-                  <td className="px-5 py-3 font-medium">{Number(x.attainment_percent || 0).toFixed(1)}%</td>
-                  <td className="px-5 py-3">
-                    {x.log_status === "approved" ? (
-                      <span className="inline-flex items-center gap-1 rounded-full bg-green-50 px-2 py-0.5 text-xs font-medium text-green-600">
-                        <CheckCircle2 className="h-3 w-3" /> Approved
-                      </span>
-                    ) : canApprove ? (
-                      <Button size="sm" variant="outline" onClick={() => approveLog(x.id)}>Approve</Button>
-                    ) : (
-                      <span className="rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-600">Submitted</span>
-                    )}
-                  </td>
-                  <td className="px-5 py-3 text-right">
-                    <div className="flex justify-end gap-1">
-                      {x.log_status !== "approved" && (
-                        <Button variant="ghost" size="icon" onClick={() => { setEditing(x); setOpen(true); }} title="Edit">
-                          <Pencil className="h-4 w-4" />
-                        </Button>
-                      )}
-                      {isManager && (
-                        <Button variant="ghost" size="icon" onClick={() => setDeleteTarget(x)} title="Delete">
-                          <Trash2 className="h-4 w-4 text-destructive" />
-                        </Button>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+      {/* Log page link card */}
+      <div className="rounded-xl border border-border bg-card p-5 flex items-center justify-between">
+        <div>
+          <div className="text-sm font-medium">Shift logs for {month}</div>
+          <div className="text-xs text-muted-foreground mt-0.5">
+            {filteredItems.length} {filteredItems.length === 1 ? "entry" : "entries"} recorded — add, edit, approve and export on the Production Log page.
+          </div>
         </div>
-      )}
-
-      <Dlg open={open} setOpen={setOpen} machines={machines} products={products} orgId={profile?.organisation_id} onSaved={load} editing={editing} productionLines={productionLines} activeOrders={activeOrders} prodLines={prodLines} />
-
-      <ConfirmDialog
-        open={!!deleteTarget}
-        onOpenChange={(v) => !v && setDeleteTarget(null)}
-        title="Delete this production log?"
-        description={deleteTarget ? `${formatDate(deleteTarget.record_date)}${deleteTarget.shift ? ` · ${deleteTarget.shift}` : ""} — this can't be undone. Linked downtime/scrap breakdown rows and OEE totals stay as they were.` : undefined}
-        onConfirm={deleteLog}
-      />
+        <Button asChild>
+          <Link to="/production/log"><BookOpen className="mr-2 h-4 w-4" /> Open Production Log</Link>
+        </Button>
+      </div>
     </div>
-  );
-}
-
-function Dlg({ open, setOpen, machines, products, orgId, onSaved, editing, productionLines, activeOrders = [], prodLines = [] }: any) {
-  const { user } = useAuth();
-  const [saving, setSaving] = useState(false);
-  const [f, setF] = useState<any>({
-    record_date: new Date().toISOString().slice(0, 10),
-    shift: "Day", machine_id: "", product: "", product_id: "", operator: "",
-    production_order_id: "", batch_number: "", production_line_id: "",
-    target_units: 0, actual_units: 0, scrap_units: 0, downtime_minutes: 0, notes: "",
-    planned_minutes: "", ideal_cycle_seconds: "", production_line: "",
-  });
-  const [breakdown, setBreakdown] = useState<{ reason_code: string; minutes: string }[]>([]);
-  const [scrapBreakdown, setScrapBreakdown] = useState<{ reason_code: string; qty: string }[]>([]);
-
-  useEffect(() => {
-    if (open && editing) {
-      setF({
-        record_date: editing.record_date, shift: editing.shift ?? "Day", machine_id: editing.machine_id ?? "",
-        product: editing.product ?? "", product_id: editing.product_id ?? "", operator: editing.operator ?? "",
-        production_order_id: editing.production_order_id ?? "", batch_number: editing.batch_number ?? "",
-        production_line_id: editing.production_line_id ?? "",
-        target_units: editing.target_units ?? 0, actual_units: editing.actual_units ?? 0,
-        scrap_units: editing.scrap_units ?? 0, downtime_minutes: editing.downtime_minutes ?? 0,
-        notes: editing.notes ?? "", planned_minutes: editing.planned_minutes ?? "", ideal_cycle_seconds: editing.ideal_cycle_seconds ?? "",
-        production_line: editing.production_line ?? "",
-      });
-      setBreakdown([]);
-      setScrapBreakdown([]);
-    } else if (open) {
-      setF({
-        record_date: new Date().toISOString().slice(0, 10),
-        shift: "Day", machine_id: "", product: "", product_id: "", operator: "",
-        production_order_id: "", batch_number: "", production_line_id: "",
-        target_units: 0, actual_units: 0, scrap_units: 0, downtime_minutes: 0, notes: "",
-        planned_minutes: "", ideal_cycle_seconds: "",
-        production_line: localStorage.getItem(LINE_STORAGE_KEY) ?? "",
-      });
-      setBreakdown([]);
-      setScrapBreakdown([]);
-    }
-  }, [open, editing]);
-
-  const breakdownTotal = breakdown.reduce((s, b) => s + (Number(b.minutes) || 0), 0);
-  const scrapTotal = scrapBreakdown.reduce((s, b) => s + (Number(b.qty) || 0), 0);
-
-  useEffect(() => {
-    if (breakdown.length > 0) setF((prev: any) => ({ ...prev, downtime_minutes: breakdownTotal }));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [breakdownTotal, breakdown.length]);
-
-  useEffect(() => {
-    if (scrapBreakdown.length > 0) setF((prev: any) => ({ ...prev, scrap_units: scrapTotal }));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [scrapTotal, scrapBreakdown.length]);
-
-  const addBreakdownRow = () => setBreakdown((rows) => [...rows, { reason_code: DOWNTIME_REASONS[0].code, minutes: "" }]);
-  const removeBreakdownRow = (i: number) => setBreakdown((rows) => rows.filter((_, idx) => idx !== i));
-
-  const addScrapRow = () => setScrapBreakdown((rows) => [...rows, { reason_code: SCRAP_REASONS[0].code, qty: "" }]);
-  const removeScrapRow = (i: number) => setScrapBreakdown((rows) => rows.filter((_, idx) => idx !== i));
-
-  const onProductChange = (productId: string) => {
-    const p = products.find((x: any) => x.id === productId);
-    setF((prev: any) => ({
-      ...prev,
-      product_id: productId,
-      product: p?.name ?? prev.product,
-      ideal_cycle_seconds: p?.ideal_cycle_seconds ?? prev.ideal_cycle_seconds,
-    }));
-  };
-
-  const onOrderChange = (orderId: string) => {
-    if (!orderId) {
-      setF((prev: any) => ({ ...prev, production_order_id: "", batch_number: "" }));
-      return;
-    }
-    const order = (activeOrders ?? []).find((o: any) => o.id === orderId);
-    if (order) {
-      setF((prev: any) => ({
-        ...prev,
-        production_order_id: order.id,
-        batch_number: order.batch_number || prev.batch_number,
-        product: order.product || prev.product,
-        product_id: order.product_id || prev.product_id,
-        production_line_id: order.production_line_id || prev.production_line_id,
-        production_line: order.production_line || prev.production_line,
-        target_units: Math.max(0, (order.quantity_ordered || 0) - (order.quantity_produced || 0)) || prev.target_units,
-      }));
-    }
-  };
-
-  const submit = async () => {
-    if (breakdown.some((b) => !b.minutes || Number(b.minutes) <= 0)) {
-      return toast.error("Every downtime reason needs minutes greater than 0");
-    }
-    if (scrapBreakdown.some((b) => !b.qty || Number(b.qty) <= 0)) {
-      return toast.error("Every scrap reason needs a quantity greater than 0");
-    }
-    setSaving(true);
-    if (f.production_line?.trim()) localStorage.setItem(LINE_STORAGE_KEY, f.production_line.trim());
-
-    if (editing) {
-      const { error: updateError } = await supabase.from("production_kpis").update({
-        machine_id: f.machine_id || null,
-        record_date: f.record_date,
-        shift: f.shift || null,
-        product: f.product || null,
-        product_id: f.product_id || null,
-        operator: f.operator || null,
-        target_units: Number(f.target_units) || 0,
-        actual_units: Number(f.actual_units) || 0,
-        scrap_units: Number(f.scrap_units) || 0,
-        downtime_minutes: Number(f.downtime_minutes) || 0,
-        notes: f.notes || null,
-        planned_minutes: f.planned_minutes === "" ? null : Number(f.planned_minutes),
-        ideal_cycle_seconds: f.ideal_cycle_seconds === "" ? null : Number(f.ideal_cycle_seconds),
-        production_line: f.production_line?.trim() || null,
-        production_order_id: f.production_order_id || null,
-        batch_number: f.batch_number?.trim() || null,
-        production_line_id: f.production_line_id || null,
-      } as any).eq("id", editing.id);
-      setSaving(false);
-      if (updateError) return toast.error(updateError.message);
-      toast.success("Updated");
-      setOpen(false);
-      onSaved();
-      triggerProductionAlert(editing.id);
-      return;
-    }
-
-    const { data: inserted, error } = await supabase.from("production_kpis").insert({
-      organisation_id: orgId,
-      machine_id: f.machine_id || null,
-      record_date: f.record_date,
-      shift: f.shift || null,
-      product: f.product || null,
-      product_id: f.product_id || null,
-      operator: f.operator || null,
-      target_units: Number(f.target_units) || 0,
-      actual_units: Number(f.actual_units) || 0,
-      scrap_units: Number(f.scrap_units) || 0,
-      downtime_minutes: Number(f.downtime_minutes) || 0,
-      notes: f.notes || null,
-      planned_minutes: f.planned_minutes === "" ? null : Number(f.planned_minutes),
-      ideal_cycle_seconds: f.ideal_cycle_seconds === "" ? null : Number(f.ideal_cycle_seconds),
-      production_line: f.production_line?.trim() || null,
-      production_order_id: f.production_order_id || null,
-      batch_number: f.batch_number?.trim() || null,
-      production_line_id: f.production_line_id || null,
-    } as any).select("id").maybeSingle();
-
-    if (!error && inserted && breakdown.length > 0) {
-      const rows = breakdown.map((b) => ({
-        organisation_id: orgId,
-        production_kpi_id: inserted.id,
-        machine_id: f.machine_id || null,
-        record_date: f.record_date,
-        category: REASON_MAP.get(b.reason_code)?.category ?? "unplanned",
-        reason_code: b.reason_code,
-        duration_minutes: Number(b.minutes),
-        created_by: user?.id ?? null,
-      }));
-      const { data: insertedDt, error: dtError } = await supabase.from("production_downtime_events").insert(rows).select("id, reason_code");
-      if (dtError) {
-        toast.error(`Saved, but downtime breakdown failed: ${dtError.message}`);
-      } else if (f.machine_id) {
-        // Auto-create a work order for genuine equipment breakdowns so
-        // maintenance is notified immediately instead of finding out at
-        // end-of-shift review. Non-blocking: failures here don't undo the save.
-        const breakdownEventIds = (insertedDt ?? []).filter((r: any) => r.reason_code === "breakdown").map((r: any) => r.id);
-        if (breakdownEventIds.length > 0) {
-          const machine = machines.find((m: any) => m.id === f.machine_id);
-          const { data: wo, error: woError } = await supabase.from("work_orders").insert({
-            organisation_id: orgId,
-            machine_id: f.machine_id,
-            title: `Breakdown — ${machine?.name ?? "machine"} (${f.record_date}${f.shift ? " " + f.shift : ""})`,
-            description: f.notes || "Auto-created from a production breakdown log.",
-            priority: "high",
-            status: "open",
-            work_type: "repair",
-            created_by: user?.id ?? null,
-          } as any).select("id").maybeSingle();
-          if (woError || !wo) {
-            toast.error(`Saved, but auto work order failed: ${woError?.message ?? "unknown error"}`);
-          } else {
-            await supabase.from("production_downtime_events").update({ work_order_id: wo.id } as any).in("id", breakdownEventIds);
-            await supabase.from("maintenance_notifications").insert({
-              organisation_id: orgId,
-              machine_id: f.machine_id,
-              title: `Breakdown reported — ${machine?.name ?? "machine"}`,
-              description: `Work order created from the production log for ${f.record_date}${f.shift ? " " + f.shift : ""}.`,
-              severity: "high",
-              reported_by: user?.id ?? null,
-              work_order_id: wo.id,
-            });
-          }
-        }
-      }
-    }
-
-    if (!error && inserted && scrapBreakdown.length > 0) {
-      const rows = scrapBreakdown.map((b) => ({
-        organisation_id: orgId,
-        production_kpi_id: inserted.id,
-        machine_id: f.machine_id || null,
-        record_date: f.record_date,
-        reason_code: b.reason_code,
-        quantity: Number(b.qty),
-        created_by: user?.id ?? null,
-      }));
-      const { error: scError } = await (supabase as any).from("production_scrap_events").insert(rows);
-      if (scError) toast.error(`Saved, but scrap breakdown failed: ${scError.message}`);
-    }
-
-    setSaving(false);
-    if (error) return toast.error(error.message);
-    toast.success("Saved");
-    setOpen(false);
-    onSaved();
-    if (inserted) triggerProductionAlert(inserted.id);
-  };
-
-  return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader><DialogTitle>{editing ? "Edit production log" : "Log production"}</DialogTitle></DialogHeader>
-        <div className="grid gap-3 sm:grid-cols-2">
-          {!editing && (
-            <div className="rounded-lg border border-primary/20 bg-primary/5 p-3 sm:col-span-2">
-              <div className="flex items-center justify-between mb-1.5">
-                <Label className="text-xs font-semibold text-primary">Link to Active Production Order (Optional)</Label>
-                {f.production_order_id && (
-                  <span className="text-[11px] text-muted-foreground">Auto-populates product, line, batch, and remaining target</span>
-                )}
-              </div>
-              <select
-                value={f.production_order_id || ""}
-                onChange={(e) => onOrderChange(e.target.value)}
-                className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm font-medium"
-              >
-                <option value="">— Standalone Shift Log (No Order) —</option>
-                {(activeOrders ?? []).map((ord: any) => (
-                  <option key={ord.id} value={ord.id}>
-                    {formatPoNumber(ord.po_year, ord.po_number)} · {ord.product} {ord.batch_number ? `(Lot ${ord.batch_number})` : ""} · {ord.quantity_produced || 0}/{ord.quantity_ordered}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
-          <div><Label>Date</Label><Input type="date" value={f.record_date} onChange={(e) => setF({ ...f, record_date: e.target.value })} className="mt-1" /></div>
-          <div><Label>Shift</Label>
-            <select value={f.shift} onChange={(e) => setF({ ...f, shift: e.target.value })}
-              className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm">
-              {SHIFTS.map((s) => <option key={s} value={s}>{s}</option>)}
-            </select>
-          </div>
-          <div><Label>Machine</Label>
-            <select value={f.machine_id} onChange={(e) => setF({ ...f, machine_id: e.target.value })}
-              className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm">
-              <option value="">—</option>
-              {machines.map((m: any) => <option key={m.id} value={m.id}>{m.name}</option>)}
-            </select>
-          </div>
-          <div>
-            <Label>Production line</Label>
-            <select
-              value={f.production_line_id || ""}
-              onChange={(e) => {
-                const lineId = e.target.value;
-                const found = prodLines.find((l: any) => l.id === lineId);
-                setF({
-                  ...f,
-                  production_line_id: lineId || null,
-                  production_line: found ? found.name : f.production_line,
-                });
-              }}
-              className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
-            >
-              <option value="">— Registered line or type below —</option>
-              {prodLines.map((l: any) => (
-                <option key={l.id} value={l.id}>{l.name} ({l.code})</option>
-              ))}
-            </select>
-            <Input
-              placeholder="Or custom line name"
-              list="production-line-options"
-              value={f.production_line}
-              onChange={(e) => setF({ ...f, production_line: e.target.value, production_line_id: "" })}
-              className="mt-1.5"
-            />
-            <datalist id="production-line-options">
-              {(productionLines ?? []).map((l: string) => <option key={l} value={l} />)}
-            </datalist>
-          </div>
-          <div>
-            <Label>Product</Label>
-            <select value={f.product_id} onChange={(e) => onProductChange(e.target.value)}
-              className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 text-sm">
-              <option value="">— select or type below —</option>
-              {products.map((p: any) => <option key={p.id} value={p.id}>{p.name}{p.sku ? ` (${p.sku})` : ""}</option>)}
-            </select>
-            <Input
-              placeholder="Or type a product name"
-              value={f.product}
-              onChange={(e) => setF({ ...f, product: e.target.value, product_id: "" })}
-              className="mt-1.5"
-            />
-          </div>
-          <div>
-            <Label>Batch / Lot # (optional)</Label>
-            <Input
-              placeholder="e.g. LOT-20261003-01"
-              value={f.batch_number}
-              onChange={(e) => setF({ ...f, batch_number: e.target.value })}
-              className="mt-1"
-            />
-          </div>
-          <div><Label>Operator</Label><Input value={f.operator} onChange={(e) => setF({ ...f, operator: e.target.value })} className="mt-1" /></div>
-          <div><Label>Target units</Label><Input type="number" min={0} value={f.target_units} onChange={(e) => setF({ ...f, target_units: e.target.value })} className="mt-1" /></div>
-          <div><Label>Actual units</Label><Input type="number" min={0} value={f.actual_units} onChange={(e) => setF({ ...f, actual_units: e.target.value })} className="mt-1" /></div>
-          <div><Label>Scrap units</Label>
-            <Input
-              type="number" min={0} value={f.scrap_units}
-              onChange={(e) => setF({ ...f, scrap_units: e.target.value })}
-              disabled={scrapBreakdown.length > 0}
-              className="mt-1"
-            />
-            {scrapBreakdown.length > 0 && <p className="mt-1 text-[11px] text-muted-foreground">Auto-summed from the reasons below.</p>}
-          </div>
-          <div>
-            <Label>Downtime (min)</Label>
-            <Input
-              type="number" min={0} value={f.downtime_minutes}
-              onChange={(e) => setF({ ...f, downtime_minutes: e.target.value })}
-              disabled={breakdown.length > 0}
-              className="mt-1"
-            />
-            {breakdown.length > 0 && <p className="mt-1 text-[11px] text-muted-foreground">Auto-summed from the reasons below.</p>}
-          </div>
-        </div>
-
-        {editing && (
-          <p className="rounded-lg border border-dashed border-border bg-muted/20 p-3 text-xs text-muted-foreground">
-            Editing updates the summary numbers only. Downtime/scrap breakdown detail and the auto-created work order (if any) stay as originally logged.
-          </p>
-        )}
-
-        {!editing && (
-        <div className="rounded-lg border border-border p-3">
-          <div className="mb-2 flex items-center justify-between">
-            <Label>Downtime breakdown (optional)</Label>
-            <Button type="button" variant="outline" size="sm" onClick={addBreakdownRow}>
-              <Plus className="mr-1 h-3.5 w-3.5" /> Add reason
-            </Button>
-          </div>
-          {breakdown.length === 0 ? (
-            <p className="text-xs text-muted-foreground">
-              Break the downtime total down by reason so it can be tracked on a Pareto chart. Choosing "Breakdown / fault" auto-creates a work order for maintenance.
-            </p>
-          ) : (
-            <div className="space-y-2">
-              {breakdown.map((b, i) => (
-                <div key={i} className="flex items-center gap-2">
-                  <select
-                    value={b.reason_code}
-                    onChange={(e) => setBreakdown((rows) => rows.map((r, idx) => idx === i ? { ...r, reason_code: e.target.value } : r))}
-                    className="h-9 flex-1 rounded-md border border-input bg-background px-2 text-sm"
-                  >
-                    <optgroup label="Unplanned">
-                      {DOWNTIME_REASONS.filter((r) => r.category === "unplanned").map((r) => <option key={r.code} value={r.code}>{r.label}</option>)}
-                    </optgroup>
-                    <optgroup label="Planned">
-                      {DOWNTIME_REASONS.filter((r) => r.category === "planned").map((r) => <option key={r.code} value={r.code}>{r.label}</option>)}
-                    </optgroup>
-                  </select>
-                  <Input
-                    type="number" min={0} placeholder="min" value={b.minutes}
-                    onChange={(e) => setBreakdown((rows) => rows.map((r, idx) => idx === i ? { ...r, minutes: e.target.value } : r))}
-                    className="w-24"
-                  />
-                  <Button type="button" variant="ghost" size="icon" onClick={() => removeBreakdownRow(i)}>
-                    <X className="h-4 w-4" />
-                  </Button>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-        )}
-
-        {!editing && (
-        <div className="rounded-lg border border-border p-3">
-          <div className="mb-2 flex items-center justify-between">
-            <Label>Scrap breakdown (optional)</Label>
-            <Button type="button" variant="outline" size="sm" onClick={addScrapRow}>
-              <Plus className="mr-1 h-3.5 w-3.5" /> Add reason
-            </Button>
-          </div>
-          {scrapBreakdown.length === 0 ? (
-            <p className="text-xs text-muted-foreground">Break scrap down by cause instead of one raw number.</p>
-          ) : (
-            <div className="space-y-2">
-              {scrapBreakdown.map((b, i) => (
-                <div key={i} className="flex items-center gap-2">
-                  <select
-                    value={b.reason_code}
-                    onChange={(e) => setScrapBreakdown((rows) => rows.map((r, idx) => idx === i ? { ...r, reason_code: e.target.value } : r))}
-                    className="h-9 flex-1 rounded-md border border-input bg-background px-2 text-sm"
-                  >
-                    {SCRAP_REASONS.map((r) => <option key={r.code} value={r.code}>{r.label}</option>)}
-                  </select>
-                  <Input
-                    type="number" min={0} placeholder="qty" value={b.qty}
-                    onChange={(e) => setScrapBreakdown((rows) => rows.map((r, idx) => idx === i ? { ...r, qty: e.target.value } : r))}
-                    className="w-24"
-                  />
-                  <Button type="button" variant="ghost" size="icon" onClick={() => removeScrapRow(i)}>
-                    <X className="h-4 w-4" />
-                  </Button>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-        )}
-
-        <div className="rounded-lg border border-dashed border-border p-3">
-          <p className="mb-2 text-xs text-muted-foreground">
-            Optional — fill these in to automatically feed today's OEE record for this machine (no need to enter it again on the OEE page).
-          </p>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <div><Label>Planned run time (min)</Label><Input type="number" min={0} placeholder="e.g. 480" value={f.planned_minutes} onChange={(e) => setF({ ...f, planned_minutes: e.target.value })} className="mt-1" /></div>
-            <div><Label>Ideal cycle time (sec/unit)</Label><Input type="number" min={0} step="0.01" placeholder="e.g. 12.5" value={f.ideal_cycle_seconds} onChange={(e) => setF({ ...f, ideal_cycle_seconds: e.target.value })} className="mt-1" /></div>
-          </div>
-        </div>
-
-        <DialogFooter>
-          <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
-          <Button onClick={submit} disabled={saving}>{saving ? <Loader2 className="h-4 w-4 animate-spin" /> : editing ? "Save changes" : "Save"}</Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
   );
 }

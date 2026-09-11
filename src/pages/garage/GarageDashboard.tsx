@@ -3,7 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { PageLoader, EmptyState } from "@/components/PageLoader";
-import { ClipboardList, ClipboardCheck, ShoppingCart } from "lucide-react";
+import { ClipboardList, ClipboardCheck, ShoppingCart, Wrench, Clock, CheckCircle2, AlertTriangle, TrendingUp, Package } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { GarageIntakeWizardModal } from "@/components/garage/GarageIntakeWizardModal";
 import { QuickCounterSaleModal } from "@/components/garage/QuickCounterSaleModal";
@@ -13,6 +13,13 @@ import { STATUS_LABEL, STATUS_BADGE, formatJobNumber } from "@/lib/garage-consta
 import { invoiceTotal } from "@/lib/garage-money";
 
 const OPEN_STATUSES = new Set(["received", "diagnosing", "estimate", "awaiting_approval", "approved", "in_progress", "quality_check", "ready"]);
+
+const toneClasses: Record<string, string> = {
+  default: "bg-primary/10 text-primary",
+  success: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
+  warning: "bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400",
+  destructive: "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400",
+};
 
 export default function GarageDashboard() {
   const { profile, organisation } = useAuth();
@@ -77,97 +84,141 @@ export default function GarageDashboard() {
   const outstandingTotal = useMemo(() => outstandingInvoices.reduce((s, inv) => s + invoiceTotal(inv), 0), [outstandingInvoices]);
   const revenueToday = useMemo(() => invoicesToday.reduce((s, inv) => s + invoiceTotal(inv), 0), [invoicesToday]);
 
-  const KPI_CARDS = [
-    { label: "Today's jobs", value: jobsToday, to: "/garage/jobs" },
-    { label: "In progress", value: inProgress, to: "/garage/jobs?status=in_progress" },
-    { label: "Waiting for customer", value: waitingForCustomer, to: "/garage/jobs?status=awaiting_approval" },
-    { label: "Ready for pickup", value: readyForPickup, to: "/garage/jobs?status=ready" },
-    { label: "Outstanding", value: formatMoney(outstandingTotal), to: "/garage/invoices?status=unpaid" },
-    { label: "Today's revenue", value: formatMoney(revenueToday), to: "/garage/reports" },
-    { label: "Low stock parts", value: lowStock, to: "/garage/inventory" },
-  ];
+  const kpiCards = [
+    {
+      label: "Jobs Today",
+      value: String(jobsToday),
+      sub: `${openJobs.length} open · ${jobs.length - openJobs.length} completed`,
+      icon: ClipboardList,
+      tone: "default",
+      to: "/garage/jobs",
+    },
+    {
+      label: "In Progress",
+      value: String(inProgress),
+      sub: inProgress > 0 ? "Currently being worked on" : "No jobs in bay right now",
+      icon: Wrench,
+      tone: inProgress > 0 ? "warning" : "success",
+      to: "/garage/jobs?status=in_progress",
+    },
+    {
+      label: "Awaiting Approval",
+      value: String(waitingForCustomer),
+      sub: waitingForCustomer > 0 ? "Estimates sent, pending customer" : "No pending approvals",
+      icon: Clock,
+      tone: waitingForCustomer > 0 ? "warning" : "success",
+      to: "/garage/jobs?status=awaiting_approval",
+    },
+    {
+      label: "Ready for Pickup",
+      value: String(readyForPickup),
+      sub: readyForPickup > 0 ? "Notify customers to collect" : "No vehicles ready",
+      icon: CheckCircle2,
+      tone: readyForPickup > 0 ? "success" : "default",
+      to: "/garage/jobs?status=ready",
+    },
+    {
+      label: "Today's Revenue",
+      value: formatMoney(revenueToday),
+      sub: `${invoicesToday.length} invoice${invoicesToday.length === 1 ? "" : "s"} raised today`,
+      icon: TrendingUp,
+      tone: revenueToday > 0 ? "success" : "default",
+      to: "/garage/reports",
+    },
+    {
+      label: "Outstanding Balance",
+      value: formatMoney(outstandingTotal),
+      sub: `${outstandingInvoices.length} unpaid invoice${outstandingInvoices.length === 1 ? "" : "s"}`,
+      icon: AlertTriangle,
+      tone: outstandingTotal > 0 ? "destructive" : "success",
+      to: "/garage/invoices?status=unpaid",
+    },
+    {
+      label: "Low Stock Parts",
+      value: String(lowStock),
+      sub: lowStock > 0 ? "Parts below reorder level" : "All parts well stocked",
+      icon: Package,
+      tone: lowStock > 0 ? "warning" : "success",
+      to: "/garage/inventory",
+    },
+  ] as const;
 
   if (loading) return <PageLoader />;
 
   return (
     <div className="space-y-6 animate-fade-in">
+      {/* Header */}
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">{organisation?.name ?? "Workshop"} dashboard</h1>
-          <p className="text-sm text-muted-foreground">What's happening in your workshop today.</p>
+          <h1 className="text-2xl font-semibold tracking-tight">{organisation?.name ?? "Workshop"} Dashboard</h1>
+          <p className="text-sm text-muted-foreground">Live overview of today's workshop activity, revenue, and stock.</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <Button
-            onClick={() => setIntakeOpen(true)}
-            className="bg-primary text-primary-foreground gap-1.5 shadow-sm"
-          >
+          <Button onClick={() => setIntakeOpen(true)} className="gap-1.5">
             <ClipboardCheck className="h-4 w-4" /> Fast Walk-In Intake
           </Button>
-          <Button
-            variant="outline"
-            onClick={() => setCounterSaleOpen(true)}
-            className="gap-1.5"
-          >
+          <Button variant="outline" onClick={() => setCounterSaleOpen(true)} className="gap-1.5">
             <ShoppingCart className="h-4 w-4" /> Quick Counter Sale
           </Button>
         </div>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        {KPI_CARDS.map((k) => (
-          <Link key={k.label} to={k.to} className="rounded-xl border border-border bg-card p-4 hover:border-primary/50">
-            <div className="text-xs uppercase tracking-wide text-muted-foreground">{k.label}</div>
-            <div className="mt-1 text-2xl font-semibold">{k.value}</div>
+      {/* KPI cards — Fleet style */}
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        {kpiCards.map((c) => (
+          <Link key={c.label} to={c.to} className="rounded-xl border border-border bg-card p-5 hover:border-primary/40 transition-colors block">
+            <div className="flex items-start justify-between">
+              <div>
+                <div className="text-sm text-muted-foreground">{c.label}</div>
+                <div className="mt-2 text-3xl font-semibold tracking-tight">{c.value}</div>
+                <div className="mt-1 text-xs text-muted-foreground">{c.sub}</div>
+              </div>
+              <div className={`flex h-10 w-10 items-center justify-center rounded-lg ${toneClasses[c.tone]}`}>
+                <c.icon className="h-5 w-5" />
+              </div>
+            </div>
           </Link>
         ))}
       </div>
 
-      <div>
-        <h2 className="mb-2 text-sm font-medium text-foreground">Today's work</h2>
+      {/* Active jobs */}
+      <div className="rounded-xl border border-border bg-card p-5">
+        <div className="mb-3 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Wrench className="h-4 w-4 text-muted-foreground" />
+            <h2 className="text-sm font-medium text-foreground">Today's Work</h2>
+          </div>
+          <Link to="/garage/jobs" className="text-xs font-medium text-primary hover:underline">View all jobs</Link>
+        </div>
         {openJobs.length === 0 ? (
           <EmptyState icon={<ClipboardList className="h-5 w-5" />} title="Nothing open" description="No jobs currently in progress." />
         ) : (
-          <div className="overflow-hidden rounded-xl border border-border bg-card">
-            <table className="w-full text-sm">
-              <thead className="text-left text-xs uppercase tracking-wide text-muted-foreground">
-                <tr>
-                  <th className="px-5 py-3 font-medium">Vehicle</th>
-                  <th className="px-5 py-3 font-medium">Customer</th>
-                  <th className="px-5 py-3 font-medium">Job</th>
-                  <th className="px-5 py-3 font-medium">Mechanic</th>
-                  <th className="px-5 py-3 font-medium">Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {openJobs.slice(0, 10).map((j) => (
-                  <tr key={j.id} className="cursor-pointer border-t border-border hover:bg-muted/40" onClick={() => navigate(`/garage/jobs/${j.id}`)}>
-                    <td className="px-5 py-3">
-                      <div className="font-medium">{[j.garage_vehicles?.make, j.garage_vehicles?.model].filter(Boolean).join(" ") || "Vehicle"}</div>
-                      {j.garage_vehicles?.registration_number && <div className="text-xs text-muted-foreground">{j.garage_vehicles.registration_number}</div>}
-                    </td>
-                    <td className="px-5 py-3 text-muted-foreground">{j.garage_customers?.name}</td>
-                    <td className="px-5 py-3 text-muted-foreground">{formatJobNumber(j)}</td>
-                    <td className="px-5 py-3 text-muted-foreground">{j.garage_mechanics?.name ?? "Unassigned"}</td>
-                    <td className="px-5 py-3"><span className={`rounded-full px-2 py-0.5 text-xs ${STATUS_BADGE[j.status]}`}>{STATUS_LABEL[j.status]}</span></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="space-y-2">
+            {openJobs.slice(0, 8).map((j) => (
+              <div
+                key={j.id}
+                className="flex items-center justify-between rounded-lg border border-border px-3 py-2 text-sm cursor-pointer hover:bg-muted/40 transition-colors"
+                onClick={() => navigate(`/garage/jobs/${j.id}`)}
+              >
+                <div>
+                  <span className="font-medium">{[j.garage_vehicles?.make, j.garage_vehicles?.model].filter(Boolean).join(" ") || "Vehicle"}</span>
+                  {j.garage_vehicles?.registration_number && (
+                    <span className="ml-2 text-xs text-muted-foreground">{j.garage_vehicles.registration_number}</span>
+                  )}
+                  <div className="text-xs text-muted-foreground mt-0.5">
+                    {j.garage_customers?.name ?? "—"} · {formatJobNumber(j)}
+                    {j.garage_mechanics?.name ? ` · ${j.garage_mechanics.name}` : ""}
+                  </div>
+                </div>
+                <span className={`rounded-full px-2 py-0.5 text-xs shrink-0 ${STATUS_BADGE[j.status]}`}>{STATUS_LABEL[j.status]}</span>
+              </div>
+            ))}
           </div>
         )}
       </div>
 
-      <GarageIntakeWizardModal
-        open={intakeOpen}
-        onOpenChange={setIntakeOpen}
-        onJobCreated={() => navigate("/garage/jobs")}
-      />
-
-      <QuickCounterSaleModal
-        open={counterSaleOpen}
-        onOpenChange={setCounterSaleOpen}
-        onSaleCompleted={() => navigate("/garage/invoices")}
-      />
+      <GarageIntakeWizardModal open={intakeOpen} onOpenChange={setIntakeOpen} onJobCreated={() => navigate("/garage/jobs")} />
+      <QuickCounterSaleModal open={counterSaleOpen} onOpenChange={setCounterSaleOpen} onSaleCompleted={() => navigate("/garage/invoices")} />
     </div>
   );
 }
