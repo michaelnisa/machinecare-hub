@@ -770,14 +770,11 @@ function StartInspectionModal({
       if (items && items.length > 0) {
         const rows = items.map((it: any) => ({
           execution_id: exec.id,
-          template_item_id: it.id,
-          item_title: it.title,
-          item_description: it.description,
-          item_type: it.item_type,
-          is_mandatory: it.is_mandatory,
-          critical_failure: it.critical_failure,
-          sort_order: it.sort_order,
-          result: "pending",
+          item_id: it.id,
+          item_text_snapshot: it.text ?? it.title ?? "Item",
+          item_type: it.item_type ?? "pass_fail",
+          severity_snapshot: it.severity ?? "minor",
+          sort_order: it.sort_order ?? 0,
         }));
         await supabase.from("checklist_execution_responses").insert(rows);
       }

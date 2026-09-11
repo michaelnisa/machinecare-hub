@@ -195,6 +195,25 @@ export default function PreStartInspection() {
       if (execErr) throw execErr;
       const { error: respErr } = await supabase.from("checklist_execution_responses").insert(responseRows);
       if (respErr) throw respErr;
+
+      // ── Create a fault report for each "Not OK" item ─────────────────────
+      if (notOkItems.length > 0) {
+        const faultRows = notOkItems.map((it) => ({
+          organisation_id: machine.organisation_id,
+          machine_id: machine.id,
+          reporter_name: driverName,
+          reporter_phone: "",
+          description: responses[it.item_id]?.comment
+            ? `Pre-start inspection defect: ${it.item_text}. Notes: ${responses[it.item_id].comment}`
+            : `Pre-start inspection defect: ${it.item_text}`,
+          severity: it.item_severity === "critical" ? "critical" : it.item_severity === "major" ? "medium" : "low",
+          status: "open",
+          source_execution_id: executionId,
+        }));
+        // Non-fatal: inspection already saved even if fault report insert fails
+        await supabase.from("fault_reports").insert(faultRows);
+      }
+
       setSubmitting(false);
       setStep("done");
     } catch (err) {
