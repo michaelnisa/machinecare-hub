@@ -3,6 +3,7 @@ import { useParams, Link, useNavigate } from "react-router-dom";
 import { BlogNavbar } from "@/components/blog/BlogNavbar";
 import { BlogPost, blogService } from "@/services/blogService";
 import { renderSimpleMarkdown } from "@/components/blog/BlogEditorModal";
+import { IndustrialCover } from "@/components/blog/IndustrialCover";
 import {
   ArrowLeft,
   Calendar,
@@ -20,6 +21,7 @@ import {
   ArrowRight,
   ShieldCheck,
   Wrench,
+  UserCheck,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -71,7 +73,7 @@ export default function BlogPostDetail() {
 
           // Load related posts in same category
           const all = await blogService.getPublishedPosts();
-          const related = all.filter((p) => p.id !== item.id && (p.category === item.category || true)).slice(0, 3);
+          const related = all.filter((p) => p.id !== item.id).slice(0, 3);
           setRelatedPosts(related);
         }
       } catch (e) {
@@ -197,14 +199,12 @@ export default function BlogPostDetail() {
               </p>
             )}
 
-            {/* Author Byline & Metadata */}
+            {/* Author Byline & Metadata (Without face picture) */}
             <div className="flex flex-wrap items-center justify-between gap-4 pt-4 border-y border-border/60 py-4 text-xs">
-              <div className="flex items-center gap-3">
-                <img
-                  src={post.author_avatar || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=200&q=80"}
-                  alt={post.author_name}
-                  className="h-10 w-10 rounded-full object-cover ring-2 ring-primary/20 shadow-sm"
-                />
+              <div className="flex items-center gap-2.5">
+                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary border border-primary/20 font-bold text-xs">
+                  <UserCheck className="h-4 w-4" />
+                </div>
                 <div>
                   <p className="font-bold text-foreground text-sm">{post.author_name}</p>
                   <p className="text-[11px] text-muted-foreground">{post.author_role || "Reliability Specialist"}</p>
@@ -236,16 +236,16 @@ export default function BlogPostDetail() {
             </div>
           </header>
 
-          {/* Cover Hero Image */}
-          {post.cover_image && (
-            <div className="my-8 overflow-hidden rounded-2xl border border-border/80 bg-muted shadow-md">
-              <img
-                src={post.cover_image}
-                alt={post.title}
-                className="w-full max-h-[460px] object-cover"
-              />
-            </div>
-          )}
+          {/* Cover Hero Image with Error Fallback */}
+          <div className="my-8 overflow-hidden rounded-2xl border border-border/80 shadow-md">
+            <IndustrialCover
+              src={post.cover_image}
+              alt={post.title}
+              category={post.category}
+              aspectRatio="aspect-[16/9] sm:aspect-[21/9]"
+              className="w-full max-h-[480px] object-cover"
+            />
+          </div>
 
           {/* Article Body */}
           <div className="prose prose-slate dark:prose-invert max-w-none text-foreground/90 font-sans text-sm sm:text-base leading-relaxed">
@@ -322,18 +322,20 @@ export default function BlogPostDetail() {
             </div>
           </div>
 
-          {/* Author Card */}
+          {/* Verified Editorial Bio (Picture removed, sleek badge) */}
           <div className="mt-10 rounded-2xl border border-border/80 bg-muted/20 p-6 flex flex-col sm:flex-row items-start sm:items-center gap-4">
-            <img
-              src={post.author_avatar || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=200&q=80"}
-              alt={post.author_name}
-              className="h-16 w-16 rounded-full object-cover ring-2 ring-primary/30"
-            />
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground font-extrabold shadow-sm">
+              <ShieldCheck className="h-6 w-6" />
+            </div>
             <div className="flex-1">
-              <h4 className="font-bold text-foreground text-base">{post.author_name}</h4>
-              <p className="text-xs text-primary font-medium">{post.author_role || "Reliability Specialist"}</p>
-              <p className="text-xs text-muted-foreground mt-1.5 leading-relaxed">
-                Contributing daily operational engineering insights, preventative standards, and equipment diagnostics for industrial machine reliability.
+              <div className="flex items-center gap-2">
+                <h4 className="font-bold text-foreground text-base">{post.author_name}</h4>
+                <Badge variant="outline" className="text-[10px] text-primary border-primary/30 bg-primary/5 font-semibold">
+                  Verified Technical Insight
+                </Badge>
+              </div>
+              <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
+                Contributing operational engineering guidelines, preventative checklists, and equipment diagnostics for industrial machine reliability.
               </p>
             </div>
           </div>
@@ -358,10 +360,11 @@ export default function BlogPostDetail() {
                     className="group flex flex-col overflow-hidden rounded-xl border border-border bg-card shadow-sm hover:border-primary/50 transition-all hover:-translate-y-1"
                   >
                     <div className="aspect-[16/9] w-full overflow-hidden bg-muted">
-                      <img
-                        src={rel.cover_image || "https://images.unsplash.com/photo-1581092160607-ee22621dd758?auto=format&fit=crop&w=600&q=80"}
+                      <IndustrialCover
+                        src={rel.cover_image}
                         alt={rel.title}
-                        className="h-full w-full object-cover transition-transform group-hover:scale-105"
+                        category={rel.category}
+                        aspectRatio="aspect-[16/9]"
                       />
                     </div>
                     <div className="p-4 flex flex-1 flex-col justify-between">
@@ -374,7 +377,7 @@ export default function BlogPostDetail() {
                         </h5>
                       </div>
                       <div className="mt-3 pt-3 border-t border-border/40 text-[10px] text-muted-foreground flex items-center justify-between">
-                        <span>{rel.author_name}</span>
+                        <span className="font-medium text-foreground">{rel.author_name}</span>
                         <span>{rel.read_time_minutes} min read</span>
                       </div>
                     </div>

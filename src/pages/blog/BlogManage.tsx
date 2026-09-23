@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { BlogPost, blogService } from "@/services/blogService";
 import { DailyStreakCard } from "@/components/blog/DailyStreakCard";
 import { BlogEditorModal } from "@/components/blog/BlogEditorModal";
+import { IndustrialCover } from "@/components/blog/IndustrialCover";
 import {
   PenTool,
   Plus,
@@ -312,17 +313,13 @@ export default function BlogManage() {
                       <TableCell>
                         <div className="flex items-center gap-3">
                           <div className="h-12 w-16 shrink-0 overflow-hidden rounded-md bg-muted border border-border">
-                            {post.cover_image ? (
-                              <img
-                                src={post.cover_image}
-                                alt={post.title}
-                                className="h-full w-full object-cover"
-                              />
-                            ) : (
-                              <div className="h-full w-full flex items-center justify-center bg-muted">
-                                <BookOpen className="h-4 w-4 text-muted-foreground" />
-                              </div>
-                            )}
+                            <IndustrialCover
+                              src={post.cover_image}
+                              alt={post.title}
+                              category={post.category}
+                              aspectRatio="aspect-[16/10]"
+                              className="h-full w-full object-cover"
+                            />
                           </div>
                           <div className="min-w-0 flex-1">
                             <div className="flex items-center gap-2">

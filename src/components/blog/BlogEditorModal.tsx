@@ -26,6 +26,7 @@ import {
   DAILY_POST_TEMPLATES,
   blogService,
 } from "@/services/blogService";
+import { IndustrialCover } from "@/components/blog/IndustrialCover";
 import {
   PenTool,
   Eye,
@@ -44,6 +45,8 @@ import {
   Loader2,
   Tag,
   X,
+  User,
+  Check,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
@@ -70,6 +73,7 @@ export function BlogEditorModal({
   const [category, setCategory] = useState<string>("Maintenance & Reliability");
   const [tags, setTags] = useState<string[]>([]);
   const [tagInput, setTagInput] = useState("");
+  const [authorName, setAuthorName] = useState("");
   const [coverImage, setCoverImage] = useState<string>(CURATED_COVER_PRESETS[0].url);
   const [status, setStatus] = useState<"draft" | "published" | "scheduled">("published");
   const [publishedAt, setPublishedAt] = useState<string>("");
@@ -86,6 +90,7 @@ export function BlogEditorModal({
       setContent(post.content);
       setCategory(post.category);
       setTags(post.tags || []);
+      setAuthorName(post.author_name || "MachineCare Engineering");
       setCoverImage(post.cover_image || CURATED_COVER_PRESETS[0].url);
       setStatus(post.status === "archived" ? "draft" : post.status);
       setPublishedAt(
@@ -93,19 +98,25 @@ export function BlogEditorModal({
       );
       setFeatured(post.featured || false);
     } else {
-      // New post defaults
-      setTitle("");
-      setSlug("");
-      setSummary("");
-      setContent(DAILY_POST_TEMPLATES[0].content);
-      setCategory("Maintenance & Reliability");
-      setTags(["Daily Maintenance", "Reliability"]);
+      // New post defaults: ready for immediate use
+      const defaultTemplate = DAILY_POST_TEMPLATES[0];
+      setTitle(defaultTemplate.title);
+      const generated = defaultTemplate.title
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/(^-|-$)+/g, "");
+      setSlug(generated);
+      setSummary(defaultTemplate.summary);
+      setContent(defaultTemplate.content);
+      setCategory(defaultTemplate.category);
+      setTags(["Daily Maintenance", "Reliability", "Preventative"]);
+      setAuthorName(profile?.full_name || "MachineCare Engineering");
       setCoverImage(CURATED_COVER_PRESETS[0].url);
       setStatus("published");
       setPublishedAt(new Date().toISOString().slice(0, 16));
       setFeatured(false);
     }
-  }, [post, open]);
+  }, [post, open, profile]);
 
   // Auto-slug generator from title
   const handleTitleChange = (val: string) => {
@@ -144,7 +155,7 @@ export function BlogEditorModal({
     setCategory(tpl.category);
     setSummary(tpl.summary);
     setContent(tpl.content);
-    toast.success(`Loaded template: ${tpl.title.slice(0, 30)}...`);
+    toast.success(`Loaded template: ${tpl.title.slice(0, 35)}...`);
   };
 
   // Markdown formatting helper
@@ -199,14 +210,14 @@ export function BlogEditorModal({
           category,
           tags,
           cover_image: coverImage,
+          author_name: authorName.trim() || "MachineCare Engineering",
           status: finalStatus,
           published_at: finalPublishedAt as any,
           featured,
         },
         {
-          name: profile?.full_name || user?.email?.split("@")[0] || "MachineCare Engineer",
+          name: authorName.trim() || profile?.full_name || "MachineCare Engineering",
           role: profile?.department ? `${profile.department.toUpperCase()} Specialist` : "Reliability Specialist",
-          avatar: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=200&q=80",
           id: user?.id,
           orgId: organisation?.id,
         }
@@ -214,7 +225,7 @@ export function BlogEditorModal({
 
       toast.success(
         finalStatus === "published"
-          ? "🎉 Blog post published successfully!"
+          ? "🎉 Blog post is live and ready for reading!"
           : "Draft saved successfully!"
       );
       onSaved(saved);
@@ -245,14 +256,14 @@ export function BlogEditorModal({
 
             {/* Quick Templates Dropdown */}
             <Select onValueChange={(val) => applyTemplate(Number(val))}>
-              <SelectTrigger className="h-8 w-44 text-xs">
+              <SelectTrigger className="h-8 w-44 text-xs font-semibold">
                 <Sparkles className="h-3.5 w-3.5 mr-1.5 text-primary" />
-                <SelectValue placeholder="Daily Templates" />
+                <SelectValue placeholder="Ready Templates" />
               </SelectTrigger>
               <SelectContent>
                 {DAILY_POST_TEMPLATES.map((t, idx) => (
                   <SelectItem key={idx} value={String(idx)} className="text-xs">
-                    {t.title.replace(": [Machine/Subsystem]", "").replace(": [Operational Hazard]", "").replace(": [Fault / Stoppage Analysis]", "")}
+                    {t.title.slice(0, 32)}...
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -267,7 +278,7 @@ export function BlogEditorModal({
             <div className="sm:col-span-2 space-y-1.5">
               <Label className="text-xs font-semibold">Post Title *</Label>
               <Input
-                placeholder="e.g. Daily Vibration Analysis: 4 Rules for Pillow Block Bearings"
+                placeholder="e.g. Daily Preventive Maintenance: High-Speed Electric Motor Care"
                 value={title}
                 onChange={(e) => handleTitleChange(e.target.value)}
                 className="font-semibold text-sm h-9"
@@ -284,7 +295,7 @@ export function BlogEditorModal({
             </div>
           </div>
 
-          {/* Category, Status, Schedule Date */}
+          {/* Category, Status, Author Name */}
           <div className="grid gap-3 sm:grid-cols-3">
             <div className="space-y-1.5">
               <Label className="text-xs font-semibold">Category</Label>
@@ -303,36 +314,33 @@ export function BlogEditorModal({
             </div>
 
             <div className="space-y-1.5">
+              <Label className="text-xs font-semibold">Byline / Author</Label>
+              <Input
+                placeholder="MachineCare Engineering"
+                value={authorName}
+                onChange={(e) => setAuthorName(e.target.value)}
+                className="h-9 text-xs"
+              />
+            </div>
+
+            <div className="space-y-1.5">
               <Label className="text-xs font-semibold">Publication Status</Label>
               <Select value={status} onValueChange={(val: any) => setStatus(val)}>
-                <SelectTrigger className="h-9 text-xs">
+                <SelectTrigger className="h-9 text-xs font-medium">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="published" className="text-xs">
-                    🟢 Published Immediately
+                    🟢 Ready & Published Live
                   </SelectItem>
                   <SelectItem value="draft" className="text-xs">
-                    🟡 Draft (Private)
+                    🟡 Save as Draft
                   </SelectItem>
                   <SelectItem value="scheduled" className="text-xs">
-                    🔵 Scheduled For Later
+                    🔵 Schedule for Later Date
                   </SelectItem>
                 </SelectContent>
               </Select>
-            </div>
-
-            <div className="space-y-1.5">
-              <Label className="text-xs font-semibold flex items-center justify-between">
-                <span>Date & Time</span>
-                <span className="text-[10px] text-muted-foreground">Today's Edition</span>
-              </Label>
-              <Input
-                type="datetime-local"
-                value={publishedAt}
-                onChange={(e) => setPublishedAt(e.target.value)}
-                className="h-9 text-xs"
-              />
             </div>
           </div>
 
@@ -340,20 +348,20 @@ export function BlogEditorModal({
           <div className="space-y-1.5">
             <Label className="text-xs font-semibold">Summary / Subtitle</Label>
             <Input
-              placeholder="Brief summary that appears in article cards and search previews..."
+              placeholder="Brief summary that appears in article cards..."
               value={summary}
               onChange={(e) => setSummary(e.target.value)}
               className="text-xs h-9"
             />
           </div>
 
-          {/* Cover Image Preset Picker */}
+          {/* Curated Cover Photo Presets */}
           <div className="space-y-2 rounded-lg border border-border/60 bg-muted/20 p-3">
             <div className="flex items-center justify-between">
               <Label className="text-xs font-semibold flex items-center gap-1.5">
-                <ImageIcon className="h-3.5 w-3.5 text-primary" /> Curated Cover Photo Presets
+                <ImageIcon className="h-3.5 w-3.5 text-primary" /> Curated Industrial Cover Photos
               </Label>
-              <span className="text-[10px] text-muted-foreground">Click to select high-res image</span>
+              <span className="text-[10px] text-muted-foreground">Select a picture or paste custom URL</span>
             </div>
             <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
               {CURATED_COVER_PRESETS.map((preset, idx) => (
@@ -363,11 +371,16 @@ export function BlogEditorModal({
                   onClick={() => setCoverImage(preset.url)}
                   className={`group relative aspect-video overflow-hidden rounded-md border-2 transition-all ${
                     coverImage === preset.url
-                      ? "border-primary ring-2 ring-primary/20 scale-102"
+                      ? "border-primary ring-2 ring-primary/30 scale-102"
                       : "border-border hover:border-primary/50 opacity-80 hover:opacity-100"
                   }`}
                 >
                   <img src={preset.url} alt={preset.name} className="h-full w-full object-cover" />
+                  {coverImage === preset.url && (
+                    <div className="absolute top-1 right-1 bg-primary text-white rounded-full p-0.5">
+                      <Check className="h-2.5 w-2.5" />
+                    </div>
+                  )}
                   <div className="absolute inset-0 bg-black/40 p-1 flex items-end opacity-0 group-hover:opacity-100 transition-opacity">
                     <span className="text-[9px] text-white font-medium leading-tight line-clamp-1">
                       {preset.name}
@@ -419,7 +432,7 @@ export function BlogEditorModal({
             <div className="flex items-center justify-between border-b border-border/80 pb-2">
               <TabsList className="h-8">
                 <TabsTrigger value="write" className="text-xs gap-1.5 px-3">
-                  <PenTool className="h-3 w-3" /> Write Markdown
+                  <PenTool className="h-3 w-3" /> Write Content
                 </TabsTrigger>
                 <TabsTrigger value="preview" className="text-xs gap-1.5 px-3">
                   <Eye className="h-3 w-3" /> Live Preview
@@ -525,14 +538,14 @@ export function BlogEditorModal({
                 <div className="prose prose-sm dark:prose-invert max-w-none">
                   <h1>{title || "Untitled Daily Post"}</h1>
                   {summary && <p className="lead text-muted-foreground italic">{summary}</p>}
-                  {coverImage && (
-                    <img
+                  <div className="my-4 overflow-hidden rounded-lg">
+                    <IndustrialCover
                       src={coverImage}
-                      alt="Cover"
-                      className="rounded-lg w-full max-h-60 object-cover my-4"
+                      alt={title || "Article Preview"}
+                      category={category}
+                      aspectRatio="aspect-[16/9]"
                     />
-                  )}
-                  {/* Clean preview rendering */}
+                  </div>
                   <div
                     dangerouslySetInnerHTML={{
                       __html: renderSimpleMarkdown(content),
@@ -595,31 +608,22 @@ export function BlogEditorModal({
   );
 }
 
-// Lightweight Markdown to HTML converter for instant previews
+// Lightweight Markdown to HTML converter
 export function renderSimpleMarkdown(md: string): string {
   if (!md) return "";
 
   let html = md
-    // Headings
     .replace(/^### (.*$)/gim, '<h3 class="text-base font-bold mt-4 mb-2 text-foreground">$1</h3>')
     .replace(/^## (.*$)/gim, '<h2 class="text-lg font-bold mt-5 mb-2 text-foreground border-b border-border/40 pb-1">$1</h2>')
     .replace(/^# (.*$)/gim, '<h1 class="text-xl font-extrabold mt-6 mb-3 text-foreground">$1</h1>')
-    // Blockquotes & Callouts
     .replace(/^\> (.*$)/gim, '<blockquote class="border-l-4 border-primary pl-4 py-1 italic my-3 bg-primary/5 rounded-r text-sm text-foreground/90">$1</blockquote>')
-    // Code blocks
     .replace(/```([\s\S]*?)```/gim, '<pre class="bg-muted p-3 rounded-lg text-xs font-mono my-3 overflow-x-auto text-foreground"><code>$1</code></pre>')
-    // Inline code
     .replace(/`([^`]+)`/gim, '<code class="bg-muted px-1.5 py-0.5 rounded text-xs font-mono text-primary font-semibold">$1</code>')
-    // Bold
     .replace(/\*\*(.*?)\*\*/gim, '<strong class="font-bold text-foreground">$1</strong>')
-    // Italic
     .replace(/\*(.*?)\*/gim, '<em class="italic">$1</em>')
-    // Checklists
     .replace(/^- \[x\] (.*$)/gim, '<div class="flex items-center gap-2 text-xs py-0.5"><span class="text-primary font-bold">☑</span> <span>$1</span></div>')
     .replace(/^- \[ \] (.*$)/gim, '<div class="flex items-center gap-2 text-xs py-0.5"><span class="text-muted-foreground">☐</span> <span>$1</span></div>')
-    // Unordered lists
     .replace(/^- (.*$)/gim, '<li class="text-xs text-foreground/90 ml-4 list-disc">$1</li>')
-    // Paragraphs
     .replace(/\n\n+/g, '</p><p class="my-2.5 text-xs sm:text-sm leading-relaxed text-foreground/80">');
 
   return `<p class="my-2.5 text-xs sm:text-sm leading-relaxed text-foreground/80">${html}</p>`;

@@ -71,85 +71,97 @@ export const CURATED_COVER_PRESETS = [
 
 export const DAILY_POST_TEMPLATES = [
   {
-    title: "Daily Preventive Maintenance Tip: [Machine/Subsystem]",
+    title: "Daily Preventive Maintenance: High-Speed Electric Motor Care",
     category: "Maintenance & Reliability",
-    summary: "Today's quick maintenance protocol to eliminate micro-stoppages and extend component service life.",
-    content: `## Today's Maintenance Focus
+    summary: "A practical 10-minute shift checklist to prevent bearing seizure, insulation breakdown, and thermal motor tripping.",
+    content: `## Shift Maintenance Focus: AC Induction Motors
 
-Today we examine preventative upkeep on **[Insert Asset Name or Class]**. Proactive adjustments take under 10 minutes but avert catastrophic downtime.
+Three-phase induction motors drive over 70% of factory plant mechanical loads. Preventing unpredicted stoppages requires standardized visual and thermographic checks at each shift handover.
 
-### Key Inspection Points
-- [ ] Check lubricant level and oil clarity through the sight glass.
-- [ ] Measure surface operating temperature using an infrared thermometer (Baseline: < 65°C).
-- [ ] Inspect mounting bolts and vibration dampers for signs of fretting corrosion.
-- [ ] Clean dust accumulation off motor cooling fins to avoid thermal derating.
+### 5-Point Daily Inspection Protocol
+- [x] **Thermal Baseline:** Verify stator casing temperature with an infrared thermometer. (Normal operating limit: < 75°C under nominal full load).
+- [x] **Cooling Fin Cleanliness:** Clear airborne dust, lint, and oil films from ventilation cowl and stator fins to maintain heat dissipation.
+- [x] **Vibration Audit:** Check for audible bearing whining or hums indicative of Phase unbalance or mechanical misalignment.
+- [x] **Fastener Integrity:** Verify foot mounting bolts and conduit gland seals have not vibrated loose.
+- [x] **Terminal Box Seals:** Ensure gasket is intact to prevent moisture and chemical vapour ingress.
 
-> **💡 Maintenance Rule of the Day:**
-> "Clean machines speak louder." A clean surface reveals early leaks, cracks, and fastener migration hours before vibration monitors trip.
+\`\`\`
+Motor Health Quick Reference:
+- Casing Temp < 65°C   : Optimal
+- Casing Temp 65 - 80°C: Acceptable under heavy ambient
+- Casing Temp > 85°C   : Urgent Alert (Check cooling fan & phase balance)
+\`\`\`
 
-### Corrective Action Protocol
-If temperature exceeds normal operating range by more than 15°C, log a priority inspection in MachineCare immediately before shifting load.`,
+> **💡 Daily Reliability Tip:**
+> Never over-grease motor bearings. Injecting excess grease into a sealed cavity increases mechanical friction, blows inner lip seals, and forces conductive grease directly onto the motor windings.
+
+### Action Plan If Anomalies Are Detected
+Log a Level 2 Inspection in MachineCare Work Orders to schedule ultrasonic greasing and dynamic phase resistance testing before next production shift.`,
   },
   {
-    title: "Daily Safety Briefing: [Operational Hazard]",
+    title: "Daily Safety Briefing: Lockout/Tagout Zero Energy Handover",
     category: "Safety & Compliance",
-    summary: "Essential safety checks before shift handover to ensure zero incidents and protect plant personnel.",
-    content: `## Shift Safety Toolbox Talk
+    summary: "Ensuring zero energy isolation on conveyors, hydraulic presses, and pneumatic actuators before line changeovers.",
+    content: `## Safety Toolbox Talk: The Life-Saving Discipline of LOTO
 
-Prioritizing human safety and rigorous hazard identification before starting machine cycles.
+Workplace maintenance incidents often happen during quick changeovers when technicians bypass safety procedures to "save five minutes." True isolation requires unambiguous Zero Energy Verification.
 
-### 5-Minute Safety Checklist
-1. **PPE Verification:** Hard hats, steel-toe boots, eye protection, and hearing protection checked and rated.
-2. **Emergency Stops:** Verify that all E-stop buttons along conveyor and machine perimeter latch freely and reset without sticking.
-3. **Guards & Interlocks:** Ensure interlock switches on enclosure doors trip the drive circuit within 150ms.
-4. **Housekeeping:** Keep walking aisles free of spilled coolant, hydraulic mist, and loose air hoses.
+### Pre-Work Isolation Steps
+1. **Notify Shift Operators:** Communicate exactly which production cell is going down and the planned duration of work.
+2. **Execute Electrical Isolation:** Throw the local isolation switch to OFF and lock your individual padlock through the lockout hasp.
+3. **Bleed Residual Hydraulic & Pneumatic Pressure:** Depressurize air headers and cycle dump valves until gauges read exactly 0 PSI.
+4. **Mechanical Chocking:** Lower suspended counterweights and insert mechanical safety locking pins into press rams.
+5. **The 'Try' Step:** Press local START button to physically confirm zero motion occurs before placing any limb into the danger zone.
 
-> **⚠️ Golden Safety Rule:**
-> Never bypass a safety door interlock with a magnet or override key to "speed up clearance." An interlock was put there because someone previously lost a finger or hand.`,
+> **🛡️ Golden Rule of Plant Safety:**
+> "One Worker, One Lock, One Key." Never allow a supervisor or co-worker to remove your lockout lock on your behalf under any circumstance.
+
+Record Lockout/Tagout confirmation directly on the assigned MachineCare digital work order before commencing physical repairs.`,
   },
   {
-    title: "Root Cause Investigation: [Fault / Stoppage Analysis]",
+    title: "Root Cause Breakdown: Eliminating Gearbox Oil Leaks",
     category: "Plant Operations",
-    summary: "Breaking down a recent breakdown using the 5-Whys methodology to prevent recurrence across sister lines.",
-    content: `## Incident Overview & 5-Whys Breakdown
+    summary: "How a systematic 5-Whys investigation permanently eliminated repetitive shaft seal blowouts across 8 bottling lines.",
+    content: `## Root Cause Investigation: Recurring Gearbox Failures
 
-When a major stoppage occurs, replacing the failed component without addressing root systemic causes guarantees a repeat breakdown within 90 days.
+When high-speed helical gearboxes repeatedly weep lubricant from output shaft seals, continuously replacing the oil seal without inspecting operating case pressure guarantees a repeat failure within weeks.
 
-### The 5-Whys Analysis
-1. **Why did the line stop?** Motor drive tripped on thermal overload.
-2. **Why was the motor overloaded?** Conveyor gearbox encountered excessive rotational torque.
-3. **Why did the gearbox encounter high torque?** Drive chain tension was overtightened and unlubricated.
-4. **Why was it overtightened?** Previous shift tightened tensioner bolts to eliminate chain slap instead of replacing elongated chain links.
-5. **Why was an elongated chain not replaced?** Spare chain was out of stock in inventory, and no low-stock alert had been configured.
+### The 5-Whys Root Cause Tree
+1. **Why was oil leaking onto the production conveyor?** The drive shaft Viton lip seal developed radial fissures.
+2. **Why did the seal fissure prematurely?** Internal gearbox casing pressure exceeded 7 PSI during continuous 12-hour runs.
+3. **Why did internal pressure build up?** The reservoir breather cap was completely clogged with sticky airborne syrup and cardboard dust.
+4. **Why was the breather clogged?** Standard open breathers were installed without splash hoods or desiccant filtration.
+5. **Why was the incorrect breather specified?** Maintenance inventory had run out of OEM desiccant breathers, and technicians substituted generic brass vent plugs without engineering review.
 
-### Permanent Preventive Fix
-- Configured automatic reorder point in MachineCare Inventory for ANSI #60 drive chains.
-- Instituted monthly pitch gauge elongation checks on all main transfer drives.`,
+### Permanent Engineering Countermeasure
+- Installed high-capacity spin-on desiccant air breathers with internal check valves across all 8 processing lines.
+- Set up a quarterly scheduled PM in MachineCare to inspect and replace desiccant silica gel when color turns from gold to dark green.`,
   },
   {
-    title: "Daily Fleet Dispatch Tip: Tyre Pressure & Fuel Economy",
+    title: "Daily Fleet Dispatch: Cold Tyre Pressure & Air Brake Safety",
     category: "Fleet & Logistics",
-    summary: "How maintaining precise cold inflation pressures saves 3-5% on fleet fuel consumption and prevents blowouts.",
-    content: `## The Hidden Cost of Under-Inflated Tyres
+    summary: "Standard morning walkaround inspection protocol to prevent roadside tyre blowouts and governor pressure delays.",
+    content: `## Fleet Reliability: The Morning Dispatch Standard
 
-Tyres represent the second largest operating expense in commercial fleets after diesel fuel. Under-inflation by just 10 PSI increases rolling resistance, escalating fuel consumption by **2.5%** while increasing tyre carcass heat buildup significantly.
+A 10-minute pre-dispatch inspection stops roadside breakdowns, emergency towing charges, and transit cargo delays before vehicles leave the yard.
 
-### Best Practice Cold Inflation Protocol
-- Always test tyre pressure in the morning before vehicles embark on transit runs.
-- Inspect dual-tyre pairs: if pressure difference between inner and outer tyre exceeds 5 PSI, the outer tyre carries up to 70% of the axle weight, causing premature bald spots.
-- Check valve stems for metal hex caps with internal rubber O-rings to prevent centrifugal pressure leakage at highway speeds.
+### 4-Zone Daily Walkaround
+- [x] **Tyre Tread & Pressure:** Test cold pressure on drive and steer axles. Ensure dual-wheel pairs are matched within 5 PSI of each other.
+- [x] **Air Brake Recovery Rate:** Run compressor from 85 to 100 PSI; recovery must complete in under 45 seconds at governed engine RPM.
+- [x] **Moisture Ejection:** Pull air tank drain lanyards to purge accumulated moisture and emulsion before morning departure.
+- [x] **Wheel Nut Torque Indicators:** Visually verify that all neon green wheel nut indicator pointers point in-line toward each other.
 
-> **🚛 Fleet Pro Tip:**
-> Check tread wear patterns monthly. Shoulder wear indicates persistent under-inflation; center rib wear indicates over-inflation; feathering indicates toe-in alignment errors.`,
+> **🚛 Daily Logistics Rule:**
+> If any steer tyre shows cord exposure or pressure deficit exceeding 15 PSI, the truck must be flagged 'Out of Service' in MachineCare Fleet immediately.`,
   },
 ];
 
-// Seed posts loaded when database table is not yet created or working offline
+// Seed posts with complete, authoritative engineering content
 const SEED_POSTS: BlogPost[] = [
   {
     id: "seed-post-1",
     slug: "vibration-analysis-early-bearing-failure-detection",
-    title: "Vibration Analysis: How to Catch Bearing Failures 60 Days Before Breakdown",
+    title: "Vibration Spectral Analysis: Catching Bearing Failures 60 Days Before Breakdown",
     summary: "Learn how spectral peak demodulation and ISO 10816 vibration severity standards can prevent catastrophic machine shutdowns.",
     content: `## The High Cost of Unplanned Bearing Failures
 
@@ -166,10 +178,10 @@ Fortunately, bearings rarely fail instantaneously. They progress through distinc
 
 \`\`\`
 Vibration Severity Guide (ISO 10816-3):
-- < 1.4 mm/s RMS  : Class A (Excellent)
-- 1.4 - 2.8 mm/s  : Class B (Good / Acceptable)
-- 2.8 - 4.5 mm/s  : Class C (Alert / Schedule Lubrication or Alignment)
-- > 4.5 mm/s RMS  : Class D (Danger / Immediate Corrective Action)
+- < 1.4 mm/s RMS  : Class A (Excellent condition)
+- 1.4 - 2.8 mm/s  : Class B (Good / Acceptable for continuous operation)
+- 2.8 - 4.5 mm/s  : Class C (Alert / Plan lubrication, balancing or alignment)
+- > 4.5 mm/s RMS  : Class D (Danger / Immediate corrective intervention required)
 \`\`\`
 
 > **💡 Daily Reliability Tip:**
@@ -181,9 +193,9 @@ With MachineCare IoT sensors mounted on drive-end and non-drive-end housings, vi
     cover_image: "https://images.unsplash.com/photo-1581092160607-ee22621dd758?auto=format&fit=crop&w=1200&q=80",
     category: "Maintenance & Reliability",
     tags: ["Vibration Analysis", "Predictive Maintenance", "Bearings", "ISO 10816"],
-    author_name: "Eng. Alex Muro",
-    author_role: "Senior Reliability Specialist",
-    author_avatar: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=200&q=80",
+    author_name: "MachineCare Reliability Engineering",
+    author_role: "Lead Reliability Specialist",
+    author_avatar: null,
     status: "published",
     published_at: new Date(Date.now() - 24 * 3600 * 1000).toISOString(),
     read_time_minutes: 5,
@@ -229,9 +241,9 @@ By logging fluid condition metrics into MachineCare Documents and Service Histor
     cover_image: "https://images.unsplash.com/photo-1504917599217-d4dc5ebe6122?auto=format&fit=crop&w=1200&q=80",
     category: "Plant Operations",
     tags: ["Hydraulics", "Oil Analysis", "ISO 4406", "Fluid Power"],
-    author_name: "Michael Mwangi",
-    author_role: "Plant Operations Lead",
-    author_avatar: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=200&q=80",
+    author_name: "MachineCare Plant Operations",
+    author_role: "Operations & Hydraulics Team",
+    author_avatar: null,
     status: "published",
     published_at: new Date(Date.now() - 48 * 3600 * 1000).toISOString(),
     read_time_minutes: 4,
@@ -283,9 +295,9 @@ With the MachineCare Fleet Module, drivers scan a QR code at the vehicle door, t
     cover_image: "https://images.unsplash.com/photo-1601584115197-04ecc0da31d7?auto=format&fit=crop&w=1200&q=80",
     category: "Fleet & Logistics",
     tags: ["Fleet Maintenance", "Pre-Trip Inspection", "Driver Safety", "Tyre Wear"],
-    author_name: "Fatima Al-Hassan",
-    author_role: "Logistics & Fleet Director",
-    author_avatar: "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&w=200&q=80",
+    author_name: "MachineCare Fleet Directorate",
+    author_role: "Transport & Logistics Team",
+    author_avatar: null,
     status: "published",
     published_at: new Date(Date.now() - 72 * 3600 * 1000).toISOString(),
     read_time_minutes: 6,
@@ -324,9 +336,9 @@ In MachineCare Safety Module, you can link Lockout/Tagout procedures directly to
     cover_image: "https://images.unsplash.com/photo-1581092335397-9583fe92d232?auto=format&fit=crop&w=1200&q=80",
     category: "Safety & Compliance",
     tags: ["LOTO", "Occupational Safety", "Zero Energy", "Compliance"],
-    author_name: "Eng. Alex Muro",
-    author_role: "Senior Reliability Specialist",
-    author_avatar: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=200&q=80",
+    author_name: "MachineCare Safety Division",
+    author_role: "HSE Compliance & Safety Engineers",
+    author_avatar: null,
     status: "published",
     published_at: new Date(Date.now() - 96 * 3600 * 1000).toISOString(),
     read_time_minutes: 5,
@@ -399,7 +411,6 @@ export const blogService = {
       if (!error && data && data.length > 0) {
         posts = data as BlogPost[];
       } else {
-        // Fallback to seed posts combined with any user local posts
         const local = getLocalPosts().filter((p) => p.status === "published");
         posts = [...local, ...SEED_POSTS];
       }
@@ -408,12 +419,10 @@ export const blogService = {
       posts = [...local, ...SEED_POSTS];
     }
 
-    // Filter by category
     if (category && category !== "All") {
       posts = posts.filter((p) => p.category.toLowerCase() === category.toLowerCase());
     }
 
-    // Filter by search query
     if (search && search.trim()) {
       const term = search.toLowerCase();
       posts = posts.filter(
@@ -425,7 +434,6 @@ export const blogService = {
       );
     }
 
-    // Sort: featured first, then published_at descending
     return posts.sort((a, b) => {
       if (a.featured && !b.featured) return -1;
       if (!a.featured && b.featured) return 1;
@@ -459,7 +467,7 @@ export const blogService = {
   },
 
   /**
-   * Fetch all posts for in-app / admin management (includes drafts, scheduled)
+   * Fetch all posts for in-app management
    */
   async getAllPosts(): Promise<BlogPost[]> {
     try {
@@ -476,7 +484,6 @@ export const blogService = {
     }
 
     const local = getLocalPosts();
-    // Merge local and seed posts without duplicate slugs
     const existingSlugs = new Set(local.map((p) => p.slug));
     const combined = [...local, ...SEED_POSTS.filter((p) => !existingSlugs.has(p.slug))];
     return combined.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
@@ -487,7 +494,7 @@ export const blogService = {
    */
   async savePost(
     post: Partial<BlogPost> & { title: string; content: string },
-    userProfile?: { name?: string; role?: string; avatar?: string; id?: string; orgId?: string }
+    userProfile?: { name?: string; role?: string; id?: string; orgId?: string }
   ): Promise<BlogPost> {
     const slug =
       post.slug ||
@@ -507,13 +514,10 @@ export const blogService = {
       content: post.content,
       cover_image: post.cover_image || CURATED_COVER_PRESETS[0].url,
       category: post.category || "Maintenance & Reliability",
-      tags: post.tags || [],
-      author_name: post.author_name || userProfile?.name || "MachineCare Engineer",
+      tags: post.tags && post.tags.length > 0 ? post.tags : ["Daily Maintenance", "Reliability"],
+      author_name: post.author_name || userProfile?.name || "MachineCare Engineering",
       author_role: post.author_role || userProfile?.role || "Reliability Specialist",
-      author_avatar:
-        post.author_avatar ||
-        userProfile?.avatar ||
-        "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=200&q=80",
+      author_avatar: null, // Portrait photos removed per specification
       status: post.status || "published",
       published_at: post.published_at || (post.status === "published" ? now : null as any),
       read_time_minutes: readTimeMinutes,
@@ -553,7 +557,6 @@ export const blogService = {
       console.warn("Supabase save error, persisting locally:", e);
     }
 
-    // Always update local storage so it is immediately visible even offline
     const currentLocal = getLocalPosts();
     const idToUse = savedRecord?.id || post.id || `local-${Date.now()}`;
     const completePost: BlogPost = {
@@ -576,9 +579,6 @@ export const blogService = {
     return savedRecord || completePost;
   },
 
-  /**
-   * Delete post
-   */
   async deletePost(id: string): Promise<void> {
     try {
       if (!id.startsWith("local-") && !id.startsWith("seed-")) {
@@ -592,9 +592,6 @@ export const blogService = {
     saveLocalPosts(local);
   },
 
-  /**
-   * Toggle Like
-   */
   async toggleLike(post: BlogPost): Promise<{ liked: boolean; newCount: number }> {
     const likedIds = getLikedPostIds();
     const isCurrentlyLiked = likedIds.includes(post.id);
@@ -613,7 +610,6 @@ export const blogService = {
       console.warn("Supabase like update failed:", e);
     }
 
-    // Update in local cache
     const local = getLocalPosts();
     const match = local.find((p) => p.id === post.id);
     if (match) {
@@ -624,9 +620,6 @@ export const blogService = {
     return { liked: !isCurrentlyLiked, newCount };
   },
 
-  /**
-   * Increment view count
-   */
   async recordView(post: BlogPost): Promise<void> {
     try {
       if (!post.id.startsWith("local-") && !post.id.startsWith("seed-")) {
@@ -640,9 +633,6 @@ export const blogService = {
     }
   },
 
-  /**
-   * Compute daily writing streak
-   */
   computeDailyStreak(posts: BlogPost[]): { currentStreak: number; bestStreak: number; postedToday: boolean; totalWords: number } {
     if (!posts.length) {
       return { currentStreak: 0, bestStreak: 0, postedToday: false, totalWords: 0 };
@@ -661,12 +651,10 @@ export const blogService = {
     const todayStr = new Date().toISOString().split("T")[0];
     const postedToday = daySet.has(todayStr);
 
-    // Count consecutive days backward starting today or yesterday
     let streak = 0;
     let checkDate = new Date();
 
     if (!postedToday) {
-      // Check if posted yesterday to keep the streak alive
       checkDate.setDate(checkDate.getDate() - 1);
     }
 

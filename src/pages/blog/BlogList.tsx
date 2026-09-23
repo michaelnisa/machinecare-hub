@@ -7,6 +7,7 @@ import {
   BlogCategory,
   blogService,
 } from "@/services/blogService";
+import { IndustrialCover } from "@/components/blog/IndustrialCover";
 import {
   Search,
   Calendar,
@@ -22,6 +23,7 @@ import {
   Send,
   PenTool,
   Wrench,
+  UserCheck,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -177,14 +179,15 @@ export default function BlogList() {
                   className="group block relative overflow-hidden rounded-2xl border border-border/80 bg-card shadow-lg transition-all hover:border-primary/50 hover:shadow-xl"
                 >
                   <div className="grid md:grid-cols-12 gap-0">
-                    <div className="md:col-span-7 aspect-[16/10] md:aspect-auto relative overflow-hidden bg-muted">
-                      <img
-                        src={featuredPost.cover_image || "https://images.unsplash.com/photo-1581092160607-ee22621dd758?auto=format&fit=crop&w=1200&q=80"}
+                    <div className="md:col-span-7 relative overflow-hidden bg-muted">
+                      <IndustrialCover
+                        src={featuredPost.cover_image}
                         alt={featuredPost.title}
+                        category={featuredPost.category}
+                        aspectRatio="aspect-[16/10] md:h-full"
                         className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
                       />
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent md:hidden" />
-                      <div className="absolute top-4 left-4">
+                      <div className="absolute top-4 left-4 z-10">
                         <Badge className="bg-primary text-primary-foreground font-bold shadow-md">
                           {featuredPost.category}
                         </Badge>
@@ -220,26 +223,21 @@ export default function BlogList() {
                       </div>
 
                       <div className="mt-6 pt-6 border-t border-border flex items-center justify-between">
-                        <div className="flex items-center gap-2.5">
-                          <img
-                            src={featuredPost.author_avatar || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=200&q=80"}
-                            alt={featuredPost.author_name}
-                            className="h-8 w-8 rounded-full object-cover ring-1 ring-border"
-                          />
-                          <div className="flex flex-col">
-                            <span className="text-xs font-semibold text-foreground">{featuredPost.author_name}</span>
-                            <span className="text-[10px] text-muted-foreground">
-                              {new Date(featuredPost.published_at).toLocaleDateString("en-US", {
-                                month: "short",
-                                day: "numeric",
-                                year: "numeric",
-                              })}
-                            </span>
-                          </div>
+                        <div className="flex flex-col">
+                          <span className="text-xs font-semibold text-foreground flex items-center gap-1">
+                            <UserCheck className="h-3.5 w-3.5 text-primary" /> {featuredPost.author_name}
+                          </span>
+                          <span className="text-[10px] text-muted-foreground ml-4.5">
+                            {new Date(featuredPost.published_at).toLocaleDateString("en-US", {
+                              month: "short",
+                              day: "numeric",
+                              year: "numeric",
+                            })}
+                          </span>
                         </div>
 
                         <div className="flex items-center gap-1 text-xs font-semibold text-primary group-hover:translate-x-1 transition-transform">
-                          Read Full Article <ArrowRight className="h-3.5 w-3.5 ml-1" />
+                          Read Article <ArrowRight className="h-3.5 w-3.5 ml-1" />
                         </div>
                       </div>
                     </div>
@@ -288,16 +286,17 @@ export default function BlogList() {
                       to={`/blog/${post.slug}`}
                       className="group flex flex-col overflow-hidden rounded-xl border border-border bg-card shadow-sm transition-all hover:border-primary/50 hover:shadow-md hover:-translate-y-1"
                     >
-                      {/* Cover thumbnail */}
-                      <div className="aspect-[16/9] w-full overflow-hidden bg-muted relative">
-                        <img
-                          src={post.cover_image || "https://images.unsplash.com/photo-1581092160607-ee22621dd758?auto=format&fit=crop&w=800&q=80"}
+                      {/* Cover thumbnail with fallback */}
+                      <div className="relative">
+                        <IndustrialCover
+                          src={post.cover_image}
                           alt={post.title}
-                          className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+                          category={post.category}
+                          aspectRatio="aspect-[16/9]"
                         />
                         <Badge
                           variant="secondary"
-                          className="absolute top-3 left-3 bg-background/90 backdrop-blur-md text-[10px] font-bold"
+                          className="absolute top-3 left-3 bg-background/90 backdrop-blur-md text-[10px] font-bold z-10"
                         >
                           {post.category}
                         </Badge>
@@ -330,16 +329,9 @@ export default function BlogList() {
                         </div>
 
                         <div className="mt-4 pt-4 border-t border-border/60 flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <img
-                              src={post.author_avatar || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=200&q=80"}
-                              alt={post.author_name}
-                              className="h-6 w-6 rounded-full object-cover ring-1 ring-border"
-                            />
-                            <span className="text-[11px] font-medium text-foreground truncate max-w-[110px]">
-                              {post.author_name}
-                            </span>
-                          </div>
+                          <span className="text-[11px] font-semibold text-foreground truncate max-w-[140px]">
+                            {post.author_name}
+                          </span>
 
                           <div className="flex items-center gap-2 text-xs text-muted-foreground">
                             <span className="flex items-center gap-1 text-[11px]">
