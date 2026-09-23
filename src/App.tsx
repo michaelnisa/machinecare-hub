@@ -148,6 +148,9 @@ const ErrorCenterView = lazy(() => import("./pages/integrations/ErrorCenterView"
 const WebhooksView = lazy(() => import("./pages/integrations/WebhooksView"));
 const CredentialsVaultView = lazy(() => import("./pages/integrations/CredentialsVaultView"));
 const IntegrationSettingsView = lazy(() => import("./pages/integrations/IntegrationSettingsView"));
+const BlogList = lazy(() => import("./pages/blog/BlogList"));
+const BlogPostDetail = lazy(() => import("./pages/blog/BlogPostDetail"));
+const BlogManage = lazy(() => import("./pages/blog/BlogManage"));
 
 const queryClient = new QueryClient();
 
@@ -184,6 +187,8 @@ const App = () => (
                 <Route path="/safety/chemical/:id" element={<ChemicalDetailPublic />} />
                 <Route path="/safety/qr-rams" element={<VendorRiskAssessmentPublic />} />
                 <Route path="/safety/qr-rams/:orgId" element={<VendorRiskAssessmentPublic />} />
+                <Route path="/blog" element={<BlogList />} />
+                <Route path="/blog/:slug" element={<BlogPostDetail />} />
                 <Route path="/unsubscribe" element={<Unsubscribe />} />
                 <Route element={<AppLayout />}>
                   <Route path="/dashboard" element={<DashboardRouter />} />
@@ -305,6 +310,7 @@ const App = () => (
                     <Route path="settings" element={<IntegrationSettingsView />} />
                   </Route>
                   <Route path="/admin" element={<Admin />} />
+                  <Route path="/blog/manage" element={<BlogManage />} />
                 </Route>
                 <Route path="*" element={<NotFound />} />
               </Routes>

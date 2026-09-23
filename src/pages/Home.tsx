@@ -69,6 +69,9 @@ export default function Home() {
             <a href="#how-it-works" className="hover:text-foreground transition-colors">
               {isSwahili ? "Jinsi Inavyofanya Kazi" : "How it Works"}
             </a>
+            <Link to="/blog" className="hover:text-foreground transition-colors text-primary font-semibold flex items-center gap-1">
+              {isSwahili ? "Blog & Makala" : "Blog & Insights"}
+            </Link>
           </nav>
           <div className="flex items-center gap-2.5">
             <LanguageSwitcher />
@@ -792,6 +795,7 @@ export default function Home() {
             <div>
               <p className="text-xs font-bold uppercase tracking-wider text-foreground">Access</p>
               <ul className="mt-3 space-y-2 text-xs text-muted-foreground">
+                <li><Link to="/blog" className="hover:text-foreground text-primary font-medium">Daily Engineering Blog</Link></li>
                 <li><Link to="/login" className="hover:text-foreground">Sign In</Link></li>
                 <li><Link to="/signup" className="hover:text-foreground">{isSwahili ? "Omba Kujiunga" : "Request Access"}</Link></li>
                 <li><Link to="/dashboard" className="hover:text-foreground">Dashboard</Link></li>

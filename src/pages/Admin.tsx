@@ -56,6 +56,7 @@ import {
   Phone,
   Mail,
   Loader2,
+  BookOpen,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useI18n } from "@/i18n/I18nProvider";
@@ -327,6 +328,12 @@ export default function Admin() {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <Button asChild variant="outline" size="sm" className="gap-1.5 border-primary/30 text-primary hover:bg-primary/5">
+            <Link to="/blog/manage">
+              <BookOpen className="h-4 w-4" />
+              {isSwahili ? "Studio ya Blog" : "Daily Blog Studio"}
+            </Link>
+          </Button>
           <Button variant="outline" size="sm" onClick={fetchData} disabled={loading}>
             <RefreshCw className={`mr-1.5 h-4 w-4 ${loading ? "animate-spin" : ""}`} />
             {isSwahili ? "Hifadhi Upya" : "Refresh"}

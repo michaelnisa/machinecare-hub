@@ -57,6 +57,7 @@ import {
   FlaskConical,
   Cpu,
   Sliders,
+  BookOpen,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { initials } from "@/lib/format";
@@ -251,6 +252,7 @@ export function Sidebar() {
         id: "system",
         label: isLite ? "Account" : "System",
         items: [
+          { to: "/blog/manage", label: "Daily Blog", icon: BookOpen },
           { to: "/team", label: t.nav.team, icon: Users },
           { to: "/integrations", label: "Integrations", icon: Layers },
           { to: "/settings", label: t.nav.settings, icon: Settings },
@@ -334,6 +336,7 @@ export function Sidebar() {
         id: "system",
         label: "System",
         items: [
+          { to: "/blog/manage", label: "Daily Blog", icon: BookOpen },
           { to: "/integrations", label: "Integrations", icon: Layers },
           { to: "/settings", label: t.nav.settings, icon: Settings },
           ...(isAdmin ? [{ to: "/admin", label: "Admin Portal", icon: ShieldAlert }] : []),
@@ -403,6 +406,7 @@ export function Sidebar() {
         id: "system",
         label: "System",
         items: [
+          { to: "/blog/manage", label: "Daily Blog", icon: BookOpen },
           { to: "/team", label: t.nav.team, icon: Users },
           { to: "/integrations", label: "Integrations", icon: Layers },
           { to: "/settings", label: t.nav.settings, icon: Settings },
@@ -667,6 +671,7 @@ export function Sidebar() {
         id: "system",
         label: isLite ? "Account" : "System",
         items: [
+          { to: "/blog/manage", label: "Daily Blog", icon: BookOpen },
           { to: "/team", label: t.nav.team, icon: Users },
           { to: "/integrations", label: "Integrations", icon: Layers },
           { to: "/settings", label: t.nav.settings, icon: Settings },
