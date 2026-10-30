@@ -27,6 +27,7 @@ import {
   blogService,
 } from "@/services/blogService";
 import { IndustrialCover } from "@/components/blog/IndustrialCover";
+import { escapeHtml } from "@/lib/escapeHtml";
 import {
   PenTool,
   Eye,
@@ -608,11 +609,14 @@ export function BlogEditorModal({
   );
 }
 
-// Lightweight Markdown to HTML converter
+// Lightweight Markdown to HTML converter with XSS sanitization
 export function renderSimpleMarkdown(md: string): string {
   if (!md) return "";
 
-  let html = md
+  // Sanitize raw text to prevent XSS injection
+  const safeText = escapeHtml(md);
+
+  let html = safeText
     .replace(/^### (.*$)/gim, '<h3 class="text-base font-bold mt-4 mb-2 text-foreground">$1</h3>')
     .replace(/^## (.*$)/gim, '<h2 class="text-lg font-bold mt-5 mb-2 text-foreground border-b border-border/40 pb-1">$1</h2>')
     .replace(/^# (.*$)/gim, '<h1 class="text-xl font-extrabold mt-6 mb-3 text-foreground">$1</h1>')

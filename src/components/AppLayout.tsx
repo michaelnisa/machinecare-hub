@@ -11,7 +11,6 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { isPlatformAdmin } from "@/lib/admin";
 import { CommandPalette } from "@/components/CommandPalette";
 import { TechnicianQrModal } from "@/components/TechnicianQrModal";
-import { DemoDataLoaderModal } from "@/components/DemoDataLoaderModal";
 
 export default function AppLayout() {
   const { user, loading } = useAuth();
@@ -20,7 +19,6 @@ export default function AppLayout() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [commandOpen, setCommandOpen] = useState(false);
   const [qrOpen, setQrOpen] = useState(false);
-  const [demoOpen, setDemoOpen] = useState(false);
 
   const isAdmin = isPlatformAdmin(user?.email);
 
@@ -54,7 +52,6 @@ export default function AppLayout() {
       {/* Global Modals */}
       <CommandPalette open={commandOpen} onOpenChange={setCommandOpen} />
       <TechnicianQrModal open={qrOpen} onOpenChange={setQrOpen} />
-      <DemoDataLoaderModal open={demoOpen} onOpenChange={setDemoOpen} onDataChanged={() => window.location.reload()} />
 
       <div className="flex min-w-0 flex-1 flex-col">
         {/* Mobile header */}
@@ -103,17 +100,6 @@ export default function AppLayout() {
             >
               <QrCode className="h-3.5 w-3.5 text-primary" />
               <span>Tech QR Scan</span>
-            </Button>
-
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setDemoOpen(true)}
-              className="flex items-center gap-1.5 text-xs h-9 text-amber-600 hover:text-amber-700 hover:bg-amber-50"
-              title="Load or clear demo operational data"
-            >
-              <Sparkles className="h-3.5 w-3.5" />
-              <span>Demo Data</span>
             </Button>
 
             <LanguageSwitcher />

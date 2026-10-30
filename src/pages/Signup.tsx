@@ -119,21 +119,33 @@ export default function Signup() {
     }
     setSubmitting(true);
     try {
-      const { error } = await (supabase as any).from("onboarding_requests").insert({
-        name: values.name,
-        contact: values.contact,
-        company: values.company,
-        industry: selectedSuite.recommendedIndustry,
-        plan: accountTier,
-        enabled_modules: selectedSuite.modules,
+      const corePayload = {
+        name: values.name.trim(),
+        contact: values.contact.trim(),
+        company: values.company.trim(),
+        industry: `${selectedSuite.recommendedIndustry} (${selectedSuite.name} - ${accountTier.toUpperCase()})`,
         status: "pending",
-      });
+      };
 
-      if (error) {
-        throw error;
+      const { error: insertError } = await (supabase as any)
+        .from("onboarding_requests")
+        .insert(corePayload);
+
+      if (insertError) {
+        console.warn("Primary insert failed, retrying with raw industry:", insertError.message);
+        const { error: retryError } = await (supabase as any)
+          .from("onboarding_requests")
+          .insert({
+            name: values.name.trim(),
+            contact: values.contact.trim(),
+            company: values.company.trim(),
+            industry: selectedSuite.recommendedIndustry,
+            status: "pending",
+          });
+        if (retryError) throw retryError;
       }
 
-      // Dispatch instant SMS notification to admin (+255764190999)
+      // Dispatch instant SMS notification to admin (+255764190999) non-blocking
       try {
         await supabase.functions.invoke("notify-onboarding-request-sms", {
           body: {
@@ -144,14 +156,15 @@ export default function Signup() {
           },
         });
       } catch (smsErr) {
-        console.error("SMS notification dispatch failed:", smsErr);
+        console.warn("SMS notification dispatch failed (non-blocking):", smsErr);
       }
 
       setRequestSubmitted(true);
       toast.success(isSwahili ? "Ombi limetumwa kikamilifu!" : "Request submitted successfully!");
     } catch (err: any) {
-      console.error(err);
-      toast.error(isSwahili ? "Imeshindwa kutuma ombi. Tafadhali jaribu tena." : "Failed to submit request. Please try again.");
+      console.error("Onboarding request error:", err);
+      const errMsg = err?.message || (isSwahili ? "Imeshindwa kutuma ombi. Tafadhali jaribu tena." : "Failed to submit request. Please try again.");
+      toast.error(errMsg);
     } finally {
       setSubmitting(false);
     }

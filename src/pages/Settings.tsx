@@ -34,7 +34,6 @@ import {
   ShieldCheck,
 } from "lucide-react";
 import { Link } from "react-router-dom";
-import { DemoDataLoaderModal } from "@/components/DemoDataLoaderModal";
 import { testSelcomConnection } from "@/services/selcomService";
 import { Switch } from "@/components/ui/switch";
 import {
@@ -94,7 +93,6 @@ export default function Settings() {
   const [labourRate, setLabourRate] = useState("0");
   const [messageChannel, setMessageChannel] = useState("whatsapp");
   const [savingWorkshopSettings, setSavingWorkshopSettings] = useState(false);
-  const [demoModalOpen, setDemoModalOpen] = useState(false);
 
   // Selcom Payment Gateway
   const [selcomEnabled, setSelcomEnabled] = useState(false);
@@ -404,36 +402,6 @@ export default function Settings() {
           </Button>
         </Link>
       </div>
-
-      <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div className="flex items-start gap-3">
-          <div className="p-2.5 rounded-lg bg-amber-500/10 text-amber-600">
-            <Sparkles className="h-5 w-5" />
-          </div>
-          <div>
-            <div className="text-sm font-bold text-foreground flex items-center gap-2">
-              Sandbox & Sample Data
-              <span className="rounded bg-amber-500/10 text-amber-600 px-1.5 py-0.2 text-[10px] font-bold border border-amber-500/20">
-                TRIAL UTILITY
-              </span>
-            </div>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              Instantly populate or safely clean sample assets, work orders, telemetry, and safety records for demos and onboarding.
-            </p>
-          </div>
-        </div>
-        <Button 
-          size="sm" 
-          variant="outline"
-          onClick={() => setDemoModalOpen(true)}
-          className="whitespace-nowrap text-xs gap-1.5 font-semibold border-amber-500/30 hover:bg-amber-500/10 text-amber-700 dark:text-amber-400"
-        >
-          <Sparkles className="h-3.5 w-3.5" />
-          Manage Demo Data
-        </Button>
-      </div>
-
-      <DemoDataLoaderModal open={demoModalOpen} onOpenChange={setDemoModalOpen} />
 
       <Section title="Organisation logo">
         <div className="flex items-center gap-5">

@@ -25,7 +25,8 @@ export default function Login() {
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const next = params.get("next") || "/dashboard";
-  const { t } = useI18n();
+  const { t, currentLang } = useI18n();
+  const isSwahili = currentLang === "sw";
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
@@ -135,7 +136,7 @@ export default function Login() {
               to="/signup"
               className="font-medium text-primary hover:underline"
             >
-              {t.auth.createOne}
+              {t.auth.createOne} / {isSwahili ? "Omba Kujiunga" : "Request Access"}
             </Link>
           </p>
         </div>

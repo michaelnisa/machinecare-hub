@@ -1187,8 +1187,17 @@ export type Database = {
           licence_expiry: string | null
           licence_number: string | null
           medical_expiry: string | null
+          next_of_kin_name: string | null
+          next_of_kin_nida: string | null
+          next_of_kin_phone: string | null
+          next_of_kin_photo_url: string | null
+          next_of_kin_relation: string | null
+          nida_number: string | null
           notes: string | null
           organisation_id: string
+          other_id_number: string | null
+          other_id_type: string | null
+          passport_number: string | null
           phone: string | null
           photo_url: string | null
           status: string
@@ -1203,8 +1212,17 @@ export type Database = {
           licence_expiry?: string | null
           licence_number?: string | null
           medical_expiry?: string | null
+          next_of_kin_name?: string | null
+          next_of_kin_nida?: string | null
+          next_of_kin_phone?: string | null
+          next_of_kin_photo_url?: string | null
+          next_of_kin_relation?: string | null
+          nida_number?: string | null
           notes?: string | null
           organisation_id: string
+          other_id_number?: string | null
+          other_id_type?: string | null
+          passport_number?: string | null
           phone?: string | null
           photo_url?: string | null
           status?: string
@@ -1219,8 +1237,17 @@ export type Database = {
           licence_expiry?: string | null
           licence_number?: string | null
           medical_expiry?: string | null
+          next_of_kin_name?: string | null
+          next_of_kin_nida?: string | null
+          next_of_kin_phone?: string | null
+          next_of_kin_photo_url?: string | null
+          next_of_kin_relation?: string | null
+          nida_number?: string | null
           notes?: string | null
           organisation_id?: string
+          other_id_number?: string | null
+          other_id_type?: string | null
+          passport_number?: string | null
           phone?: string | null
           photo_url?: string | null
           status?: string
@@ -3334,6 +3361,8 @@ export type Database = {
           current_odometer_km: number | null
           department: string | null
           fuel_type: string | null
+          has_trailer: boolean | null
+          head_tank_capacity_l: number | null
           home_depot: string | null
           id: string
           make: string | null
@@ -3348,6 +3377,11 @@ export type Database = {
           serial_number: string | null
           status: string
           tank_capacity_l: number | null
+          total_tank_capacity_l: number | null
+          trailer_make_model: string | null
+          trailer_plate: string | null
+          trailer_tank_capacity_l: number | null
+          vehicle_type: string | null
           vin: string | null
           warranty_expiry: string | null
           warranty_provider: string | null
@@ -3361,6 +3395,8 @@ export type Database = {
           current_odometer_km?: number | null
           department?: string | null
           fuel_type?: string | null
+          has_trailer?: boolean | null
+          head_tank_capacity_l?: number | null
           home_depot?: string | null
           id?: string
           make?: string | null
@@ -3375,6 +3411,11 @@ export type Database = {
           serial_number?: string | null
           status?: string
           tank_capacity_l?: number | null
+          total_tank_capacity_l?: number | null
+          trailer_make_model?: string | null
+          trailer_plate?: string | null
+          trailer_tank_capacity_l?: number | null
+          vehicle_type?: string | null
           vin?: string | null
           warranty_expiry?: string | null
           warranty_provider?: string | null
@@ -3388,6 +3429,8 @@ export type Database = {
           current_odometer_km?: number | null
           department?: string | null
           fuel_type?: string | null
+          has_trailer?: boolean | null
+          head_tank_capacity_l?: number | null
           home_depot?: string | null
           id?: string
           make?: string | null
@@ -3402,6 +3445,11 @@ export type Database = {
           serial_number?: string | null
           status?: string
           tank_capacity_l?: number | null
+          total_tank_capacity_l?: number | null
+          trailer_make_model?: string | null
+          trailer_plate?: string | null
+          trailer_tank_capacity_l?: number | null
+          vehicle_type?: string | null
           vin?: string | null
           warranty_expiry?: string | null
           warranty_provider?: string | null
@@ -6491,6 +6539,8 @@ export type Database = {
       trips: {
         Row: {
           cargo_description: string | null
+          client_name: string | null
+          client_order_no: string | null
           cost: number | null
           created_at: string
           created_by: string | null
@@ -6498,13 +6548,17 @@ export type Database = {
           driver_id: string | null
           end_at: string | null
           end_odo: number | null
+          estimated_return_at: string | null
           fuel_log_id: string | null
           fuel_used_l: number | null
           id: string
+          is_round_trip: boolean | null
           machine_id: string
           organisation_id: string
           origin: string | null
           purpose: string | null
+          roundtrip_hours_est: number | null
+          route_notes: string | null
           start_at: string | null
           start_odo: number | null
           status: string
@@ -6512,6 +6566,8 @@ export type Database = {
         }
         Insert: {
           cargo_description?: string | null
+          client_name?: string | null
+          client_order_no?: string | null
           cost?: number | null
           created_at?: string
           created_by?: string | null
@@ -6519,13 +6575,17 @@ export type Database = {
           driver_id?: string | null
           end_at?: string | null
           end_odo?: number | null
+          estimated_return_at?: string | null
           fuel_log_id?: string | null
           fuel_used_l?: number | null
           id?: string
+          is_round_trip?: boolean | null
           machine_id: string
           organisation_id: string
           origin?: string | null
           purpose?: string | null
+          roundtrip_hours_est?: number | null
+          route_notes?: string | null
           start_at?: string | null
           start_odo?: number | null
           status?: string
@@ -6533,6 +6593,8 @@ export type Database = {
         }
         Update: {
           cargo_description?: string | null
+          client_name?: string | null
+          client_order_no?: string | null
           cost?: number | null
           created_at?: string
           created_by?: string | null
@@ -6540,13 +6602,17 @@ export type Database = {
           driver_id?: string | null
           end_at?: string | null
           end_odo?: number | null
+          estimated_return_at?: string | null
           fuel_log_id?: string | null
           fuel_used_l?: number | null
           id?: string
+          is_round_trip?: boolean | null
           machine_id?: string
           organisation_id?: string
           origin?: string | null
           purpose?: string | null
+          roundtrip_hours_est?: number | null
+          route_notes?: string | null
           start_at?: string | null
           start_odo?: number | null
           status?: string
