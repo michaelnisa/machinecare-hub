@@ -29,29 +29,14 @@ import { toast } from "sonner";
 import { formatDate } from "@/lib/format";
 import { scheduleStatus } from "@/lib/machine-constants";
 import { useI18n } from "@/i18n/I18nProvider";
+import {
+  SAFE_DRIVER_COLUMNS,
+  parseDriver,
+  serializeDriverPayload,
+  type FleetDriver,
+} from "@/lib/fleet-metadata";
 
-type Driver = {
-  id: string;
-  full_name: string;
-  phone: string | null;
-  email: string | null;
-  licence_number: string | null;
-  licence_class: string | null;
-  licence_expiry: string | null;
-  medical_expiry: string | null;
-  passport_number: string | null;
-  nida_number: string | null;
-  other_id_type: string | null;
-  other_id_number: string | null;
-  photo_url: string | null;
-  next_of_kin_name: string | null;
-  next_of_kin_relation: string | null;
-  next_of_kin_phone: string | null;
-  next_of_kin_nida: string | null;
-  next_of_kin_photo_url: string | null;
-  status: string;
-  notes: string | null;
-};
+type Driver = FleetDriver;
 
 const OTHER_ID_TYPES = [
   "Voter ID",
@@ -111,10 +96,10 @@ export default function Drivers() {
     setLoading(true);
     const { data, error } = await supabase
       .from("drivers")
-      .select("*")
+      .select(SAFE_DRIVER_COLUMNS)
       .order("full_name");
     if (error) toast.error(error.message);
-    setDrivers((data ?? []) as Driver[]);
+    setDrivers((data ?? []).map(parseDriver));
     setLoading(false);
   };
 
@@ -445,8 +430,7 @@ function DriverDialog({ open, onOpenChange, driver, onSaved }: {
         nokPhotoUrl = path;
       }
 
-      const payload = {
-        organisation_id: profile.organisation_id,
+      const safePayload = serializeDriverPayload({
         full_name: form.full_name.trim(),
         phone: form.phone.trim() || null,
         email: form.email.trim() || null,
@@ -465,12 +449,15 @@ function DriverDialog({ open, onOpenChange, driver, onSaved }: {
         next_of_kin_nida: form.next_of_kin_nida.trim() || null,
         next_of_kin_photo_url: nokPhotoUrl,
         status: form.status,
-        notes: form.notes.trim() || null,
-      };
+        user_notes: form.notes.trim() || null,
+      });
 
       const { error } = driver
-        ? await supabase.from("drivers").update(payload).eq("id", driver.id)
-        : await supabase.from("drivers").insert(payload);
+        ? await supabase.from("drivers").update(safePayload).eq("id", driver.id)
+        : await supabase.from("drivers").insert({
+            ...safePayload,
+            organisation_id: profile.organisation_id,
+          });
 
       if (error) throw error;
       toast.success(driver ? "Driver updated" : "Driver registered successfully");

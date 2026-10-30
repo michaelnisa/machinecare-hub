@@ -47,6 +47,11 @@ import {
   TRUCK_TYRE_MIN_PSI
 } from "@/lib/fleet-constants";
 import { useI18n } from "@/i18n/I18nProvider";
+import {
+  SAFE_MACHINE_COLUMNS,
+  parseMachine,
+  type FleetVehicle,
+} from "@/lib/fleet-metadata";
 
 const POPULAR_BRANDS = [
   "Michelin",
@@ -91,18 +96,7 @@ const RETIRE_REASONS = [
   { value: "scrapped", label: "Scrapped / Disposed" },
 ];
 
-type Machine = { 
-  id: string; 
-  name: string; 
-  plate_number: string | null; 
-  make: string | null;
-  model: string | null;
-  vehicle_type: string | null;
-  has_trailer: boolean | null;
-  trailer_plate: string | null;
-  current_odometer_km: number | null; 
-  cover_image_url: string | null;
-};
+type Machine = FleetVehicle;
 
 export type Tyre = {
   id: string;
@@ -210,13 +204,15 @@ export default function Tyres() {
     const [{ data: m }, { data: rawT, error: tErr }] = await Promise.all([
       supabase
         .from("machines")
-        .select("id, name, plate_number, make, model, vehicle_type, has_trailer, trailer_plate, current_odometer_km, cover_image_url")
+        .select(SAFE_MACHINE_COLUMNS)
+        .in("category", ["Vehicle", "Trailer"])
         .order("name"),
       supabase.from("tyres").select("*").order("created_at", { ascending: false }),
     ]);
 
     if (tErr) toast.error(tErr.message);
-    setMachines((m ?? []) as Machine[]);
+    const parsedMachines = (m ?? []).map(parseMachine);
+    setMachines(parsedMachines);
     const parsedTyres = (rawT ?? []).map(parseTyre);
     setTyres(parsedTyres);
     setLoading(false);
@@ -238,22 +234,24 @@ export default function Tyres() {
     [machines, selectedMachine]
   );
 
-  // Auto-detect layout based on vehicle type
+  // Set layout strictly based on vehicle/trailer's configured axle configuration
+  // Fulfills "know like this car it axle is this so the tyre is this"
   useEffect(() => {
     if (!currentMachine) return;
-    const vt = currentMachine.vehicle_type?.toLowerCase() || "";
-    if (vt === "trailer" || currentMachine.has_trailer) {
-      setTruckLayoutId("6x4");
-    } else if (vt === "prime_mover" || vt === "hauler" || vt === "tanker") {
-      setTruckLayoutId("6x4");
-    } else if (vt === "rigid_truck") {
-      setTruckLayoutId("4x2");
-    } else if (vt === "pickup" || vt === "van") {
-      setTruckLayoutId("4_wheel");
+    if (currentMachine.axle_configuration && TRUCK_LAYOUTS[currentMachine.axle_configuration]) {
+      setTruckLayoutId(currentMachine.axle_configuration);
     } else {
-      setTruckLayoutId("6x4");
+      const isTrailer = currentMachine.is_trailer || currentMachine.category === "Trailer";
+      if (isTrailer) {
+        setTruckLayoutId("trailer_tri");
+      } else {
+        const vt = currentMachine.vehicle_type?.toLowerCase() || "";
+        if (vt === "rigid") setTruckLayoutId("4x2");
+        else if (vt === "van_pickup" || vt === "pickup" || vt === "van") setTruckLayoutId("4_wheel");
+        else setTruckLayoutId("6x4");
+      }
     }
-  }, [currentMachine?.id]);
+  }, [currentMachine?.id, currentMachine?.axle_configuration]);
 
   const machineMap = useMemo(() => new Map(machines.map((m) => [m.id, m])), [machines]);
 
@@ -426,16 +424,29 @@ export default function Tyres() {
           </div>
 
           <Select value={selectedMachine} onValueChange={setSelectedMachine}>
-            <SelectTrigger className="w-72 h-10">
-              <SelectValue placeholder="Pick a vehicle" />
+            <SelectTrigger className="w-80 h-10">
+              <SelectValue placeholder="Pick a vehicle or trailer" />
             </SelectTrigger>
-            <SelectContent>
-              {machines.map((m) => (
-                <SelectItem key={m.id} value={m.id}>
-                  {m.plate_number ? `${m.name} (${m.plate_number})` : m.name}
-                  {m.has_trailer ? " + Trailer" : ""}
-                </SelectItem>
-              ))}
+            <SelectContent className="max-h-80">
+              {machines.map((m) => {
+                const isTrl = m.is_trailer || m.category === "Trailer";
+                return (
+                  <SelectItem key={m.id} value={m.id}>
+                    <div className="flex items-center gap-2">
+                      <span className={`text-[10px] font-semibold px-1 rounded uppercase ${isTrl ? 'bg-emerald-500/15 text-emerald-700' : 'bg-blue-500/15 text-blue-700'}`}>
+                        {isTrl ? 'Trailer' : 'Truck'}
+                      </span>
+                      <span className="font-medium text-foreground">{m.name}</span>
+                      {m.plate_number && <span className="text-muted-foreground font-mono text-xs">({m.plate_number})</span>}
+                      {m.axle_configuration && (
+                        <span className="text-[10px] text-muted-foreground ml-auto bg-muted px-1.5 py-0.5 rounded border">
+                          {m.axle_configuration}
+                        </span>
+                      )}
+                    </div>
+                  </SelectItem>
+                );
+              })}
             </SelectContent>
           </Select>
 

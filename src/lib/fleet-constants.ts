@@ -66,7 +66,7 @@ export function formatPositionName(pos: string): string {
   return map[normalized] || map[pos] || pos;
 }
 
-export type TruckLayoutConfigId = "6x4" | "4x2" | "8x4" | "trailer_tri" | "4_wheel";
+export type TruckLayoutConfigId = "6x4" | "4x2" | "8x4" | "trailer_tri" | "trailer_tandem" | "4_wheel";
 
 export interface AxleWheelSlot {
   id: string;
@@ -256,6 +256,38 @@ export const TRUCK_LAYOUTS: Record<TruckLayoutConfigId, TruckLayoutConfig> = {
           { id: "T3-LI", label: "Left Inner", side: "left", tier: "inner" },
           { id: "T3-RI", label: "Right Inner", side: "right", tier: "inner" },
           { id: "T3-RO", label: "Right Outer", side: "right", tier: "outer" },
+        ],
+      },
+    ],
+  },
+  trailer_tandem: {
+    id: "trailer_tandem",
+    name: "Tandem Axle Trailer (8 Tyres)",
+    description: "2 Dual Trailer Axles (Cargo Trailer / 2-Axle Semi-Trailer)",
+    totalTyres: 8,
+    axles: [
+      {
+        id: "T1",
+        name: "Trailer Axle 1",
+        type: "trailer",
+        isDual: true,
+        slots: [
+          { id: "T1-LO", label: "Left Outer", side: "left", tier: "outer" },
+          { id: "T1-LI", label: "Left Inner", side: "left", tier: "inner" },
+          { id: "T1-RI", label: "Right Inner", side: "right", tier: "inner" },
+          { id: "T1-RO", label: "Right Outer", side: "right", tier: "outer" },
+        ],
+      },
+      {
+        id: "T2",
+        name: "Trailer Axle 2",
+        type: "trailer",
+        isDual: true,
+        slots: [
+          { id: "T2-LO", label: "Left Outer", side: "left", tier: "outer" },
+          { id: "T2-LI", label: "Left Inner", side: "left", tier: "inner" },
+          { id: "T2-RI", label: "Right Inner", side: "right", tier: "inner" },
+          { id: "T2-RO", label: "Right Outer", side: "right", tier: "outer" },
         ],
       },
     ],

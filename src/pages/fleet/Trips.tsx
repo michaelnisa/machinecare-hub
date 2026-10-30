@@ -35,29 +35,17 @@ import { toast } from "sonner";
 import { formatDate, formatNumber, formatMoney } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { useI18n } from "@/i18n/I18nProvider";
+import {
+  SAFE_MACHINE_COLUMNS,
+  SAFE_DRIVER_COLUMNS,
+  parseMachine,
+  parseDriver,
+  type FleetVehicle,
+  type FleetDriver,
+} from "@/lib/fleet-metadata";
 
-type Machine = {
-  id: string;
-  name: string;
-  plate_number: string | null;
-  current_odometer_km: number | null;
-  has_trailer: boolean | null;
-  trailer_plate: string | null;
-  trailer_make_model: string | null;
-  head_tank_capacity_l: number | null;
-  trailer_tank_capacity_l: number | null;
-  total_tank_capacity_l: number | null;
-  tank_capacity_l: number | null;
-};
-
-type Driver = {
-  id: string;
-  full_name: string;
-  phone: string | null;
-  nida_number: string | null;
-  next_of_kin_name: string | null;
-  next_of_kin_phone: string | null;
-};
+type Machine = FleetVehicle;
+type Driver = FleetDriver;
 
 type ExpenseSummary = {
   total: number;
@@ -104,6 +92,37 @@ const TAB_LABELS: Record<(typeof TABS)[number], string> = {
   completed: "Completed",
   cancelled: "Cancelled",
 };
+
+function parseTripRecord(raw: any): Trip {
+  let client_name = raw.client_name ?? null;
+  let client_order_no = raw.client_order_no ?? null;
+  let roundtrip_hours_est = raw.roundtrip_hours_est ?? null;
+  let is_round_trip = raw.is_round_trip ?? true;
+  let cargo_description = raw.cargo_description ?? null;
+  let purpose = raw.purpose ?? null;
+
+  if (raw.cargo_description && typeof raw.cargo_description === "string" && raw.cargo_description.startsWith("{") && raw.cargo_description.endsWith("}")) {
+    try {
+      const parsed = JSON.parse(raw.cargo_description);
+      if (parsed.client) client_name = parsed.client;
+      if (parsed.order_no) client_order_no = parsed.order_no;
+      if (parsed.est_hours != null) roundtrip_hours_est = Number(parsed.est_hours);
+      if (parsed.is_round_trip != null) is_round_trip = Boolean(parsed.is_round_trip);
+      if (parsed.purpose) purpose = parsed.purpose;
+      if (parsed.cargo) cargo_description = parsed.cargo;
+    } catch {}
+  }
+
+  return {
+    ...raw,
+    client_name,
+    client_order_no,
+    roundtrip_hours_est,
+    is_round_trip,
+    cargo_description,
+    purpose,
+  };
+}
 
 function calculateRoundtripDisplay(t: Trip) {
   if (t.status === "completed" && t.start_at && t.end_at) {
@@ -177,20 +196,20 @@ export default function Trips() {
       supabase.from("trips").select("*").order("created_at", { ascending: false }),
       supabase
         .from("machines")
-        .select("id, name, plate_number, current_odometer_km, has_trailer, trailer_plate, trailer_make_model, head_tank_capacity_l, trailer_tank_capacity_l, total_tank_capacity_l, tank_capacity_l")
+        .select(SAFE_MACHINE_COLUMNS)
         .order("name"),
       supabase
         .from("drivers")
-        .select("id, full_name, phone, nida_number, next_of_kin_name, next_of_kin_phone")
+        .select(SAFE_DRIVER_COLUMNS)
         .eq("status", "active")
         .order("full_name"),
       (supabase as any).from("trip_expenses").select("id, trip_id, expense_type, amount"),
     ]);
 
     if (tErr) toast.error(tErr.message);
-    setTrips((t ?? []) as Trip[]);
-    setMachines((m ?? []) as Machine[]);
-    setDrivers((d ?? []) as Driver[]);
+    setTrips((t ?? []).map(parseTripRecord));
+    setMachines((m ?? []).map(parseMachine));
+    setDrivers((d ?? []).map(parseDriver));
 
     const expMap = new Map<string, ExpenseSummary>();
     (exp ?? []).forEach((e: any) => {
@@ -617,6 +636,15 @@ function NewTripDialog({ open, onOpenChange, machines, drivers, onSaved }: {
       estReturnAt = new Date(now.getTime() + estHours * 3600 * 1000).toISOString();
     }
 
+    const cargoMeta = {
+      client: form.client_name.trim() || null,
+      order_no: form.client_order_no.trim() || null,
+      est_hours: estHours,
+      is_round_trip: form.is_round_trip,
+      purpose: form.purpose.trim() || null,
+      cargo: form.cargo_description.trim() || null,
+    };
+
     const payload = {
       organisation_id: profile.organisation_id,
       machine_id: form.machine_id,
@@ -627,7 +655,7 @@ function NewTripDialog({ open, onOpenChange, machines, drivers, onSaved }: {
       origin: form.origin.trim() || null,
       destination: form.destination.trim() || null,
       route_notes: form.route_notes.trim() || null,
-      cargo_description: form.cargo_description.trim() || null,
+      cargo_description: JSON.stringify(cargoMeta),
       is_round_trip: form.is_round_trip,
       roundtrip_hours_est: estHours,
       estimated_return_at: estReturnAt,
@@ -637,7 +665,23 @@ function NewTripDialog({ open, onOpenChange, machines, drivers, onSaved }: {
       created_by: user?.id,
     };
 
-    const { error } = await supabase.from("trips").insert(payload);
+    let { error } = await supabase.from("trips").insert(payload);
+    if (error && error.message?.includes("column") && error.message?.includes("does not exist")) {
+      const safePayload = {
+        organisation_id: profile.organisation_id,
+        machine_id: form.machine_id,
+        driver_id: form.driver_id || null,
+        origin: form.origin.trim() || null,
+        destination: form.destination.trim() || null,
+        cargo_description: JSON.stringify(cargoMeta),
+        start_odo: form.start_odo === "" ? null : Number(form.start_odo),
+        status: form.start_now ? "in_progress" : "planned",
+        start_at: form.start_now ? now.toISOString() : null,
+      };
+      const res = await supabase.from("trips").insert(safePayload);
+      error = res.error;
+    }
+
     setSubmitting(false);
     if (error) return toast.error(error.message);
     toast.success(form.start_now ? "Trip dispatched and active" : "Trip scheduled successfully");
