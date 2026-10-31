@@ -23,9 +23,11 @@ import {
   SAFE_TYRE_COLUMNS,
   parseMachine,
   parseDriver,
+  parseTrip,
   AXLE_CONFIG_OPTIONS,
   type FleetVehicle,
   type FleetDriver,
+  type FleetTrip,
 } from "@/lib/fleet-metadata";
 import { VehicleDialog } from "./Vehicles";
 import {
@@ -129,7 +131,7 @@ export default function FleetVehicleDetail() {
   const [loading, setLoading] = useState(true);
   const [vehicle, setVehicle] = useState<FleetVehicle | null>(null);
   const [allTrailers, setAllTrailers] = useState<FleetVehicle[]>([]);
-  const [trips, setTrips] = useState<Trip[]>([]);
+  const [trips, setTrips] = useState<FleetTrip[]>([]);
   const [tyres, setTyres] = useState<Tyre[]>([]);
   const [schedules, setSchedules] = useState<Schedule[]>([]);
   const [serviceLogs, setServiceLogs] = useState<ServiceLog[]>([]);
@@ -187,7 +189,7 @@ export default function FleetVehicleDetail() {
 
       const parsedVehicle = parseMachine(rawVeh);
       setVehicle(parsedVehicle);
-      setTrips((rawTrips ?? []) as Trip[]);
+      setTrips(((rawTrips ?? []).map(parseTrip)) as FleetTrip[]);
       setTyres((rawTyres ?? []) as Tyre[]);
       setSchedules((rawSched ?? []) as Schedule[]);
       setServiceLogs((rawLogs ?? []) as ServiceLog[]);
@@ -864,7 +866,10 @@ export default function FleetVehicleDetail() {
                             </div>
                           </td>
                           <td className="px-4 py-3 text-muted-foreground text-xs">
-                            {tr.cargo_description || tr.purpose || "General freight"}
+                            {tr.client_name ? (
+                              <span className="font-semibold text-foreground block">{tr.client_name}</span>
+                            ) : null}
+                            <span>{tr.raw_cargo || (tr as any).purpose || "General freight"}</span>
                           </td>
                           <td className="px-4 py-3 text-foreground font-medium">
                             {driver ? driver.full_name : "Unassigned"}

@@ -100,6 +100,8 @@ function parseTripRecord(raw: any): Trip {
   let is_round_trip = raw.is_round_trip ?? true;
   let cargo_description = raw.cargo_description ?? null;
   let purpose = raw.purpose ?? null;
+  let route_notes = raw.route_notes ?? null;
+  let estimated_return_at = raw.estimated_return_at ?? null;
 
   if (raw.cargo_description && typeof raw.cargo_description === "string" && raw.cargo_description.startsWith("{") && raw.cargo_description.endsWith("}")) {
     try {
@@ -110,6 +112,8 @@ function parseTripRecord(raw: any): Trip {
       if (parsed.is_round_trip != null) is_round_trip = Boolean(parsed.is_round_trip);
       if (parsed.purpose) purpose = parsed.purpose;
       if (parsed.cargo) cargo_description = parsed.cargo;
+      if (parsed.route_notes) route_notes = parsed.route_notes;
+      if (parsed.estimated_return_at) estimated_return_at = parsed.estimated_return_at;
     } catch {}
   }
 
@@ -121,6 +125,8 @@ function parseTripRecord(raw: any): Trip {
     is_round_trip,
     cargo_description,
     purpose,
+    route_notes,
+    estimated_return_at,
   };
 }
 
@@ -650,43 +656,33 @@ function NewTripDialog({ open, onOpenChange, machines, drivers, onSaved }: {
       is_round_trip: form.is_round_trip,
       purpose: form.purpose.trim() || null,
       cargo: form.cargo_description.trim() || null,
+      route_notes: form.route_notes.trim() || null,
+      estimated_return_at: estReturnAt,
     };
 
-    const payload = {
+    // Use confirmed schema columns for public.trips; extended client order and route metadata
+    // are stored safely in cargo_description JSON matching parseTripRecord and serializeTripPayload.
+    const safePayload = {
       organisation_id: profile.organisation_id,
       machine_id: form.machine_id,
       driver_id: form.driver_id || null,
-      client_name: form.client_name.trim() || null,
-      client_order_no: form.client_order_no.trim() || null,
-      purpose: form.purpose.trim() || null,
+      purpose: form.purpose.trim() || (form.client_name.trim() ? `Client: ${form.client_name.trim()}` : null),
       origin: form.origin.trim() || null,
       destination: form.destination.trim() || null,
-      route_notes: form.route_notes.trim() || null,
       cargo_description: JSON.stringify(cargoMeta),
-      is_round_trip: form.is_round_trip,
-      roundtrip_hours_est: estHours,
-      estimated_return_at: estReturnAt,
       start_odo: form.start_odo === "" ? null : Number(form.start_odo),
       status: form.start_now ? "in_progress" : "planned",
       start_at: form.start_now ? now.toISOString() : null,
       created_by: user?.id,
     };
 
-    let { error } = await supabase.from("trips").insert(payload);
-    if (error && error.message?.includes("column") && error.message?.includes("does not exist")) {
-      const safePayload = {
-        organisation_id: profile.organisation_id,
-        machine_id: form.machine_id,
-        driver_id: form.driver_id || null,
-        origin: form.origin.trim() || null,
-        destination: form.destination.trim() || null,
-        cargo_description: JSON.stringify(cargoMeta),
-        start_odo: form.start_odo === "" ? null : Number(form.start_odo),
-        status: form.start_now ? "in_progress" : "planned",
-        start_at: form.start_now ? now.toISOString() : null,
-      };
-      const res = await supabase.from("trips").insert(safePayload);
-      error = res.error;
+    const { error } = await supabase.from("trips").insert(safePayload);
+
+    if (!error && form.start_now && safePayload.start_odo != null) {
+      await supabase
+        .from("machines")
+        .update({ current_odometer_km: safePayload.start_odo, current_hours: safePayload.start_odo })
+        .eq("id", form.machine_id);
     }
 
     setSubmitting(false);
