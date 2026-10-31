@@ -31,6 +31,7 @@ export const AXLE_CONFIG_OPTIONS: { value: TruckLayoutConfigId; label: string; d
 
 export interface FleetVehicle {
   id: string;
+  vehicle_code: string; // Unique Fleet ID (e.g. TRK-001 or TRL-001)
   name: string;
   plate_number: string | null;
   make: string | null;
@@ -68,7 +69,27 @@ export interface FleetVehicle {
   trailer_make_model: string | null;
 }
 
-export function parseMachine(raw: any): FleetVehicle {
+export function generateVehicleCode(category: "Vehicle" | "Trailer" | string = "Vehicle", seed?: string, index?: number): string {
+  const isTrailer = String(category).toLowerCase().includes("trailer");
+  const prefix = isTrailer ? "TRL" : "TRK";
+
+  if (typeof index === "number" && index >= 0) {
+    return `${prefix}-${String(index + 1).padStart(3, "0")}`;
+  }
+  if (seed) {
+    const clean = seed.trim().toUpperCase();
+    if (/^[A-Z]{2,4}-\d{2,4}$/.test(clean)) return clean;
+    let hash = 0;
+    for (let i = 0; i < seed.length; i++) {
+      hash = (hash * 33 + seed.charCodeAt(i)) % 99;
+    }
+    return `${prefix}-${String((Math.abs(hash) % 99) + 1).padStart(3, "0")}`;
+  }
+  const rand = Math.floor(1 + Math.random() * 99);
+  return `${prefix}-${String(rand).padStart(3, "0")}`;
+}
+
+export function parseMachine(raw: any, index?: number): FleetVehicle {
   let vehicle_type = "rigid_truck";
   let axle_configuration = "6x4";
   let is_trailer = raw.category === "Trailer";
@@ -79,6 +100,7 @@ export function parseMachine(raw: any): FleetVehicle {
   let trailer_tank_capacity_l: number | null = null;
   let total_tank_capacity_l: number | null = raw.tank_capacity_l ?? null;
   let user_notes: string | null = raw.notes ?? null;
+  let vehicle_code: string | null = null;
 
   let current_hours: number | null = raw.current_hours ?? null;
   let auto_pm_enabled: boolean = false;
@@ -88,6 +110,7 @@ export function parseMachine(raw: any): FleetVehicle {
   if (raw.notes && typeof raw.notes === "string" && raw.notes.startsWith("{") && raw.notes.endsWith("}")) {
     try {
       const parsed = JSON.parse(raw.notes);
+      if (parsed.vehicle_code) vehicle_code = parsed.vehicle_code;
       if (parsed.vehicle_type) vehicle_type = parsed.vehicle_type;
       if (parsed.axle_configuration) axle_configuration = parsed.axle_configuration;
       if (parsed.is_trailer != null) is_trailer = Boolean(parsed.is_trailer);
@@ -115,10 +138,20 @@ export function parseMachine(raw: any): FleetVehicle {
     axle_configuration = "trailer_tri";
   }
 
+  // Deterministic fallback for sequential or seeded vehicle code
+  if (!vehicle_code) {
+    vehicle_code = generateVehicleCode(
+      is_trailer ? "Trailer" : (raw.category || "Vehicle"),
+      raw.plate_number || raw.name || raw.id,
+      index
+    );
+  }
+
   const has_trailer = Boolean(is_trailer || linked_trailer_id || linked_trailer_plate);
 
   return {
     ...raw,
+    vehicle_code,
     current_hours,
     vehicle_type,
     axle_configuration: axle_configuration as TruckLayoutConfigId,
@@ -140,6 +173,7 @@ export function parseMachine(raw: any): FleetVehicle {
 }
 
 export function serializeMachinePayload(data: {
+  vehicle_code?: string | null;
   name: string;
   plate_number: string | null;
   make: string | null;
@@ -171,6 +205,7 @@ export function serializeMachinePayload(data: {
   user_notes?: string | null;
 }) {
   const meta = {
+    vehicle_code: data.vehicle_code ? data.vehicle_code.trim().toUpperCase() : null,
     vehicle_type: data.vehicle_type,
     axle_configuration: data.axle_configuration,
     is_trailer: data.is_trailer,

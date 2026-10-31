@@ -42,6 +42,7 @@ import { MachineHealthStrip } from "@/components/MachineHealthStrip";
 import { MachineStatusControl } from "@/components/MachineStatusControl";
 import { MachineSafetyProfile } from "@/components/MachineSafetyProfile";
 import { useAuth } from "@/contexts/AuthContext";
+import { parseMachine } from "@/lib/fleet-metadata";
 
 export default function MachineDetail() {
   const { id } = useParams<{ id: string }>();
@@ -189,6 +190,7 @@ export default function MachineDetail() {
     );
 
   const Icon = CATEGORY_ICONS[machine.category] ?? CATEGORY_ICONS.Other;
+  const parsed = machine ? parseMachine(machine) : null;
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -204,6 +206,12 @@ export default function MachineDetail() {
             <h1 className="text-2xl font-semibold tracking-tight">
               {machine.name}
             </h1>
+            {parsed?.vehicle_code && (
+              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded text-xs font-mono font-bold bg-muted/80 text-foreground border border-border/80">
+                <span className="text-[10px] uppercase font-sans text-muted-foreground">ID</span>
+                <span>{parsed.vehicle_code}</span>
+              </span>
+            )}
             <MachineStatusControl
               machineId={machine.id}
               status={machine.status}
@@ -669,7 +677,7 @@ export default function MachineDetail() {
         qrEnabled={machine.qr_enabled !== false}
         onQrEnabledChange={(v) => setMachine((m: any) => ({ ...m, qr_enabled: v }))}
         plateNumber={machine.plate_number}
-        registrationNumber={machine.registration_number}
+        registrationNumber={parsed?.vehicle_code || machine.registration_number}
         currentHours={machine.current_hours}
         category={machine.category}
       />

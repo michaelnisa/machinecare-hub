@@ -30,7 +30,11 @@ import {
   Fuel,
   Wrench,
   Clock,
-  CheckCircle2
+  CheckCircle2,
+  List,
+  LayoutGrid,
+  RefreshCw,
+  Eye
 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
@@ -41,6 +45,7 @@ import {
   SAFE_MACHINE_COLUMNS,
   parseMachine,
   serializeMachinePayload,
+  generateVehicleCode,
   type FleetVehicle,
   AXLE_CONFIG_OPTIONS
 } from "@/lib/fleet-metadata";
@@ -81,6 +86,7 @@ const VEHICLE_TYPES = [
 
 const EMPTY_FORM = {
   category: "Vehicle" as "Vehicle" | "Trailer",
+  vehicle_code: "",
   name: "",
   plate_number: "",
   make: "",
@@ -122,6 +128,7 @@ export default function Vehicles() {
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("all");
   const [assetTab, setAssetTab] = useState<"all" | "vehicles" | "trailers">("all");
+  const [viewMode, setViewMode] = useState<"table" | "cards">("table");
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<FleetVehicle | null>(null);
   const [initialCategory, setInitialCategory] = useState<"Vehicle" | "Trailer">("Vehicle");
@@ -153,7 +160,7 @@ export default function Vehicles() {
     const err = e1 || e2 || e3 || e4 || e5;
     if (err) toast.error(err.message);
 
-    const parsedMachines = (m ?? []).map(parseMachine);
+    const parsedMachines = (m ?? []).map((raw, idx) => parseMachine(raw, idx));
     setMachines(parsedMachines);
     setTrips((t ?? []) as Trip[]);
     setSchedules((s ?? []) as Schedule[]);
@@ -212,6 +219,7 @@ export default function Vehicles() {
         const q = search.toLowerCase();
         if (
           !m.name.toLowerCase().includes(q) &&
+          !(m.vehicle_code ?? "").toLowerCase().includes(q) &&
           !(m.plate_number ?? "").toLowerCase().includes(q) &&
           !(m.trailer_plate ?? "").toLowerCase().includes(q) &&
           !(m.make ?? "").toLowerCase().includes(q) &&
@@ -322,7 +330,7 @@ export default function Vehicles() {
         <div className="flex flex-wrap items-center gap-2">
           <div className="relative flex-1 min-w-[200px] max-w-sm">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search plate, name, axle..." className="pl-9 h-9 text-sm" />
+            <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search ID, plate, name, axle..." className="pl-9 h-9 text-sm" />
           </div>
           <select
             value={status}
@@ -334,6 +342,28 @@ export default function Vehicles() {
             <option value="under_maintenance">Under maintenance</option>
             <option value="retired">Retired</option>
           </select>
+          <div className="flex items-center rounded-lg border border-border bg-muted/40 p-0.5">
+            <Button
+              type="button"
+              variant={viewMode === "table" ? "secondary" : "ghost"}
+              size="sm"
+              className="h-8 px-2.5 text-xs gap-1.5 cursor-pointer"
+              onClick={() => setViewMode("table")}
+              title="Table View"
+            >
+              <List className="h-3.5 w-3.5" /> Table
+            </Button>
+            <Button
+              type="button"
+              variant={viewMode === "cards" ? "secondary" : "ghost"}
+              size="sm"
+              className="h-8 px-2.5 text-xs gap-1.5 cursor-pointer"
+              onClick={() => setViewMode("cards")}
+              title="Badges / Cards View"
+            >
+              <LayoutGrid className="h-3.5 w-3.5" /> Badges
+            </Button>
+          </div>
         </div>
       </div>
 
@@ -354,6 +384,142 @@ export default function Vehicles() {
             ) : undefined
           }
         />
+      ) : viewMode === "cards" ? (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {filtered.map((m) => {
+            const isTrailer = m.is_trailer || m.category === "Trailer";
+            const driver = currentDriver.get(m.id);
+            const axleMatch = AXLE_CONFIG_OPTIONS.find((a) => a.value === m.axle_configuration);
+            const totalTank = m.total_tank_capacity_l ?? m.tank_capacity_l;
+
+            return (
+              <div
+                key={m.id}
+                className="group relative rounded-xl border border-border bg-card p-4 shadow-2xs hover:shadow-sm hover:border-primary/40 transition-all flex flex-col justify-between"
+              >
+                <div className="space-y-3">
+                  {/* Card Header: Photo + Name + ID + Status */}
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                      <Link
+                        to={`/machines/${m.id}`}
+                        className="flex h-12 w-14 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-border bg-muted ring-2 ring-transparent group-hover:ring-primary/20 transition-all"
+                      >
+                        <CoverImage
+                          value={m.cover_image_url}
+                          alt={m.name}
+                          className="h-full w-full object-cover"
+                          fallback={isTrailer ? <Container className="h-6 w-6 text-emerald-600" /> : <Truck className="h-6 w-6 text-muted-foreground" />}
+                        />
+                      </Link>
+                      <div>
+                        <Link
+                          to={`/machines/${m.id}`}
+                          className="font-semibold text-foreground group-hover:text-primary transition-colors block text-base leading-tight"
+                        >
+                          {m.name}
+                        </Link>
+                        <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                          <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-mono font-bold bg-muted/80 text-foreground border border-border/80">
+                            <span className="text-[9px] uppercase font-sans text-muted-foreground">ID</span>
+                            <span>{m.vehicle_code}</span>
+                          </div>
+                          {isTrailer ? (
+                            <span className="rounded bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-600 border border-emerald-500/20">
+                              Trailer
+                            </span>
+                          ) : (
+                            <span className="rounded bg-blue-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-blue-600 border border-blue-500/20">
+                              Truck
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    <StatusBadge status={m.status} />
+                  </div>
+
+                  {/* Quick Specifications */}
+                  <div className="space-y-1.5 text-xs text-muted-foreground pt-2 border-t border-border/60">
+                    <div className="flex items-center justify-between">
+                      <span className="text-muted-foreground">Plate Number:</span>
+                      <span className="font-semibold text-foreground font-mono">{m.plate_number || "—"}</span>
+                    </div>
+
+                    <div className="flex items-center justify-between">
+                      <span className="text-muted-foreground">Axle & Layout:</span>
+                      <span className="font-medium text-foreground text-right truncate max-w-[200px]" title={axleMatch?.label}>
+                        {axleMatch ? axleMatch.label.split("(")[0].trim() : m.axle_configuration || "6x4"}
+                      </span>
+                    </div>
+
+                    {!isTrailer && (
+                      <div className="flex items-center justify-between">
+                        <span className="text-muted-foreground">Hitched Unit:</span>
+                        {m.has_trailer && m.trailer_plate ? (
+                          <span className="font-medium text-primary flex items-center gap-1">
+                            <Link2 className="h-3 w-3" /> {m.trailer_plate}
+                          </span>
+                        ) : (
+                          <span className="italic text-muted-foreground">Solo</span>
+                        )}
+                      </div>
+                    )}
+
+                    <div className="flex items-center justify-between">
+                      <span className="text-muted-foreground">Driver:</span>
+                      <span className="font-medium text-foreground">{driver?.name ?? "Unassigned"}</span>
+                    </div>
+
+                    {totalTank != null && totalTank > 0 && (
+                      <div className="flex items-center justify-between">
+                        <span className="text-muted-foreground">Tank Capacity:</span>
+                        <span className="font-medium text-foreground">{formatNumber(totalTank)} L</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Card Footer Actions */}
+                <div className="flex items-center justify-between gap-2 pt-3 mt-3 border-t border-border/60">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="flex-1 h-8 text-xs gap-1.5 cursor-pointer"
+                    asChild
+                  >
+                    <Link to={`/machines/${m.id}`}>
+                      <Eye className="h-3.5 w-3.5 text-primary" /> View Details
+                    </Link>
+                  </Button>
+
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 cursor-pointer"
+                    onClick={() => { setQrMachine(m); setQrOpen(true); }}
+                    title="Asset QR Code"
+                  >
+                    <QrCode className="h-3.5 w-3.5 text-primary" />
+                  </Button>
+
+                  {canWrite && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 cursor-pointer"
+                      onClick={() => { setEditing(m); setOpen(true); }}
+                      title="Edit asset"
+                    >
+                      <Pencil className="h-3.5 w-3.5" />
+                    </Button>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
       ) : (
         <div className="overflow-hidden rounded-xl border border-border bg-card">
           <div className="border-b border-border px-5 py-3 text-sm font-medium flex items-center justify-between">
@@ -401,10 +567,14 @@ export default function Vehicles() {
                             />
                           </div>
                           <div>
-                            <div className="flex items-center gap-1.5">
-                              <Link to={`/machines/${m.id}`} className="font-medium hover:underline text-foreground">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <Link to={`/machines/${m.id}`} className="font-semibold hover:underline text-foreground">
                                 {m.name}
                               </Link>
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-mono font-bold bg-muted/80 text-foreground border border-border/80">
+                                <span className="text-[9px] uppercase font-sans text-muted-foreground">ID</span>
+                                <span>{m.vehicle_code}</span>
+                              </span>
                               {isTrailer ? (
                                 <span className="rounded bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-600 border border-emerald-500/20">
                                   Trailer
@@ -558,6 +728,7 @@ export default function Vehicles() {
         machine={editing}
         initialCategory={initialCategory}
         availableTrailers={fleetTrailers}
+        existingCount={initialCategory === "Trailer" ? fleetTrailers.length : powerUnits.length}
         onSaved={load}
       />
 
@@ -570,6 +741,7 @@ export default function Vehicles() {
           machineName={qrMachine.name}
           qrEnabled={true}
           plateNumber={qrMachine.plate_number}
+          registrationNumber={qrMachine.vehicle_code}
           currentHours={qrMachine.current_odometer_km}
           category={qrMachine.category}
           organisationName={profile?.organisation_id}
@@ -593,6 +765,7 @@ function VehicleDialog({
   machine,
   initialCategory = "Vehicle",
   availableTrailers,
+  existingCount,
   onSaved,
 }: {
   open: boolean;
@@ -600,6 +773,7 @@ function VehicleDialog({
   machine: FleetVehicle | null;
   initialCategory?: "Vehicle" | "Trailer";
   availableTrailers: FleetVehicle[];
+  existingCount?: number;
   onSaved: () => void;
 }) {
   const { profile, user } = useAuth();
@@ -622,6 +796,7 @@ function VehicleDialog({
 
         setForm({
           category: (machine.category === "Trailer" ? "Trailer" : "Vehicle") as "Vehicle" | "Trailer",
+          vehicle_code: machine.vehicle_code || generateVehicleCode(machine.category, undefined, existingCount ?? 0),
           name: machine.name,
           plate_number: machine.plate_number ?? "",
           make: machine.make ?? "",
@@ -654,6 +829,7 @@ function VehicleDialog({
         setForm({
           ...EMPTY_FORM,
           category: initialCategory,
+          vehicle_code: generateVehicleCode(initialCategory, undefined, existingCount ?? 0),
           is_trailer: isTrailer,
           vehicle_type: isTrailer ? "trailer" : "truck",
           axle_configuration: isTrailer ? "trailer_tri" : "6x4",
@@ -662,7 +838,7 @@ function VehicleDialog({
       setPhotoFile(null);
       setPhotoPreview(null);
     }
-  }, [open, machine, initialCategory]);
+  }, [open, machine, initialCategory, existingCount]);
 
   const onPhotoSelected = (file: File | null) => {
     if (!file) { setPhotoFile(null); setPhotoPreview(null); return; }
@@ -767,6 +943,7 @@ function VehicleDialog({
 
       // Build safe payload serialized into standard schema and metadata JSON
       const safePayload = serializeMachinePayload({
+        vehicle_code: form.vehicle_code.trim() || null,
         name: form.name.trim(),
         plate_number: form.plate_number.trim() || null,
         make: form.make.trim() || null,
@@ -895,11 +1072,13 @@ function VehicleDialog({
                 <Button
                   type="button"
                   variant={form.category === "Vehicle" ? "default" : "outline"}
-                  className="flex items-center justify-center gap-2"
+                  className="flex items-center justify-center gap-2 cursor-pointer"
                   onClick={() => {
+                    const currentNum = form.vehicle_code.match(/\d+$/)?.[0] ?? String((existingCount ?? 0) + 1).padStart(3, "0");
                     setForm((prev) => ({
                       ...prev,
                       category: "Vehicle",
+                      vehicle_code: `TRK-${currentNum.padStart(3, "0")}`,
                       is_trailer: false,
                       vehicle_type: "truck",
                       axle_configuration: "6x4",
@@ -911,11 +1090,13 @@ function VehicleDialog({
                 <Button
                   type="button"
                   variant={form.category === "Trailer" ? "default" : "outline"}
-                  className="flex items-center justify-center gap-2"
+                  className="flex items-center justify-center gap-2 cursor-pointer"
                   onClick={() => {
+                    const currentNum = form.vehicle_code.match(/\d+$/)?.[0] ?? String((existingCount ?? 0) + 1).padStart(3, "0");
                     setForm((prev) => ({
                       ...prev,
                       category: "Trailer",
+                      vehicle_code: `TRL-${currentNum.padStart(3, "0")}`,
                       is_trailer: true,
                       vehicle_type: "trailer",
                       axle_configuration: "trailer_tri",
@@ -958,15 +1139,49 @@ function VehicleDialog({
               </div>
             </div>
 
-            {/* Name */}
+            {/* Name & Asset ID / Code */}
             <div className="space-y-1.5 sm:col-span-2">
-              <Label>{isTrailer ? "Trailer Name / Unit ID *" : "Vehicle Name *"}</Label>
-              <Input
-                value={form.name}
-                onChange={(e) => setForm({ ...form, name: e.target.value })}
-                placeholder={isTrailer ? "e.g. Tanker Semi-Trailer #01 (BPW)" : "e.g. Scania R500 Prime Mover"}
-                maxLength={100}
-              />
+              <div className="grid gap-4 sm:grid-cols-3">
+                <div className="space-y-1.5 sm:col-span-2">
+                  <Label>{isTrailer ? "Trailer Name / Unit ID *" : "Vehicle Name *"}</Label>
+                  <Input
+                    value={form.name}
+                    onChange={(e) => setForm({ ...form, name: e.target.value })}
+                    placeholder={isTrailer ? "e.g. Tanker Semi-Trailer #01 (BPW)" : "e.g. Scania R500 Prime Mover"}
+                    maxLength={100}
+                    required
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-xs font-semibold">{isTrailer ? "Trailer ID / Code *" : "Asset ID / Code *"}</Label>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const nextCode = generateVehicleCode(
+                          form.category,
+                          undefined,
+                          (existingCount ?? 0) + Math.floor(1 + Math.random() * 20)
+                        );
+                        setForm((prev) => ({ ...prev, vehicle_code: nextCode }));
+                      }}
+                      className="text-[10px] text-primary hover:underline flex items-center gap-0.5 cursor-pointer font-medium"
+                      title="Generate next ID"
+                    >
+                      <RefreshCw className="h-2.5 w-2.5" /> Auto-Gen
+                    </button>
+                  </div>
+                  <Input
+                    value={form.vehicle_code}
+                    onChange={(e) => setForm({ ...form, vehicle_code: e.target.value.toUpperCase() })}
+                    placeholder={isTrailer ? "TRL-001" : "TRK-001"}
+                    className="font-mono font-bold text-foreground tracking-wider uppercase h-10"
+                    required
+                  />
+                  <p className="text-[10px] text-muted-foreground">{isTrailer ? "e.g. TRL-001, TRL-012" : "e.g. TRK-001, FLT-042"}</p>
+                </div>
+              </div>
             </div>
 
             {/* Vehicle Type (Only for power units) */}
