@@ -2,6 +2,7 @@ import { Link } from "react-router-dom";
 import { Wrench, Sparkles, PenTool, ArrowRight, Home, LayoutDashboard } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
+import { isPlatformAdmin } from "@/lib/admin";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 
 interface BlogNavbarProps {
@@ -9,7 +10,8 @@ interface BlogNavbarProps {
 }
 
 export function BlogNavbar({ onSearchClick }: BlogNavbarProps) {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
+  const isAdmin = isPlatformAdmin(user?.email || profile?.email);
 
   return (
     <header className="sticky top-0 z-40 border-b border-border/70 bg-background/90 backdrop-blur-xl transition-all">
@@ -56,11 +58,13 @@ export function BlogNavbar({ onSearchClick }: BlogNavbarProps) {
 
           {user ? (
             <>
-              <Button asChild variant="outline" size="sm" className="hidden sm:inline-flex gap-1.5 border-primary/30 text-primary hover:bg-primary/5">
-                <Link to="/blog/manage">
-                  <PenTool className="h-3.5 w-3.5" /> Post Daily Blog
-                </Link>
-              </Button>
+              {isAdmin && (
+                <Button asChild variant="outline" size="sm" className="hidden sm:inline-flex gap-1.5 border-primary/30 text-primary hover:bg-primary/5">
+                  <Link to="/blog/manage">
+                    <PenTool className="h-3.5 w-3.5" /> Post Daily Blog
+                  </Link>
+                </Button>
+              )}
               <Button asChild size="sm" style={{ background: "var(--gradient-primary)" }}>
                 <Link to="/dashboard">
                   <LayoutDashboard className="h-3.5 w-3.5 mr-1.5" /> Dashboard

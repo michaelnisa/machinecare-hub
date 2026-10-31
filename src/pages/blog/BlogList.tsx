@@ -31,9 +31,11 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
+import { isPlatformAdmin } from "@/lib/admin";
 
 export default function BlogList() {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
+  const isAdmin = isPlatformAdmin(user?.email || profile?.email);
   const [posts, setPosts] = useState<BlogPost[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedCategory, setSelectedCategory] = useState<string>("All");
@@ -96,8 +98,8 @@ export default function BlogList() {
               Actionable daily engineering articles, predictive vibration standards, fluid cleanliness protocols, fleet maintenance guides, and zero-incident safety practices.
             </p>
 
-            {/* Quick in-app post button for authors */}
-            {user && (
+            {/* Quick in-app post button for authors (Platform Admin only) */}
+            {user && isAdmin && (
               <div className="mt-6 flex items-center gap-3">
                 <Button asChild size="sm" className="font-bold shadow-md" style={{ background: "var(--gradient-primary)" }}>
                   <Link to="/blog/manage">

@@ -88,6 +88,32 @@ export function Sidebar() {
         organisation?.name ||
         "Company";
 
+  const inventoryNavGroup: NavGroup = useMemo(
+    () => ({
+      id: "inventory",
+      label: "Inventory",
+      items: [
+        { to: "/inventory", label: t.nav.inventory, icon: Package },
+        { to: "/inventory/items", label: "Items & spare parts", icon: Boxes },
+        { to: "/inventory/stock", label: "Stock", icon: Warehouse },
+        { to: "/inventory/locations", label: "Locations", icon: MapPin },
+        { to: "/inventory/requests", label: "Material requests", icon: ClipboardList },
+        { to: "/inventory/transfers", label: "Transfers", icon: ArrowLeftRight },
+        { to: "/inventory/critical-spares", label: "Critical spares", icon: ShieldAlert },
+        { to: "/inventory/purchase-requests", label: "Purchase requests", icon: ShoppingCart },
+        { to: "/inventory/purchase-orders", label: "Purchase orders", icon: ClipboardList },
+        { to: "/inventory/suppliers", label: "Suppliers", icon: Building2 },
+        { to: "/inventory/quarantine", label: "Quarantine", icon: PackageX },
+        { to: "/inventory/production-materials", label: "Production materials", icon: Factory },
+        { to: "/inventory/reorder", label: "Reorder & insights", icon: TrendingUp },
+        { to: "/inventory/stock-counts", label: "Stock counts", icon: ClipboardCheck },
+        { to: "/inventory/history", label: "Inventory history", icon: History },
+        { to: "/inventory/reports", label: "Inventory reports", icon: FileBarChart },
+      ],
+    }),
+    [t],
+  );
+
   const manufacturingGroups: NavGroup[] = useMemo(
     () => [
       {
@@ -207,28 +233,7 @@ export function Sidebar() {
             },
           ]
         : []),
-      {
-        id: "inventory",
-        label: "Inventory",
-        items: [
-          { to: "/inventory", label: t.nav.inventory, icon: Package },
-          { to: "/inventory/items", label: "Items & spare parts", icon: Boxes },
-          { to: "/inventory/stock", label: "Stock", icon: Warehouse },
-          { to: "/inventory/locations", label: "Locations", icon: MapPin },
-          { to: "/inventory/requests", label: "Material requests", icon: ClipboardList },
-          { to: "/inventory/transfers", label: "Transfers", icon: ArrowLeftRight },
-          { to: "/inventory/critical-spares", label: "Critical spares", icon: ShieldAlert },
-          { to: "/inventory/purchase-requests", label: "Purchase requests", icon: ShoppingCart },
-          { to: "/inventory/purchase-orders", label: "Purchase orders", icon: ClipboardList },
-          { to: "/inventory/suppliers", label: "Suppliers", icon: Building2 },
-          { to: "/inventory/quarantine", label: "Quarantine", icon: PackageX },
-          { to: "/inventory/production-materials", label: "Production materials", icon: Factory },
-          { to: "/inventory/reorder", label: "Reorder & insights", icon: TrendingUp },
-          { to: "/inventory/stock-counts", label: "Stock counts", icon: ClipboardCheck },
-          { to: "/inventory/history", label: "Inventory history", icon: History },
-          { to: "/inventory/reports", label: "Inventory reports", icon: FileBarChart },
-        ],
-      },
+      inventoryNavGroup,
       ...(!isLite
         ? [
             {
@@ -259,7 +264,7 @@ export function Sidebar() {
         id: "system",
         label: isLite ? "Account" : "System",
         items: [
-          { to: "/blog/manage", label: "Daily Blog", icon: BookOpen },
+          ...(isAdmin ? [{ to: "/blog/manage", label: "Daily Blog", icon: BookOpen }] : []),
           { to: "/team", label: t.nav.team, icon: Users },
           { to: "/integrations", label: "Integrations", icon: Layers },
           { to: "/settings", label: t.nav.settings, icon: Settings },
@@ -267,7 +272,7 @@ export function Sidebar() {
         ],
       },
     ],
-    [t, isLite, profile?.department, isManager, isAdmin],
+    [t, isLite, profile?.department, isManager, isAdmin, inventoryNavGroup],
   );
 
   // Fleet & Logistics nav — pages not yet built (Phases 2-6) route to a
@@ -311,10 +316,10 @@ export function Sidebar() {
             label: "Checklist templates",
             icon: ClipboardList,
           },
-          { to: "/inventory", label: t.nav.inventory, icon: Package },
           { to: "/vendors", label: "Vendors", icon: Building2 },
         ],
       },
+      inventoryNavGroup,
       {
         id: "fleet-insights",
         label: "Insights",
@@ -343,14 +348,14 @@ export function Sidebar() {
         id: "system",
         label: "System",
         items: [
-          { to: "/blog/manage", label: "Daily Blog", icon: BookOpen },
+          ...(isAdmin ? [{ to: "/blog/manage", label: "Daily Blog", icon: BookOpen }] : []),
           { to: "/integrations", label: "Integrations", icon: Layers },
           { to: "/settings", label: t.nav.settings, icon: Settings },
           ...(isAdmin ? [{ to: "/admin", label: "Admin Portal", icon: ShieldAlert }] : []),
         ],
       },
     ],
-    [t, isAdmin],
+    [t, isAdmin, inventoryNavGroup],
   );
 
   // Workshop/Garage nav — a fully separate product experience from
@@ -413,7 +418,7 @@ export function Sidebar() {
         id: "system",
         label: "System",
         items: [
-          { to: "/blog/manage", label: "Daily Blog", icon: BookOpen },
+          ...(isAdmin ? [{ to: "/blog/manage", label: "Daily Blog", icon: BookOpen }] : []),
           { to: "/team", label: t.nav.team, icon: Users },
           { to: "/integrations", label: "Integrations", icon: Layers },
           { to: "/settings", label: t.nav.settings, icon: Settings },
@@ -686,7 +691,7 @@ export function Sidebar() {
         id: "system",
         label: isLite ? "Account" : "System",
         items: [
-          { to: "/blog/manage", label: "Daily Blog", icon: BookOpen },
+          ...(isAdmin ? [{ to: "/blog/manage", label: "Daily Blog", icon: BookOpen }] : []),
           { to: "/team", label: t.nav.team, icon: Users },
           { to: "/integrations", label: "Integrations", icon: Layers },
           { to: "/settings", label: t.nav.settings, icon: Settings },

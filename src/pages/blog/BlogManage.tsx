@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
-import { Link } from "react-router-dom";
+import { Link, Navigate } from "react-router-dom";
 import { BlogPost, blogService } from "@/services/blogService";
+import { isPlatformAdmin } from "@/lib/admin";
 import { DailyStreakCard } from "@/components/blog/DailyStreakCard";
 import { BlogEditorModal } from "@/components/blog/BlogEditorModal";
 import { IndustrialCover } from "@/components/blog/IndustrialCover";
@@ -55,7 +56,12 @@ import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
 
 export default function BlogManage() {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
+  const isAdmin = isPlatformAdmin(user?.email || profile?.email);
+
+  if (!isAdmin) {
+    return <Navigate to="/dashboard" replace />;
+  }
 
   const [posts, setPosts] = useState<BlogPost[]>([]);
   const [loading, setLoading] = useState(true);
