@@ -77,7 +77,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         .select("*")
         .eq("id", prof.organisation_id)
         .maybeSingle();
-      setOrganisation(org as Organisation | null);
+
+      if (org) {
+        const metaCompany =
+          user?.user_metadata?.company_name ||
+          user?.user_metadata?.organisation_name;
+        if (
+          metaCompany &&
+          (org.name === "My Company" || org.name === "MachineCare") &&
+          metaCompany.trim() !== org.name.trim()
+        ) {
+          await supabase
+            .from("organisations")
+            .update({ name: metaCompany.trim() })
+            .eq("id", org.id);
+          org.name = metaCompany.trim();
+        }
+        setOrganisation(org as Organisation | null);
+      } else {
+        setOrganisation(null);
+      }
     }
   };
 

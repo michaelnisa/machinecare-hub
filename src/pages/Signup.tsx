@@ -5,23 +5,22 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
-import type { IndustryProfile } from "@/hooks/useIndustry";
-import { IndustryPicker } from "@/components/IndustryPicker";
 import { SolutionSuitePicker, SOLUTION_SUITES, type SolutionSuite } from "@/components/SolutionSuitePicker";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Wrench, Loader2, ArrowLeft, CheckCircle2 } from "lucide-react";
+import { Wrench, Loader2, ArrowLeft, CheckCircle2, Building2, UserPlus, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { useI18n } from "@/i18n/I18nProvider";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 
-// ── Zod schemas ────────────────────────────────────────────────
-const inviteSchema = z.object({
-  full_name: z.string().trim().min(2, "Required").max(100),
-  email: z.string().trim().email("Enter a valid email").max(255),
-  password: z.string().min(8, "At least 8 characters").max(72),
+// ── Zod Schemas ────────────────────────────────────────────────
+const signupSchema = z.object({
+  full_name: z.string().trim().min(2, "Name must be at least 2 characters").max(100),
+  company_name: z.string().trim().max(100).optional(),
+  email: z.string().trim().email("Enter a valid email address").max(255),
+  password: z.string().min(6, "Password must be at least 6 characters").max(72),
 });
 
 const onboardingSchema = z.object({
@@ -30,91 +29,155 @@ const onboardingSchema = z.object({
   company: z.string().trim().min(2, "Company name must be at least 2 characters").max(100),
 });
 
-type InviteFormValues = z.infer<typeof inviteSchema>;
+type SignupFormValues = z.infer<typeof signupSchema>;
 type OnboardingFormValues = z.infer<typeof onboardingSchema>;
 
 export default function Signup() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [params] = useSearchParams();
-  const orgInviteToken = params.get("invite") || params.get("token");
-  const isApprovedSignup = Boolean(params.get("approved") || params.get("company"));
-  const isAccessGranted = Boolean(orgInviteToken || isApprovedSignup);
 
+  const orgInviteToken = params.get("invite") || params.get("token");
   const rawEmail = params.get("email") || "";
   const inviteEmail = rawEmail.includes("@") ? rawEmail : "";
+  const paramCompany = params.get("company") || "";
+
   const { t, currentLang } = useI18n();
   const isSwahili = currentLang === "sw";
 
+  const [activeTab, setActiveTab] = useState<"signup" | "demo">("signup");
   const [submitting, setSubmitting] = useState(false);
   const [accepted, setAccepted] = useState(false);
   const [emailSent, setEmailSent] = useState<string | null>(null);
   const [requestSubmitted, setRequestSubmitted] = useState(false);
-  const [industryProfile, setIndustryProfile] = useState<IndustryProfile>("manufacturing");
-  const [selectedSuite, setSelectedSuite] = useState<SolutionSuite>(SOLUTION_SUITES[0]);
+  const [selectedSuite, setSelectedSuite] = useState<SolutionSuite>(() => {
+    const indParam = params.get("industry") || params.get("suite");
+    if (indParam) {
+      const match = SOLUTION_SUITES.find(
+        (s) => s.id === indParam || s.recommendedIndustry === indParam
+      );
+      if (match) return match;
+    }
+    return SOLUTION_SUITES[0];
+  });
   const [accountTier, setAccountTier] = useState<"standard" | "enterprise">("standard");
+  const [resending, setResending] = useState(false);
+
+  const handleResendEmail = async () => {
+    if (!emailSent) return;
+    setResending(true);
+    const { error } = await supabase.auth.resend({
+      type: "signup",
+      email: emailSent,
+      options: {
+        emailRedirectTo: `${window.location.origin}/dashboard`,
+      },
+    });
+    setResending(false);
+    if (error) {
+      toast.error(error.message);
+    } else {
+      toast.success(
+        isSwahili
+          ? "Barua pepe imetumwa tena! Hakikisha kuangalia kwenye folda ya Spam/Junk."
+          : "Verification email resent! Please check your Inbox and Spam/Junk folder."
+      );
+    }
+  };
 
   useEffect(() => {
-    if (user && isAccessGranted) {
+    if (user) {
       navigate("/dashboard", { replace: true });
     }
-  }, [user, navigate, isAccessGranted]);
+  }, [user, navigate]);
 
-  // ── Invite form setup ──────────────────────────────────────────
-  const inviteForm = useForm<InviteFormValues>({
-    resolver: zodResolver(inviteSchema),
-    defaultValues: { email: inviteEmail ?? "" },
+  // ── Signup Form ──────────────────────────────────────────────
+  const signupForm = useForm<SignupFormValues>({
+    resolver: zodResolver(signupSchema),
+    defaultValues: {
+      full_name: "",
+      company_name: paramCompany || "",
+      email: inviteEmail || "",
+      password: "",
+    },
   });
 
-  // ── Onboarding form setup ──────────────────────────────────────
+  // ── Onboarding Form ──────────────────────────────────────────
   const onboardingForm = useForm<OnboardingFormValues>({
     resolver: zodResolver(onboardingSchema),
     defaultValues: { name: "", contact: "", company: "" },
   });
 
-  const onInviteSubmit = async (values: InviteFormValues) => {
+  const onSignupSubmit = async (values: SignupFormValues) => {
     if (!accepted) {
-      toast.error(t.auth.mustAcceptTos);
+      toast.error(
+        isSwahili
+          ? "Tafadhali kubali Vigezo vya Huduma na Sera ya Faragha"
+          : "Please accept the Terms of Service & Privacy Policy"
+      );
       return;
     }
+
     if (inviteEmail && values.email.toLowerCase() !== inviteEmail.toLowerCase()) {
-      toast.error(t.auth.inviteEmailMismatch);
+      toast.error(t.auth.inviteEmailMismatch || "Email does not match invite");
       return;
     }
+
     setSubmitting(true);
+    try {
+      const company = values.company_name?.trim() || "My Company";
+      const signupMetaData: Record<string, any> = {
+        full_name: values.full_name.trim(),
+        company_name: company,
+        organisation_name: company,
+        plan: accountTier,
+        enabled_modules: selectedSuite.modules,
+        industry_profile: params.get("industry") || selectedSuite.recommendedIndustry,
+      };
 
-    const signupMetaData: Record<string, any> = {
-      full_name: values.full_name,
-      plan: accountTier,
-      enabled_modules: selectedSuite.modules,
-      industry_profile: params.get("industry") || selectedSuite.recommendedIndustry,
-    };
-    if (orgInviteToken) {
-      signupMetaData.invite_token = orgInviteToken;
-    }
-    if (params.get("company")) {
-      signupMetaData.company_name = params.get("company");
-    }
+      if (orgInviteToken) {
+        signupMetaData.invite_token = orgInviteToken;
+      }
 
-    const { error } = await supabase.auth.signUp({
-      email: values.email,
-      password: values.password,
-      options: {
-        emailRedirectTo: `${window.location.origin}/dashboard`,
-        data: signupMetaData,
-      },
-    });
-    setSubmitting(false);
-    if (error) {
-      toast.error(error.message);
-      return;
+      const { data, error } = await supabase.auth.signUp({
+        email: values.email.trim(),
+        password: values.password,
+        options: {
+          emailRedirectTo: `${window.location.origin}/dashboard`,
+          data: signupMetaData,
+        },
+      });
+
+      if (error) {
+        throw error;
+      }
+
+      if (data?.session) {
+        // Immediate session without confirmation
+        toast.success(
+          isSwahili
+            ? "Akaunti imefunguliwa kikamilifu! Karibu MachineCare."
+            : "Account created successfully! Welcome to MachineCare."
+        );
+        navigate("/dashboard", { replace: true });
+      } else {
+        // Supabase requires email verification
+        setEmailSent(values.email.trim());
+      }
+    } catch (err: any) {
+      console.error("Signup error:", err);
+      const msg = err?.message || "Failed to create account. Please try again.";
+      toast.error(msg);
+    } finally {
+      setSubmitting(false);
     }
-    setEmailSent(values.email);
   };
 
   const onOnboardingSubmit = async (values: OnboardingFormValues) => {
     if (!accepted) {
-      toast.error(isSwahili ? "Tafadhali kubali vigezo na masharti" : "Please accept the Terms & Conditions");
+      toast.error(
+        isSwahili ? "Tafadhali kubali vigezo na masharti" : "Please accept the Terms & Conditions"
+      );
       return;
     }
     setSubmitting(true);
@@ -125,6 +188,8 @@ export default function Signup() {
         company: values.company.trim(),
         industry: `${selectedSuite.recommendedIndustry} (${selectedSuite.name} - ${accountTier.toUpperCase()})`,
         status: "pending",
+        plan: accountTier,
+        enabled_modules: selectedSuite.modules,
       };
 
       const { error: insertError } = await (supabase as any)
@@ -145,7 +210,7 @@ export default function Signup() {
         if (retryError) throw retryError;
       }
 
-      // Dispatch instant SMS notification to admin (+255764190999) non-blocking
+      // Dispatch optional SMS non-blocking
       try {
         await supabase.functions.invoke("notify-onboarding-request-sms", {
           body: {
@@ -163,34 +228,63 @@ export default function Signup() {
       toast.success(isSwahili ? "Ombi limetumwa kikamilifu!" : "Request submitted successfully!");
     } catch (err: any) {
       console.error("Onboarding request error:", err);
-      const errMsg = err?.message || (isSwahili ? "Imeshindwa kutuma ombi. Tafadhali jaribu tena." : "Failed to submit request. Please try again.");
+      const errMsg =
+        err?.message ||
+        (isSwahili ? "Imeshindwa kutuma ombi. Tafadhali jaribu tena." : "Failed to submit request. Please try again.");
       toast.error(errMsg);
     } finally {
       setSubmitting(false);
     }
   };
 
-  // ── Email sent confirmation (For Invited Users) ─────────────
+  // ── Confirmation: Email verification sent ────────────────────
   if (emailSent) {
     return (
-      <div className="flex min-h-screen items-center justify-center p-4">
-        <div className="w-full max-w-md rounded-xl border border-border bg-card p-8 text-center shadow-xl">
-          <CheckCircle2 className="mx-auto mb-3 h-12 w-12 text-primary" />
-          <h1 className="text-2xl font-bold">{t.auth.checkInbox}</h1>
-          <p className="mt-2 text-sm text-muted-foreground">
+      <div className="flex min-h-screen items-center justify-center p-4 bg-background">
+        <div className="w-full max-w-md rounded-2xl border border-border bg-card p-8 text-center shadow-xl animate-fade-in">
+          <CheckCircle2 className="mx-auto mb-3 h-14 w-14 text-primary" />
+          <h1 className="text-2xl font-bold tracking-tight">{t.auth.checkInbox}</h1>
+          <p className="mt-3 text-sm text-muted-foreground leading-relaxed">
             {t.auth.confirmSentTo}{" "}
-            <span className="font-medium text-foreground">{emailSent}</span>.{" "}
-            {t.auth.confirmSentDesc}
+            <span className="font-semibold text-foreground">{emailSent}</span>.
           </p>
-          <Button asChild variant="outline" className="mt-6 w-full">
-            <Link to="/login">{t.common.login}</Link>
-          </Button>
+
+          <div className="my-5 rounded-xl border border-amber-500/20 bg-amber-500/10 p-4 text-left text-xs text-amber-900 dark:text-amber-200 space-y-1.5">
+            <p className="font-semibold flex items-center gap-1.5">
+              <span>⚠️</span>
+              <span>{isSwahili ? "Huoni barua pepe?" : "Can't find the email?"}</span>
+            </p>
+            <p className="opacity-90 leading-relaxed">
+              {isSwahili
+                ? "Tafadhali angalia folda yako ya Spam au Junk. Barua pepe za uthibitisho hutumwa kutoka kwa Supabase na zinaweza kuwekwa huko kimakosa."
+                : "Please check your Spam, Junk, or Promotions folder. Verification emails are sent from Supabase and may be filtered there by mistake."}
+            </p>
+          </div>
+
+          <div className="mt-6 flex flex-col gap-2.5">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={handleResendEmail}
+              disabled={resending}
+              className="w-full h-10 text-xs"
+            >
+              {resending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              {isSwahili ? "Tuma Kiungo cha Uthibitisho Tena" : "Resend Verification Email"}
+            </Button>
+            <Button asChild className="w-full h-10" style={{ background: "var(--gradient-primary)" }}>
+              <Link to="/login">{t.common.login}</Link>
+            </Button>
+            <Button asChild variant="ghost" size="sm">
+              <Link to="/">{t.common.back} to Home</Link>
+            </Button>
+          </div>
         </div>
       </div>
     );
   }
 
-  // ── Onboarding Request success screen ──────────────────────
+  // ── Confirmation: Onboarding request sent ────────────────────
   if (requestSubmitted) {
     return (
       <div className="flex min-h-screen items-center justify-center p-4 bg-background">
@@ -201,18 +295,10 @@ export default function Signup() {
             {isSwahili ? "Ombi Limepokelewa!" : "Request Received!"}
           </h1>
           <p className="mt-4 text-sm text-muted-foreground leading-relaxed">
-            {isSwahili 
-              ? "Asante kwa kuonyesha nia na MachineCare. Ombi lako limesajiliwa na timu yetu ya onboarding itawasiliana nawe hivi karibuni ili kukufungulia akaunti ya kampuni yako."
-              : "Thank you for your interest in MachineCare. Your request has been registered and our onboarding team will contact you shortly to set up your workspace."}
+            {isSwahili
+              ? "Asante kwa kuonyesha nia na MachineCare. Ombi lako limesajiliwa na timu yetu ya onboarding itawasiliana nawe hivi karibuni."
+              : "Thank you for your interest in MachineCare. Your request has been registered and our onboarding team will contact you shortly."}
           </p>
-          <div className="mt-6 p-4 rounded-xl bg-secondary/60 text-xs text-left text-muted-foreground space-y-2">
-            <p className="font-semibold text-foreground">{isSwahili ? "Hatua inayofuata:" : "What happens next?"}</p>
-            <ol className="list-decimal list-inside space-y-1">
-              <li>{isSwahili ? "Tunahakiki sekta na maelezo ya kampuni yako." : "We review your company and industry profile."}</li>
-              <li>{isSwahili ? "Tunakupigia simu au kukutumia barua pepe kukamilisha usanidi." : "We schedule a call or email you to complete setup."}</li>
-              <li>{isSwahili ? "Unapokea kiungo cha kujisajili na kuanza kutumia mfumo." : "You receive an invite link to activate your workspace."}</li>
-            </ol>
-          </div>
           <Button asChild className="mt-8 w-full h-11" style={{ background: "var(--gradient-primary)" }}>
             <Link to="/">{isSwahili ? "Rudi Nyumbani" : "Return to Home"}</Link>
           </Button>
@@ -250,36 +336,96 @@ export default function Signup() {
         </div>
 
         <div className="w-full max-w-md">
-          <div className="mb-6 flex items-center gap-2.5">
-            <div
-              className="flex h-10 w-10 items-center justify-center rounded-xl text-primary-foreground"
-              style={{ background: "var(--gradient-primary)" }}
-            >
-              <Wrench className="h-5 w-5" />
+          {/* Header branding */}
+          <div className="mb-6 flex items-center justify-between">
+            <div className="flex items-center gap-2.5">
+              <div
+                className="flex h-10 w-10 items-center justify-center rounded-xl text-primary-foreground"
+                style={{ background: "var(--gradient-primary)" }}
+              >
+                <Wrench className="h-5 w-5" />
+              </div>
+              <span className="text-xl font-bold tracking-tight">{t.common.appName}</span>
             </div>
-            <span className="text-xl font-bold tracking-tight">{t.common.appName}</span>
+
+            {!orgInviteToken && (
+              <div className="flex items-center gap-1 rounded-lg border border-border p-0.5 text-xs bg-muted/40">
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("signup")}
+                  className={`rounded-md px-2.5 py-1 font-medium transition-all ${
+                    activeTab === "signup"
+                      ? "bg-background text-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  {isSwahili ? "Fungua Akaunti" : "Create Account"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("demo")}
+                  className={`rounded-md px-2.5 py-1 font-medium transition-all ${
+                    activeTab === "demo"
+                      ? "bg-background text-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  {isSwahili ? "Omba Demo" : "Request Demo"}
+                </button>
+              </div>
+            )}
           </div>
 
-          {isAccessGranted ? (
-            // ── FLOW A: Invited / Approved user registration ──
+          {activeTab === "signup" ? (
+            // ── FLOW 1: Direct Account Registration ──
             <>
-              <h1 className="mb-1 text-3xl font-bold tracking-tight">
-                {t.auth.joinTeam}
+              <h1 className="mb-1 text-2xl font-bold tracking-tight">
+                {orgInviteToken
+                  ? t.auth.joinTeam || "Join Your Team"
+                  : isSwahili
+                  ? "Fungua Akaunti ya Kampuni"
+                  : "Create Your Account"}
               </h1>
               <p className="mb-6 text-sm text-muted-foreground">
-                {t.auth.joinTeamSub}
+                {orgInviteToken
+                  ? t.auth.joinTeamSub || "Complete registration to access your shared workspace."
+                  : isSwahili
+                  ? "Jiunge na MachineCare kwa sekunde chache ili uanze kusimamia vifaa vyako."
+                  : "Get started in seconds with real-time fleet, machines & maintenance care."}
               </p>
 
-              <form onSubmit={inviteForm.handleSubmit(onInviteSubmit)} className="space-y-4">
+              <form onSubmit={signupForm.handleSubmit(onSignupSubmit)} className="space-y-4">
                 <div className="space-y-1.5">
-                  <Label htmlFor="full_name">{t.auth.yourName}</Label>
-                  <Input id="full_name" {...inviteForm.register("full_name")} />
-                  {inviteForm.formState.errors.full_name && (
+                  <Label htmlFor="full_name">{t.auth.yourName || "Full Name"}</Label>
+                  <Input
+                    id="full_name"
+                    placeholder={isSwahili ? "Mf. Juma Yusuf" : "e.g. John Doe"}
+                    {...signupForm.register("full_name")}
+                  />
+                  {signupForm.formState.errors.full_name && (
                     <p className="text-xs text-destructive">
-                      {inviteForm.formState.errors.full_name.message}
+                      {signupForm.formState.errors.full_name.message}
                     </p>
                   )}
                 </div>
+
+                {!orgInviteToken && (
+                  <div className="space-y-1.5">
+                    <Label htmlFor="company_name">
+                      {isSwahili ? "Jina la Kampuni" : "Company / Organisation"}
+                    </Label>
+                    <Input
+                      id="company_name"
+                      placeholder={isSwahili ? "Mf. Mwananchi Logistics Ltd" : "e.g. Apex Industrial Ltd"}
+                      {...signupForm.register("company_name")}
+                    />
+                    {signupForm.formState.errors.company_name && (
+                      <p className="text-xs text-destructive">
+                        {signupForm.formState.errors.company_name.message}
+                      </p>
+                    )}
+                  </div>
+                )}
 
                 <div className="space-y-1.5">
                   <Label htmlFor="email">{t.auth.email}</Label>
@@ -287,12 +433,13 @@ export default function Signup() {
                     id="email"
                     type="email"
                     autoComplete="email"
-                    {...inviteForm.register("email")}
+                    placeholder="name@company.com"
+                    {...signupForm.register("email")}
                     readOnly={!!inviteEmail}
                   />
-                  {inviteForm.formState.errors.email && (
+                  {signupForm.formState.errors.email && (
                     <p className="text-xs text-destructive">
-                      {inviteForm.formState.errors.email.message}
+                      {signupForm.formState.errors.email.message}
                     </p>
                   )}
                 </div>
@@ -303,110 +450,28 @@ export default function Signup() {
                     id="password"
                     type="password"
                     autoComplete="new-password"
-                    {...inviteForm.register("password")}
+                    placeholder="••••••••"
+                    {...signupForm.register("password")}
                   />
-                  {inviteForm.formState.errors.password && (
+                  {signupForm.formState.errors.password && (
                     <p className="text-xs text-destructive">
-                      {inviteForm.formState.errors.password.message}
+                      {signupForm.formState.errors.password.message}
                     </p>
                   )}
                 </div>
 
-                <label className="flex items-start gap-2 text-xs text-muted-foreground cursor-pointer">
-                  <Checkbox
-                    checked={accepted}
-                    onCheckedChange={(v) => setAccepted(!!v)}
-                    className="mt-0.5"
-                  />
-                  <span>
-                    {t.auth.tosAccept}{" "}
-                    <Link to="/terms" className="text-primary hover:underline">
-                      {t.auth.terms}
-                    </Link>{" "}
-                    {t.auth.and}{" "}
-                    <Link to="/privacy" className="text-primary hover:underline">
-                      {t.auth.privacy}
-                    </Link>
-                    .
-                  </span>
-                </label>
+                {!orgInviteToken && (
+                  <div className="pt-2">
+                    <SolutionSuitePicker
+                      selectedSuiteId={selectedSuite.id}
+                      onSelectSuite={setSelectedSuite}
+                      accountTier={accountTier}
+                      onChangeAccountTier={setAccountTier}
+                    />
+                  </div>
+                )}
 
-                <Button
-                  type="submit"
-                  className="h-11 w-full text-base"
-                  disabled={submitting}
-                  style={{ background: "var(--gradient-primary)" }}
-                >
-                  {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                  {t.common.signup}
-                </Button>
-              </form>
-            </>
-          ) : (
-            // ── FLOW B: Public onboarding request ──
-            <>
-              <h1 className="mb-1.5 text-3xl font-bold tracking-tight">
-                {isSwahili ? "Omba Kujiunga" : "Request Access"}
-              </h1>
-              <p className="mb-6 text-sm text-muted-foreground leading-normal">
-                {isSwahili
-                  ? "MachineCare kwa sasa inajiendesha kwa waalikwa pekee ili kuhakikisha huduma bora. Jaza fomu hii na timu yetu itawasiliana nawe ili kufungua akaunti ya kampuni yako."
-                  : "MachineCare is currently an invite-only platform to ensure high-quality onboarding. Fill out this form and our team will get in touch to set up your workspace."}
-              </p>
-
-              <form onSubmit={onboardingForm.handleSubmit(onOnboardingSubmit)} className="space-y-4">
-                <div className="space-y-1.5">
-                  <Label htmlFor="name">{isSwahili ? "Jina Kamili" : "Your Name"}</Label>
-                  <Input 
-                    id="name" 
-                    placeholder={isSwahili ? "Mf. Juma Yusuf" : "e.g. John Doe"}
-                    {...onboardingForm.register("name")} 
-                  />
-                  {onboardingForm.formState.errors.name && (
-                    <p className="text-xs text-destructive">
-                      {onboardingForm.formState.errors.name.message}
-                    </p>
-                  )}
-                </div>
-
-                <div className="space-y-1.5">
-                  <Label htmlFor="contact">{isSwahili ? "Njia ya Mawasiliano" : "Contact Details"}</Label>
-                  <Input
-                    id="contact"
-                    placeholder={isSwahili ? "Barua pepe au namba ya simu" : "Email address or phone number"}
-                    {...onboardingForm.register("contact")}
-                  />
-                  {onboardingForm.formState.errors.contact && (
-                    <p className="text-xs text-destructive">
-                      {onboardingForm.formState.errors.contact.message}
-                    </p>
-                  )}
-                </div>
-
-                <div className="space-y-1.5">
-                  <Label htmlFor="company">{isSwahili ? "Jina la Kampuni" : "Company / Organisation"}</Label>
-                  <Input
-                    id="company"
-                    placeholder={isSwahili ? "Mf. Kiwanda cha Ngozi Ltd" : "e.g. Acme Industrial Ltd"}
-                    {...onboardingForm.register("company")}
-                  />
-                  {onboardingForm.formState.errors.company && (
-                    <p className="text-xs text-destructive">
-                      {onboardingForm.formState.errors.company.message}
-                    </p>
-                  )}
-                </div>
-
-                <div className="pt-1">
-                  <SolutionSuitePicker
-                    selectedSuiteId={selectedSuite.id}
-                    onSelectSuite={setSelectedSuite}
-                    accountTier={accountTier}
-                    onChangeAccountTier={setAccountTier}
-                  />
-                </div>
-
-                <label className="flex items-start gap-2 text-xs text-muted-foreground cursor-pointer pt-2">
+                <label className="flex items-start gap-2 text-xs text-muted-foreground cursor-pointer pt-1">
                   <Checkbox
                     checked={accepted}
                     onCheckedChange={(v) => setAccepted(!!v)}
@@ -443,19 +508,131 @@ export default function Signup() {
 
                 <Button
                   type="submit"
+                  className="h-11 w-full text-base font-semibold mt-2"
+                  disabled={submitting}
+                  style={{ background: "var(--gradient-primary)" }}
+                >
+                  {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  {orgInviteToken
+                    ? isSwahili ? "Jiunge na Timu" : "Join Workspace"
+                    : isSwahili ? "Fungua Akaunti Sasa" : "Create Account"}
+                </Button>
+              </form>
+            </>
+          ) : (
+            // ── FLOW 2: Enterprise Demo / Onboarding Request ──
+            <>
+              <h1 className="mb-1.5 text-2xl font-bold tracking-tight">
+                {isSwahili ? "Omba Kujiunga" : "Request Enterprise Demo"}
+              </h1>
+              <p className="mb-6 text-sm text-muted-foreground leading-normal">
+                {isSwahili
+                  ? "Jaza fomu hii na wataalamu wetu watawasiliana nawe ili kusanidi mfumo kulingana na mahitaji yako."
+                  : "Tell us about your organization and our specialists will arrange a tailored enterprise demonstration."}
+              </p>
+
+              <form onSubmit={onboardingForm.handleSubmit(onOnboardingSubmit)} className="space-y-4">
+                <div className="space-y-1.5">
+                  <Label htmlFor="demo_name">{isSwahili ? "Jina Kamili" : "Your Name"}</Label>
+                  <Input
+                    id="demo_name"
+                    placeholder={isSwahili ? "Mf. Juma Yusuf" : "e.g. John Doe"}
+                    {...onboardingForm.register("name")}
+                  />
+                  {onboardingForm.formState.errors.name && (
+                    <p className="text-xs text-destructive">
+                      {onboardingForm.formState.errors.name.message}
+                    </p>
+                  )}
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label htmlFor="demo_contact">{isSwahili ? "Njia ya Mawasiliano" : "Contact Details"}</Label>
+                  <Input
+                    id="demo_contact"
+                    placeholder={isSwahili ? "Barua pepe au simu" : "Email address or phone number"}
+                    {...onboardingForm.register("contact")}
+                  />
+                  {onboardingForm.formState.errors.contact && (
+                    <p className="text-xs text-destructive">
+                      {onboardingForm.formState.errors.contact.message}
+                    </p>
+                  )}
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label htmlFor="demo_company">{isSwahili ? "Jina la Kampuni" : "Company / Organisation"}</Label>
+                  <Input
+                    id="demo_company"
+                    placeholder={isSwahili ? "Mf. Kiwanda cha Saruji Ltd" : "e.g. Acme Industrial Ltd"}
+                    {...onboardingForm.register("company")}
+                  />
+                  {onboardingForm.formState.errors.company && (
+                    <p className="text-xs text-destructive">
+                      {onboardingForm.formState.errors.company.message}
+                    </p>
+                  )}
+                </div>
+
+                <div className="pt-1">
+                  <SolutionSuitePicker
+                    selectedSuiteId={selectedSuite.id}
+                    onSelectSuite={setSelectedSuite}
+                    accountTier={accountTier}
+                    onChangeAccountTier={setAccountTier}
+                  />
+                </div>
+
+                <label className="flex items-start gap-2 text-xs text-muted-foreground cursor-pointer pt-2">
+                  <Checkbox
+                    checked={accepted}
+                    onCheckedChange={(v) => setAccepted(!!v)}
+                    className="mt-0.5"
+                  />
+                  <span>
+                    {isSwahili ? (
+                      <>
+                        Ninakubali{" "}
+                        <Link to="/terms" className="text-primary hover:underline">
+                          Vigezo
+                        </Link>{" "}
+                        na{" "}
+                        <Link to="/privacy" className="text-primary hover:underline">
+                          Sera ya Faragha
+                        </Link>
+                        .
+                      </>
+                    ) : (
+                      <>
+                        I agree to the{" "}
+                        <Link to="/terms" className="text-primary hover:underline">
+                          Terms of Service
+                        </Link>{" "}
+                        and{" "}
+                        <Link to="/privacy" className="text-primary hover:underline">
+                          Privacy Policy
+                        </Link>
+                        .
+                      </>
+                    )}
+                  </span>
+                </label>
+
+                <Button
+                  type="submit"
                   className="h-11 w-full text-base font-semibold mt-4"
                   disabled={submitting}
                   style={{ background: "var(--gradient-primary)" }}
                 >
                   {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                  {isSwahili ? "Tuma Ombi la Kujiunga" : "Submit Access Request"}
+                  {isSwahili ? "Tuma Ombi la Demo" : "Submit Demo Request"}
                 </Button>
               </form>
             </>
           )}
 
           <p className="mt-6 text-center text-sm text-muted-foreground">
-            {t.auth.haveAccount}{" "}
+            {t.auth.haveAccount || "Already have an account?"}{" "}
             <Link
               to="/login"
               className="font-semibold text-primary hover:underline transition-colors"

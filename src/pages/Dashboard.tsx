@@ -43,7 +43,7 @@ interface ActivityRow {
 import { isPlatformAdmin } from "@/lib/admin";
 
 export default function Dashboard() {
-  const { user, profile } = useAuth();
+  const { user, profile, organisation } = useAuth();
   const isAdmin = isPlatformAdmin(user?.email || profile?.email);
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState<Stats>({ total: 0, active: 0, due_soon: 0, overdue: 0 });
@@ -172,9 +172,20 @@ export default function Dashboard() {
     <div className="space-y-6 animate-fade-in">
       {/* Header */}
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Assets & Maintenance</h1>
-          <p className="text-sm text-muted-foreground">Fleet overview, service schedules and recent maintenance activity.</p>
+        <div className="flex items-center gap-3">
+          {organisation?.logo_url ? (
+            <img
+              src={organisation.logo_url}
+              alt={organisation.name || "Company Logo"}
+              className="h-12 w-12 rounded-xl object-contain border border-border bg-card p-1 shadow-sm shrink-0"
+            />
+          ) : null}
+          <div>
+            <h1 className="text-2xl font-semibold tracking-tight">
+              {organisation?.name ? `${organisation.name} — Assets & Maintenance` : "Assets & Maintenance"}
+            </h1>
+            <p className="text-sm text-muted-foreground">Fleet overview, service schedules and recent maintenance activity.</p>
+          </div>
         </div>
         <div className="flex gap-2">
           <Button variant="outline" onClick={() => setLogDialog(true)} disabled={machines.length === 0}>

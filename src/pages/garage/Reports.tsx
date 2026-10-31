@@ -185,6 +185,26 @@ export default function GarageReports() {
 
   return (
     <div className="space-y-8 animate-fade-in">
+      <div className="hidden print:flex items-center justify-between border-b-2 border-slate-900 pb-4 mb-4">
+        <div className="flex items-center gap-3">
+          {organisation?.logo_url ? (
+            <img
+              src={organisation.logo_url}
+              alt={organisation.name || "Company Logo"}
+              className="h-12 w-auto max-w-[180px] object-contain"
+            />
+          ) : (
+            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary text-primary-foreground font-black text-xl">
+              {organisation?.name ? organisation.name.trim().charAt(0).toUpperCase() : "W"}
+            </div>
+          )}
+          <div>
+            <h1 className="text-2xl font-bold text-slate-900">{organisation?.name ?? "Workshop"} — Monthly Workshop Report</h1>
+            <p className="text-xs text-slate-600">Month: {month}</p>
+          </div>
+        </div>
+      </div>
+
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Reports</h1>

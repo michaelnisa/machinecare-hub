@@ -27,7 +27,7 @@ export default function GarageEstimatePrint() {
         .eq("id", id)
         .maybeSingle();
       if (!estimate) { setLoading(false); return; }
-      const { data: org } = await supabase.from("organisations").select("id,name,phone,address").eq("id", estimate.organisation_id).maybeSingle();
+      const { data: org } = await supabase.from("organisations").select("id,name,phone,address,logo_url").eq("id", estimate.organisation_id).maybeSingle();
       setData({ estimate, job: estimate.garage_jobs, org });
       setLoading(false);
     })();
@@ -102,6 +102,13 @@ export default function GarageEstimatePrint() {
             </div>
           </div>
           <div className="text-right">
+            {org?.logo_url && (
+              <img
+                src={org.logo_url}
+                alt={org.name || "Company Logo"}
+                className="mb-1.5 ml-auto h-12 w-auto max-w-[160px] object-contain"
+              />
+            )}
             <div className="text-lg font-semibold">{org?.name ?? "—"}</div>
             {org?.phone && <div className="text-xs text-slate-600">{org.phone}</div>}
             {org?.address && <div className="text-xs text-slate-600">{org.address}</div>}

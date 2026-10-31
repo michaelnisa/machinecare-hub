@@ -66,7 +66,7 @@ export default function WorkOrderPrint() {
       if (!wo) { setLoading(false); return; }
       const [{ data: machine }, { data: org }, { data: assignee }, { data: vendor }, { data: createdBy }] = await Promise.all([
         supabase.from("machines").select("id,name,make,model,year,serial_number,registration_number,current_hours,category,plate_number,current_odometer_km,home_depot").eq("id", wo.machine_id).maybeSingle(),
-        supabase.from("organisations").select("id,name").eq("id", wo.organisation_id).maybeSingle(),
+        supabase.from("organisations").select("id,name,logo_url").eq("id", wo.organisation_id).maybeSingle(),
         wo.assignee_id ? supabase.from("profiles").select("id,full_name").eq("id", wo.assignee_id).maybeSingle() : Promise.resolve({ data: null }),
         wo.vendor_id ? supabase.from("vendors").select("id,name,phone,email,category").eq("id", wo.vendor_id).maybeSingle() : Promise.resolve({ data: null }),
         wo.created_by ? supabase.from("profiles").select("id,full_name").eq("id", wo.created_by).maybeSingle() : Promise.resolve({ data: null }),
@@ -142,6 +142,13 @@ export default function WorkOrderPrint() {
             <div className="mt-1 text-xs text-slate-500">Issued {formatDate(wo.created_at)}</div>
           </div>
           <div className="text-right">
+            {org?.logo_url && (
+              <img
+                src={org.logo_url}
+                alt={org.name || "Company Logo"}
+                className="mb-1.5 ml-auto h-12 w-auto max-w-[160px] object-contain"
+              />
+            )}
             <div className="text-lg font-semibold">{org?.name ?? "—"}</div>
             <div className="mt-1 inline-flex items-center gap-1.5 rounded-md border border-slate-300 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-slate-700">
               Priority: <span className={

@@ -47,7 +47,7 @@ type TyreAlertRow = { key: string; label: string; status: "due_soon" | "overdue"
 type OpenWoGroup = { machineId: string; label: string; count: number; highestPriority: string };
 
 export default function FleetDashboard() {
-  const { profile } = useAuth();
+  const { profile, organisation } = useAuth();
   const { t } = useI18n();
   const [loading, setLoading] = useState(true);
   const [expiring, setExpiring] = useState<ExpiryRow[]>([]);
@@ -296,11 +296,22 @@ export default function FleetDashboard() {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">{t.fleet.dashboardTitle}</h1>
-        <p className="text-sm text-muted-foreground">
-          {t.fleet.dashboardSub}
-        </p>
+      <div className="flex items-center gap-3">
+        {organisation?.logo_url ? (
+          <img
+            src={organisation.logo_url}
+            alt={organisation.name || "Company Logo"}
+            className="h-12 w-12 rounded-xl object-contain border border-border bg-card p-1 shadow-sm shrink-0"
+          />
+        ) : null}
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">
+            {organisation?.name ? `${organisation.name} — ${t.fleet.dashboardTitle}` : t.fleet.dashboardTitle}
+          </h1>
+          <p className="text-sm text-muted-foreground">
+            {t.fleet.dashboardSub}
+          </p>
+        </div>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">

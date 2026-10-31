@@ -32,8 +32,10 @@ import {
   Sparkles,
   Smartphone,
   ShieldCheck,
+  Lock,
 } from "lucide-react";
 import { Link } from "react-router-dom";
+import { isPlatformAdmin } from "@/lib/admin";
 import { testSelcomConnection } from "@/services/selcomService";
 import { Switch } from "@/components/ui/switch";
 import {
@@ -68,6 +70,7 @@ export default function Settings() {
   const { user, profile, organisation, refresh } = useAuth();
   const { isGarage, isMixed } = useIndustry();
   const { isManager } = useUserRole();
+  const isAdmin = isPlatformAdmin(user?.email || profile?.email);
   const [loading, setLoading] = useState(true);
   const [members, setMembers] = useState<any[]>([]);
   const [orgName, setOrgName] = useState("");
@@ -79,6 +82,8 @@ export default function Settings() {
   const [savingProfile, setSavingProfile] = useState(false);
   const [pwd, setPwd] = useState("");
   const [savingPwd, setSavingPwd] = useState(false);
+  const [newEmail, setNewEmail] = useState("");
+  const [savingEmail, setSavingEmail] = useState(false);
   const [pendingProfile, setPendingProfile] = useState<IndustryProfile | null>(
     null,
   );
@@ -368,6 +373,39 @@ export default function Settings() {
     }
   };
 
+  const changeEmail = async () => {
+    const trimmed = newEmail.trim();
+    if (!trimmed) {
+      toast.error("Please enter a new email address");
+      return;
+    }
+    if (trimmed.toLowerCase() === user?.email?.toLowerCase()) {
+      toast.error("New email must be different from your current email");
+      return;
+    }
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(trimmed)) {
+      toast.error("Please enter a valid email address");
+      return;
+    }
+
+    setSavingEmail(true);
+    const { error } = await supabase.auth.updateUser(
+      { email: trimmed },
+      { emailRedirectTo: `${window.location.origin}/settings` }
+    );
+    setSavingEmail(false);
+
+    if (error) {
+      toast.error(error.message);
+    } else {
+      toast.success(
+        "Confirmation link sent! Please check your inbox to confirm your new email address."
+      );
+      setNewEmail("");
+    }
+  };
+
   if (loading) return <PageLoader />;
 
   return (
@@ -471,45 +509,78 @@ export default function Settings() {
 
       {isManager && (
         <Section title="Industry profile">
-          <p className="mb-3 text-sm text-muted-foreground">
-            This decides your sidebar, dashboard and vocabulary across the app.
-          </p>
-          <IndustryPicker
-            value={organisation?.industry_profile ?? "manufacturing"}
-            onChange={setPendingProfile}
-          />
+          {!isAdmin ? (
+            <div className="rounded-xl border border-border bg-card p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                    <Lock className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <p className="font-semibold text-sm text-foreground">
+                      {INDUSTRY_PROFILES.find((p) => p.value === (organisation?.industry_profile ?? "manufacturing"))?.label}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {INDUSTRY_PROFILES.find((p) => p.value === (organisation?.industry_profile ?? "manufacturing"))?.desc}
+                    </p>
+                  </div>
+                </div>
+                <span className="text-[11px] font-semibold px-2.5 py-1 rounded-full bg-primary/10 text-primary border border-primary/20 flex items-center gap-1.5 shrink-0">
+                  <ShieldCheck className="h-3.5 w-3.5" /> Admin Locked
+                </span>
+              </div>
+              <p className="text-xs text-muted-foreground border-t border-border pt-2.5 leading-relaxed">
+                This account is locked to this industry profile. Changes to your organization suite or profile can only be authorized and performed by MachineCare Platform Administrators via the Admin Portal.
+              </p>
+            </div>
+          ) : (
+            <>
+              <div className="mb-3 flex items-center justify-between">
+                <p className="text-sm text-muted-foreground">
+                  Platform Admin Override: This sets the default sidebar, dashboard and vocabulary across the tenant.
+                </p>
+                <span className="text-[11px] font-semibold px-2.5 py-1 rounded-full bg-amber-500/10 text-amber-600 border border-amber-500/20">
+                  Admin Access
+                </span>
+              </div>
+              <IndustryPicker
+                value={organisation?.industry_profile ?? "manufacturing"}
+                onChange={setPendingProfile}
+              />
 
-          <AlertDialog
-            open={pendingProfile !== null}
-            onOpenChange={(open) => !open && setPendingProfile(null)}
-          >
-            <AlertDialogContent>
-              <AlertDialogHeader>
-                <AlertDialogTitle>Change industry profile?</AlertDialogTitle>
-                <AlertDialogDescription>
-                  This changes your sidebar and dashboard to{" "}
-                  {
-                    INDUSTRY_PROFILES.find((p) => p.value === pendingProfile)
-                      ?.label
-                  }
-                  . Everyone in your organisation will see the new layout on
-                  their next page load.
-                </AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                <AlertDialogCancel>Cancel</AlertDialogCancel>
-                <AlertDialogAction
-                  onClick={confirmIndustryProfileChange}
-                  disabled={savingIndustryProfile}
-                >
-                  {savingIndustryProfile && (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  )}
-                  Confirm
-                </AlertDialogAction>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
+              <AlertDialog
+                open={pendingProfile !== null}
+                onOpenChange={(open) => !open && setPendingProfile(null)}
+              >
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Change industry profile?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      This changes the sidebar and default dashboard to{" "}
+                      {
+                        INDUSTRY_PROFILES.find((p) => p.value === pendingProfile)
+                          ?.label
+                      }
+                      . All members of this organisation will see the new layout on
+                      their next page load.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    <AlertDialogAction
+                      onClick={confirmIndustryProfileChange}
+                      disabled={savingIndustryProfile}
+                    >
+                      {savingIndustryProfile && (
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      )}
+                      Confirm
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            </>
+          )}
         </Section>
       )}
 
@@ -801,6 +872,40 @@ export default function Settings() {
           >
             {savingPwd && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             Update password
+          </Button>
+        </div>
+      </Section>
+
+      <Section title="Change email">
+        <p className="mb-4 text-sm text-muted-foreground">
+          Update the email address associated with your account. A verification link will be sent to complete the change.
+        </p>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-1.5">
+            <Label>Current email</Label>
+            <Input value={user?.email ?? ""} disabled className="bg-muted/50" />
+          </div>
+          <div className="space-y-1.5">
+            <Label>New email</Label>
+            <Input
+              type="email"
+              value={newEmail}
+              onChange={(e) => setNewEmail(e.target.value)}
+              placeholder="new.email@company.com"
+            />
+          </div>
+        </div>
+        <div className="mt-4 flex justify-end">
+          <Button
+            onClick={changeEmail}
+            disabled={
+              savingEmail ||
+              !newEmail.trim() ||
+              newEmail.trim().toLowerCase() === user?.email?.toLowerCase()
+            }
+          >
+            {savingEmail && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            Update email
           </Button>
         </div>
       </Section>

@@ -126,6 +126,7 @@ export default function WorkOrderDetail() {
               ...wo,
               machine: machine ?? undefined,
               org: org ?? undefined,
+              logo_url: org?.logo_url ?? undefined,
               assignee: assignee ?? undefined,
               vendor: vendor ?? undefined,
               createdBy: createdBy ?? undefined,

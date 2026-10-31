@@ -52,10 +52,18 @@ export default function InductionCertificate() {
         </div>
 
         <div className="rounded-2xl border-2 border-primary/30 bg-card p-8 sm:p-14 text-center shadow-sm print:border-primary print:shadow-none">
-          <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-full bg-primary-soft text-primary">
-            <Award className="h-8 w-8" />
-          </div>
-          <div className="text-xs uppercase tracking-[0.3em] text-muted-foreground">{organisation?.name ?? "MachineCare"}</div>
+          {organisation?.logo_url ? (
+            <img
+              src={organisation.logo_url}
+              alt={organisation.name || "Company Logo"}
+              className="mx-auto mb-6 h-16 w-auto max-w-[220px] object-contain"
+            />
+          ) : (
+            <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-full bg-primary-soft text-primary">
+              <Award className="h-8 w-8" />
+            </div>
+          )}
+          <div className="text-xs uppercase tracking-[0.3em] text-muted-foreground">{organisation?.name ?? "Company"}</div>
           <h1 className="mt-4 font-serif text-3xl sm:text-4xl font-bold tracking-tight">{t.induction.certificate}</h1>
           <p className="mt-6 text-sm text-muted-foreground">{t.induction.certificateBody}</p>
           <p className="mt-3 font-serif text-2xl sm:text-3xl font-semibold">{ind.full_name}</p>

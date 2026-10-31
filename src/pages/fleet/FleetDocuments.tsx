@@ -59,7 +59,7 @@ const EMPTY_FORM = {
 };
 
 export default function FleetDocuments() {
-  const { profile } = useAuth();
+  const { profile, organisation } = useAuth();
   const { isManager, canWrite } = useUserRole();
   const { t } = useI18n();
   const [loading, setLoading] = useState(true);
@@ -133,15 +133,25 @@ export default function FleetDocuments() {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">{t.fleet.documentsTitle}</h1>
-          <p className="text-sm text-muted-foreground">
-            {t.fleet.documentsSub}
-            {expiringSoonCount > 0 && (
-              <span className="ml-2 font-medium text-amber-600">{expiringSoonCount} need attention</span>
-            )}
-          </p>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          {organisation?.logo_url ? (
+            <img
+              src={organisation.logo_url}
+              alt={organisation.name || "Company Logo"}
+              className="h-10 w-auto max-w-[150px] object-contain rounded-lg border p-1 bg-white"
+            />
+          ) : null}
+          <div>
+            <h1 className="text-2xl font-semibold tracking-tight">{t.fleet.documentsTitle}</h1>
+            <p className="text-sm text-muted-foreground">
+              {organisation?.name ? `${organisation.name} · ` : ""}
+              {t.fleet.documentsSub}
+              {expiringSoonCount > 0 && (
+                <span className="ml-2 font-medium text-amber-600">{expiringSoonCount} need attention</span>
+              )}
+            </p>
+          </div>
         </div>
         {canWrite && (
           <Button onClick={() => { setEditing(null); setOpen(true); }}>

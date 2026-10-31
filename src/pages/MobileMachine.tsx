@@ -147,7 +147,7 @@ const T = {
 
 export default function MobileMachine() {
   const { id } = useParams<{ id: string }>();
-  const { user, profile, loading: authLoading } = useAuth();
+  const { user, profile, organisation, loading: authLoading } = useAuth();
   const { lang } = useI18n();
   const t = T[lang];
 
@@ -603,10 +603,18 @@ export default function MobileMachine() {
         {/* Header */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-              <Wrench className="h-5 w-5" />
-            </div>
-            <span className="font-semibold">MachineCare</span>
+            {organisation?.logo_url ? (
+              <img
+                src={organisation.logo_url}
+                alt={organisation.name || "Company Logo"}
+                className="h-9 w-9 rounded-lg object-contain bg-background/50 border border-border p-1"
+              />
+            ) : (
+              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary text-primary-foreground font-black text-sm">
+                {(organisation?.name || user?.user_metadata?.company_name) ? (organisation?.name || user?.user_metadata?.company_name).trim().charAt(0).toUpperCase() : <Wrench className="h-5 w-5" />}
+              </div>
+            )}
+            <span className="font-semibold">{organisation?.name || user?.user_metadata?.company_name || "Company"}</span>
           </div>
           <LanguageSwitcher />
         </div>

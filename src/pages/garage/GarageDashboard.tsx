@@ -163,9 +163,18 @@ export default function GarageDashboard() {
     <div className="space-y-6 animate-fade-in">
       {/* Header */}
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">{organisation?.name ?? "Workshop"} Dashboard</h1>
-          <p className="text-sm text-muted-foreground">Live overview of today's workshop activity, revenue, and stock.</p>
+        <div className="flex items-center gap-3">
+          {organisation?.logo_url ? (
+            <img
+              src={organisation.logo_url}
+              alt={organisation.name || "Company Logo"}
+              className="h-12 w-12 rounded-xl object-contain border border-border bg-card p-1 shadow-sm shrink-0"
+            />
+          ) : null}
+          <div>
+            <h1 className="text-2xl font-semibold tracking-tight">{organisation?.name ?? "Workshop"} Dashboard</h1>
+            <p className="text-sm text-muted-foreground">Live overview of today's workshop activity, revenue, and stock.</p>
+          </div>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <Button onClick={() => setIntakeOpen(true)} className="gap-1.5">

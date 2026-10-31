@@ -130,9 +130,9 @@ export function WorkOrderPreview({
           </div>
         </div>
         <div className="text-right">
-          {data.logo_url ? (
+          {(data.logo_url || org?.logo_url || (data as any)?.org?.logo_url) ? (
             <img
-              src={data.logo_url}
+              src={data.logo_url || org?.logo_url || (data as any)?.org?.logo_url}
               alt={org?.name ?? "Logo"}
               className="mb-1 ml-auto h-14 w-auto max-w-[160px] object-contain"
             />

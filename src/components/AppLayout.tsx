@@ -13,7 +13,7 @@ import { CommandPalette } from "@/components/CommandPalette";
 import { TechnicianQrModal } from "@/components/TechnicianQrModal";
 
 export default function AppLayout() {
-  const { user, loading } = useAuth();
+  const { user, loading, organisation } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -21,6 +21,13 @@ export default function AppLayout() {
   const [qrOpen, setQrOpen] = useState(false);
 
   const isAdmin = isPlatformAdmin(user?.email);
+  const companyDisplayName =
+    (organisation?.name && organisation.name !== "MachineCare" && organisation.name !== "My Company")
+      ? organisation.name
+      : user?.user_metadata?.company_name ||
+        user?.user_metadata?.organisation_name ||
+        organisation?.name ||
+        "Company";
 
   useEffect(() => {
     if (!loading && !user) {
@@ -59,7 +66,16 @@ export default function AppLayout() {
           <Button variant="ghost" size="icon" onClick={() => setMobileOpen((o) => !o)}>
             {mobileOpen ? <X className="h-5 w-5 text-foreground" /> : <Menu className="h-5 w-5 text-foreground" />}
           </Button>
-          <span className="font-semibold text-sm">MachineCare</span>
+          <div className="flex items-center gap-2 min-w-0">
+            {organisation?.logo_url ? (
+              <img
+                src={organisation.logo_url}
+                alt={companyDisplayName}
+                className="h-6 w-6 rounded object-contain border border-border bg-background p-0.5 shrink-0"
+              />
+            ) : null}
+            <span className="font-semibold text-sm truncate">{companyDisplayName}</span>
+          </div>
           <div className="ml-auto flex items-center gap-1">
             <Button variant="ghost" size="icon" onClick={() => setCommandOpen(true)} title="Search">
               <Search className="h-4 w-4 text-foreground" />
@@ -90,7 +106,26 @@ export default function AppLayout() {
             </kbd>
           </Button>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2.5">
+            {organisation && (
+              <div className="hidden lg:flex items-center gap-2 pr-2.5 border-r border-border">
+                {organisation.logo_url ? (
+                  <img
+                    src={organisation.logo_url}
+                    alt={companyDisplayName}
+                    className="h-7 w-7 rounded-md object-contain border border-border bg-background p-0.5 shrink-0 shadow-sm"
+                  />
+                ) : (
+                  <div className="flex h-7 w-7 items-center justify-center rounded-md bg-primary/10 text-primary font-bold text-xs shrink-0">
+                    {companyDisplayName ? companyDisplayName.trim().charAt(0).toUpperCase() : "C"}
+                  </div>
+                )}
+                <span className="text-xs font-semibold text-foreground truncate max-w-[160px]" title={companyDisplayName}>
+                  {companyDisplayName}
+                </span>
+              </div>
+            )}
+
             <Button
               variant="outline"
               size="sm"

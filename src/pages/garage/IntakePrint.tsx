@@ -118,9 +118,17 @@ export default function GarageIntakePrint() {
         {/* Header */}
         <div className="flex items-start justify-between border-b border-border pb-6">
           <div className="flex items-center gap-3">
-            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary text-primary-foreground print:border print:border-black">
-              <Wrench className="h-6 w-6" />
-            </div>
+            {org?.logo_url ? (
+              <img
+                src={org.logo_url}
+                alt={org.name || "Company Logo"}
+                className="h-12 w-auto max-w-[160px] object-contain rounded-lg border p-1 bg-white print:border-none"
+              />
+            ) : (
+              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary text-primary-foreground print:border print:border-black font-bold text-lg">
+                {org?.name ? org.name.trim().charAt(0).toUpperCase() : <Wrench className="h-6 w-6" />}
+              </div>
+            )}
             <div>
               <h1 className="text-xl font-bold tracking-tight">{org?.name ?? "Auto Care Workshop"}</h1>
               <p className="text-xs text-muted-foreground">{org?.address || "Professional Automotive Service & Repair"}</p>

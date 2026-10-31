@@ -28,7 +28,7 @@ export default function GarageInvoicePrint() {
         .maybeSingle();
       if (!invoice) { setLoading(false); return; }
       const [{ data: org }, { data: payments }] = await Promise.all([
-        supabase.from("organisations").select("id,name,phone,address,invoice_footer_note").eq("id", invoice.organisation_id).maybeSingle(),
+        supabase.from("organisations").select("id,name,phone,address,invoice_footer_note,logo_url").eq("id", invoice.organisation_id).maybeSingle(),
         (supabase as any).from("garage_payments").select("*").eq("invoice_id", id).order("paid_at", { ascending: true }),
       ]);
       setData({ invoice, job: invoice.garage_jobs, org, payments: payments ?? [] });
@@ -107,6 +107,13 @@ export default function GarageInvoicePrint() {
             <div className="mt-1 text-xs text-slate-500">Issued {formatDate(invoice.issued_at)} · Job {formatJobNumber(job)}</div>
           </div>
           <div className="text-right">
+            {org?.logo_url && (
+              <img
+                src={org.logo_url}
+                alt={org.name || "Company Logo"}
+                className="mb-1.5 ml-auto h-12 w-auto max-w-[160px] object-contain"
+              />
+            )}
             <div className="text-lg font-semibold">{org?.name ?? "—"}</div>
             {org?.phone && <div className="text-xs text-slate-600">{org.phone}</div>}
             {org?.address && <div className="text-xs text-slate-600">{org.address}</div>}

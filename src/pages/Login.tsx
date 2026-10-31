@@ -28,6 +28,8 @@ export default function Login() {
   const { t, currentLang } = useI18n();
   const isSwahili = currentLang === "sw";
   const [submitting, setSubmitting] = useState(false);
+  const [unconfirmedEmail, setUnconfirmedEmail] = useState<string | null>(null);
+  const [resending, setResending] = useState(false);
 
   useEffect(() => {
     if (user) navigate(next, { replace: true });
@@ -36,6 +38,7 @@ export default function Login() {
   const {
     register,
     handleSubmit,
+    getValues,
     formState: { errors },
   } = useForm<FormValues>({
     resolver: zodResolver(schema),
@@ -43,14 +46,53 @@ export default function Login() {
 
   const onSubmit = async (values: FormValues) => {
     setSubmitting(true);
+    setUnconfirmedEmail(null);
     const { error } = await supabase.auth.signInWithPassword(values);
     setSubmitting(false);
     if (error) {
-      toast.error(error.message);
+      if (
+        error.message?.toLowerCase().includes("email not confirmed") ||
+        (error as any).code === "email_not_confirmed"
+      ) {
+        setUnconfirmedEmail(values.email);
+        toast.error(
+          isSwahili
+            ? "Barua pepe haijathibitishwa. Tafadhali thibitisha kiungo ulichotumiwa au bofya kutuma tena."
+            : "Email not confirmed. Please verify your email or click Resend below."
+        );
+      } else {
+        toast.error(error.message);
+      }
       return;
     }
     toast.success(t.auth.welcomeBack);
     navigate(next, { replace: true });
+  };
+
+  const handleResendConfirmation = async (targetEmail?: string) => {
+    const emailToUse = targetEmail || unconfirmedEmail || getValues("email");
+    if (!emailToUse || !emailToUse.includes("@")) {
+      toast.error("Please enter a valid email address first");
+      return;
+    }
+    setResending(true);
+    const { error } = await supabase.auth.resend({
+      type: "signup",
+      email: emailToUse.trim(),
+      options: {
+        emailRedirectTo: `${window.location.origin}/dashboard`,
+      },
+    });
+    setResending(false);
+    if (error) {
+      toast.error(error.message);
+    } else {
+      toast.success(
+        isSwahili
+          ? `Barua pepe imetumwa kwa ${emailToUse}. Hakikisha kuangalia kwenye folda ya Spam/Junk!`
+          : `Verification email sent to ${emailToUse}. Please check your Inbox and Spam/Junk folder!`
+      );
+    }
   };
 
   return (
@@ -81,6 +123,30 @@ export default function Login() {
           <p className="mb-6 text-sm text-muted-foreground">
             {t.auth.welcomeSub}
           </p>
+
+          {unconfirmedEmail && (
+            <div className="mb-4 rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-xs text-amber-900 dark:text-amber-200 animate-fade-in">
+              <p className="font-semibold mb-1">
+                {isSwahili ? "Uthibitisho wa Barua Pepe Unahitajika" : "Email Verification Pending"}
+              </p>
+              <p className="mb-3 opacity-90 leading-relaxed">
+                {isSwahili
+                  ? `Barua pepe ya kuthibitisha ilitumwa kwa ${unconfirmedEmail}. Hakikisha kuangalia pia folda ya Spam/Junk.`
+                  : `A confirmation link was sent to ${unconfirmedEmail}. If you haven't received it, please check your Spam or Junk folder.`}
+              </p>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => handleResendConfirmation(unconfirmedEmail)}
+                disabled={resending}
+                className="w-full bg-background/80 hover:bg-background text-xs"
+              >
+                {resending && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
+                {isSwahili ? "Tuma Kiungo cha Uthibitisho Tena" : "Resend Verification Email"}
+              </Button>
+            </div>
+          )}
 
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
             <div className="space-y-1.5">
@@ -129,6 +195,16 @@ export default function Login() {
               {t.common.login}
             </Button>
           </form>
+
+          <div className="mt-4 text-center">
+            <button
+              type="button"
+              onClick={() => handleResendConfirmation()}
+              className="text-xs text-muted-foreground hover:text-primary transition-colors underline underline-offset-4"
+            >
+              {isSwahili ? "Hukupokea barua pepe ya uthibitisho? Bofya kutuma tena" : "Didn't receive verification email? Click to resend"}
+            </button>
+          </div>
 
           <p className="mt-6 text-center text-sm text-muted-foreground">
             {t.auth.noAccount}{" "}

@@ -266,6 +266,29 @@ export default function Admin() {
     );
   };
 
+  // Handle Organization Industry Profile Update (Admin Portal Only)
+  const handleUpdateOrgIndustry = async (orgId: string, newProfile: string) => {
+    try {
+      const { error } = await supabase
+        .from("organisations")
+        .update({ industry_profile: newProfile } as any)
+        .eq("id", orgId);
+
+      if (error) throw error;
+
+      setOrganisations((prev) =>
+        prev.map((o) => (o.id === orgId ? { ...o, industry_profile: newProfile } : o))
+      );
+      toast.success(
+        isSwahili
+          ? "Sekta ya kampuni imeboreshwa kikamilifu!"
+          : "Organisation industry profile updated successfully!"
+      );
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to update industry profile");
+    }
+  };
+
   // Handle Direct SMS Dispatch
   const handleSendSms = async () => {
     if (!targetPhone || !smsText) {
@@ -608,6 +631,19 @@ export default function Admin() {
                       <span className="font-medium text-foreground">
                         {new Date(org.created_at).toLocaleDateString("en-GB")}
                       </span>
+                    </div>
+                    <div className="flex items-center justify-between gap-2 border-t border-border pt-2.5">
+                      <span className="text-muted-foreground font-medium">{isSwahili ? "Badili Sekta:" : "Industry Profile:"}</span>
+                      <select
+                        value={org.industry_profile || "manufacturing"}
+                        onChange={(e) => handleUpdateOrgIndustry(org.id, e.target.value)}
+                        className="rounded-md border border-input bg-background px-2 py-1 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary font-medium"
+                      >
+                        <option value="fleet_logistics">Fleet & Logistics</option>
+                        <option value="manufacturing">Manufacturing</option>
+                        <option value="garage">Garage & Workshop</option>
+                        <option value="mixed">Mixed Enterprise</option>
+                      </select>
                     </div>
                     <Button
                       variant="outline"

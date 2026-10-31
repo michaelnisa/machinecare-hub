@@ -67,6 +67,13 @@ export default function ChecklistTemplatePrint() {
             </div>
           </div>
           <div className="text-right">
+            {organisation?.logo_url && (
+              <img
+                src={organisation.logo_url}
+                alt={organisation.name || "Company Logo"}
+                className="mb-1.5 ml-auto h-12 w-auto max-w-[160px] object-contain"
+              />
+            )}
             <div className="text-lg font-semibold">{organisation?.name ?? "—"}</div>
           </div>
         </div>

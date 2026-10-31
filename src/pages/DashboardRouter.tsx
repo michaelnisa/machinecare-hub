@@ -12,11 +12,24 @@ export default function DashboardRouter() {
 
   const enabledMods = organisation?.enabled_modules;
   const isSafetyDept = profile?.department === "safety";
+  const industry = organisation?.industry_profile;
 
+  // 1. Safety department user or safety-only module subscription
   if (isSafetyDept || (enabledMods?.length === 1 && enabledMods[0] === "safety")) {
     return <Safety />;
   }
 
+  // 2. Direct Industry Profile resolution (Fleet & Logistics defaults immediately to FleetDashboard)
+  if (industry === "fleet_logistics" || isFleet) {
+    return <FleetDashboard />;
+  }
+
+  // 3. Garage & Workshop profile resolution
+  if (industry === "garage" || isGarage) {
+    return <GarageDashboard />;
+  }
+
+  // 4. Specific module-based routing for modular configurations
   if (enabledMods && Array.isArray(enabledMods) && enabledMods.length > 0) {
     if (enabledMods.includes("production") && !enabledMods.includes("maintenance")) {
       return <ProductionOverview />;
@@ -29,7 +42,5 @@ export default function DashboardRouter() {
     }
   }
 
-  if (isFleet) return <FleetDashboard />;
-  if (isGarage) return <GarageDashboard />;
   return <Dashboard />;
 }

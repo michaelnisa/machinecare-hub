@@ -61,7 +61,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { initials } from "@/lib/format";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useI18n } from "@/i18n/I18nProvider";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 import { cn } from "@/lib/utils";
@@ -80,6 +80,13 @@ export function Sidebar() {
 
   const isAdmin = isPlatformAdmin(user?.email || profile?.email);
   const isLite = (organisation?.plan ?? "standard") === "lite";
+  const companyDisplayName =
+    (organisation?.name && organisation.name !== "MachineCare" && organisation.name !== "My Company")
+      ? organisation.name
+      : user?.user_metadata?.company_name ||
+        user?.user_metadata?.organisation_name ||
+        organisation?.name ||
+        "Company";
 
   const manufacturingGroups: NavGroup[] = useMemo(
     () => [
@@ -520,6 +527,14 @@ export function Sidebar() {
   const groups = useMemo(() => {
     if (isSafetyDept) return safetyDeptGroups;
 
+    // Direct Industry Profile matching (Ensures Fleet & Logistics accounts default strictly to Fleet navigation)
+    if (organisation?.industry_profile === "fleet_logistics" || isFleet) {
+      return fleetGroups;
+    }
+    if (organisation?.industry_profile === "garage" || isGarage) {
+      return garageGroups;
+    }
+
     const enabledMods = organisation?.enabled_modules;
     if (enabledMods && Array.isArray(enabledMods) && enabledMods.length > 0) {
       // 1. Standalone Safety & HSE
@@ -738,19 +753,37 @@ export function Sidebar() {
   return (
     <div className="flex h-full flex-col">
       <div className="flex items-center justify-between gap-2 px-5 py-5">
-        <div className="flex items-center gap-2">
-          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-            <Wrench className="h-5 w-5" />
-          </div>
-          <div>
-            <div className="text-lg font-semibold leading-tight tracking-tight text-sidebar-foreground">
-              {t.common.appName}
+        <Link to="/settings" className="flex items-center gap-2.5 min-w-0 group" title="Account & Organization Settings">
+          {organisation?.logo_url ? (
+            <img
+              src={organisation.logo_url}
+              alt={companyDisplayName}
+              className="h-10 w-10 rounded-xl object-contain bg-background border border-sidebar-border p-1 shrink-0 shadow-sm transition-transform group-hover:scale-105"
+            />
+          ) : (
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary text-primary-foreground shrink-0 font-black text-base shadow-sm uppercase transition-transform group-hover:scale-105">
+              {companyDisplayName && companyDisplayName !== "Company" ? (
+                companyDisplayName.trim().charAt(0)
+              ) : (
+                <Building2 className="h-5 w-5" />
+              )}
+            </div>
+          )}
+          <div className="min-w-0">
+            <div className="text-base font-bold leading-tight tracking-tight text-sidebar-foreground truncate group-hover:text-primary transition-colors" title={companyDisplayName}>
+              {companyDisplayName}
             </div>
             {(() => {
+              if (isFleet || organisation?.industry_profile === "fleet_logistics") {
+                return <div className="text-[11px] font-semibold uppercase tracking-wider text-primary truncate">Fleet & Logistics</div>;
+              }
+              if (isGarage || organisation?.industry_profile === "garage") {
+                return <div className="text-[11px] font-semibold uppercase tracking-wider text-primary truncate">Workshop & Garage</div>;
+              }
               const enabledMods = organisation?.enabled_modules;
               if (enabledMods && Array.isArray(enabledMods) && enabledMods.length > 0) {
                 if (enabledMods.length === 1 && enabledMods[0] === "safety") {
-                  return <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Safety HSE</div>;
+                  return <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground truncate">Safety HSE</div>;
                 }
                 if (
                   enabledMods.includes("connected_data") &&
@@ -759,32 +792,26 @@ export function Sidebar() {
                   !enabledMods.includes("production") &&
                   !enabledMods.includes("maintenance")
                 ) {
-                  return <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">IoT & Telemetry</div>;
-                }
-                if (enabledMods.includes("workshop") && !enabledMods.includes("fleet") && !enabledMods.includes("production")) {
-                  return <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Workshop</div>;
-                }
-                if (enabledMods.includes("fleet") && !enabledMods.includes("workshop") && !enabledMods.includes("production")) {
-                  return <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Fleet</div>;
+                  return <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground truncate">IoT & Telemetry</div>;
                 }
                 if (organisation.plan === "enterprise" || enabledMods.length >= 7) {
-                  return <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Enterprise</div>;
+                  return <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground truncate">Enterprise</div>;
                 }
                 if (enabledMods.includes("production") && !enabledMods.includes("maintenance")) {
-                  return <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Production</div>;
+                  return <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground truncate">Production</div>;
                 }
                 if (enabledMods.includes("maintenance") && !enabledMods.includes("production")) {
-                  return <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Maintenance</div>;
+                  return <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground truncate">Maintenance</div>;
                 }
               }
-              return (isGarage || isFleet) ? (
-                <div className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-                  {isGarage ? "Workshop" : "Fleet"}
+              return (
+                <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground truncate">
+                  {organisation?.industry_profile?.replace("_", " ") || "Hub"}
                 </div>
-              ) : null;
+              );
             })()}
           </div>
-        </div>
+        </Link>
         <LanguageSwitcher compact />
       </div>
 
@@ -856,9 +883,17 @@ export function Sidebar() {
 
       <div className="border-t border-sidebar-border p-3">
         <div className="flex items-center gap-3 rounded-lg p-2">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary-soft text-sm font-semibold text-primary">
-            {initials(profile?.full_name)}
-          </div>
+          {organisation?.logo_url ? (
+            <img
+              src={organisation.logo_url}
+              alt={organisation.name || "Company"}
+              className="h-9 w-9 shrink-0 rounded-lg object-contain bg-background border border-sidebar-border p-0.5 shadow-sm"
+            />
+          ) : (
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary-soft text-sm font-semibold text-primary">
+              {initials(profile?.full_name)}
+            </div>
+          )}
           <div className="min-w-0 flex-1">
             <div className="truncate text-sm font-medium text-sidebar-foreground">
               {profile?.full_name ?? "User"}

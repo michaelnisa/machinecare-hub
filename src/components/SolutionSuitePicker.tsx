@@ -58,7 +58,7 @@ export const SOLUTION_SUITES: SolutionSuite[] = [
     name: "Fleet & Logistics",
     description: "Vehicles, drivers, trips, fuel efficiency, tyres, and pre-start checklists.",
     icon: Truck,
-    modules: ["fleet"],
+    modules: ["fleet", "maintenance", "inventory"],
     recommendedIndustry: "fleet_logistics",
   },
   {
