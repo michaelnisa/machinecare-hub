@@ -241,7 +241,15 @@ export default function MobileMachine() {
           .select("amount, expense_type")
           .eq("trip_id", tripData.id);
 
-        const expList = expData || [];
+        let expList = expData || [];
+        if (expList.length === 0 && tripData.cargo_description && typeof tripData.cargo_description === "string" && tripData.cargo_description.startsWith("{")) {
+          try {
+            const parsed = JSON.parse(tripData.cargo_description);
+            if (Array.isArray(parsed.expenses)) {
+              expList = parsed.expenses;
+            }
+          } catch {}
+        }
         const totalExpenses = expList.reduce((sum: number, e: any) => sum + (Number(e.amount) || 0), 0);
         const totalFines = expList.filter((e: any) => e.expense_type === "fine").reduce((sum: number, e: any) => sum + (Number(e.amount) || 0), 0);
         const totalReceipts = expList.filter((e: any) => e.expense_type !== "fine").reduce((sum: number, e: any) => sum + (Number(e.amount) || 0), 0);

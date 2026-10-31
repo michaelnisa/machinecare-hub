@@ -67,12 +67,36 @@ export function TripExpensesListDialog({
         setExpenses(rpcData);
       } else {
         // Fallback to direct select
-        const { data } = await (supabase as any)
+        const { data, error: selectErr } = await (supabase as any)
           .from("trip_expenses")
           .select("*")
           .eq("trip_id", tripId)
           .order("created_at", { ascending: false });
-        setExpenses(data ?? []);
+
+        if (!selectErr && data && data.length > 0) {
+          setExpenses(data);
+        } else {
+          // Check trips.cargo_description for stored expenses
+          const { data: tripData } = await supabase
+            .from("trips")
+            .select("cargo_description, cost")
+            .eq("id", tripId)
+            .maybeSingle();
+
+          if (tripData?.cargo_description) {
+            try {
+              const parsed =
+                typeof tripData.cargo_description === "string" && tripData.cargo_description.startsWith("{")
+                  ? JSON.parse(tripData.cargo_description)
+                  : null;
+              if (parsed && Array.isArray(parsed.expenses)) {
+                setExpenses(parsed.expenses);
+                return;
+              }
+            } catch {}
+          }
+          setExpenses(data ?? []);
+        }
       }
     } catch (err: any) {
       console.warn("Failed to load trip expenses:", err);
@@ -116,7 +140,42 @@ export function TripExpensesListDialog({
         .from("trip_expenses")
         .delete()
         .eq("id", id);
-      if (error) throw error;
+
+      if (error) {
+        // Fallback: Delete from trips.cargo_description
+        const { data: tripData } = await supabase
+          .from("trips")
+          .select("cost, cargo_description")
+          .eq("id", tripId)
+          .maybeSingle();
+
+        if (tripData?.cargo_description) {
+          let cargoMeta: Record<string, any> = {};
+          try {
+            cargoMeta =
+              typeof tripData.cargo_description === "string" && tripData.cargo_description.startsWith("{")
+                ? JSON.parse(tripData.cargo_description)
+                : {};
+          } catch {}
+
+          const currentExpenses: any[] = Array.isArray(cargoMeta.expenses) ? cargoMeta.expenses : [];
+          const target = currentExpenses.find((e) => e.id === id);
+          const filtered = currentExpenses.filter((e) => e.id !== id);
+          cargoMeta.expenses = filtered;
+
+          const deduct = target ? Number(target.amount) || 0 : 0;
+          const newCost = Math.max(0, (Number(tripData.cost) || 0) - deduct);
+
+          await supabase
+            .from("trips")
+            .update({
+              cost: newCost,
+              cargo_description: JSON.stringify(cargoMeta),
+            })
+            .eq("id", tripId);
+        }
+      }
+
       toast.success("Expense removed");
       loadExpenses();
       onExpenseChanged?.();

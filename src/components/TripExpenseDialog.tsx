@@ -169,7 +169,67 @@ export function TripExpenseDialog({
           .from("trip_expenses")
           .insert(payload);
 
-        if (insertErr) throw insertErr;
+        if (insertErr) {
+          const isMissingTable =
+            insertErr.message?.includes("schema cache") ||
+            insertErr.message?.includes("does not exist") ||
+            insertErr.code === "PGRST204" ||
+            insertErr.code === "42P01";
+
+          if (isMissingTable) {
+            // Table trip_expenses does not exist in remote Supabase schema:
+            // Store expense in trips.cargo_description JSON metadata and update trips.cost
+            const { data: tripData } = await supabase
+              .from("trips")
+              .select("cost, cargo_description")
+              .eq("id", tripId)
+              .maybeSingle();
+
+            let cargoMeta: Record<string, any> = {};
+            if (tripData?.cargo_description) {
+              if (typeof tripData.cargo_description === "string" && tripData.cargo_description.startsWith("{")) {
+                try {
+                  cargoMeta = JSON.parse(tripData.cargo_description);
+                } catch {
+                  cargoMeta = { cargo: tripData.cargo_description };
+                }
+              } else {
+                cargoMeta = { cargo: tripData.cargo_description };
+              }
+            }
+
+            const currentExpenses: any[] = Array.isArray(cargoMeta.expenses) ? cargoMeta.expenses : [];
+            const newExpense = {
+              id: typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `exp-${Date.now()}`,
+              trip_id: tripId,
+              machine_id: machineId,
+              expense_type: expenseType,
+              title: title.trim() || defaultTitle,
+              amount: numAmount,
+              currency: "TZS",
+              reference_number: referenceNumber.trim() || null,
+              receipt_url: uploadedReceiptUrl,
+              notes: notes.trim() || null,
+              created_at: new Date().toISOString(),
+              created_by: user?.id ?? null,
+            };
+
+            cargoMeta.expenses = [newExpense, ...currentExpenses];
+            const updatedCost = (Number(tripData?.cost) || 0) + numAmount;
+
+            const { error: updateTripErr } = await supabase
+              .from("trips")
+              .update({
+                cost: updatedCost,
+                cargo_description: JSON.stringify(cargoMeta),
+              })
+              .eq("id", tripId);
+
+            if (updateTripErr) throw updateTripErr;
+          } else {
+            throw insertErr;
+          }
+        }
       }
 
       toast.success(

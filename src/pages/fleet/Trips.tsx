@@ -230,6 +230,32 @@ export default function Trips() {
       }
       expMap.set(e.trip_id, current);
     });
+
+    // Also parse expenses from cargo_description JSON metadata if trip_expenses table was not present
+    (t ?? []).forEach((tripRaw: any) => {
+      if (tripRaw.cargo_description && typeof tripRaw.cargo_description === "string" && tripRaw.cargo_description.startsWith("{")) {
+        try {
+          const parsed = JSON.parse(tripRaw.cargo_description);
+          if (Array.isArray(parsed.expenses) && parsed.expenses.length > 0) {
+            const current = expMap.get(tripRaw.id) || { total: 0, fines: 0, receipts: 0, count: 0 };
+            if (current.count === 0) {
+              parsed.expenses.forEach((e: any) => {
+                const amt = Number(e.amount) || 0;
+                current.total += amt;
+                current.count += 1;
+                if (e.expense_type === "fine") {
+                  current.fines += amt;
+                } else {
+                  current.receipts += amt;
+                }
+              });
+              expMap.set(tripRaw.id, current);
+            }
+          }
+        } catch {}
+      }
+    });
+
     setExpenseSummaries(expMap);
 
     setLoading(false);
