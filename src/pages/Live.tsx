@@ -292,15 +292,24 @@ export default function Live() {
       <div className="mx-auto max-w-[1800px] px-8 py-8">
         {/* Header */}
         <div className="mb-8 flex items-center justify-between">
-          <div>
-            <h1 className="text-4xl font-bold tracking-tight">{organisation?.name ?? "Live Operations"}</h1>
-            <p className="mt-1 text-white/50">
-              {isFleet
-                ? "Real-time KPI dashboard"
-                : isGarage
-                ? "Workshop & Garage — live service bay board"
-                : "Maintenance — live KPI dashboard"}
-            </p>
+          <div className="flex items-center gap-4">
+            {organisation?.logo_url && (
+              <img
+                src={organisation.logo_url}
+                alt={organisation.name || "Company Logo"}
+                className="h-16 w-16 rounded-2xl object-contain border border-white/20 bg-white/10 p-2 shadow-lg shrink-0"
+              />
+            )}
+            <div>
+              <h1 className="text-4xl font-bold tracking-tight">{organisation?.name ?? "Live Operations"}</h1>
+              <p className="mt-1 text-white/50">
+                {isFleet
+                  ? "Real-time KPI dashboard"
+                  : isGarage
+                  ? "Workshop & Garage — live service bay board"
+                  : "Maintenance — live KPI dashboard"}
+              </p>
+            </div>
           </div>
           <div className="flex items-center gap-4">
             <Button variant="ghost" size="icon" onClick={toggleFullscreen} className="text-white/70 hover:text-white hover:bg-white/10" title="Fullscreen">

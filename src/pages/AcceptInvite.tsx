@@ -55,9 +55,9 @@ export default function AcceptInvite() {
       <div className="absolute right-4 top-4"><LanguageSwitcher /></div>
       <div className="mx-auto flex min-h-screen max-w-md items-center justify-center px-4">
         <div className="w-full rounded-xl border border-border bg-card p-8">
-          <div className="mb-4 flex items-center gap-2">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary text-primary-foreground">
-              <Wrench className="h-5 w-5" />
+          <div className="mb-4 flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary font-bold text-base border border-border">
+              {preview?.organisation_name ? preview.organisation_name.trim().charAt(0).toUpperCase() : <Wrench className="h-5 w-5 text-primary" />}
             </div>
             <span className="text-xl font-semibold">{preview?.organisation_name || "MachineCare"}</span>
           </div>

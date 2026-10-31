@@ -45,6 +45,13 @@ import { isPlatformAdmin } from "@/lib/admin";
 export default function Dashboard() {
   const { user, profile, organisation } = useAuth();
   const isAdmin = isPlatformAdmin(user?.email || profile?.email);
+  const companyDisplayName =
+    (organisation?.name && organisation.name !== "MachineCare" && organisation.name !== "My Company")
+      ? organisation.name
+      : user?.user_metadata?.company_name ||
+        user?.user_metadata?.organisation_name ||
+        organisation?.name ||
+        "Company";
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState<Stats>({ total: 0, active: 0, due_soon: 0, overdue: 0 });
   const [upcoming, setUpcoming] = useState<UpcomingRow[]>([]);
@@ -176,13 +183,17 @@ export default function Dashboard() {
           {organisation?.logo_url ? (
             <img
               src={organisation.logo_url}
-              alt={organisation.name || "Company Logo"}
+              alt={companyDisplayName}
               className="h-12 w-12 rounded-xl object-contain border border-border bg-card p-1 shadow-sm shrink-0"
             />
-          ) : null}
+          ) : (
+            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10 text-primary font-bold text-lg border border-border shadow-sm shrink-0">
+              {companyDisplayName ? companyDisplayName.trim().charAt(0).toUpperCase() : "C"}
+            </div>
+          )}
           <div>
             <h1 className="text-2xl font-semibold tracking-tight">
-              {organisation?.name ? `${organisation.name} — Assets & Maintenance` : "Assets & Maintenance"}
+              {companyDisplayName ? `${companyDisplayName} — Assets & Maintenance` : "Assets & Maintenance"}
             </h1>
             <p className="text-sm text-muted-foreground">Fleet overview, service schedules and recent maintenance activity.</p>
           </div>

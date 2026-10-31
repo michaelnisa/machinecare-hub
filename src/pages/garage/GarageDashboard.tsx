@@ -22,7 +22,14 @@ const toneClasses: Record<string, string> = {
 };
 
 export default function GarageDashboard() {
-  const { profile, organisation } = useAuth();
+  const { user, profile, organisation } = useAuth();
+  const companyDisplayName =
+    (organisation?.name && organisation.name !== "MachineCare" && organisation.name !== "My Company")
+      ? organisation.name
+      : user?.user_metadata?.company_name ||
+        user?.user_metadata?.organisation_name ||
+        organisation?.name ||
+        "Company";
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [jobs, setJobs] = useState<any[]>([]);
@@ -167,12 +174,16 @@ export default function GarageDashboard() {
           {organisation?.logo_url ? (
             <img
               src={organisation.logo_url}
-              alt={organisation.name || "Company Logo"}
+              alt={companyDisplayName}
               className="h-12 w-12 rounded-xl object-contain border border-border bg-card p-1 shadow-sm shrink-0"
             />
-          ) : null}
+          ) : (
+            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10 text-primary font-bold text-lg border border-border shadow-sm shrink-0">
+              {companyDisplayName ? companyDisplayName.trim().charAt(0).toUpperCase() : "C"}
+            </div>
+          )}
           <div>
-            <h1 className="text-2xl font-semibold tracking-tight">{organisation?.name ?? "Workshop"} Dashboard</h1>
+            <h1 className="text-2xl font-semibold tracking-tight">{companyDisplayName ? `${companyDisplayName} — Workshop Dashboard` : "Workshop Dashboard"}</h1>
             <p className="text-sm text-muted-foreground">Live overview of today's workshop activity, revenue, and stock.</p>
           </div>
         </div>
