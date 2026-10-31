@@ -52,21 +52,27 @@ export function formatPositionName(pos: string): string {
     "T1-LI": "Trailer Axle 1 Left Inner",
     "T1-RI": "Trailer Axle 1 Right Inner",
     "T1-RO": "Trailer Axle 1 Right Outer",
+    T1L: "Trailer Axle 1 Left",
+    T1R: "Trailer Axle 1 Right",
     "T2-LO": "Trailer Axle 2 Left Outer",
     "T2-LI": "Trailer Axle 2 Left Inner",
     "T2-RI": "Trailer Axle 2 Right Inner",
     "T2-RO": "Trailer Axle 2 Right Outer",
+    T2L: "Trailer Axle 2 Left",
+    T2R: "Trailer Axle 2 Right",
     "T3-LO": "Trailer Axle 3 Left Outer",
     "T3-LI": "Trailer Axle 3 Left Inner",
     "T3-RI": "Trailer Axle 3 Right Inner",
     "T3-RO": "Trailer Axle 3 Right Outer",
+    T3L: "Trailer Axle 3 Left",
+    T3R: "Trailer Axle 3 Right",
     Spare1: "Spare Tyre 1",
     Spare2: "Spare Tyre 2",
   };
   return map[normalized] || map[pos] || pos;
 }
 
-export type TruckLayoutConfigId = "6x4" | "4x2" | "8x4" | "trailer_tri" | "trailer_tandem" | "4_wheel";
+export type TruckLayoutConfigId = "6x4" | "4x2" | "4x2_trailer" | "8x4" | "trailer_tri" | "trailer_tandem" | "4_wheel";
 
 export interface AxleWheelSlot {
   id: string;
@@ -160,6 +166,58 @@ export const TRUCK_LAYOUTS: Record<TruckLayoutConfigId, TruckLayoutConfig> = {
           { id: "B1-LI", label: "Left Inner", side: "left", tier: "inner" },
           { id: "B1-RI", label: "Right Inner", side: "right", tier: "inner" },
           { id: "B1-RO", label: "Right Outer", side: "right", tier: "outer" },
+        ],
+      },
+    ],
+  },
+  "4x2_trailer": {
+    id: "4x2_trailer",
+    name: "4x2 with Rigid Trailer (12 Tyres)",
+    description: "4x2 Rigid Truck (6 Tyres: 1 Steer + 1 Dual Drive) + Drawbar Rigid Trailer (6 Tyres: 1 Steer + 1 Dual Axle)",
+    totalTyres: 12,
+    axles: [
+      {
+        id: "A1",
+        name: "Truck Front Steer Axle",
+        type: "front_steer",
+        isDual: false,
+        slots: [
+          { id: "A1L", label: "Steer Left", side: "left" },
+          { id: "A1R", label: "Steer Right", side: "right" },
+        ],
+      },
+      {
+        id: "B1",
+        name: "Truck Rear Drive Axle",
+        type: "rear_drive",
+        isDual: true,
+        slots: [
+          { id: "B1-LO", label: "Drive Left Outer", side: "left", tier: "outer" },
+          { id: "B1-LI", label: "Drive Left Inner", side: "left", tier: "inner" },
+          { id: "B1-RI", label: "Drive Right Inner", side: "right", tier: "inner" },
+          { id: "B1-RO", label: "Drive Right Outer", side: "right", tier: "outer" },
+        ],
+      },
+      {
+        id: "T1",
+        name: "Trailer Front Axle (Drawbar)",
+        type: "trailer",
+        isDual: false,
+        slots: [
+          { id: "T1L", label: "Trailer 1 Left", side: "left" },
+          { id: "T1R", label: "Trailer 1 Right", side: "right" },
+        ],
+      },
+      {
+        id: "T2",
+        name: "Trailer Rear Axle (Dual)",
+        type: "trailer",
+        isDual: true,
+        slots: [
+          { id: "T2-LO", label: "Trailer 2 Left Outer", side: "left", tier: "outer" },
+          { id: "T2-LI", label: "Trailer 2 Left Inner", side: "left", tier: "inner" },
+          { id: "T2-RI", label: "Trailer 2 Right Inner", side: "right", tier: "inner" },
+          { id: "T2-RO", label: "Trailer 2 Right Outer", side: "right", tier: "outer" },
         ],
       },
     ],

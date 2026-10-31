@@ -246,7 +246,8 @@ export default function Tyres() {
         setTruckLayoutId("trailer_tri");
       } else {
         const vt = currentMachine.vehicle_type?.toLowerCase() || "";
-        if (vt === "rigid") setTruckLayoutId("4x2");
+        if (vt === "rigid_trailer") setTruckLayoutId("4x2_trailer");
+        else if (vt === "rigid") setTruckLayoutId("4x2");
         else if (vt === "van_pickup" || vt === "pickup" || vt === "van") setTruckLayoutId("4_wheel");
         else setTruckLayoutId("6x4");
       }
@@ -641,11 +642,24 @@ export default function Tyres() {
                   <div className="space-y-8">
                     {currentLayout.axles.map((axle, axleIndex) => {
                       const isFrontSteer = axle.type === "front_steer";
+                      const isFirstTrailerAxle =
+                        axle.type === "trailer" &&
+                        axleIndex > 0 &&
+                        currentLayout.axles[axleIndex - 1]?.type !== "trailer";
                       return (
-                        <div
-                          key={axle.id}
-                          className="relative rounded-xl border border-border/80 bg-secondary/30 p-4 transition-all hover:border-primary/30"
-                        >
+                        <div key={axle.id} className="space-y-4">
+                          {isFirstTrailerAxle && (
+                            <div className="flex items-center justify-center gap-3 py-2">
+                              <div className="h-px flex-1 bg-primary/20 border-dashed" />
+                              <span className="flex items-center gap-1.5 rounded-full border border-primary/30 bg-primary/10 px-3.5 py-1 font-mono text-[11px] font-bold text-primary shadow-sm">
+                                🔗 RIGID TRAILER / DRAWBAR HITCH (ATTACHED TRAILER)
+                              </span>
+                              <div className="h-px flex-1 bg-primary/20 border-dashed" />
+                            </div>
+                          )}
+                          <div
+                            className="relative rounded-xl border border-border/80 bg-secondary/30 p-4 transition-all hover:border-primary/30"
+                          >
                           {/* Axle Header Label */}
                           <div className="mb-3 flex items-center justify-between">
                             <div className="flex items-center gap-2">
@@ -724,6 +738,7 @@ export default function Tyres() {
                                 })}
                             </div>
                           </div>
+                        </div>
                         </div>
                       );
                     })}
@@ -1855,13 +1870,15 @@ function FitTyreDialog({
             </div>
           </div>
 
-          <DialogFooter>
+          <DialogFooter className="sticky bottom-0 -mx-6 -mb-6 bg-background/95 backdrop-blur px-6 py-3 border-t border-border mt-4">
             <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
             <Button type="submit" disabled={submitting} style={{ background: "var(--gradient-primary)" }}>
               {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              {isSwahili ? "Kamilisha Usajili wa Tairi" : "Complete Tyre Fitment"}
+              {submitting
+                ? (isSwahili ? "Inahifadhi..." : "Saving...")
+                : (isSwahili ? "Kamilisha Usajili wa Tairi" : "Complete Tyre Fitment")}
             </Button>
           </DialogFooter>
         </form>
@@ -1987,13 +2004,13 @@ function QuickInspectDialog({
             />
           </div>
 
-          <DialogFooter>
+          <DialogFooter className="sticky bottom-0 -mx-6 -mb-6 bg-background/95 backdrop-blur px-6 py-3 border-t border-border mt-4">
             <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
             <Button type="submit" disabled={submitting} style={{ background: "var(--gradient-primary)" }}>
               {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Save Inspection
+              {submitting ? (isSwahili ? "Inahifadhi..." : "Saving...") : (isSwahili ? "Hifadhi Ukaguzi" : "Save Inspection")}
             </Button>
           </DialogFooter>
         </form>
@@ -2159,13 +2176,15 @@ function RotateTyreDialog({
             </div>
           )}
 
-          <DialogFooter>
+          <DialogFooter className="sticky bottom-0 -mx-6 -mb-6 bg-background/95 backdrop-blur px-6 py-3 border-t border-border mt-4">
             <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
             <Button type="submit" disabled={submitting} style={{ background: "var(--gradient-primary)" }}>
               {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              {occupant ? "Swap Tyres" : "Move Tyre"}
+              {submitting
+                ? (isSwahili ? "Inahifadhi..." : "Saving...")
+                : (occupant ? "Swap Tyres" : "Move Tyre")}
             </Button>
           </DialogFooter>
         </form>
@@ -2303,13 +2322,15 @@ function RetireTyreDialog({
             <span>Fit a new replacement tyre immediately at this position</span>
           </label>
 
-          <DialogFooter>
+          <DialogFooter className="sticky bottom-0 -mx-6 -mb-6 bg-background/95 backdrop-blur px-6 py-3 border-t border-border mt-4">
             <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
             <Button type="submit" variant="destructive" disabled={submitting}>
               {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Confirm Removal
+              {submitting
+                ? (isSwahili ? "Inaondoa..." : "Removing...")
+                : (isSwahili ? "Ondoa Tairi" : "Confirm Removal")}
             </Button>
           </DialogFooter>
         </form>
@@ -2541,13 +2562,15 @@ function WalkaroundInspectDialog({
             })}
           </div>
 
-          <DialogFooter className="pt-2">
+          <DialogFooter className="sticky bottom-0 -mx-6 -mb-6 bg-background/95 backdrop-blur px-6 py-3 border-t border-border mt-4">
             <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
             <Button type="submit" disabled={submitting} style={{ background: "var(--gradient-primary)" }}>
               {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Save Walkaround Inspection
+              {submitting
+                ? (isSwahili ? "Inahifadhi..." : "Saving...")
+                : (isSwahili ? "Hifadhi Ukaguzi wa Lori Zima" : "Save Walkaround Inspection")}
             </Button>
           </DialogFooter>
         </form>

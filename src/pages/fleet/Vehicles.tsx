@@ -68,6 +68,7 @@ const VEHICLE_TYPES = [
   { value: "prime_mover", label: "Prime Mover / Tractor Head" },
   { value: "tanker", label: "Tanker Truck (Fuel / Liquid)" },
   { value: "rigid", label: "Rigid Truck" },
+  { value: "rigid_trailer", label: "Rigid Truck with Trailer" },
   { value: "van_pickup", label: "Van / Pickup / Utility" },
   { value: "bus", label: "Bus / Commuter" },
   { value: "trailer", label: "Trailer / Semi-Trailer" },
@@ -917,6 +918,7 @@ function VehicleDialog({
                   onValueChange={(v) => {
                     let defaultAxle: TruckLayoutConfigId = "6x4";
                     if (v === "rigid") defaultAxle = "4x2";
+                    else if (v === "rigid_trailer") defaultAxle = "4x2_trailer";
                     else if (v === "van_pickup") defaultAxle = "4_wheel";
                     else if (v === "prime_mover" || v === "tanker" || v === "truck") defaultAxle = "6x4";
 

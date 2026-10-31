@@ -22,6 +22,7 @@ export const SAFE_TYRE_COLUMNS =
 export const AXLE_CONFIG_OPTIONS: { value: TruckLayoutConfigId; label: string; description: string; tyreCount: number }[] = [
   { value: "6x4", label: "6x4 Heavy Truck (10 Tyres)", description: "1 Steer Axle + 2 Dual Drive Rear Axles (Prime Mover / Heavy Hauler / Tanker Head)", tyreCount: 10 },
   { value: "4x2", label: "4x2 Rigid Truck (6 Tyres)", description: "1 Steer Axle + 1 Dual Drive Rear Axle (Distribution / Medium Cargo)", tyreCount: 6 },
+  { value: "4x2_trailer", label: "4x2 with Rigid Trailer (12 Tyres)", description: "4x2 Rigid Truck (6 Tyres) + Drawbar Rigid Trailer (6 Tyres: 1 Steer + 1 Dual Axle)", tyreCount: 12 },
   { value: "8x4", label: "8x4 Multi-Axle Hauler (12 Tyres)", description: "2 Front Steer Axles + 2 Dual Drive Rear Axles (Heavy Tipper / Super Hauler)", tyreCount: 12 },
   { value: "trailer_tri", label: "Tri-Axle Trailer (12 Tyres)", description: "3 Dual Axles (Fuel Tanker Trailer / Heavy Flatbed)", tyreCount: 12 },
   { value: "trailer_tandem", label: "Tandem Axle Trailer (8 Tyres)", description: "2 Dual Axles (Standard Cargo / Semi-Trailer)", tyreCount: 8 },

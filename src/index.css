@@ -145,3 +145,11 @@
         @apply bg-muted text-muted-foreground;
     }
 }
+
+/* Ensure smooth touch scrolling and pan support on all modal dialogs */
+[role="dialog"] {
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-y;
+    overscroll-behavior: contain;
+}
+
