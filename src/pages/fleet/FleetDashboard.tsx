@@ -467,7 +467,7 @@ export default function FleetDashboard() {
                     return (
                       <tr key={m.id} className="border-t border-border">
                         <td className="py-2 pr-3">
-                          <Link to={`/machines/${m.id}`} className="font-medium hover:underline">{m.name}</Link>
+                          <Link to={`/fleet/vehicles/${m.id}`} className="font-medium hover:underline">{m.name}</Link>
                           {m.plate_number && <span className="ml-1.5 text-xs text-muted-foreground">{m.plate_number}</span>}
                         </td>
                         <td className="py-2 pr-3 text-muted-foreground">

@@ -209,7 +209,7 @@ export default function Inspections() {
                 return (
                   <tr key={e.id} className="border-t border-border">
                     <td className="px-5 py-3 font-medium">
-                      <Link to={`/machines/${e.machine_id}`} className="hover:underline text-foreground">
+                      <Link to={`/fleet/vehicles/${e.machine_id}`} className="hover:underline text-foreground">
                         {vehicleLabel(e.machine_id)}
                       </Link>
                     </td>

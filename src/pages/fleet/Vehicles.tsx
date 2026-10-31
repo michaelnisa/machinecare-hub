@@ -128,7 +128,7 @@ export default function Vehicles() {
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("all");
   const [assetTab, setAssetTab] = useState<"all" | "vehicles" | "trailers">("all");
-  const [viewMode, setViewMode] = useState<"table" | "cards">("table");
+  const [viewMode, setViewMode] = useState<"table" | "cards">("cards");
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<FleetVehicle | null>(null);
   const [initialCategory, setInitialCategory] = useState<"Vehicle" | "Trailer">("Vehicle");
@@ -402,7 +402,7 @@ export default function Vehicles() {
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex items-center gap-3">
                       <Link
-                        to={`/machines/${m.id}`}
+                        to={`/fleet/vehicles/${m.id}`}
                         className="flex h-12 w-14 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-border bg-muted ring-2 ring-transparent group-hover:ring-primary/20 transition-all"
                       >
                         <CoverImage
@@ -414,7 +414,7 @@ export default function Vehicles() {
                       </Link>
                       <div>
                         <Link
-                          to={`/machines/${m.id}`}
+                          to={`/fleet/vehicles/${m.id}`}
                           className="font-semibold text-foreground group-hover:text-primary transition-colors block text-base leading-tight"
                         >
                           {m.name}
@@ -489,7 +489,7 @@ export default function Vehicles() {
                     className="flex-1 h-8 text-xs gap-1.5 cursor-pointer"
                     asChild
                   >
-                    <Link to={`/machines/${m.id}`}>
+                    <Link to={`/fleet/vehicles/${m.id}`}>
                       <Eye className="h-3.5 w-3.5 text-primary" /> View Details
                     </Link>
                   </Button>
@@ -568,7 +568,7 @@ export default function Vehicles() {
                           </div>
                           <div>
                             <div className="flex items-center gap-1.5 flex-wrap">
-                              <Link to={`/machines/${m.id}`} className="font-semibold hover:underline text-foreground">
+                              <Link to={`/fleet/vehicles/${m.id}`} className="font-semibold hover:underline text-foreground">
                                 {m.name}
                               </Link>
                               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-mono font-bold bg-muted/80 text-foreground border border-border/80">
@@ -759,7 +759,7 @@ export default function Vehicles() {
   );
 }
 
-function VehicleDialog({
+export function VehicleDialog({
   open,
   onOpenChange,
   machine,
