@@ -383,7 +383,14 @@ export default function Trips() {
                       </td>
 
                       <td className="px-5 py-3 text-muted-foreground" onClick={(e) => e.stopPropagation()}>
-                        <div className="font-medium text-foreground">{d ? d.full_name : "—"}</div>
+                        <div className="font-medium text-foreground flex items-center gap-1.5 flex-wrap">
+                          <span>{d ? d.full_name : "—"}</span>
+                          {d?.driver_code && (
+                            <span className="font-mono text-[10px] font-semibold text-primary bg-primary/10 border border-primary/20 px-1 py-0.2 rounded">
+                              {d.driver_code}
+                            </span>
+                          )}
+                        </div>
                         {d?.phone && <div className="text-xs">{d.phone}</div>}
                       </td>
 
@@ -724,7 +731,7 @@ function NewTripDialog({ open, onOpenChange, machines, drivers, onSaved }: {
                 <SelectContent>
                   {drivers.map((d) => (
                     <SelectItem key={d.id} value={d.id}>
-                      {d.full_name} {d.phone ? `(${d.phone})` : ""}
+                      {d.driver_code ? `[${d.driver_code}] ` : ""}{d.full_name} {d.phone ? `(${d.phone})` : ""}
                     </SelectItem>
                   ))}
                 </SelectContent>

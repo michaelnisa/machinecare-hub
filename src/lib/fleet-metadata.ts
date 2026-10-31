@@ -205,8 +205,20 @@ export function serializeMachinePayload(data: {
   };
 }
 
+export function generateDriverCode(seed?: string): string {
+  if (seed) {
+    const clean = seed.replace(/[^a-zA-Z0-9]/g, "").toUpperCase();
+    if (clean.length >= 4) {
+      return `DRV-${clean.slice(0, 4)}`;
+    }
+  }
+  const rand = Math.floor(1000 + Math.random() * 9000);
+  return `DRV-${rand}`;
+}
+
 export interface FleetDriver {
   id: string;
+  driver_code: string; // Unique Driver ID (e.g. DRV-8492)
   full_name: string;
   phone: string | null;
   status: string;
@@ -233,6 +245,7 @@ export interface FleetDriver {
 }
 
 export function parseDriver(raw: any): FleetDriver {
+  let driver_code: string | null = raw.driver_code ?? null;
   let email: string | null = raw.email ?? null;
   let license_number: string | null = raw.licence_number ?? raw.license_number ?? null;
   let licence_class: string | null = raw.licence_class ?? null;
@@ -247,11 +260,12 @@ export function parseDriver(raw: any): FleetDriver {
   let next_of_kin_phone: string | null = raw.next_of_kin_phone ?? null;
   let next_of_kin_nida: string | null = raw.next_of_kin_nida ?? null;
   let next_of_kin_photo_url: string | null = raw.next_of_kin_photo_url ?? null;
-  let user_notes: string | null = raw.notes ?? null;
+  let user_notes: string | null = null;
 
   if (raw.notes && typeof raw.notes === "string" && raw.notes.startsWith("{") && raw.notes.endsWith("}")) {
     try {
       const parsed = JSON.parse(raw.notes);
+      if (parsed.driver_code) driver_code = parsed.driver_code;
       if (parsed.email) email = parsed.email;
       if (parsed.license_number || parsed.licence_number) license_number = parsed.licence_number ?? parsed.license_number;
       if (parsed.licence_class) licence_class = parsed.licence_class;
@@ -268,10 +282,17 @@ export function parseDriver(raw: any): FleetDriver {
       if (parsed.next_of_kin_photo_url) next_of_kin_photo_url = parsed.next_of_kin_photo_url;
       user_notes = parsed.text ?? null;
     } catch {}
+  } else if (raw.notes && typeof raw.notes === "string" && !raw.notes.startsWith("{")) {
+    user_notes = raw.notes;
+  }
+
+  if (!driver_code) {
+    driver_code = generateDriverCode(raw.id || raw.full_name);
   }
 
   return {
     ...raw,
+    driver_code,
     email,
     license_number,
     licence_number: license_number,
@@ -292,6 +313,7 @@ export function parseDriver(raw: any): FleetDriver {
 }
 
 export function serializeDriverPayload(data: {
+  driver_code?: string | null;
   full_name: string;
   phone: string | null;
   status: string;
@@ -313,7 +335,9 @@ export function serializeDriverPayload(data: {
   next_of_kin_photo_url?: string | null;
   user_notes?: string | null;
 }) {
+  const code = data.driver_code && data.driver_code.trim() ? data.driver_code.trim().toUpperCase() : generateDriverCode();
   const meta = {
+    driver_code: code,
     email: data.email ?? null,
     license_number: data.license_number ?? data.licence_number ?? null,
     licence_class: data.licence_class ?? null,

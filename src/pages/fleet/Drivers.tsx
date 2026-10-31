@@ -24,6 +24,13 @@ import {
   Phone,
   Eye,
   HeartHandshake,
+  Copy,
+  Check,
+  RefreshCw,
+  Mail,
+  Calendar,
+  CreditCard,
+  CheckCircle2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { formatDate } from "@/lib/format";
@@ -33,6 +40,7 @@ import {
   SAFE_DRIVER_COLUMNS,
   parseDriver,
   serializeDriverPayload,
+  generateDriverCode,
   type FleetDriver,
 } from "@/lib/fleet-metadata";
 
@@ -58,6 +66,7 @@ const NOK_RELATIONS = [
 ];
 
 const EMPTY_FORM = {
+  driver_code: "",
   full_name: "",
   phone: "",
   email: "",
@@ -87,6 +96,7 @@ export default function Drivers() {
   const [drivers, setDrivers] = useState<Driver[]>([]);
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Driver | null>(null);
+  const [selectedDriver, setSelectedDriver] = useState<Driver | null>(null);
   const [confirm, setConfirm] = useState<string | null>(null);
   const [nokDriver, setNokDriver] = useState<Driver | null>(null);
   const [search, setSearch] = useState("");
@@ -111,6 +121,7 @@ export default function Drivers() {
     return drivers.filter((d) =>
       [
         d.full_name,
+        d.driver_code,
         d.phone,
         d.email,
         d.licence_number,
@@ -163,7 +174,7 @@ export default function Drivers() {
         <Input
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search name, phone, licence, NIDA, passport…"
+          placeholder="Search by name, driver ID, phone, licence, NIDA…"
           className="pl-9"
         />
       </div>
@@ -176,67 +187,76 @@ export default function Drivers() {
           action={canWrite ? <Button onClick={() => { setEditing(null); setOpen(true); }}><Plus className="mr-2 h-4 w-4" /> New driver</Button> : undefined}
         />
       ) : (
-        <div className="overflow-hidden rounded-xl border border-border bg-card">
-          <div className="border-b border-border px-5 py-3 text-sm font-medium">Drivers ({filtered.length})</div>
+        <div className="overflow-hidden rounded-xl border border-border bg-card shadow-xs">
+          <div className="border-b border-border px-5 py-3.5 text-sm font-medium flex items-center justify-between">
+            <span>Drivers List ({filtered.length})</span>
+            <span className="text-xs text-muted-foreground">Click any driver name to view complete profile & KYC</span>
+          </div>
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[1100px] text-sm">
-              <thead className="text-left text-xs uppercase tracking-wide text-muted-foreground">
+            <table className="w-full min-w-[850px] text-sm">
+              <thead className="text-left text-xs uppercase tracking-wide text-muted-foreground bg-muted/20">
                 <tr>
-                  <th className="px-5 py-3 font-medium">Driver</th>
-                  <th className="px-5 py-3 font-medium">Contact</th>
-                  <th className="px-5 py-3 font-medium">National / State IDs</th>
-                  <th className="px-5 py-3 font-medium">Licence</th>
-                  <th className="px-5 py-3 font-medium">Next of Kin</th>
-                  <th className="px-5 py-3 font-medium">Status</th>
-                  <th className="px-5 py-3"></th>
+                  <th className="px-5 py-3.5 font-medium">Driver & ID</th>
+                  <th className="px-5 py-3.5 font-medium">Contact</th>
+                  <th className="px-5 py-3.5 font-medium">Licence</th>
+                  <th className="px-5 py-3.5 font-medium">Status</th>
+                  <th className="px-5 py-3.5 text-right font-medium">Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {filtered.map((d) => (
-                  <tr key={d.id} className="border-t border-border hover:bg-muted/40">
-                    <td className="px-5 py-3">
+                  <tr
+                    key={d.id}
+                    className="border-t border-border hover:bg-muted/30 transition-colors"
+                  >
+                    <td className="px-5 py-3.5">
                       <div className="flex items-center gap-3">
-                        <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full border border-border bg-muted">
+                        <button
+                          type="button"
+                          onClick={() => setSelectedDriver(d)}
+                          className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-full border border-border bg-muted hover:ring-2 hover:ring-primary/40 transition-all cursor-pointer focus:outline-none"
+                          title="Click to view driver details"
+                        >
                           <CoverImage
                             value={d.photo_url}
                             alt={d.full_name}
                             className="h-full w-full object-cover"
                             fallback={<User className="h-5 w-5 text-muted-foreground" />}
                           />
-                        </div>
+                        </button>
                         <div>
-                          <div className="font-semibold text-foreground">{d.full_name}</div>
-                          {d.notes && <div className="text-xs text-muted-foreground line-clamp-1">{d.notes}</div>}
+                          <button
+                            type="button"
+                            onClick={() => setSelectedDriver(d)}
+                            className="text-left group cursor-pointer focus:outline-none block"
+                            title="Click to view full driver details"
+                          >
+                            <div className="font-semibold text-foreground group-hover:text-primary transition-colors flex items-center gap-2 flex-wrap">
+                              <span className="text-base">{d.full_name}</span>
+                              <span className="font-mono text-[11px] font-bold text-primary bg-primary/10 border border-primary/25 px-2 py-0.5 rounded inline-flex items-center gap-1 shadow-2xs">
+                                <CreditCard className="h-3 w-3" />
+                                {d.driver_code}
+                              </span>
+                            </div>
+                          </button>
+                          {d.user_notes ? (
+                            <div className="text-xs text-muted-foreground line-clamp-1 italic mt-0.5">
+                              {d.user_notes}
+                            </div>
+                          ) : (
+                            <div className="text-[11px] text-muted-foreground mt-0.5 flex items-center gap-1">
+                              <span className="text-primary hover:underline cursor-pointer" onClick={() => setSelectedDriver(d)}>View profile details</span>
+                              {d.nida_number && <span className="text-[10px] text-muted-foreground font-mono">• NIDA: {d.nida_number}</span>}
+                            </div>
+                          )}
                         </div>
                       </div>
                     </td>
-                    <td className="px-5 py-3 text-muted-foreground">
+                    <td className="px-5 py-3.5 text-muted-foreground">
                       <div className="font-medium text-foreground">{d.phone ?? "—"}</div>
-                      {d.email && <div className="text-xs">{d.email}</div>}
+                      {d.email && <div className="text-xs text-muted-foreground">{d.email}</div>}
                     </td>
-                    <td className="px-5 py-3">
-                      <div className="space-y-1">
-                        {d.nida_number ? (
-                          <div className="text-xs flex items-center gap-1 font-mono">
-                            <span className="font-bold text-[10px] text-primary uppercase">NIDA:</span> {d.nida_number}
-                          </div>
-                        ) : null}
-                        {d.passport_number ? (
-                          <div className="text-xs flex items-center gap-1 font-mono text-muted-foreground">
-                            <span className="font-semibold text-[10px] uppercase">PPT:</span> {d.passport_number}
-                          </div>
-                        ) : null}
-                        {d.other_id_number ? (
-                          <div className="text-[11px] text-muted-foreground">
-                            {d.other_id_type || "Other"}: {d.other_id_number}
-                          </div>
-                        ) : null}
-                        {!d.nida_number && !d.passport_number && !d.other_id_number && (
-                          <span className="text-muted-foreground">—</span>
-                        )}
-                      </div>
-                    </td>
-                    <td className="px-5 py-3 text-muted-foreground">
+                    <td className="px-5 py-3.5 text-muted-foreground">
                       <div className="font-medium text-foreground">
                         {d.licence_number ?? "—"} {d.licence_class ? `(${d.licence_class})` : ""}
                       </div>
@@ -246,55 +266,43 @@ export default function Drivers() {
                           <span>Lic: {formatDate(d.licence_expiry)}</span>
                         </span>
                         {d.medical_expiry && (
-                          <span className="text-[11px]">Med: {formatDate(d.medical_expiry)}</span>
+                          <span className="text-[11px] text-muted-foreground">Med: {formatDate(d.medical_expiry)}</span>
                         )}
                       </div>
                     </td>
-                    <td className="px-5 py-3">
-                      {d.next_of_kin_name ? (
-                        <button
-                          type="button"
-                          onClick={() => setNokDriver(d)}
-                          className="text-left group cursor-pointer"
-                          title="Click to view full Next of Kin profile & photo"
-                        >
-                          <div className="font-medium text-xs group-hover:text-primary transition-colors flex items-center gap-1">
-                            <HeartHandshake className="h-3.5 w-3.5 text-rose-500" />
-                            {d.next_of_kin_name}
-                            {d.next_of_kin_relation && (
-                              <span className="text-[10px] text-muted-foreground">({d.next_of_kin_relation})</span>
-                            )}
-                          </div>
-                          <div className="text-[11px] text-muted-foreground flex items-center gap-1 mt-0.5">
-                            <Phone className="h-3 w-3" />
-                            <span>{d.next_of_kin_phone || "No phone"}</span>
-                            {d.next_of_kin_photo_url && (
-                              <span className="ml-1 rounded bg-muted px-1 text-[9px] font-semibold text-primary">Photo</span>
-                            )}
-                          </div>
-                        </button>
-                      ) : (
-                        <span className="text-muted-foreground text-xs italic">Not registered</span>
-                      )}
-                    </td>
-                    <td className="px-5 py-3">
+                    <td className="px-5 py-3.5">
                       <StatusBadge status={d.status === "active" ? worstExpiryStatus(d) === "overdue" ? "overdue" : "active" : "retired"} />
                     </td>
-                    <td className="px-5 py-3 text-right">
-                      <div className="flex items-center justify-end gap-1">
-                        {d.next_of_kin_name && (
-                          <Button variant="ghost" size="icon" onClick={() => setNokDriver(d)} title="View Next of Kin">
-                            <Eye className="h-4 w-4 text-muted-foreground" />
-                          </Button>
-                        )}
+                    <td className="px-5 py-3.5 text-right">
+                      <div className="flex items-center justify-end gap-1.5">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-8 text-xs gap-1.5 cursor-pointer"
+                          onClick={() => setSelectedDriver(d)}
+                        >
+                          <Eye className="h-3.5 w-3.5 text-primary" /> View Profile
+                        </Button>
                         {canWrite && (
-                          <Button variant="ghost" size="icon" onClick={() => { setEditing(d); setOpen(true); }} title="Edit driver">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 cursor-pointer"
+                            onClick={() => { setEditing(d); setOpen(true); }}
+                            title="Edit driver"
+                          >
                             <Pencil className="h-4 w-4" />
                           </Button>
                         )}
                         {isManager && (
-                          <Button variant="ghost" size="icon" onClick={() => setConfirm(d.id)} title="Remove driver">
-                            <Trash2 className="h-4 w-4 text-destructive" />
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10 cursor-pointer"
+                            onClick={() => setConfirm(d.id)}
+                            title="Remove driver"
+                          >
+                            <Trash2 className="h-4 w-4" />
                           </Button>
                         )}
                       </div>
@@ -308,6 +316,25 @@ export default function Drivers() {
       )}
 
       <DriverDialog open={open} onOpenChange={setOpen} driver={editing} onSaved={load} />
+
+      {selectedDriver && (
+        <DriverDetailModal
+          open={!!selectedDriver}
+          onOpenChange={(v) => !v && setSelectedDriver(null)}
+          driver={selectedDriver}
+          onEdit={() => {
+            const d = selectedDriver;
+            setSelectedDriver(null);
+            setEditing(d);
+            setOpen(true);
+          }}
+          onViewNextOfKin={() => {
+            const d = selectedDriver;
+            setSelectedDriver(null);
+            setNokDriver(d);
+          }}
+        />
+      )}
 
       {nokDriver && (
         <NextOfKinModal
@@ -353,6 +380,7 @@ function DriverDialog({ open, onOpenChange, driver, onSaved }: {
       setForm(
         driver
           ? {
+              driver_code: driver.driver_code,
               full_name: driver.full_name,
               phone: driver.phone ?? "",
               email: driver.email ?? "",
@@ -371,9 +399,12 @@ function DriverDialog({ open, onOpenChange, driver, onSaved }: {
               next_of_kin_nida: driver.next_of_kin_nida ?? "",
               next_of_kin_photo_url: driver.next_of_kin_photo_url ?? "",
               status: driver.status,
-              notes: driver.notes ?? "",
+              notes: driver.user_notes ?? "",
             }
-          : EMPTY_FORM,
+          : {
+              ...EMPTY_FORM,
+              driver_code: generateDriverCode(),
+            },
       );
       setDriverPhotoFile(null);
       setDriverPhotoPreview(null);
@@ -431,6 +462,7 @@ function DriverDialog({ open, onOpenChange, driver, onSaved }: {
       }
 
       const safePayload = serializeDriverPayload({
+        driver_code: form.driver_code.trim(),
         full_name: form.full_name.trim(),
         phone: form.phone.trim() || null,
         email: form.email.trim() || null,
@@ -510,17 +542,42 @@ function DriverDialog({ open, onOpenChange, driver, onSaved }: {
             </div>
           </div>
 
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid gap-4 sm:grid-cols-3">
             <div className="space-y-1.5 sm:col-span-2">
-              <Label>Full name *</Label>
+              <Label>Driver Full Name *</Label>
               <Input
                 value={form.full_name}
                 onChange={(e) => setForm({ ...form, full_name: e.target.value })}
                 placeholder="e.g. Juma Hamisi Bakari"
                 maxLength={200}
+                required
               />
             </div>
 
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <Label className="text-xs font-semibold">Unique Driver ID *</Label>
+                <button
+                  type="button"
+                  onClick={() => setForm({ ...form, driver_code: generateDriverCode() })}
+                  className="text-[10px] text-primary hover:underline flex items-center gap-0.5 cursor-pointer font-medium"
+                  title="Generate new ID"
+                >
+                  <RefreshCw className="h-2.5 w-2.5" /> Auto-Gen
+                </button>
+              </div>
+              <Input
+                value={form.driver_code}
+                onChange={(e) => setForm({ ...form, driver_code: e.target.value.toUpperCase() })}
+                placeholder="DRV-XXXX"
+                className="font-mono font-bold text-primary tracking-wider uppercase h-10"
+                required
+              />
+              <p className="text-[10px] text-muted-foreground">Unique ID for trips & dispatch</p>
+            </div>
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-1.5">
               <Label>Phone number *</Label>
               <Input
@@ -833,6 +890,262 @@ function NextOfKinModal({
             <Pencil className="mr-1.5 h-3.5 w-3.5" /> Edit Details
           </Button>
           <Button size="sm" onClick={() => onOpenChange(false)}>
+            Close
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function DriverDetailModal({
+  open,
+  onOpenChange,
+  driver,
+  onEdit,
+  onViewNextOfKin,
+}: {
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  driver: Driver;
+  onEdit: () => void;
+  onViewNextOfKin: () => void;
+}) {
+  const [copied, setCopied] = useState(false);
+
+  const copyCode = () => {
+    if (!driver.driver_code) return;
+    navigator.clipboard.writeText(driver.driver_code);
+    setCopied(true);
+    toast.success(`Driver ID ${driver.driver_code} copied!`);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  const licStatus = scheduleStatus(driver.licence_expiry);
+  const medStatus = scheduleStatus(driver.medical_expiry);
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
+        <DialogHeader>
+          <DialogTitle className="flex items-center justify-between text-lg pr-4">
+            <span className="flex items-center gap-2">
+              <User className="h-5 w-5 text-primary" /> Driver Profile & KYC Dossier
+            </span>
+            <div className="flex items-center gap-2">
+              <StatusBadge status={driver.status === "active" ? (licStatus === "overdue" || medStatus === "overdue") ? "overdue" : "active" : "retired"} />
+            </div>
+          </DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-5 pt-1">
+          {/* Top Profile Summary Card */}
+          <div className="flex flex-col sm:flex-row items-center sm:items-start gap-4 p-4 rounded-xl border border-border bg-muted/20">
+            <div className="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-full border-2 border-border bg-card shadow-sm">
+              <CoverImage
+                value={driver.photo_url}
+                alt={driver.full_name}
+                className="h-full w-full object-cover"
+                fallback={<User className="h-10 w-10 text-muted-foreground" />}
+              />
+            </div>
+            <div className="flex-1 text-center sm:text-left space-y-1.5">
+              <div className="text-xl font-bold text-foreground">{driver.full_name}</div>
+              
+              <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2 pt-0.5">
+                <div className="font-mono text-xs font-bold text-primary bg-primary/10 border border-primary/25 px-2.5 py-1 rounded-md inline-flex items-center gap-1.5 shadow-2xs">
+                  <CreditCard className="h-3.5 w-3.5" />
+                  <span>ID: {driver.driver_code}</span>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-7 px-2 text-xs gap-1 cursor-pointer"
+                  onClick={copyCode}
+                  title="Copy Driver Unique ID"
+                >
+                  {copied ? <Check className="h-3 w-3 text-emerald-600" /> : <Copy className="h-3 w-3" />}
+                  <span>{copied ? "Copied" : "Copy ID"}</span>
+                </Button>
+              </div>
+
+              <p className="text-xs text-muted-foreground pt-1">
+                Unique system ID connected to Trips, Dispatch, and QR Driver Inspections.
+              </p>
+            </div>
+          </div>
+
+          {/* Quick Contact & Communications */}
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="p-3.5 rounded-xl border border-border bg-card space-y-1">
+              <span className="text-xs text-muted-foreground flex items-center gap-1.5">
+                <Phone className="h-3.5 w-3.5 text-primary" /> Phone Number
+              </span>
+              <div>
+                {driver.phone ? (
+                  <a
+                    href={`tel:${driver.phone}`}
+                    className="text-sm font-semibold text-primary hover:underline"
+                  >
+                    {driver.phone}
+                  </a>
+                ) : (
+                  <span className="text-sm text-muted-foreground">—</span>
+                )}
+              </div>
+            </div>
+
+            <div className="p-3.5 rounded-xl border border-border bg-card space-y-1">
+              <span className="text-xs text-muted-foreground flex items-center gap-1.5">
+                <Mail className="h-3.5 w-3.5 text-primary" /> Email Address
+              </span>
+              <div>
+                {driver.email ? (
+                  <a
+                    href={`mailto:${driver.email}`}
+                    className="text-sm font-semibold text-primary hover:underline break-all"
+                  >
+                    {driver.email}
+                  </a>
+                ) : (
+                  <span className="text-sm text-muted-foreground">—</span>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Driving Licence & Medical Examination */}
+          <div className="rounded-xl border border-border bg-card p-4 space-y-3">
+            <h4 className="text-sm font-semibold text-foreground flex items-center gap-2">
+              <CreditCard className="h-4 w-4 text-primary" /> Driving Licence & Medical Clearance
+            </h4>
+
+            <div className="grid gap-3 sm:grid-cols-2 text-sm">
+              <div className="p-3 rounded-lg border border-border bg-muted/20 space-y-1">
+                <span className="text-xs text-muted-foreground">Licence Number & Class</span>
+                <div className="font-bold text-foreground">
+                  {driver.licence_number ?? "Not registered"} {driver.licence_class ? `(${driver.licence_class})` : ""}
+                </div>
+              </div>
+
+              <div className="p-3 rounded-lg border border-border bg-muted/20 space-y-1">
+                <span className="text-xs text-muted-foreground flex items-center gap-1">
+                  <Calendar className="h-3 w-3" /> Licence Expiry
+                </span>
+                <div className="flex items-center gap-2">
+                  <span className="font-semibold text-foreground">{formatDate(driver.licence_expiry)}</span>
+                  <StatusBadge status={licStatus} />
+                </div>
+              </div>
+
+              <div className="p-3 rounded-lg border border-border bg-muted/20 space-y-1 sm:col-span-2">
+                <span className="text-xs text-muted-foreground flex items-center gap-1">
+                  <Calendar className="h-3 w-3" /> Medical Certificate Expiry
+                </span>
+                <div className="flex items-center gap-2">
+                  <span className="font-semibold text-foreground">{formatDate(driver.medical_expiry)}</span>
+                  {driver.medical_expiry && <StatusBadge status={medStatus} />}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* National Legal Identification (KYC) */}
+          <div className="rounded-xl border border-border bg-card p-4 space-y-3">
+            <h4 className="text-sm font-semibold text-foreground flex items-center gap-2">
+              <Shield className="h-4 w-4 text-primary" /> Legal Identification & KYC Documents
+            </h4>
+
+            <div className="grid gap-3 sm:grid-cols-3 text-sm">
+              <div className="p-3 rounded-lg border border-border bg-muted/20 space-y-1">
+                <span className="text-xs text-muted-foreground uppercase font-bold text-primary">NIDA Number</span>
+                <div className="font-mono font-medium text-xs break-all text-foreground">
+                  {driver.nida_number || "Not recorded"}
+                </div>
+              </div>
+
+              <div className="p-3 rounded-lg border border-border bg-muted/20 space-y-1">
+                <span className="text-xs text-muted-foreground uppercase font-bold text-foreground">Passport No.</span>
+                <div className="font-mono font-medium text-xs text-foreground">
+                  {driver.passport_number || "Not recorded"}
+                </div>
+              </div>
+
+              <div className="p-3 rounded-lg border border-border bg-muted/20 space-y-1">
+                <span className="text-xs text-muted-foreground uppercase font-bold text-foreground">
+                  {driver.other_id_type || "Secondary ID"}
+                </span>
+                <div className="font-medium text-xs text-foreground">
+                  {driver.other_id_number || "Not recorded"}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Next of Kin Emergency Profile */}
+          <div className="rounded-xl border border-rose-500/20 bg-rose-500/5 p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <h4 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                <HeartHandshake className="h-4 w-4 text-rose-500" /> Next of Kin (Emergency Contact)
+              </h4>
+              {driver.next_of_kin_name && (
+                <span className="text-[10px] uppercase font-bold text-rose-600 bg-rose-500/10 px-2 py-0.5 rounded">
+                  {driver.next_of_kin_relation || "Emergency Contact"}
+                </span>
+              )}
+            </div>
+
+            {driver.next_of_kin_name ? (
+              <div className="flex items-center gap-4 p-3 rounded-lg border border-border bg-background">
+                <div className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-full border border-border bg-muted">
+                  <CoverImage
+                    value={driver.next_of_kin_photo_url}
+                    alt={driver.next_of_kin_name}
+                    className="h-full w-full object-cover"
+                    fallback={<User className="h-7 w-7 text-muted-foreground" />}
+                  />
+                </div>
+                <div className="space-y-1 flex-1">
+                  <div className="font-bold text-foreground text-sm">{driver.next_of_kin_name}</div>
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                    {driver.next_of_kin_phone && (
+                      <span className="flex items-center gap-1">
+                        <Phone className="h-3 w-3 text-primary" />
+                        <a href={`tel:${driver.next_of_kin_phone}`} className="font-semibold text-primary hover:underline">
+                          {driver.next_of_kin_phone}
+                        </a>
+                      </span>
+                    )}
+                    {driver.next_of_kin_nida && (
+                      <span className="font-mono text-[11px]">
+                        NIDA: {driver.next_of_kin_nida}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="text-xs text-muted-foreground italic p-2">
+                No next of kin recorded. You can register emergency contacts by editing this driver.
+              </div>
+            )}
+          </div>
+
+          {/* User Notes */}
+          {driver.user_notes && (
+            <div className="rounded-xl border border-border bg-muted/20 p-3.5 space-y-1">
+              <span className="text-xs font-semibold text-foreground">Operational Notes & Remarks</span>
+              <p className="text-xs text-muted-foreground whitespace-pre-wrap">{driver.user_notes}</p>
+            </div>
+          )}
+        </div>
+
+        <DialogFooter className="flex sm:justify-between items-center gap-2 pt-2">
+          <Button variant="outline" size="sm" onClick={onEdit} className="gap-1.5 cursor-pointer">
+            <Pencil className="h-3.5 w-3.5" /> Edit Driver Profile
+          </Button>
+          <Button size="sm" onClick={() => onOpenChange(false)} className="cursor-pointer">
             Close
           </Button>
         </DialogFooter>
