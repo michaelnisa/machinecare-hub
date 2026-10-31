@@ -31,6 +31,9 @@ import {
   Calendar,
   CreditCard,
   CheckCircle2,
+  Users,
+  LayoutGrid,
+  List,
 } from "lucide-react";
 import { toast } from "sonner";
 import { formatDate } from "@/lib/format";
@@ -101,6 +104,8 @@ export default function Drivers() {
   const [nokDriver, setNokDriver] = useState<Driver | null>(null);
   const [search, setSearch] = useState("");
 
+  const [viewMode, setViewMode] = useState<"table" | "cards">("table");
+
   const load = async () => {
     if (!profile) return;
     setLoading(true);
@@ -109,7 +114,7 @@ export default function Drivers() {
       .select(SAFE_DRIVER_COLUMNS)
       .order("full_name");
     if (error) toast.error(error.message);
-    setDrivers((data ?? []).map(parseDriver));
+    setDrivers((data ?? []).map((raw, idx) => parseDriver(raw, idx)));
     setLoading(false);
   };
 
@@ -157,26 +162,90 @@ export default function Drivers() {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      <div className="flex flex-wrap items-start justify-between gap-3">
+      {/* Header */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">{t.fleet.driversTitle}</h1>
           <p className="text-sm text-muted-foreground">{t.fleet.driversSub}</p>
         </div>
         {canWrite && (
-          <Button onClick={() => { setEditing(null); setOpen(true); }}>
-            <Plus className="mr-2 h-4 w-4" /> {t.fleet.addDriver}
+          <Button onClick={() => { setEditing(null); setOpen(true); }} className="gap-2 shadow-xs cursor-pointer">
+            <Plus className="h-4 w-4" /> {t.fleet.addDriver}
           </Button>
         )}
       </div>
 
-      <div className="relative w-full max-w-sm">
-        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-        <Input
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search by name, driver ID, phone, licence, NIDA…"
-          className="pl-9"
-        />
+      {/* Fleet Driver Insights Bar */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div className="flex items-center gap-3.5 p-3.5 rounded-xl border border-border bg-card shadow-2xs">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+            <Users className="h-5 w-5" />
+          </div>
+          <div>
+            <div className="text-lg font-bold text-foreground leading-none">{drivers.length}</div>
+            <div className="text-xs text-muted-foreground mt-1">Total Fleet Drivers</div>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-3.5 p-3.5 rounded-xl border border-border bg-card shadow-2xs">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+            <CheckCircle2 className="h-5 w-5" />
+          </div>
+          <div>
+            <div className="text-lg font-bold text-foreground leading-none">
+              {drivers.filter((d) => d.status === "active").length} Active
+            </div>
+            <div className="text-xs text-muted-foreground mt-1">Authorized for Dispatch</div>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-3.5 p-3.5 rounded-xl border border-border bg-card shadow-2xs">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-blue-500/10 text-blue-600 dark:text-blue-400">
+            <Shield className="h-5 w-5" />
+          </div>
+          <div>
+            <div className="text-lg font-bold text-foreground leading-none">
+              {drivers.filter((d) => Boolean(d.licence_number || d.licence_class)).length} Licensed
+            </div>
+            <div className="text-xs text-muted-foreground mt-1">Commercial Licences</div>
+          </div>
+        </div>
+      </div>
+
+      {/* Search & View Switcher */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="relative w-full max-w-sm">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search by name, driver ID, phone, licence…"
+            className="pl-9"
+          />
+        </div>
+
+        <div className="flex items-center rounded-lg border border-border bg-muted/40 p-0.5">
+          <Button
+            type="button"
+            variant={viewMode === "table" ? "secondary" : "ghost"}
+            size="sm"
+            className="h-8 px-2.5 text-xs gap-1.5 cursor-pointer"
+            onClick={() => setViewMode("table")}
+            title="Table View"
+          >
+            <List className="h-3.5 w-3.5" /> Table
+          </Button>
+          <Button
+            type="button"
+            variant={viewMode === "cards" ? "secondary" : "ghost"}
+            size="sm"
+            className="h-8 px-2.5 text-xs gap-1.5 cursor-pointer"
+            onClick={() => setViewMode("cards")}
+            title="Badges / Cards View"
+          >
+            <LayoutGrid className="h-3.5 w-3.5" /> Badges
+          </Button>
+        </div>
       </div>
 
       {drivers.length === 0 ? (
@@ -186,14 +255,120 @@ export default function Drivers() {
           description="Add your first driver to start tracking licences, NIDA, and Next of Kin emergency details."
           action={canWrite ? <Button onClick={() => { setEditing(null); setOpen(true); }}><Plus className="mr-2 h-4 w-4" /> New driver</Button> : undefined}
         />
+      ) : viewMode === "cards" ? (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {filtered.map((d) => (
+            <div
+              key={d.id}
+              className="group rounded-xl border border-border bg-card p-4 space-y-3.5 shadow-2xs hover:shadow-md transition-all hover:border-primary/40 relative"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedDriver(d)}
+                    className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-full border border-border bg-muted ring-2 ring-transparent group-hover:ring-primary/20 transition-all cursor-pointer"
+                  >
+                    <CoverImage
+                      value={d.photo_url}
+                      alt={d.full_name}
+                      className="h-full w-full object-cover"
+                      fallback={<User className="h-6 w-6 text-muted-foreground" />}
+                    />
+                  </button>
+                  <div>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedDriver(d)}
+                      className="text-left font-semibold text-foreground group-hover:text-primary transition-colors block cursor-pointer"
+                    >
+                      {d.full_name}
+                    </button>
+                    <div className="inline-flex items-center gap-1 mt-1 px-2 py-0.5 rounded text-[11px] font-mono font-bold bg-muted/80 text-foreground border border-border/80">
+                      <span className="text-[9px] uppercase font-sans text-muted-foreground">ID</span>
+                      <span>{d.driver_code}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <StatusBadge status={d.status === "active" ? worstExpiryStatus(d) === "overdue" ? "overdue" : "active" : "retired"} />
+              </div>
+
+              <div className="space-y-1.5 text-xs text-muted-foreground pt-1 border-t border-border/60">
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">Contact:</span>
+                  {d.phone ? (
+                    <a href={`tel:${d.phone}`} className="font-semibold text-foreground hover:text-primary transition-colors">
+                      {d.phone}
+                    </a>
+                  ) : (
+                    <span>—</span>
+                  )}
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">Licence:</span>
+                  {d.licence_class ? (
+                    <span className="inline-flex items-center gap-1 font-medium text-foreground">
+                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                      Class {d.licence_class}
+                    </span>
+                  ) : d.licence_number ? (
+                    <span className="inline-flex items-center gap-1 font-medium text-foreground">
+                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                      Licensed
+                    </span>
+                  ) : (
+                    <span className="italic">—</span>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between gap-2 pt-2 border-t border-border/60">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="flex-1 h-8 text-xs gap-1.5 cursor-pointer"
+                  onClick={() => setSelectedDriver(d)}
+                >
+                  <Eye className="h-3.5 w-3.5 text-primary" /> View Profile
+                </Button>
+
+                {canWrite && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 cursor-pointer"
+                    onClick={() => { setEditing(d); setOpen(true); }}
+                    title="Edit driver"
+                  >
+                    <Pencil className="h-3.5 w-3.5" />
+                  </Button>
+                )}
+
+                {isManager && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10 cursor-pointer"
+                    onClick={() => setConfirm(d.id)}
+                    title="Remove driver"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </Button>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
       ) : (
         <div className="overflow-hidden rounded-xl border border-border bg-card shadow-xs">
-          <div className="border-b border-border px-5 py-3.5 text-sm font-medium flex items-center justify-between">
+          <div className="border-b border-border px-5 py-3 text-sm font-medium flex items-center justify-between">
             <span>Drivers List ({filtered.length})</span>
-            <span className="text-xs text-muted-foreground">Click any driver name to view complete profile & KYC</span>
+            <span className="text-xs text-muted-foreground">Click any driver name to view complete profile dossier</span>
           </div>
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[850px] text-sm">
+            <table className="w-full min-w-[750px] text-sm">
               <thead className="text-left text-xs uppercase tracking-wide text-muted-foreground bg-muted/20">
                 <tr>
                   <th className="px-5 py-3.5 font-medium">Driver & ID</th>
@@ -214,8 +389,8 @@ export default function Drivers() {
                         <button
                           type="button"
                           onClick={() => setSelectedDriver(d)}
-                          className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-full border border-border bg-muted hover:ring-2 hover:ring-primary/40 transition-all cursor-pointer focus:outline-none"
-                          title="Click to view driver details"
+                          className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-full border border-border bg-muted hover:ring-2 hover:ring-primary/40 transition-all cursor-pointer focus:outline-none"
+                          title="Click to view driver profile"
                         >
                           <CoverImage
                             value={d.photo_url}
@@ -232,10 +407,10 @@ export default function Drivers() {
                             title="Click to view full driver details"
                           >
                             <div className="font-semibold text-foreground group-hover:text-primary transition-colors flex items-center gap-2 flex-wrap">
-                              <span className="text-base">{d.full_name}</span>
-                              <span className="font-mono text-[11px] font-bold text-primary bg-primary/10 border border-primary/25 px-2 py-0.5 rounded inline-flex items-center gap-1 shadow-2xs">
-                                <CreditCard className="h-3 w-3" />
-                                {d.driver_code}
+                              <span>{d.full_name}</span>
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-mono font-bold bg-muted/80 text-foreground border border-border/80">
+                                <span className="text-[9px] uppercase font-sans text-muted-foreground">ID</span>
+                                <span>{d.driver_code}</span>
                               </span>
                             </div>
                           </button>
@@ -246,7 +421,6 @@ export default function Drivers() {
                           ) : (
                             <div className="text-[11px] text-muted-foreground mt-0.5 flex items-center gap-1">
                               <span className="text-primary hover:underline cursor-pointer" onClick={() => setSelectedDriver(d)}>View profile details</span>
-                              {d.nida_number && <span className="text-[10px] text-muted-foreground font-mono">• NIDA: {d.nida_number}</span>}
                             </div>
                           )}
                         </div>
@@ -256,19 +430,20 @@ export default function Drivers() {
                       <div className="font-medium text-foreground">{d.phone ?? "—"}</div>
                       {d.email && <div className="text-xs text-muted-foreground">{d.email}</div>}
                     </td>
-                    <td className="px-5 py-3.5 text-muted-foreground">
-                      <div className="font-medium text-foreground">
-                        {d.licence_number ?? "—"} {d.licence_class ? `(${d.licence_class})` : ""}
-                      </div>
-                      <div className="flex items-center gap-2 mt-0.5 text-xs">
-                        <span className="flex items-center gap-1">
-                          <StatusBadge status={scheduleStatus(d.licence_expiry)} />
-                          <span>Lic: {formatDate(d.licence_expiry)}</span>
+                    <td className="px-5 py-3.5">
+                      {d.licence_class ? (
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-muted/70 text-foreground border border-border/70">
+                          <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                          <span>Class {d.licence_class}</span>
                         </span>
-                        {d.medical_expiry && (
-                          <span className="text-[11px] text-muted-foreground">Med: {formatDate(d.medical_expiry)}</span>
-                        )}
-                      </div>
+                      ) : d.licence_number ? (
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-muted/70 text-muted-foreground border border-border/70">
+                          <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                          <span>Licensed</span>
+                        </span>
+                      ) : (
+                        <span className="text-xs text-muted-foreground italic">—</span>
+                      )}
                     </td>
                     <td className="px-5 py-3.5">
                       <StatusBadge status={d.status === "active" ? worstExpiryStatus(d) === "overdue" ? "overdue" : "active" : "retired"} />
@@ -315,7 +490,7 @@ export default function Drivers() {
         </div>
       )}
 
-      <DriverDialog open={open} onOpenChange={setOpen} driver={editing} onSaved={load} />
+      <DriverDialog open={open} onOpenChange={setOpen} driver={editing} onSaved={load} existingCount={drivers.length} />
 
       {selectedDriver && (
         <DriverDetailModal
@@ -361,11 +536,12 @@ export default function Drivers() {
   );
 }
 
-function DriverDialog({ open, onOpenChange, driver, onSaved }: {
+function DriverDialog({ open, onOpenChange, driver, onSaved, existingCount }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
   driver: Driver | null;
   onSaved: () => void;
+  existingCount?: number;
 }) {
   const { profile } = useAuth();
   const [submitting, setSubmitting] = useState(false);
@@ -403,7 +579,7 @@ function DriverDialog({ open, onOpenChange, driver, onSaved }: {
             }
           : {
               ...EMPTY_FORM,
-              driver_code: generateDriverCode(),
+              driver_code: generateDriverCode(undefined, existingCount ?? 0),
             },
       );
       setDriverPhotoFile(null);
@@ -556,12 +732,12 @@ function DriverDialog({ open, onOpenChange, driver, onSaved }: {
 
             <div className="space-y-1.5">
               <div className="flex items-center justify-between">
-                <Label className="text-xs font-semibold">Unique Driver ID *</Label>
+                <Label className="text-xs font-semibold">Driver ID / Code *</Label>
                 <button
                   type="button"
-                  onClick={() => setForm({ ...form, driver_code: generateDriverCode() })}
+                  onClick={() => setForm({ ...form, driver_code: generateDriverCode(undefined, (existingCount ?? 0) + Math.floor(1 + Math.random() * 20)) })}
                   className="text-[10px] text-primary hover:underline flex items-center gap-0.5 cursor-pointer font-medium"
-                  title="Generate new ID"
+                  title="Generate next ID"
                 >
                   <RefreshCw className="h-2.5 w-2.5" /> Auto-Gen
                 </button>
@@ -569,11 +745,11 @@ function DriverDialog({ open, onOpenChange, driver, onSaved }: {
               <Input
                 value={form.driver_code}
                 onChange={(e) => setForm({ ...form, driver_code: e.target.value.toUpperCase() })}
-                placeholder="DRV-XXXX"
-                className="font-mono font-bold text-primary tracking-wider uppercase h-10"
+                placeholder="DRV-001"
+                className="font-mono font-bold text-foreground tracking-wider uppercase h-10"
                 required
               />
-              <p className="text-[10px] text-muted-foreground">Unique ID for trips & dispatch</p>
+              <p className="text-[10px] text-muted-foreground">e.g. DRV-001, EMP-024</p>
             </div>
           </div>
 
@@ -953,9 +1129,9 @@ function DriverDetailModal({
               <div className="text-xl font-bold text-foreground">{driver.full_name}</div>
               
               <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2 pt-0.5">
-                <div className="font-mono text-xs font-bold text-primary bg-primary/10 border border-primary/25 px-2.5 py-1 rounded-md inline-flex items-center gap-1.5 shadow-2xs">
-                  <CreditCard className="h-3.5 w-3.5" />
-                  <span>ID: {driver.driver_code}</span>
+                <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-muted text-foreground border border-border text-xs font-mono font-bold tracking-wider shadow-2xs">
+                  <span className="text-[10px] font-sans uppercase font-bold text-muted-foreground">ID</span>
+                  <span>{driver.driver_code}</span>
                 </div>
                 <Button
                   type="button"
@@ -963,7 +1139,7 @@ function DriverDetailModal({
                   size="sm"
                   className="h-7 px-2 text-xs gap-1 cursor-pointer"
                   onClick={copyCode}
-                  title="Copy Driver Unique ID"
+                  title="Copy Driver ID"
                 >
                   {copied ? <Check className="h-3 w-3 text-emerald-600" /> : <Copy className="h-3 w-3" />}
                   <span>{copied ? "Copied" : "Copy ID"}</span>
@@ -971,7 +1147,7 @@ function DriverDetailModal({
               </div>
 
               <p className="text-xs text-muted-foreground pt-1">
-                Unique system ID connected to Trips, Dispatch, and QR Driver Inspections.
+                Official personnel ID for Dispatch, Trips, and Equipment Inspection.
               </p>
             </div>
           </div>

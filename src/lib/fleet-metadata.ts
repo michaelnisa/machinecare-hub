@@ -205,20 +205,26 @@ export function serializeMachinePayload(data: {
   };
 }
 
-export function generateDriverCode(seed?: string): string {
-  if (seed) {
-    const clean = seed.replace(/[^a-zA-Z0-9]/g, "").toUpperCase();
-    if (clean.length >= 4) {
-      return `DRV-${clean.slice(0, 4)}`;
-    }
+export function generateDriverCode(seed?: string, index?: number): string {
+  if (typeof index === "number" && index >= 0) {
+    return `DRV-${String(index + 1).padStart(3, "0")}`;
   }
-  const rand = Math.floor(1000 + Math.random() * 9000);
-  return `DRV-${rand}`;
+  if (seed) {
+    const clean = seed.trim().toUpperCase();
+    if (/^[A-Z]{2,4}-\d{2,4}$/.test(clean)) return clean;
+    let hash = 0;
+    for (let i = 0; i < seed.length; i++) {
+      hash = (hash * 33 + seed.charCodeAt(i)) % 99;
+    }
+    return `DRV-${String((Math.abs(hash) % 99) + 1).padStart(3, "0")}`;
+  }
+  const rand = Math.floor(1 + Math.random() * 99);
+  return `DRV-${String(rand).padStart(3, "0")}`;
 }
 
 export interface FleetDriver {
   id: string;
-  driver_code: string; // Unique Driver ID (e.g. DRV-8492)
+  driver_code: string; // Unique Driver ID (e.g. DRV-001)
   full_name: string;
   phone: string | null;
   status: string;
@@ -244,7 +250,7 @@ export interface FleetDriver {
   user_notes: string | null;
 }
 
-export function parseDriver(raw: any): FleetDriver {
+export function parseDriver(raw: any, index?: number): FleetDriver {
   let driver_code: string | null = raw.driver_code ?? null;
   let email: string | null = raw.email ?? null;
   let license_number: string | null = raw.licence_number ?? raw.license_number ?? null;
@@ -287,7 +293,7 @@ export function parseDriver(raw: any): FleetDriver {
   }
 
   if (!driver_code) {
-    driver_code = generateDriverCode(raw.id || raw.full_name);
+    driver_code = generateDriverCode(raw.id || raw.full_name, index);
   }
 
   return {
