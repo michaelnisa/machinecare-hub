@@ -381,7 +381,7 @@ export default function Notifications() {
                           </td>
                           <td className="px-5 py-3 text-right">
                             <span className="text-xs text-destructive font-medium">
-                              Was due {formatDate(a.next_due_date)}
+                              {a.trigger_reason || (a.next_due_date ? `Was due ${formatDate(a.next_due_date)}` : "Overdue")}
                             </span>
                           </td>
                           <td className="px-5 py-3 text-right">
@@ -424,7 +424,7 @@ export default function Notifications() {
                           </td>
                           <td className="px-5 py-3 text-right">
                             <span className="text-xs text-amber-600 font-medium">
-                              Due {formatDate(a.next_due_date)}
+                              {a.trigger_reason || (a.next_due_date ? `Due ${formatDate(a.next_due_date)}` : "Due soon")}
                             </span>
                           </td>
                           <td className="px-5 py-3 text-right">

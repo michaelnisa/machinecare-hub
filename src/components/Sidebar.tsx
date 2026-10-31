@@ -311,6 +311,8 @@ export function Sidebar() {
         items: [
           { to: "/work-orders", label: t.nav.workOrders, icon: ClipboardList },
           { to: "/fault-reports", label: "Fault reports", icon: AlertTriangle },
+          { to: "/maintenance/calendar", label: "Maintenance Calendar", icon: Calendar },
+          { to: "/maintenance/schedules", label: "PM Schedules", icon: ClipboardCheck },
           {
             to: "/checklist-templates",
             label: "Checklist templates",

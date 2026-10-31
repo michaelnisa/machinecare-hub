@@ -8,7 +8,7 @@
 import type { TruckLayoutConfigId } from "./fleet-constants";
 
 export const SAFE_MACHINE_COLUMNS =
-  "id, name, plate_number, make, model, year, vin, category, fuel_type, tank_capacity_l, current_odometer_km, home_depot, cover_image_url, status, notes";
+  "id, name, plate_number, make, model, year, vin, category, fuel_type, tank_capacity_l, current_odometer_km, current_hours, home_depot, cover_image_url, status, notes";
 
 export const SAFE_DRIVER_COLUMNS =
   "id, full_name, phone, status, notes, photo_url";
@@ -41,6 +41,7 @@ export interface FleetVehicle {
   fuel_type: string | null;
   tank_capacity_l: number | null;
   current_odometer_km: number | null;
+  current_hours: number | null;
   home_depot: string | null;
   cover_image_url: string | null;
   status: string;
@@ -56,6 +57,9 @@ export interface FleetVehicle {
   head_tank_capacity_l: number | null;
   trailer_tank_capacity_l: number | null;
   total_tank_capacity_l: number | null;
+  auto_pm_enabled?: boolean;
+  auto_pm_hours_interval?: number | null;
+  auto_pm_km_interval?: number | null;
   user_notes: string | null;
 
   // Compatibility helpers
@@ -76,6 +80,11 @@ export function parseMachine(raw: any): FleetVehicle {
   let total_tank_capacity_l: number | null = raw.tank_capacity_l ?? null;
   let user_notes: string | null = raw.notes ?? null;
 
+  let current_hours: number | null = raw.current_hours ?? null;
+  let auto_pm_enabled: boolean = false;
+  let auto_pm_hours_interval: number | null = null;
+  let auto_pm_km_interval: number | null = null;
+
   if (raw.notes && typeof raw.notes === "string" && raw.notes.startsWith("{") && raw.notes.endsWith("}")) {
     try {
       const parsed = JSON.parse(raw.notes);
@@ -88,6 +97,9 @@ export function parseMachine(raw: any): FleetVehicle {
       if (parsed.head_tank_capacity_l != null) head_tank_capacity_l = Number(parsed.head_tank_capacity_l);
       if (parsed.trailer_tank_capacity_l != null) trailer_tank_capacity_l = Number(parsed.trailer_tank_capacity_l);
       if (parsed.total_tank_capacity_l != null) total_tank_capacity_l = Number(parsed.total_tank_capacity_l);
+      if (parsed.auto_pm_enabled != null) auto_pm_enabled = Boolean(parsed.auto_pm_enabled);
+      if (parsed.auto_pm_hours_interval != null) auto_pm_hours_interval = Number(parsed.auto_pm_hours_interval);
+      if (parsed.auto_pm_km_interval != null) auto_pm_km_interval = Number(parsed.auto_pm_km_interval);
       user_notes = parsed.text ?? null;
     } catch {
       // Fallback on parse failure
@@ -107,6 +119,7 @@ export function parseMachine(raw: any): FleetVehicle {
 
   return {
     ...raw,
+    current_hours,
     vehicle_type,
     axle_configuration: axle_configuration as TruckLayoutConfigId,
     is_trailer,
@@ -116,6 +129,9 @@ export function parseMachine(raw: any): FleetVehicle {
     head_tank_capacity_l,
     trailer_tank_capacity_l,
     total_tank_capacity_l,
+    auto_pm_enabled,
+    auto_pm_hours_interval,
+    auto_pm_km_interval,
     user_notes,
     has_trailer,
     trailer_plate: linked_trailer_plate,
@@ -134,6 +150,7 @@ export function serializeMachinePayload(data: {
   fuel_type: string | null;
   tank_capacity_l: number | null;
   current_odometer_km: number | null;
+  current_hours?: number | null;
   home_depot: string | null;
   status: string;
   cover_image_url: string | null;
@@ -148,6 +165,9 @@ export function serializeMachinePayload(data: {
   head_tank_capacity_l?: number | null;
   trailer_tank_capacity_l?: number | null;
   total_tank_capacity_l?: number | null;
+  auto_pm_enabled?: boolean;
+  auto_pm_hours_interval?: number | null;
+  auto_pm_km_interval?: number | null;
   user_notes?: string | null;
 }) {
   const meta = {
@@ -160,6 +180,9 @@ export function serializeMachinePayload(data: {
     head_tank_capacity_l: data.head_tank_capacity_l ?? null,
     trailer_tank_capacity_l: data.trailer_tank_capacity_l ?? null,
     total_tank_capacity_l: data.total_tank_capacity_l ?? null,
+    auto_pm_enabled: data.auto_pm_enabled ?? false,
+    auto_pm_hours_interval: data.auto_pm_hours_interval ?? null,
+    auto_pm_km_interval: data.auto_pm_km_interval ?? null,
     text: data.user_notes ?? "",
   };
 
@@ -174,6 +197,7 @@ export function serializeMachinePayload(data: {
     fuel_type: data.fuel_type,
     tank_capacity_l: data.total_tank_capacity_l ?? data.head_tank_capacity_l ?? data.tank_capacity_l,
     current_odometer_km: data.current_odometer_km,
+    current_hours: data.current_hours ?? null,
     home_depot: data.home_depot,
     status: data.status,
     cover_image_url: data.cover_image_url,

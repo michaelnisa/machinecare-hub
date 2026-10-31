@@ -6,13 +6,15 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { PageLoader, EmptyState } from "@/components/PageLoader";
-import { ClipboardCheck, Plus, Loader2, CheckCircle2, XCircle, MinusCircle, AlertTriangle } from "lucide-react";
+import { ClipboardCheck, Plus, Loader2, CheckCircle2, XCircle, MinusCircle, AlertTriangle, QrCode } from "lucide-react";
+import { Link } from "react-router-dom";
+import { MachineQrDialog } from "@/components/MachineQrDialog";
 import { toast } from "sonner";
 import { formatDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { useI18n } from "@/i18n/I18nProvider";
 
-type Machine = { id: string; name: string; plate_number: string | null; organisation_id: string };
+type Machine = { id: string; name: string; plate_number: string | null; organisation_id: string; current_odometer_km?: number | null; category?: string };
 type Driver = { id: string; full_name: string };
 type Execution = {
   id: string;
@@ -40,6 +42,8 @@ export default function Inspections() {
   const [vehicleFilter, setVehicleFilter] = useState("all");
   const [driverFilter, setDriverFilter] = useState("all");
   const [newOpen, setNewOpen] = useState(false);
+  const [qrOpen, setQrOpen] = useState(false);
+  const [qrMachine, setQrMachine] = useState<Machine | null>(null);
 
   const load = async () => {
     if (!profile) return;
@@ -49,27 +53,66 @@ export default function Inspections() {
       .select("id")
       .eq("is_fleet_pre_start", true);
     if (tErr) toast.error(tErr.message);
-    const templateIds = (templates ?? []).map((t) => t.id);
+    let templateIds = (templates ?? []).map((t) => t.id);
 
     const [{ data: m }, { data: d }] = await Promise.all([
-      supabase.from("machines").select("id, name, plate_number, organisation_id").eq("category", "Vehicle"),
+      supabase.from("machines").select("id, name, plate_number, organisation_id, current_odometer_km, category").eq("category", "Vehicle"),
       supabase.from("drivers").select("id, full_name").eq("status", "active"),
     ]);
-    setMachines((m ?? []) as Machine[]);
+    const vehicleList = (m ?? []) as Machine[];
+    setMachines(vehicleList);
     setDrivers((d ?? []) as Driver[]);
 
-    if (templateIds.length === 0) {
+    // If no fleet pre-start template exists in this organisation, auto-seed one so QR code walkaround works seamlessly!
+    if (templateIds.length === 0 && profile.organisation_id) {
+      try {
+        const { data: createdTmpl } = await supabase.from("checklist_templates").insert({
+          organisation_id: profile.organisation_id,
+          name: "Daily Vehicle Pre-Trip Walkaround",
+          description: "Standard daily walkaround inspection for fleet vehicles and trucks.",
+          is_fleet_pre_start: true,
+          status: "approved",
+          version: 1,
+        }).select("id").single();
+
+        if (createdTmpl?.id) {
+          templateIds = [createdTmpl.id];
+          await supabase.from("checklist_template_items").insert([
+            { template_id: createdTmpl.id, text: "Foot Brake & Parking Handbrake Operation", sort_order: 1, severity: "critical", item_type: "tri_state" },
+            { template_id: createdTmpl.id, text: "Tyres Tread Depth, Inflation & Wheel Lug Nuts", sort_order: 2, severity: "critical", item_type: "tri_state" },
+            { template_id: createdTmpl.id, text: "Engine Oil, Coolant & Brake Fluid Levels", sort_order: 3, severity: "major", item_type: "tri_state" },
+            { template_id: createdTmpl.id, text: "Headlights, Tail Lights, Brake Lights & Indicators", sort_order: 4, severity: "major", item_type: "tri_state" },
+            { template_id: createdTmpl.id, text: "Mirrors, Windscreen, Wipers & Washer Fluid", sort_order: 5, severity: "minor", item_type: "tri_state" },
+            { template_id: createdTmpl.id, text: "Seatbelt, Fire Extinguisher & Warning Triangles", sort_order: 6, severity: "critical", item_type: "tri_state" },
+          ]);
+        }
+      } catch (e) {
+        console.warn("Could not auto-create standard fleet checklist template:", e);
+      }
+    }
+
+    const machineIds = vehicleList.map((v) => v.id);
+
+    // Fetch executions: either matching fleet templates OR matching any vehicle in the fleet
+    let query = supabase
+      .from("checklist_executions")
+      .select("id, machine_id, driver_id, performed_by_name, performed_at, overall_result")
+      .order("performed_at", { ascending: false })
+      .limit(200);
+
+    if (templateIds.length > 0 && machineIds.length > 0) {
+      query = query.or(`template_id.in.(${templateIds.join(",")}),machine_id.in.(${machineIds.join(",")})`);
+    } else if (templateIds.length > 0) {
+      query = query.in("template_id", templateIds);
+    } else if (machineIds.length > 0) {
+      query = query.in("machine_id", machineIds);
+    } else {
       setExecutions([]);
       setLoading(false);
       return;
     }
 
-    const { data: ex, error: exErr } = await supabase
-      .from("checklist_executions")
-      .select("id, machine_id, driver_id, performed_by_name, performed_at, overall_result")
-      .in("template_id", templateIds)
-      .order("performed_at", { ascending: false })
-      .limit(200);
+    const { data: ex, error: exErr } = await query;
     if (exErr) toast.error(exErr.message);
     setExecutions((ex ?? []) as Execution[]);
     setLoading(false);
@@ -157,29 +200,67 @@ export default function Inspections() {
                 <th className="px-5 py-3 font-medium">Driver</th>
                 <th className="px-5 py-3 font-medium">Submitted</th>
                 <th className="px-5 py-3 font-medium">Result</th>
+                <th className="px-5 py-3 font-medium text-right">QR Inspection</th>
               </tr>
             </thead>
             <tbody>
-              {filtered.map((e) => (
-                <tr key={e.id} className="border-t border-border">
-                  <td className="px-5 py-3 font-medium">{vehicleLabel(e.machine_id)}</td>
-                  <td className="px-5 py-3 text-muted-foreground">
-                    {e.driver_id ? driverMap.get(e.driver_id)?.full_name ?? e.performed_by_name : e.performed_by_name ?? "—"}
-                  </td>
-                  <td className="px-5 py-3 text-muted-foreground">{formatDate(e.performed_at)}</td>
-                  <td className="px-5 py-3">
-                    <span className={`rounded-md px-2 py-0.5 text-xs font-medium capitalize ${RESULT_CLASS[e.overall_result ?? "ok"] ?? "bg-muted"}`}>
-                      {(e.overall_result ?? "ok") === "attention" ? "Needs attention" : "OK"}
-                    </span>
-                  </td>
-                </tr>
-              ))}
+              {filtered.map((e) => {
+                const vehicleObj = machineMap.get(e.machine_id);
+                return (
+                  <tr key={e.id} className="border-t border-border">
+                    <td className="px-5 py-3 font-medium">
+                      <Link to={`/machines/${e.machine_id}`} className="hover:underline text-foreground">
+                        {vehicleLabel(e.machine_id)}
+                      </Link>
+                    </td>
+                    <td className="px-5 py-3 text-muted-foreground">
+                      {e.driver_id ? driverMap.get(e.driver_id)?.full_name ?? e.performed_by_name : e.performed_by_name ?? "—"}
+                    </td>
+                    <td className="px-5 py-3 text-muted-foreground">{formatDate(e.performed_at)}</td>
+                    <td className="px-5 py-3">
+                      <span className={`rounded-md px-2 py-0.5 text-xs font-medium capitalize ${RESULT_CLASS[e.overall_result ?? "ok"] ?? "bg-muted"}`}>
+                        {(e.overall_result ?? "ok") === "attention" ? "Needs attention" : "OK"}
+                      </span>
+                    </td>
+                    <td className="px-5 py-3 text-right">
+                      {vehicleObj && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            setQrMachine(vehicleObj);
+                            setQrOpen(true);
+                          }}
+                          className="h-8 gap-1.5 text-xs text-primary"
+                          title="View / Print Driver QR Inspection Sticker"
+                        >
+                          <QrCode className="h-3.5 w-3.5" /> QR Code
+                        </Button>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
       )}
 
       <NewInspectionDialog open={newOpen} onOpenChange={setNewOpen} machines={machines} drivers={drivers} onSaved={load} />
+
+      {qrMachine && (
+        <MachineQrDialog
+          open={qrOpen}
+          onOpenChange={setQrOpen}
+          machineId={qrMachine.id}
+          machineName={qrMachine.name}
+          qrEnabled={true}
+          plateNumber={qrMachine.plate_number}
+          currentHours={qrMachine.current_odometer_km}
+          category={qrMachine.category || "Vehicle"}
+          organisationName={profile?.organisation_id}
+        />
+      )}
     </div>
   );
 }

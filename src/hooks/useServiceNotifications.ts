@@ -10,6 +10,9 @@ export interface ServiceNotification {
   machine_id: string;
   machine_name: string;
   next_due_date: string | null;
+  next_due_hours?: number | null;
+  current_hours?: number | null;
+  trigger_reason?: string;
   status: "due_soon" | "overdue";
 }
 
@@ -42,7 +45,7 @@ export function useServiceNotifications(pollMs = 60_000) {
   const load = useCallback(async () => {
     const { data, error } = await supabase
       .from("service_schedules")
-      .select("id, name, next_due_date, machine_id, machines(name)")
+      .select("id, name, next_due_date, next_due_hours, interval_hours, machine_id, machines(name, current_hours)")
       .order("next_due_date", { ascending: true, nullsFirst: false });
     if (error) {
       setLoading(false);
@@ -50,7 +53,23 @@ export function useServiceNotifications(pollMs = 60_000) {
     }
     const enriched: ServiceNotification[] = (data ?? [])
       .map((s: any) => {
-        const status = scheduleStatus(s.next_due_date);
+        let status: "ok" | "due_soon" | "overdue" = scheduleStatus(s.next_due_date);
+        let trigger_reason = s.next_due_date ? `Calendar due date: ${s.next_due_date}` : "";
+
+        // Check engine operating hours trigger
+        const curHours = s.machines?.current_hours;
+        const dueHours = s.next_due_hours;
+        if (dueHours != null && curHours != null) {
+          const diffHours = dueHours - curHours;
+          if (diffHours <= 0) {
+            status = "overdue";
+            trigger_reason = `Exceeded operating hours (${curHours} hrs / limit: ${dueHours} hrs)`;
+          } else if (diffHours <= 25 && status !== "overdue") {
+            status = "due_soon";
+            trigger_reason = `Approaching runtime limit (${curHours} hrs / ${dueHours} hrs)`;
+          }
+        }
+
         if (status === "ok") return null;
         return {
           id: s.id,
@@ -58,6 +77,9 @@ export function useServiceNotifications(pollMs = 60_000) {
           machine_id: s.machine_id,
           machine_name: s.machines?.name ?? "Machine",
           next_due_date: s.next_due_date,
+          next_due_hours: s.next_due_hours,
+          current_hours: curHours,
+          trigger_reason,
           status,
         };
       })

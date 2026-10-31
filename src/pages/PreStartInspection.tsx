@@ -161,18 +161,6 @@ export default function PreStartInspection() {
     const executionId = crypto.randomUUID();
     const overallResult = notOkItems.length > 0 ? "attention" : "ok";
 
-    const executionPayload = {
-      id: executionId,
-      organisation_id: machine.organisation_id,
-      machine_id: machine.id,
-      template_id: template.id,
-      template_version: template.version,
-      driver_id: driverId || null,
-      performed_by_name: driverName,
-      performed_at: new Date().toISOString(),
-      status: "completed",
-      overall_result: overallResult,
-    };
     const responseRows = items.map((it, i) => ({
       execution_id: executionId,
       item_id: it.item_id,
@@ -184,7 +172,65 @@ export default function PreStartInspection() {
       sort_order: i,
     }));
 
+    let executionPayload: any = null;
+
     try {
+      let activeTemplateId = template.id;
+      let activeTemplateVersion = template.version;
+
+      // If the template was a local fallback ("std-fleet-walkaround"), ensure an approved template exists in DB
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(activeTemplateId);
+      if (!isUuid && machine.organisation_id) {
+        const { data: existing } = await supabase
+          .from("checklist_templates")
+          .select("id, version")
+          .eq("organisation_id", machine.organisation_id)
+          .eq("is_fleet_pre_start", true)
+          .limit(1)
+          .maybeSingle();
+
+        if (existing?.id) {
+          activeTemplateId = existing.id;
+          activeTemplateVersion = existing.version || 1;
+        } else {
+          const { data: createdTmpl } = await supabase.from("checklist_templates").insert({
+            organisation_id: machine.organisation_id,
+            name: "Daily Vehicle Pre-Trip Walkaround",
+            description: "Standard daily walkaround inspection for fleet vehicles and trucks.",
+            is_fleet_pre_start: true,
+            status: "approved",
+            version: 1,
+          }).select("id, version").single();
+
+          if (createdTmpl?.id) {
+            activeTemplateId = createdTmpl.id;
+            activeTemplateVersion = createdTmpl.version || 1;
+            await supabase.from("checklist_template_items").insert(
+              DEFAULT_FLEET_CHECKLIST.map((it) => ({
+                template_id: createdTmpl.id,
+                text: it.item_text,
+                sort_order: it.item_sort_order,
+                severity: it.item_severity,
+                item_type: "tri_state",
+              }))
+            );
+          }
+        }
+      }
+
+      executionPayload = {
+        id: executionId,
+        organisation_id: machine.organisation_id,
+        machine_id: machine.id,
+        template_id: activeTemplateId,
+        template_version: activeTemplateVersion,
+        driver_id: driverId || null,
+        performed_by_name: driverName,
+        performed_at: new Date().toISOString(),
+        status: "completed",
+        overall_result: overallResult,
+      };
+
       if (driverId && driverName) {
         try {
           localStorage.setItem("mc_last_driver_id", driverId);

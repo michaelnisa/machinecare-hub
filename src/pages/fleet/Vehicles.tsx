@@ -27,8 +27,12 @@ import {
   Container,
   Layers,
   Link2,
-  Fuel
+  Fuel,
+  Wrench,
+  Clock,
+  CheckCircle2
 } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 import { useI18n } from "@/i18n/I18nProvider";
 import { MachineQrDialog } from "@/components/MachineQrDialog";
@@ -96,6 +100,10 @@ const EMPTY_FORM = {
   total_tank_capacity_l: "",
   tank_capacity_l: "",
   current_odometer_km: "",
+  current_hours: "",
+  auto_pm_enabled: false,
+  auto_pm_hours_interval: "250",
+  auto_pm_km_interval: "10000",
   home_depot: "",
   status: "active",
   user_notes: "",
@@ -633,6 +641,10 @@ function VehicleDialog({
           total_tank_capacity_l: machine.total_tank_capacity_l != null ? String(machine.total_tank_capacity_l) : (machine.tank_capacity_l != null ? String(machine.tank_capacity_l) : ""),
           tank_capacity_l: machine.tank_capacity_l != null ? String(machine.tank_capacity_l) : "",
           current_odometer_km: machine.current_odometer_km != null ? String(machine.current_odometer_km) : "",
+          current_hours: machine.current_hours != null ? String(machine.current_hours) : "",
+          auto_pm_enabled: Boolean(machine.auto_pm_enabled),
+          auto_pm_hours_interval: machine.auto_pm_hours_interval != null ? String(machine.auto_pm_hours_interval) : "250",
+          auto_pm_km_interval: machine.auto_pm_km_interval != null ? String(machine.auto_pm_km_interval) : "10000",
           home_depot: machine.home_depot ?? "",
           status: machine.status,
           user_notes: machine.user_notes ?? "",
@@ -765,6 +777,7 @@ function VehicleDialog({
         fuel_type: isTrailer ? null : (form.fuel_type || null),
         tank_capacity_l: totalCap ?? headCap,
         current_odometer_km: form.current_odometer_km ? Number(form.current_odometer_km) : null,
+        current_hours: form.current_hours ? Number(form.current_hours) : null,
         home_depot: form.home_depot.trim() || null,
         status: form.status,
         cover_image_url: coverUrl,
@@ -777,17 +790,64 @@ function VehicleDialog({
         head_tank_capacity_l: headCap,
         trailer_tank_capacity_l: trailerCap,
         total_tank_capacity_l: totalCap,
+        auto_pm_enabled: form.auto_pm_enabled,
+        auto_pm_hours_interval: form.auto_pm_hours_interval ? Number(form.auto_pm_hours_interval) : null,
+        auto_pm_km_interval: form.auto_pm_km_interval ? Number(form.auto_pm_km_interval) : null,
         user_notes: form.user_notes.trim() || null,
       });
 
-      const { error } = machine
-        ? await supabase.from("machines").update(safePayload).eq("id", machine.id)
-        : await supabase.from("machines").insert({
-            ...safePayload,
-            organisation_id: profile.organisation_id,
-          });
+      let savedMachineId = machine?.id;
 
-      if (error) throw error;
+      if (machine) {
+        const { error } = await supabase.from("machines").update(safePayload).eq("id", machine.id);
+        if (error) throw error;
+      } else {
+        const { data: newMach, error } = await supabase.from("machines").insert({
+          ...safePayload,
+          organisation_id: profile.organisation_id,
+        }).select("id").single();
+        if (error) throw error;
+        savedMachineId = newMach.id;
+      }
+
+      // Auto-create or sync Preventive Maintenance (PM) Schedule if enabled
+      if (savedMachineId && form.auto_pm_enabled && form.auto_pm_hours_interval) {
+        const intervalHours = Number(form.auto_pm_hours_interval);
+        const curHours = form.current_hours ? Number(form.current_hours) : 0;
+        const nextDueHours = curHours + intervalHours;
+
+        // Check if an auto-PM schedule already exists for this machine
+        const { data: existingSchedules } = await supabase
+          .from("service_schedules")
+          .select("id")
+          .eq("machine_id", savedMachineId)
+          .eq("name", "Automated PM Interval Service")
+          .limit(1);
+
+        if (existingSchedules && existingSchedules.length > 0) {
+          await supabase.from("service_schedules").update({
+            interval_hours: intervalHours,
+            next_due_hours: nextDueHours,
+            status: "active",
+          }).eq("id", existingSchedules[0].id);
+        } else {
+          // Calculate calendar due date estimate (e.g., 90 days out if no date given)
+          const estDate = new Date();
+          estDate.setDate(estDate.getDate() + 90);
+          await supabase.from("service_schedules").insert({
+            organisation_id: profile.organisation_id,
+            machine_id: savedMachineId,
+            name: "Automated PM Interval Service",
+            service_type: "small_service",
+            interval_hours: intervalHours,
+            next_due_hours: nextDueHours,
+            interval_days: 90,
+            next_due_date: estDate.toISOString().slice(0, 10),
+            status: "active",
+            instructions: `Automated PM alert: triggered after ${intervalHours} operating hours or scheduled interval. Inspect fluids, filters, and safety systems.`,
+          });
+        }
+      }
 
       // Status history sync
       if (machine && form.status !== machine.status) {
@@ -1039,7 +1099,64 @@ function VehicleDialog({
             {/* Odometer */}
             <div className="space-y-1.5">
               <Label>{isTrailer ? "Approx. Distance Run (km)" : "Current Odometer (km)"}</Label>
-              <Input type="number" step="any" value={form.current_odometer_km} onChange={(e) => setForm({ ...form, current_odometer_km: e.target.value })} />
+              <Input type="number" step="any" value={form.current_odometer_km} onChange={(e) => setForm({ ...form, current_odometer_km: e.target.value })} placeholder="e.g. 120500" />
+            </div>
+
+            {/* Operating Hours (Engine runtime) */}
+            <div className="space-y-1.5">
+              <Label className="flex items-center gap-1.5">
+                <Clock className="h-3.5 w-3.5 text-primary" /> Current Operating Hours (hrs)
+              </Label>
+              <Input type="number" step="any" value={form.current_hours} onChange={(e) => setForm({ ...form, current_hours: e.target.value })} placeholder="e.g. 2450" />
+            </div>
+
+            {/* Automated PM Maintenance Notifications (Optional) */}
+            <div className="sm:col-span-2 rounded-xl border border-primary/20 bg-primary/5 p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <div className="flex items-center gap-2">
+                    <Wrench className="h-4 w-4 text-primary" />
+                    <Label className="text-sm font-semibold cursor-pointer" htmlFor="auto-pm-switch">
+                      Automated Preventive Maintenance (PM) Trigger
+                    </Label>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Automatically track runtime hours or distance, and notify maintenance when this vehicle needs service.
+                  </p>
+                </div>
+                <Switch
+                  id="auto-pm-switch"
+                  checked={form.auto_pm_enabled}
+                  onCheckedChange={(checked) => setForm({ ...form, auto_pm_enabled: checked })}
+                />
+              </div>
+
+              {form.auto_pm_enabled && (
+                <div className="grid gap-3 sm:grid-cols-2 pt-2 border-t border-primary/10">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-medium">Service Trigger Every (Hours)</Label>
+                    <Input
+                      type="number"
+                      step="any"
+                      value={form.auto_pm_hours_interval}
+                      onChange={(e) => setForm({ ...form, auto_pm_hours_interval: e.target.value })}
+                      placeholder="e.g. 250 or 500"
+                    />
+                    <span className="text-[10px] text-muted-foreground">Alerts when machine reaches runtime threshold</span>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-medium">Service Trigger Every (Kilometers)</Label>
+                    <Input
+                      type="number"
+                      step="any"
+                      value={form.auto_pm_km_interval}
+                      onChange={(e) => setForm({ ...form, auto_pm_km_interval: e.target.value })}
+                      placeholder="e.g. 10000 or 15000"
+                    />
+                    <span className="text-[10px] text-muted-foreground">Optional distance interval for highway hauls</span>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Home Depot */}
