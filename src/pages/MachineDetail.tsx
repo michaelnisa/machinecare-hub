@@ -46,7 +46,7 @@ import { parseMachine } from "@/lib/fleet-metadata";
 
 export default function MachineDetail() {
   const { id } = useParams<{ id: string }>();
-  const { profile } = useAuth();
+  const { profile, organisation } = useAuth();
   const [loading, setLoading] = useState(true);
   const [machine, setMachine] = useState<any>(null);
   const [schedules, setSchedules] = useState<any[]>([]);
@@ -680,6 +680,13 @@ export default function MachineDetail() {
         registrationNumber={parsed?.vehicle_code || machine.registration_number}
         currentHours={machine.current_hours}
         category={machine.category}
+        make={machine.make}
+        model={machine.model}
+        year={machine.year}
+        serialNumber={machine.serial_number}
+        vin={machine.vin}
+        organisationName={organisation?.name}
+        organisationLogoUrl={organisation?.logo_url}
       />
       <ConfirmDialog
         open={!!confirm}

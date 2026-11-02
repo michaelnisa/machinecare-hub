@@ -34,7 +34,7 @@ type FormValues = z.infer<typeof schema>;
 interface Props {
   open: boolean;
   onOpenChange: (v: boolean) => void;
-  onSaved?: () => void;
+  onSaved?: (createdMachine?: any) => void;
   machine?: any;
 }
 
@@ -114,9 +114,12 @@ export function MachineFormDialog({ open, onOpenChange, onSaved, machine }: Prop
         toast.success("Machine updated");
       } else {
         payload.organisation_id = profile.organisation_id;
-        const { error } = await supabase.from("machines").insert(payload);
+        const { data: newMach, error } = await supabase.from("machines").insert(payload).select().single();
         if (error) throw error;
         toast.success("Machine added");
+        onOpenChange(false);
+        onSaved?.(newMach);
+        return;
       }
       onOpenChange(false);
       onSaved?.();

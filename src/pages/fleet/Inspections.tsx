@@ -31,7 +31,7 @@ const RESULT_CLASS: Record<string, string> = {
 };
 
 export default function Inspections() {
-  const { profile } = useAuth();
+  const { profile, organisation } = useAuth();
   const { canWrite } = useUserRole();
   const { t } = useI18n();
   const [loading, setLoading] = useState(true);
@@ -258,7 +258,8 @@ export default function Inspections() {
           plateNumber={qrMachine.plate_number}
           currentHours={qrMachine.current_odometer_km}
           category={qrMachine.category || "Vehicle"}
-          organisationName={profile?.organisation_id}
+          organisationName={organisation?.name}
+          organisationLogoUrl={organisation?.logo_url}
         />
       )}
     </div>

@@ -8,9 +8,10 @@ import { Input } from "@/components/ui/input";
 import { StatusBadge } from "@/components/StatusBadge";
 import { PageLoader, EmptyState } from "@/components/PageLoader";
 import { CATEGORIES, CATEGORY_ICONS } from "@/lib/machine-constants";
-import { Plus, Search, Wrench, FileSpreadsheet } from "lucide-react";
+import { Plus, Search, Wrench, FileSpreadsheet, QrCode } from "lucide-react";
 import { toast } from "sonner";
 import { MachineFormDialog } from "@/components/MachineFormDialog";
+import { MachineQrDialog } from "@/components/MachineQrDialog";
 import { BulkImporterModal } from "@/components/BulkImporterModal";
 import { CoverImage } from "@/components/CoverImage";
 import { formatNumber } from "@/lib/format";
@@ -25,10 +26,15 @@ interface Machine {
   current_hours: number | null;
   cover_image_url: string | null;
   department: string | null;
+  plate_number?: string | null;
+  registration_number?: string | null;
+  year?: number | null;
+  serial_number?: string | null;
+  qr_enabled?: boolean;
 }
 
 export default function Machines() {
-  const { profile } = useAuth();
+  const { profile, organisation } = useAuth();
   const { role } = useUserRole();
   const [loading, setLoading] = useState(true);
   const [machines, setMachines] = useState<Machine[]>([]);
@@ -38,6 +44,8 @@ export default function Machines() {
   const [department, setDepartment] = useState<string>("");
   const [dialog, setDialog] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
+  const [qrOpen, setQrOpen] = useState(false);
+  const [qrMachine, setQrMachine] = useState<any | null>(null);
 
   // Auto-scope viewers and technicians to their own department
   useEffect(() => {
@@ -51,7 +59,7 @@ export default function Machines() {
     const { data, error } = await supabase
       .from("machines")
       .select(
-        "id, name, category, make, model, status, current_hours, cover_image_url, department",
+        "id, name, category, make, model, status, current_hours, cover_image_url, department, plate_number, registration_number, year, serial_number, qr_enabled",
       )
       .order("created_at", { ascending: false });
     if (error) toast.error(error.message);
@@ -210,11 +218,25 @@ export default function Machines() {
                     </span>
                     <span>{formatNumber(m.current_hours)} hrs/km</span>
                   </div>
-                  <Link to={`/machines/${m.id}`} className="mt-2">
-                    <Button variant="outline" size="sm" className="w-full">
-                      View
+                  <div className="mt-2 flex items-center gap-1.5">
+                    <Link to={`/machines/${m.id}`} className="flex-1">
+                      <Button variant="outline" size="sm" className="w-full">
+                        View
+                      </Button>
+                    </Link>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="px-2.5 text-muted-foreground hover:text-foreground"
+                      title="View / Print QR Code Tag"
+                      onClick={() => {
+                        setQrMachine(m);
+                        setQrOpen(true);
+                      }}
+                    >
+                      <QrCode className="h-4 w-4" />
                     </Button>
-                  </Link>
+                  </div>
                 </div>
               </div>
             );
@@ -225,8 +247,35 @@ export default function Machines() {
       <MachineFormDialog
         open={dialog}
         onOpenChange={setDialog}
-        onSaved={load}
+        onSaved={(newMach?: any) => {
+          load();
+          if (newMach) {
+            setQrMachine(newMach);
+            setQrOpen(true);
+          }
+        }}
       />
+
+      {/* QR Code Tag Modal */}
+      {qrMachine && (
+        <MachineQrDialog
+          open={qrOpen}
+          onOpenChange={setQrOpen}
+          machineId={qrMachine.id}
+          machineName={qrMachine.name}
+          qrEnabled={qrMachine.qr_enabled !== false}
+          plateNumber={qrMachine.plate_number}
+          registrationNumber={qrMachine.registration_number}
+          currentHours={qrMachine.current_hours}
+          category={qrMachine.category}
+          make={qrMachine.make}
+          model={qrMachine.model}
+          year={qrMachine.year}
+          serialNumber={qrMachine.serial_number}
+          organisationName={organisation?.name}
+          organisationLogoUrl={organisation?.logo_url}
+        />
+      )}
 
       <BulkImporterModal
         entity="machine"

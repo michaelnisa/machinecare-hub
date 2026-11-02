@@ -125,7 +125,7 @@ type VehicleDoc = {
 export default function FleetVehicleDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { profile } = useAuth();
+  const { profile, organisation } = useAuth();
   const { canWrite, isManager } = useUserRole();
 
   const [loading, setLoading] = useState(true);
@@ -1089,7 +1089,13 @@ export default function FleetVehicleDetail() {
         registrationNumber={vehicle.vehicle_code}
         currentHours={vehicle.current_odometer_km}
         category={vehicle.category}
-        organisationName={profile?.organisation_id}
+        make={vehicle.make}
+        model={vehicle.model}
+        year={vehicle.year}
+        serialNumber={vehicle.serial_number}
+        vin={vehicle.vin}
+        organisationName={organisation?.name}
+        organisationLogoUrl={organisation?.logo_url}
       />
 
       {/* Update Odometer Modal */}

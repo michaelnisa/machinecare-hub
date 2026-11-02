@@ -116,7 +116,7 @@ const EMPTY_FORM = {
 };
 
 export default function Vehicles() {
-  const { profile } = useAuth();
+  const { profile, organisation } = useAuth();
   const { canWrite } = useUserRole();
   const { t } = useI18n();
   const [loading, setLoading] = useState(true);
@@ -729,7 +729,16 @@ export default function Vehicles() {
         initialCategory={initialCategory}
         availableTrailers={fleetTrailers}
         existingCount={initialCategory === "Trailer" ? fleetTrailers.length : powerUnits.length}
-        onSaved={load}
+        onSaved={(createdMachine?: any) => {
+          load();
+          if (createdMachine) {
+            setQrMachine({
+              ...createdMachine,
+              vehicle_code: createdMachine.registration_number || createdMachine.vehicle_code,
+            });
+            setQrOpen(true);
+          }
+        }}
       />
 
       {/* QR Dialog */}
@@ -741,10 +750,16 @@ export default function Vehicles() {
           machineName={qrMachine.name}
           qrEnabled={true}
           plateNumber={qrMachine.plate_number}
-          registrationNumber={qrMachine.vehicle_code}
-          currentHours={qrMachine.current_odometer_km}
+          registrationNumber={qrMachine.vehicle_code || (qrMachine as any).registration_number}
+          currentHours={qrMachine.current_odometer_km ?? (qrMachine as any).current_hours}
           category={qrMachine.category}
-          organisationName={profile?.organisation_id}
+          make={qrMachine.make}
+          model={qrMachine.model}
+          year={qrMachine.year}
+          serialNumber={(qrMachine as any).serial_number}
+          vin={(qrMachine as any).vin}
+          organisationName={organisation?.name}
+          organisationLogoUrl={organisation?.logo_url}
         />
       )}
 
@@ -774,7 +789,7 @@ export function VehicleDialog({
   initialCategory?: "Vehicle" | "Trailer";
   availableTrailers: FleetVehicle[];
   existingCount?: number;
-  onSaved: () => void;
+  onSaved: (createdRecord?: any) => void;
 }) {
   const { profile, user } = useAuth();
   const { t } = useI18n();
@@ -974,6 +989,7 @@ export function VehicleDialog({
       });
 
       let savedMachineId = machine?.id;
+      let createdRecord: any = null;
 
       if (machine) {
         const { error } = await supabase.from("machines").update(safePayload).eq("id", machine.id);
@@ -982,9 +998,10 @@ export function VehicleDialog({
         const { data: newMach, error } = await supabase.from("machines").insert({
           ...safePayload,
           organisation_id: profile.organisation_id,
-        }).select("id").single();
+        }).select("id, name, plate_number, registration_number, current_odometer_km, current_hours, category, make, model, year, serial_number, vin").single();
         if (error) throw error;
         savedMachineId = newMach.id;
+        createdRecord = newMach;
       }
 
       // Auto-create or sync Preventive Maintenance (PM) Schedule if enabled
@@ -1040,7 +1057,7 @@ export function VehicleDialog({
 
       toast.success(machine ? (isTrailer ? "Trailer updated" : "Vehicle updated") : (isTrailer ? "Trailer registered" : "Vehicle registered"));
       onOpenChange(false);
-      onSaved();
+      onSaved(createdRecord);
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Failed to save asset";
       toast.error(msg);
