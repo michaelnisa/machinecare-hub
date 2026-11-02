@@ -5,7 +5,14 @@ import { CoverImage } from "@/components/CoverImage";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { PageLoader } from "@/components/PageLoader";
-import { Wrench, ArrowRight, AlertTriangle, Gauge, Fuel, BookOpen, ClipboardList, LogIn, CheckCircle2, ClipboardCheck, Route, Siren, AlertOctagon, Receipt, DollarSign, ShieldCheck, ChevronDown } from "lucide-react";
+import { Wrench, ArrowRight, AlertTriangle, Gauge, Fuel, BookOpen, ClipboardList, LogIn, CheckCircle2, ClipboardCheck, Route, Siren, AlertOctagon, Receipt, DollarSign, ShieldCheck, ChevronDown, Car, Building2, Camera, Plus } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
 import { ServiceLogDialog } from "@/components/ServiceLogDialog";
 import { UpdateReadingDialog } from "@/components/UpdateReadingDialog";
 import { QuickFuelDialog } from "@/components/QuickFuelDialog";
@@ -84,6 +91,7 @@ const T = {
     totalTripCost: "Total Driver Cost Used",
     uploadFine: "Upload Traffic Fine",
     uploadReceipt: "Upload Receipt",
+    addCostFine: "Add Cost / Fine",
     viewExpenses: "View Trip Expenses",
   },
   sw: {
@@ -141,6 +149,7 @@ const T = {
     totalTripCost: "Jumla ya Gharama Zilizotumika",
     uploadFine: "Weka Faini ya Trafiki",
     uploadReceipt: "Weka Risiti/Stakabadhi",
+    addCostFine: "Weka Gharama / Faini",
     viewExpenses: "Tazama Gharama Zote",
   },
 };
@@ -165,6 +174,15 @@ export default function MobileMachine() {
   const [expenseDialogOpen, setExpenseDialogOpen] = useState(false);
   const [expensesListOpen, setExpensesListOpen] = useState(false);
   const [expenseDialogType, setExpenseDialogType] = useState<"fine" | "receipt" | "toll" | "parking" | "fuel" | "repair" | "other">("receipt");
+
+  // Company branding & photo upload states
+  const [companyInfo, setCompanyInfo] = useState<{ name: string; logo_url: string | null }>({
+    name: "",
+    logo_url: null,
+  });
+  const [uploadingCover, setUploadingCover] = useState(false);
+  const [authPromptOpen, setAuthPromptOpen] = useState(false);
+  const [authPromptAction, setAuthPromptAction] = useState<"trip" | "fuel" | "expense">("trip");
 
   // fault report form (visible when not signed in, different org, or when a signed-in own-org user clicks "Report fault")
   const [reporterName, setReporterName] = useState("");
@@ -298,6 +316,105 @@ export default function MobileMachine() {
       .then(({ data }) => setHistory(data ?? []));
   };
 
+  const loadCompanyBranding = async (orgId?: string | null, fallbackName?: string | null, fallbackLogo?: string | null) => {
+    if (fallbackName || fallbackLogo) {
+      setCompanyInfo((prev) => ({
+        name: fallbackName || prev.name,
+        logo_url: fallbackLogo || prev.logo_url,
+      }));
+    }
+
+    if (!orgId) return;
+
+    try {
+      const { data, error } = await (supabase as any).rpc("get_safety_gateway_org_public", {
+        p_org_id: orgId,
+      });
+      if (!error && data && data.length > 0) {
+        setCompanyInfo({
+          name: data[0].name || fallbackName || "Company",
+          logo_url: data[0].logo_url || fallbackLogo || null,
+        });
+        return;
+      }
+
+      // Fallback direct query if authenticated
+      const { data: directOrg } = await supabase
+        .from("organisations")
+        .select("name, logo_url")
+        .eq("id", orgId)
+        .maybeSingle();
+
+      if (directOrg) {
+        setCompanyInfo({
+          name: directOrg.name || fallbackName || "Company",
+          logo_url: directOrg.logo_url || fallbackLogo || null,
+        });
+      }
+    } catch (e) {
+      console.warn("Failed to load company branding:", e);
+    }
+  };
+
+  const handleUploadCover = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !machine) return;
+    setUploadingCover(true);
+    try {
+      const ext = (file.name.split(".").pop() || "jpg").toLowerCase();
+      const path = `${machine.organisation_id || "public"}/covers/${machine.id}/${Date.now()}.${ext}`;
+      const { error: upErr } = await supabase.storage
+        .from("machine-docs")
+        .upload(path, file, { upsert: true });
+      if (upErr) throw upErr;
+      const { data: pubData } = supabase.storage
+        .from("machine-docs")
+        .getPublicUrl(path);
+      const coverUrl = pubData?.publicUrl || path;
+      const { error: updateErr } = await supabase
+        .from("machines")
+        .update({ cover_image_url: coverUrl })
+        .eq("id", machine.id);
+      if (updateErr) throw updateErr;
+      setMachine((m: any) => ({ ...m, cover_image_url: coverUrl }));
+      toast.success("Vehicle photo updated successfully");
+    } catch (err: any) {
+      toast.error(err.message || "Failed to upload photo");
+    } finally {
+      setUploadingCover(false);
+    }
+  };
+
+  const handleStartTripClick = () => {
+    if (activeTrip) {
+      setExpensesListOpen(true);
+    } else if (user && isOwnOrg) {
+      setTripOpen(true);
+    } else {
+      setAuthPromptAction("trip");
+      setAuthPromptOpen(true);
+    }
+  };
+
+  const handleLogFuelClick = () => {
+    if (user && isOwnOrg) {
+      setFuelOpen(true);
+    } else {
+      setAuthPromptAction("fuel");
+      setAuthPromptOpen(true);
+    }
+  };
+
+  const handleAddCostFineClick = () => {
+    setExpenseDialogType("fine");
+    if (activeTrip || (user && isOwnOrg)) {
+      setExpenseDialogOpen(true);
+    } else {
+      setAuthPromptAction("expense");
+      setAuthPromptOpen(true);
+    }
+  };
+
   useEffect(() => {
     if (user && isOwnOrg && profile) {
       setReporterName(profile.full_name ?? "");
@@ -380,8 +497,17 @@ export default function MobileMachine() {
     // 1. Instant offline hydration from QR search parameters or local device cache
     const searchParams = new URLSearchParams(window.location.search);
     const paramName = searchParams.get("n");
+    const paramOrg = searchParams.get("o");
+    const paramLogo = searchParams.get("ol");
     const cachedStr = localStorage.getItem(`mc_machine_cache_${id}`);
     let initialMachine: any = null;
+
+    if (paramOrg || paramLogo) {
+      setCompanyInfo({
+        name: paramOrg || organisation?.name || user?.user_metadata?.company_name || "",
+        logo_url: paramLogo || organisation?.logo_url || null,
+      });
+    }
 
     if (cachedStr) {
       try {
@@ -395,7 +521,7 @@ export default function MobileMachine() {
         registration_number: searchParams.get("r") || null,
         current_hours: searchParams.get("h") ? Number(searchParams.get("h")) : null,
         category: searchParams.get("c") || "Vehicle",
-        organisation_name: searchParams.get("o") || "Fleet Depot",
+        organisation_name: paramOrg || "Fleet Depot",
         status: "active",
       };
     }
@@ -404,6 +530,7 @@ export default function MobileMachine() {
       setMachine(initialMachine);
       setLoading(false);
       loadRoadworthiness(initialMachine);
+      loadCompanyBranding(initialMachine.organisation_id, initialMachine.organisation_name || paramOrg, paramLogo);
     } else {
       setLoading(true);
     }
@@ -413,6 +540,7 @@ export default function MobileMachine() {
       if (!error && data && data.length > 0) {
         setMachine(data[0]);
         loadRoadworthiness(data[0]);
+        loadCompanyBranding(data[0].organisation_id, data[0].organisation_name || paramOrg, paramLogo);
         try {
           localStorage.setItem(`mc_machine_cache_${id}`, JSON.stringify(data[0]));
         } catch {}
@@ -608,21 +736,30 @@ export default function MobileMachine() {
   return (
     <div className="min-h-screen bg-background p-4 sm:p-6">
       <div className="mx-auto max-w-md space-y-5">
-        {/* Header */}
+        {/* Header with Company Logo & Name */}
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            {organisation?.logo_url ? (
+          <div className="flex items-center gap-2.5 min-w-0">
+            {companyInfo.logo_url || organisation?.logo_url ? (
               <img
-                src={organisation.logo_url}
-                alt={organisation.name || "Company Logo"}
-                className="h-9 w-9 rounded-lg object-contain bg-background/50 border border-border p-1"
+                src={companyInfo.logo_url || organisation?.logo_url || ""}
+                alt={companyInfo.name || organisation?.name || "Company Logo"}
+                className="h-10 w-auto max-w-[140px] max-h-10 rounded-lg object-contain bg-background/50 border border-border p-1 shadow-sm"
               />
             ) : (
-              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary text-primary-foreground font-black text-sm">
-                {(organisation?.name || user?.user_metadata?.company_name) ? (organisation?.name || user?.user_metadata?.company_name).trim().charAt(0).toUpperCase() : <Wrench className="h-5 w-5" />}
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary text-primary-foreground font-black text-base shadow-sm">
+                {(companyInfo.name || organisation?.name || user?.user_metadata?.company_name)
+                  ? (companyInfo.name || organisation?.name || user?.user_metadata?.company_name).trim().charAt(0).toUpperCase()
+                  : <Building2 className="h-5 w-5" />}
               </div>
             )}
-            <span className="font-semibold">{organisation?.name || user?.user_metadata?.company_name || "Company"}</span>
+            <div className="min-w-0">
+              <span className="font-bold text-sm tracking-tight text-foreground truncate block">
+                {companyInfo.name || organisation?.name || user?.user_metadata?.company_name || "Company"}
+              </span>
+              <span className="text-[10px] text-muted-foreground uppercase font-semibold tracking-wider block">
+                Fleet Management
+              </span>
+            </div>
           </div>
           <LanguageSwitcher />
         </div>
@@ -668,24 +805,95 @@ export default function MobileMachine() {
           </div>
         )}
 
-        {/* Identity card */}
-        <div className="overflow-hidden rounded-2xl border border-border bg-card">
-          {machine.cover_image_url && (
-            <div className="aspect-video w-full overflow-hidden bg-muted">
-              <CoverImage value={machine.cover_image_url} alt={machine.name} className="h-full w-full object-cover" />
+        {/* Identity card with Enhanced Vehicle Photo */}
+        <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
+          {machine.cover_image_url ? (
+            <div className="relative aspect-[16/9] w-full overflow-hidden bg-muted group">
+              <CoverImage
+                value={machine.cover_image_url}
+                alt={machine.name}
+                className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
+              />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent pointer-events-none" />
+              
+              {/* Overlaid Badges */}
+              <div className="absolute top-3 left-3 flex items-center gap-1.5 rounded-full bg-black/60 backdrop-blur-md px-3 py-1 text-xs font-semibold text-white shadow-md border border-white/10">
+                <Car className="h-3.5 w-3.5 text-primary" /> {machine.category || "Vehicle"}
+              </div>
+
+              <span className={`absolute top-3 right-3 rounded-full px-3 py-1 text-[11px] font-bold uppercase tracking-wider shadow-md backdrop-blur-md ${statusClass}`}>
+                {machine.status}
+              </span>
+
+              {machine.plate_number && (
+                <div className="absolute bottom-3 left-3 flex items-center gap-2">
+                  <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-amber-400 text-black font-mono font-black text-xs tracking-wider border-2 border-amber-500 shadow-lg">
+                    <span className="text-[9px] uppercase font-sans font-black bg-black/10 px-1 rounded">TZ</span>
+                    {machine.plate_number}
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="relative aspect-[16/9] w-full overflow-hidden bg-gradient-to-br from-slate-900 via-slate-800 to-primary/20 rounded-t-2xl flex flex-col justify-between p-4">
+              <div className="absolute inset-0 opacity-10 bg-[radial-gradient(#ffffff_1px,transparent_1px)] [background-size:16px_16px]" />
+              
+              <div className="relative z-10 flex items-center justify-between w-full">
+                <div className="flex items-center gap-1.5 rounded-full bg-white/10 backdrop-blur-md px-3 py-1 text-xs font-semibold text-white border border-white/10">
+                  <Car className="h-3.5 w-3.5 text-primary" /> {machine.category || "Vehicle"}
+                </div>
+                <span className={`rounded-full px-3 py-1 text-[11px] font-bold uppercase tracking-wider shadow-md ${statusClass}`}>
+                  {machine.status}
+                </span>
+              </div>
+
+              <div className="relative z-10 flex flex-col items-center justify-center my-auto py-2">
+                <div className="p-3.5 rounded-2xl bg-white/5 border border-white/10 shadow-inner mb-2">
+                  <Car className="h-10 w-10 text-white/80" />
+                </div>
+                <p className="text-white/70 text-xs font-medium tracking-wide">
+                  {[machine.make, machine.model, machine.year].filter(Boolean).join(" · ") || "Fleet Vehicle"}
+                </p>
+              </div>
+
+              <div className="relative z-10 flex items-center justify-between w-full">
+                {machine.plate_number ? (
+                  <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-amber-400 text-black font-mono font-black text-xs tracking-wider border border-amber-500 shadow-md">
+                    <span className="text-[9px] uppercase font-sans font-black bg-black/10 px-1 rounded">TZ</span>
+                    {machine.plate_number}
+                  </div>
+                ) : <div />}
+                
+                {user && isOwnOrg && (
+                  <label className="cursor-pointer text-[11px] text-white/90 hover:text-white bg-white/15 hover:bg-white/25 px-2.5 py-1 rounded-lg border border-white/15 flex items-center gap-1 shadow-sm transition-colors">
+                    <Camera className="h-3.5 w-3.5" />
+                    <span>{uploadingCover ? "Uploading…" : "Add photo"}</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      capture="environment"
+                      className="hidden"
+                      disabled={uploadingCover}
+                      onChange={handleUploadCover}
+                    />
+                  </label>
+                )}
+              </div>
             </div>
           )}
           <div className="p-5 space-y-2">
             <div className="flex items-start justify-between gap-3">
-              <h1 className="text-xl font-semibold leading-tight">{machine.name}</h1>
-              <span className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-medium capitalize ${statusClass}`}>
-                {machine.status}
-              </span>
+              <h1 className="text-xl font-bold leading-tight">{machine.name}</h1>
+              {!machine.cover_image_url && (
+                <span className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-medium capitalize ${statusClass}`}>
+                  {machine.status}
+                </span>
+              )}
             </div>
             <p className="text-sm text-muted-foreground">
               {[machine.make, machine.model, machine.year].filter(Boolean).join(" · ") || machine.category}
             </p>
-            <p className="text-xs text-muted-foreground">{t.org}: {machine.organisation_name}</p>
+            <p className="text-xs text-muted-foreground">{t.org}: {companyInfo.name || machine.organisation_name || "Company"}</p>
             <div className="grid grid-cols-2 gap-1 pt-1 text-xs">
               {machine.registration_number && (
                 <p><span className="text-muted-foreground">{t.reg}:</span> {machine.registration_number}</p>
@@ -693,7 +901,7 @@ export default function MobileMachine() {
               {machine.serial_number && (
                 <p><span className="text-muted-foreground">{t.sn}:</span> {machine.serial_number}</p>
               )}
-              {machine.plate_number && (
+              {machine.plate_number && !machine.cover_image_url && (
                 <p><span className="text-muted-foreground">Plate:</span> {machine.plate_number}</p>
               )}
               {machine.current_hours != null && (
@@ -743,7 +951,7 @@ export default function MobileMachine() {
               {/* Tile 2: Trip Dispatch */}
               <button
                 type="button"
-                onClick={() => setTripOpen(true)}
+                onClick={handleStartTripClick}
                 className="flex flex-col justify-between p-3.5 rounded-2xl border border-border bg-card hover:bg-muted/50 transition-all text-left group"
               >
                 <div className="flex items-start justify-between w-full">
@@ -762,10 +970,10 @@ export default function MobileMachine() {
                 </div>
               </button>
 
-              {/* Tile 3: Fuel & Receipts */}
+              {/* Tile 3: Fuel & Litres */}
               <button
                 type="button"
-                onClick={() => setFuelOpen(true)}
+                onClick={handleLogFuelClick}
                 className="flex flex-col justify-between p-3.5 rounded-2xl border border-border bg-card hover:bg-muted/50 transition-all text-left group"
               >
                 <div className="flex items-start justify-between w-full">
@@ -780,21 +988,23 @@ export default function MobileMachine() {
                 </div>
               </button>
 
-              {/* Tile 4: Breakdown / Accident SOS */}
+              {/* Tile 4: Log Cost & Traffic Fines (Replaces Breakdown/SOS) */}
               <button
                 type="button"
-                onClick={() => { setShowFaultForm(true); setShowAccidentForm(false); }}
-                className="flex flex-col justify-between p-3.5 rounded-2xl border border-rose-500/20 bg-rose-500/5 hover:bg-rose-500/10 transition-all text-left group"
+                onClick={handleAddCostFineClick}
+                className="flex flex-col justify-between p-3.5 rounded-2xl border border-rose-500/30 bg-rose-500/5 hover:bg-rose-500/10 transition-all text-left group"
               >
                 <div className="flex items-start justify-between w-full">
                   <div className="p-2 rounded-xl bg-rose-500/15 text-rose-600 dark:text-rose-400">
-                    <Siren className="h-5 w-5" />
+                    <Receipt className="h-5 w-5" />
                   </div>
-                  <span className="text-[10px] font-bold text-rose-600 bg-rose-500/10 px-1.5 py-0.5 rounded">SOS</span>
+                  <Badge variant="outline" className="text-[10px] font-semibold text-rose-600 border-rose-500/30">
+                    Cost & Fine
+                  </Badge>
                 </div>
                 <div className="mt-2.5">
-                  <div className="font-bold text-sm text-foreground">Breakdown / SOS</div>
-                  <p className="text-[11px] text-muted-foreground mt-0.5">Report fault or collision</p>
+                  <div className="font-bold text-sm text-foreground">Add Cost / Fine</div>
+                  <p className="text-[11px] text-muted-foreground mt-0.5">Upload risit & fines</p>
                 </div>
               </button>
             </div>
@@ -932,11 +1142,14 @@ export default function MobileMachine() {
             ) : (
               <div className="p-4 text-center space-y-3">
                 <p className="text-xs text-muted-foreground">{t.noActiveTrip}</p>
-                {user && isOwnOrg && (
-                  <Button size="sm" variant="outline" className="gap-1.5 text-xs" onClick={() => setTripOpen(true)}>
-                    <Route className="h-3.5 w-3.5" /> {t.startTrip}
+                <div className="flex flex-col sm:flex-row items-center justify-center gap-2">
+                  <Button size="sm" variant="outline" className="gap-1.5 text-xs w-full sm:w-auto" onClick={handleStartTripClick}>
+                    <Route className="h-3.5 w-3.5 text-primary" /> {t.startTrip}
                   </Button>
-                )}
+                  <Button size="sm" variant="outline" className="gap-1.5 text-xs w-full sm:w-auto text-rose-600 border-rose-500/30 hover:bg-rose-500/10" onClick={handleAddCostFineClick}>
+                    <Receipt className="h-3.5 w-3.5" /> Add Cost / Fine
+                  </Button>
+                </div>
               </div>
             )}
           </div>
@@ -1066,8 +1279,8 @@ export default function MobileMachine() {
           </>
         )}
 
-        {/* Fault report form: always available to anonymous/different-org visitors; for a signed-in own-org user it's toggled via the "Report fault" quick action */}
-        {(!user || !isOwnOrg || showFaultForm) && (
+        {/* Fault report form: for factory machines always available, for vehicles only shown if toggled */}
+        {(machine.category !== "Vehicle" ? (!user || !isOwnOrg || showFaultForm) : showFaultForm) && (
           <div className="rounded-2xl border border-border bg-card p-5 space-y-3">
             <div className="flex items-center gap-2">
               <AlertTriangle className="h-5 w-5 text-amber-500" />
@@ -1140,8 +1353,8 @@ export default function MobileMachine() {
           </div>
         )}
 
-        {/* Accident/incident report form: same visibility rule as the fault report form, separate from it */}
-        {(!user || !isOwnOrg || showAccidentForm) && (
+        {/* Accident/incident report form: only for fixed machinery/plant, completely removed for fleet vehicles */}
+        {machine.category !== "Vehicle" && (!user || !isOwnOrg || showAccidentForm) && (
           <div className="rounded-2xl border border-red-200 bg-card p-5 space-y-3 dark:border-red-900">
             <div className="flex items-center gap-2">
               <Siren className="h-5 w-5 text-red-600" />
@@ -1243,6 +1456,46 @@ export default function MobileMachine() {
         )}
       </div>
 
+      {/* Driver Authentication Prompt Dialog */}
+      <Dialog open={authPromptOpen} onOpenChange={setAuthPromptOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              {authPromptAction === "fuel" ? (
+                <Fuel className="h-5 w-5 text-blue-600" />
+              ) : authPromptAction === "trip" ? (
+                <Route className="h-5 w-5 text-primary" />
+              ) : (
+                <Receipt className="h-5 w-5 text-rose-600" />
+              )}
+              {authPromptAction === "fuel"
+                ? "Driver Sign-In · Log Fuel"
+                : authPromptAction === "trip"
+                ? "Driver Sign-In · Start Trip"
+                : "Active Trip & Driver Sign-In"}
+            </DialogTitle>
+            <DialogDescription className="text-xs pt-1">
+              {authPromptAction === "fuel"
+                ? "To record pump fuel charges and update vehicle odometer, please sign in with your driver or operator account."
+                : authPromptAction === "trip"
+                ? "To dispatch this vehicle and record trip kilometers, please sign in with your driver account."
+                : "No active trip is currently in progress for this vehicle. Please sign in to start a trip and attach receipts and traffic fines."}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2 pt-2">
+            <Button asChild className="w-full h-11 text-sm font-semibold">
+              <Link to={`/login?next=/m/${machine?.id || ""}`}>
+                <LogIn className="mr-2 h-4 w-4" /> Sign In as Driver
+              </Link>
+            </Button>
+            <Button variant="outline" className="w-full" onClick={() => setAuthPromptOpen(false)}>
+              Close
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Quick Actions Dialogs */}
       {user && isOwnOrg && (
         <>
           <ServiceLogDialog
@@ -1258,17 +1511,6 @@ export default function MobileMachine() {
             machineId={machine.id}
             currentHours={machine.current_hours}
             onSaved={() => {
-              // refresh machine hours
-              (supabase as any).rpc("get_machine_public", { _machine_id: machine.id }).then(({ data }: any) => {
-                if (data?.[0]) setMachine(data[0]);
-              });
-            }}
-          />
-          <QuickFuelDialog
-            open={fuelOpen}
-            onOpenChange={setFuelOpen}
-            machineId={machine.id}
-            onSaved={() => {
               (supabase as any).rpc("get_machine_public", { _machine_id: machine.id }).then(({ data }: any) => {
                 if (data?.[0]) setMachine(data[0]);
               });
@@ -1280,39 +1522,57 @@ export default function MobileMachine() {
             machineId={machine.id}
             machineCategory={machine.category}
           />
-          {machine.category === "Vehicle" && (
-            <QuickStartTripDialog
-              open={tripOpen}
-              onOpenChange={setTripOpen}
-              machineId={machine.id}
-              onSaved={refreshMachineAndHistory}
-            />
-          )}
         </>
       )}
 
-      {machine && activeTrip && (
+      {/* Trip & Fuel Dialogs (mounted whenever machine exists) */}
+      {machine && machine.category === "Vehicle" && (
+        <QuickStartTripDialog
+          open={tripOpen}
+          onOpenChange={setTripOpen}
+          machineId={machine.id}
+          onSaved={refreshMachineAndHistory}
+        />
+      )}
+
+      {machine && (
+        <QuickFuelDialog
+          open={fuelOpen}
+          onOpenChange={setFuelOpen}
+          machineId={machine.id}
+          onSaved={refreshMachineAndHistory}
+        />
+      )}
+
+      {/* Driver Cost, Fine & Receipt Upload Dialogs */}
+      {machine && (
         <>
           <TripExpenseDialog
             open={expenseDialogOpen}
             onOpenChange={setExpenseDialogOpen}
-            tripId={activeTrip.trip_id}
+            tripId={activeTrip?.trip_id || null}
             machineId={machine.id}
             orgId={machine.organisation_id}
             defaultType={expenseDialogType}
-            onSaved={loadActiveTrip}
+            onSaved={() => {
+              loadActiveTrip();
+              refreshMachineAndHistory();
+            }}
           />
           <TripExpensesListDialog
             open={expensesListOpen}
             onOpenChange={setExpensesListOpen}
-            tripId={activeTrip.trip_id}
+            tripId={activeTrip?.trip_id || null}
             machineId={machine.id}
             machineName={machine.name}
-            driverName={activeTrip.driver_name}
-            fuelCost={activeTrip.fuel_cost}
+            driverName={activeTrip?.driver_name}
+            fuelCost={activeTrip?.fuel_cost}
             orgId={machine.organisation_id}
             canManage={isOwnOrg}
-            onExpenseChanged={loadActiveTrip}
+            onExpenseChanged={() => {
+              loadActiveTrip();
+              refreshMachineAndHistory();
+            }}
           />
         </>
       )}

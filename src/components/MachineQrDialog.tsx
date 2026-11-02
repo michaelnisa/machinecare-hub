@@ -114,7 +114,7 @@ export function MachineQrDialog({
   const [pdfFormat, setPdfFormat] = useState<"sticker" | "a4">("sticker");
 
   const effectiveOrgName =
-    initialOrgName || organisation?.name || "MachineCare Fleet";
+    initialOrgName || organisation?.name || "Company Fleet";
   const effectiveOrgLogo = initialOrgLogo || organisation?.logo_url || null;
 
   // Sync state when props change
@@ -191,6 +191,7 @@ export function MachineQrDialog({
   if (currentHours != null) queryParams.set("h", String(currentHours));
   if (category) queryParams.set("c", category);
   if (effectiveOrgName) queryParams.set("o", effectiveOrgName);
+  if (effectiveOrgLogo) queryParams.set("ol", effectiveOrgLogo);
 
   const queryString = queryParams.toString();
   const url = `${typeof window !== "undefined" ? window.location.origin : ""}/m/${machineId}${
@@ -477,7 +478,7 @@ export function MachineQrDialog({
       pdf.text(`TAG: ${machineId.slice(0, 8).toUpperCase()}`, startX + 8, curY);
 
       pdf.setFont("helvetica", "bold");
-      pdf.text("MachineCare Hub", startX + tagW - 8, curY, { align: "right" });
+      pdf.text(effectiveOrgName, startX + tagW - 8, curY, { align: "right" });
 
       const fname = `${safeFilename}${plateNumber ? `_${plateNumber.replace(/\s+/g, "")}` : ""}-qr-tag${isA4 ? "-a4" : ""}.pdf`;
       pdf.save(fname);
@@ -751,7 +752,7 @@ export function MachineQrDialog({
 
       <div class="tag-footer">
         <span>TAG: ${escapeHtml(machineId.slice(0, 8).toUpperCase())}</span>
-        <span>MachineCare Hub</span>
+        <span>${escapeHtml(effectiveOrgName)}</span>
       </div>
     </div>
 
@@ -897,7 +898,7 @@ export function MachineQrDialog({
               {/* Footer */}
               <div className="pt-1.5 border-t border-slate-200 flex items-center justify-between text-[9.5px] text-slate-400 font-mono">
                 <span>TAG: {machineId.slice(0, 8).toUpperCase()}</span>
-                <span className="font-sans font-semibold text-[9px]">MachineCare Hub</span>
+                <span className="font-sans font-semibold text-[9px] truncate max-w-[140px] text-right">{effectiveOrgName}</span>
               </div>
             </div>
           </div>

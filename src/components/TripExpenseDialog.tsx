@@ -39,7 +39,7 @@ export const EXPENSE_CATEGORIES = [
 interface Props {
   open: boolean;
   onOpenChange: (v: boolean) => void;
-  tripId: string;
+  tripId?: string | null;
   machineId: string;
   orgId?: string | null;
   defaultType?: "fine" | "receipt" | "toll" | "parking" | "fuel" | "repair" | "other";
@@ -111,6 +111,47 @@ export function TripExpenseDialog({
 
     setSubmitting(true);
     try {
+      let effectiveTripId = tripId;
+      if (!effectiveTripId) {
+        // 1. Try to find active trip for this vehicle
+        const { data: tripData } = await (supabase as any)
+          .from("trips")
+          .select("id")
+          .eq("machine_id", machineId)
+          .eq("status", "in_progress")
+          .order("start_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (tripData?.id) {
+          effectiveTripId = tripData.id;
+        } else if (user) {
+          // 2. Auto-create in-progress trip for this machine so driver can log on-road expense
+          const targetOrg = orgId || profile?.organisation_id;
+          const { data: newTrip } = await (supabase as any)
+            .from("trips")
+            .insert({
+              organisation_id: targetOrg,
+              machine_id: machineId,
+              driver_id: profile?.id || null,
+              purpose: "Driver On-Road Expense & Fine",
+              status: "in_progress",
+              start_at: new Date().toISOString(),
+              created_by: user?.id ?? null,
+            })
+            .select("id")
+            .single();
+
+          if (newTrip?.id) {
+            effectiveTripId = newTrip.id;
+          }
+        }
+      }
+
+      if (!effectiveTripId) {
+        throw new Error("No active trip found for this vehicle. Please start a trip or sign in to record expenses.");
+      }
+
       let uploadedReceiptUrl: string | null = null;
 
       // 1. Upload photo if selected
@@ -118,7 +159,7 @@ export function TripExpenseDialog({
         const ext = photoFile.name.split(".").pop() || "jpg";
         const cleanName = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}.${ext}`;
         const targetOrg = orgId || profile?.organisation_id || "public";
-        const storagePath = `${targetOrg}/trips/${tripId}/${cleanName}`;
+        const storagePath = `${targetOrg}/trips/${effectiveTripId}/${cleanName}`;
 
         const { error: uploadError } = await supabase.storage
           .from("machine-docs")
@@ -138,7 +179,7 @@ export function TripExpenseDialog({
       const { data: rpcId, error: rpcErr } = await (supabase as any).rpc(
         "add_trip_expense_public",
         {
-          _trip_id: tripId,
+          _trip_id: effectiveTripId,
           _expense_type: expenseType,
           _title: title.trim() || defaultTitle,
           _amount: numAmount,
@@ -152,7 +193,7 @@ export function TripExpenseDialog({
         // Fallback to direct table insert
         const fallbackOrgId = orgId || profile?.organisation_id;
         const payload: any = {
-          trip_id: tripId,
+          trip_id: effectiveTripId,
           machine_id: machineId,
           expense_type: expenseType,
           title: title.trim() || defaultTitle,
@@ -182,7 +223,7 @@ export function TripExpenseDialog({
             const { data: tripData } = await supabase
               .from("trips")
               .select("cost, cargo_description")
-              .eq("id", tripId)
+              .eq("id", effectiveTripId)
               .maybeSingle();
 
             let cargoMeta: Record<string, any> = {};
@@ -201,7 +242,7 @@ export function TripExpenseDialog({
             const currentExpenses: any[] = Array.isArray(cargoMeta.expenses) ? cargoMeta.expenses : [];
             const newExpense = {
               id: typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `exp-${Date.now()}`,
-              trip_id: tripId,
+              trip_id: effectiveTripId,
               machine_id: machineId,
               expense_type: expenseType,
               title: title.trim() || defaultTitle,
@@ -223,7 +264,7 @@ export function TripExpenseDialog({
                 cost: updatedCost,
                 cargo_description: JSON.stringify(cargoMeta),
               })
-              .eq("id", tripId);
+              .eq("id", effectiveTripId);
 
             if (updateTripErr) throw updateTripErr;
           } else {
