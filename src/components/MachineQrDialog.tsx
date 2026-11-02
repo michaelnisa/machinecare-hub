@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { QRCodeCanvas, QRCodeSVG } from "qrcode.react";
+import { QRCodeCanvas } from "qrcode.react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
@@ -19,7 +19,6 @@ import { toast } from "sonner";
 import { escapeHtml } from "@/lib/escapeHtml";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
-import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
 
 interface Props {
@@ -42,6 +41,38 @@ interface Props {
   vin?: string | null;
 }
 
+// Safely loads a remote image URL to a base64 Data URL for jsPDF & Print
+async function loadImgDataUrl(
+  src: string
+): Promise<{ dataUrl: string; width: number; height: number } | null> {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.onload = () => {
+      try {
+        const c = document.createElement("canvas");
+        c.width = img.naturalWidth || img.width;
+        c.height = img.naturalHeight || img.height;
+        const ctx = c.getContext("2d");
+        if (ctx) {
+          ctx.drawImage(img, 0, 0);
+          resolve({
+            dataUrl: c.toDataURL("image/png"),
+            width: c.width,
+            height: c.height,
+          });
+          return;
+        }
+      } catch (e) {
+        // Fallback if canvas is tainted
+      }
+      resolve(null);
+    };
+    img.onerror = () => resolve(null);
+    img.src = src;
+  });
+}
+
 export function MachineQrDialog({
   open,
   onOpenChange,
@@ -62,7 +93,7 @@ export function MachineQrDialog({
   vin: initialVin,
 }: Props) {
   const { organisation } = useAuth();
-  const badgeRef = useRef<HTMLDivElement>(null);
+  const qrCanvasRef = useRef<HTMLCanvasElement>(null);
 
   // Local state enriched from props or auto-fetched if missing
   const [machineName, setMachineName] = useState(initialMachineName);
@@ -79,14 +110,11 @@ export function MachineQrDialog({
 
   const [toggling, setToggling] = useState(false);
   const [downloadingPdf, setDownloadingPdf] = useState(false);
-  const [downloadingPng, setDownloadingPng] = useState(false);
   const [copied, setCopied] = useState(false);
-  const [logoDataUrl, setLogoDataUrl] = useState<string | null>(null);
-  const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
   const [pdfFormat, setPdfFormat] = useState<"sticker" | "a4">("sticker");
 
   const effectiveOrgName =
-    initialOrgName || organisation?.name || "MachineCare Hub";
+    initialOrgName || organisation?.name || "MachineCare Fleet";
   const effectiveOrgLogo = initialOrgLogo || organisation?.logo_url || null;
 
   // Sync state when props change
@@ -155,37 +183,6 @@ export function MachineQrDialog({
     };
   }, [open, machineId]);
 
-  // Convert company logo to base64 Data URL to guarantee clean rendering in html2canvas & jsPDF
-  useEffect(() => {
-    if (!effectiveOrgLogo) {
-      setLogoDataUrl(null);
-      return;
-    }
-
-    let isCancelled = false;
-    (async () => {
-      try {
-        const res = await fetch(effectiveOrgLogo, { mode: "cors" });
-        const blob = await res.blob();
-        const reader = new FileReader();
-        reader.onloadend = () => {
-          if (!isCancelled && typeof reader.result === "string") {
-            setLogoDataUrl(reader.result);
-          }
-        };
-        reader.readAsDataURL(blob);
-      } catch {
-        if (!isCancelled) {
-          setLogoDataUrl(effectiveOrgLogo);
-        }
-      }
-    })();
-
-    return () => {
-      isCancelled = true;
-    };
-  }, [effectiveOrgLogo]);
-
   // Build clean mobile URL
   const queryParams = new URLSearchParams();
   if (machineName) queryParams.set("n", machineName);
@@ -200,26 +197,18 @@ export function MachineQrDialog({
     queryString ? `?${queryString}` : ""
   }`;
 
-  // Generate ultra-reliable base64 QR code image from offscreen canvas
-  useEffect(() => {
-    const extractQrDataUrl = () => {
-      const canvas = document.getElementById("offscreen-qr-canvas") as HTMLCanvasElement | null;
-      if (canvas) {
-        try {
-          const data = canvas.toDataURL("image/png");
-          if (data && data.length > 50) {
-            setQrDataUrl(data);
-          }
-        } catch (e) {
-          console.error("Error generating QR image data", e);
-        }
+  // Synchronous and guaranteed QR Data URL extractor
+  const getQrDataUrl = (): string | null => {
+    if (qrCanvasRef.current) {
+      try {
+        return qrCanvasRef.current.toDataURL("image/png");
+      } catch (e) {
+        console.error("Error extracting QR canvas data URL", e);
       }
-    };
-
-    extractQrDataUrl();
-    const timer = setTimeout(extractQrDataUrl, 80);
-    return () => clearTimeout(timer);
-  }, [url, open]);
+    }
+    const el = document.getElementById("machine-qr-canvas") as HTMLCanvasElement | null;
+    return el ? el.toDataURL("image/png") : null;
+  };
 
   const toggleQrEnabled = async (v: boolean) => {
     setToggling(true);
@@ -245,72 +234,253 @@ export function MachineQrDialog({
     .replace(/[^a-zA-Z0-9_-]/g, "_")
     .toLowerCase();
 
-  // 1-Click PDF Download: Generates razor-sharp, aspect-ratio-accurate PDF
+  const makeModelStr = [make, model].filter(Boolean).join(" ");
+  const metaLineStr = [
+    makeModelStr,
+    year ? `Yr: ${year}` : null,
+    serialNumber ? `S/N: ${serialNumber}` : null,
+  ]
+    .filter(Boolean)
+    .join(" • ");
+
+  // Pure Native Vector PDF Generation (100% Crisp Typography & Guaranteed QR Code)
   const downloadPdf = async () => {
-    if (!badgeRef.current) return;
     setDownloadingPdf(true);
     try {
-      const canvas = await html2canvas(badgeRef.current, {
-        scale: 2.5, // 250 DPI equivalent - crisp text and crisp QR
-        backgroundColor: "#ffffff",
-        useCORS: true,
-        allowTaint: true,
-        logging: false,
-      });
+      const qrData = getQrDataUrl();
+      if (!qrData) {
+        toast.error("QR Code canvas is initializing. Please click again.");
+        return;
+      }
 
-      const imgData = canvas.toDataURL("image/png");
-      const canvasWidth = canvas.width;
-      const canvasHeight = canvas.height;
+      // Pre-load company logo if configured
+      let logoObj: { dataUrl: string; width: number; height: number } | null = null;
+      if (effectiveOrgLogo) {
+        logoObj = await loadImgDataUrl(effectiveOrgLogo);
+      }
 
-      if (pdfFormat === "a4") {
-        // Standard A4 sheet (210mm x 297mm) with centered badge and dashed cut guides
-        const pdf = new jsPDF({
-          orientation: "portrait",
-          unit: "mm",
-          format: "a4",
-        });
+      const isA4 = pdfFormat === "a4";
+      const pdf = isA4
+        ? new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" })
+        : new jsPDF({ orientation: "portrait", unit: "mm", format: [100, 140] });
 
-        const pageWidth = 210;
-        const pageHeight = 297;
-        const stickerWidth = 105;
-        const stickerHeight = (canvasHeight * stickerWidth) / canvasWidth;
-        const x = (pageWidth - stickerWidth) / 2;
-        const y = (pageHeight - stickerHeight) / 2 - 12;
+      const tagW = 100;
+      const tagH = 140;
+      const startX = isA4 ? (210 - tagW) / 2 : 0;
+      const startY = isA4 ? (297 - tagH) / 2 - 8 : 0;
 
-        // Cut guidelines
+      // Draw dashed cut border on A4
+      if (isA4) {
         pdf.setLineDashPattern([2, 2], 0);
-        pdf.setDrawColor(160, 174, 192);
-        pdf.rect(x - 4, y - 4, stickerWidth + 8, stickerHeight + 8);
+        pdf.setDrawColor(148, 163, 184); // slate-400
+        pdf.setLineWidth(0.3);
+        pdf.rect(startX - 4, startY - 4, tagW + 8, tagH + 8);
 
         pdf.setFont("helvetica", "normal");
         pdf.setFontSize(8.5);
         pdf.setTextColor(100, 116, 139);
         pdf.text(
           "✂ Cut along dashed guide · Affix to vehicle dashboard, windshield or equipment chassis",
-          pageWidth / 2,
-          y + stickerHeight + 11,
+          105,
+          startY + tagH + 11,
           { align: "center" }
         );
-
-        pdf.addImage(imgData, "PNG", x, y, stickerWidth, stickerHeight);
-        const filename = `${safeFilename}${plateNumber ? `_${plateNumber.replace(/\s+/g, "")}` : ""}-qr-tag-a4.pdf`;
-        pdf.save(filename);
-      } else {
-        // Exact 100mm wide sticker format with 100% accurate aspect ratio (ZERO stretching)
-        const pdfWidthMm = 100;
-        const pdfHeightMm = Number(((canvasHeight * pdfWidthMm) / canvasWidth).toFixed(2));
-
-        const pdf = new jsPDF({
-          orientation: "portrait",
-          unit: "mm",
-          format: [pdfWidthMm, pdfHeightMm],
-        });
-
-        pdf.addImage(imgData, "PNG", 0, 0, pdfWidthMm, pdfHeightMm);
-        const filename = `${safeFilename}${plateNumber ? `_${plateNumber.replace(/\s+/g, "")}` : ""}-qr-tag.pdf`;
-        pdf.save(filename);
+        pdf.setLineDashPattern([], 0);
       }
 
+      // 1. Tag Container Background & Heavy Slate Border
+      pdf.setFillColor(255, 255, 255);
+      pdf.setDrawColor(15, 23, 42); // slate-900
+      pdf.setLineWidth(1.0);
+      pdf.roundedRect(startX, startY, tagW, tagH, 4, 4, "FD");
+
+      // 2. Top Color Stripe
+      pdf.setFillColor(2, 132, 199); // sky-600
+      pdf.roundedRect(startX, startY, tagW, 4.5, 4, 4, "F");
+      pdf.rect(startX, startY + 2.5, tagW, 2, "F");
+
+      let curY = startY + 8;
+
+      // 3. Organization Header (Logo and/or Name)
+      if (logoObj) {
+        const aspect = logoObj.width / logoObj.height;
+        const maxLogoH = 9.5;
+        const maxLogoW = 38;
+        let logoW = maxLogoH * aspect;
+        let logoH = maxLogoH;
+        if (logoW > maxLogoW) {
+          logoW = maxLogoW;
+          logoH = logoW / aspect;
+        }
+        pdf.addImage(logoObj.dataUrl, "PNG", startX + (tagW - logoW) / 2, curY, logoW, logoH);
+        curY += logoH + 2.5;
+      }
+
+      pdf.setFont("helvetica", "bold");
+      pdf.setFontSize(10.5);
+      pdf.setTextColor(15, 23, 42);
+      pdf.text(effectiveOrgName.toUpperCase(), startX + tagW / 2, curY, {
+        align: "center",
+        maxWidth: tagW - 14,
+      });
+      curY += 4.5;
+
+      // Thin separator
+      pdf.setDrawColor(226, 232, 240);
+      pdf.setLineWidth(0.3);
+      pdf.line(startX + 10, curY, startX + tagW - 10, curY);
+      curY += 4.5;
+
+      // 4. Tag Classification Pill
+      const catText = `OFFICIAL ASSET TAG · ${(category || "FLEET UNIT").toUpperCase()}`;
+      pdf.setFont("helvetica", "bold");
+      pdf.setFontSize(7.5);
+      const catWidth = pdf.getTextWidth(catText) + 8;
+      pdf.setFillColor(240, 249, 255); // sky-50
+      pdf.setDrawColor(186, 230, 253); // sky-200
+      pdf.setLineWidth(0.3);
+      pdf.roundedRect(startX + (tagW - catWidth) / 2, curY, catWidth, 5, 2.5, 2.5, "FD");
+      pdf.setTextColor(2, 132, 199); // sky-600
+      pdf.text(catText, startX + tagW / 2, curY + 3.5, { align: "center" });
+      curY += 9;
+
+      // 5. Machine / Vehicle Name
+      pdf.setFont("helvetica", "bold");
+      pdf.setFontSize(13.5);
+      pdf.setTextColor(15, 23, 42);
+      const nameLines = pdf.splitTextToSize(machineName, tagW - 14);
+      pdf.text(nameLines, startX + tagW / 2, curY, { align: "center" });
+      curY += nameLines.length * 5.2 + 2;
+
+      // 6. Plate & Unit Badges
+      if (plateNumber && registrationNumber) {
+        pdf.setFont("courier", "bold");
+        pdf.setFontSize(10);
+        const pText = `PLATE: ${plateNumber.toUpperCase()}`;
+        const pW = pdf.getTextWidth(pText) + 6;
+
+        pdf.setFont("courier", "bold");
+        pdf.setFontSize(9);
+        const uText = `UNIT: ${registrationNumber.toUpperCase()}`;
+        const uW = pdf.getTextWidth(uText) + 6;
+
+        const totalBadgesW = pW + uW + 4;
+        if (totalBadgesW <= tagW - 14) {
+          const pX = startX + (tagW - totalBadgesW) / 2;
+          const uX = pX + pW + 4;
+
+          pdf.setFillColor(15, 23, 42);
+          pdf.roundedRect(pX, curY, pW, 6.2, 1.5, 1.5, "F");
+          pdf.setFont("courier", "bold");
+          pdf.setFontSize(10);
+          pdf.setTextColor(255, 255, 255);
+          pdf.text(pText, pX + pW / 2, curY + 4.4, { align: "center" });
+
+          pdf.setFillColor(241, 245, 249);
+          pdf.setDrawColor(203, 213, 225);
+          pdf.setLineWidth(0.3);
+          pdf.roundedRect(uX, curY, uW, 6.2, 1.5, 1.5, "FD");
+          pdf.setFont("courier", "bold");
+          pdf.setFontSize(9);
+          pdf.setTextColor(30, 41, 59);
+          pdf.text(uText, uX + uW / 2, curY + 4.4, { align: "center" });
+          curY += 8.5;
+        } else {
+          pdf.setFillColor(15, 23, 42);
+          pdf.roundedRect(startX + (tagW - pW) / 2, curY, pW, 6.2, 1.5, 1.5, "F");
+          pdf.setFont("courier", "bold");
+          pdf.setFontSize(10);
+          pdf.setTextColor(255, 255, 255);
+          pdf.text(pText, startX + tagW / 2, curY + 4.4, { align: "center" });
+          curY += 7.5;
+
+          pdf.setFillColor(241, 245, 249);
+          pdf.setDrawColor(203, 213, 225);
+          pdf.setLineWidth(0.3);
+          pdf.roundedRect(startX + (tagW - uW) / 2, curY, uW, 5.5, 1.5, 1.5, "FD");
+          pdf.setFont("courier", "bold");
+          pdf.setFontSize(9);
+          pdf.setTextColor(30, 41, 59);
+          pdf.text(uText, startX + tagW / 2, curY + 4.0, { align: "center" });
+          curY += 7.5;
+        }
+      } else if (plateNumber) {
+        pdf.setFont("courier", "bold");
+        pdf.setFontSize(10.5);
+        const pText = `PLATE: ${plateNumber.toUpperCase()}`;
+        const pW = pdf.getTextWidth(pText) + 7;
+        pdf.setFillColor(15, 23, 42);
+        pdf.roundedRect(startX + (tagW - pW) / 2, curY, pW, 6.5, 1.5, 1.5, "F");
+        pdf.setTextColor(255, 255, 255);
+        pdf.text(pText, startX + tagW / 2, curY + 4.7, { align: "center" });
+        curY += 8.5;
+      } else if (registrationNumber) {
+        pdf.setFont("courier", "bold");
+        pdf.setFontSize(9.5);
+        const uText = `UNIT: ${registrationNumber.toUpperCase()}`;
+        const uW = pdf.getTextWidth(uText) + 6;
+        pdf.setFillColor(241, 245, 249);
+        pdf.setDrawColor(203, 213, 225);
+        pdf.setLineWidth(0.3);
+        pdf.roundedRect(startX + (tagW - uW) / 2, curY, uW, 5.8, 1.5, 1.5, "FD");
+        pdf.setTextColor(30, 41, 59);
+        pdf.text(uText, startX + tagW / 2, curY + 4.2, { align: "center" });
+        curY += 8;
+      }
+
+      // 7. Make / Model / Year / S/N
+      if (metaLineStr) {
+        pdf.setFont("helvetica", "normal");
+        pdf.setFontSize(8);
+        pdf.setTextColor(71, 85, 105);
+        pdf.text(metaLineStr, startX + tagW / 2, curY, {
+          align: "center",
+          maxWidth: tagW - 14,
+        });
+        curY += 4.5;
+      }
+
+      // 8. Center QR Code (Guaranteed High-Res Image)
+      const qrSizeMm = 45;
+      const qrBoxX = startX + (tagW - (qrSizeMm + 4)) / 2;
+      pdf.setFillColor(255, 255, 255);
+      pdf.setDrawColor(226, 232, 240);
+      pdf.setLineWidth(0.4);
+      pdf.roundedRect(qrBoxX, curY, qrSizeMm + 4, qrSizeMm + 4, 3, 3, "FD");
+      pdf.addImage(qrData, "PNG", qrBoxX + 2, curY + 2, qrSizeMm, qrSizeMm);
+      curY += qrSizeMm + 7;
+
+      // 9. Scan Action Text
+      pdf.setFont("helvetica", "bold");
+      pdf.setFontSize(8.5);
+      pdf.setTextColor(15, 23, 42);
+      pdf.text("SCAN WITH PHONE CAMERA", startX + tagW / 2, curY, { align: "center" });
+      curY += 3.8;
+
+      pdf.setFont("helvetica", "normal");
+      pdf.setFontSize(7);
+      pdf.setTextColor(100, 116, 139);
+      pdf.text("Daily Inspection · Maintenance Log · Report Faults", startX + tagW / 2, curY, {
+        align: "center",
+      });
+      curY += 4.5;
+
+      // 10. Tag Footer
+      pdf.setDrawColor(226, 232, 240);
+      pdf.setLineWidth(0.3);
+      pdf.line(startX + 8, curY, startX + tagW - 8, curY);
+      curY += 3.5;
+
+      pdf.setFont("courier", "normal");
+      pdf.setFontSize(7);
+      pdf.setTextColor(148, 163, 184);
+      pdf.text(`TAG: ${machineId.slice(0, 8).toUpperCase()}`, startX + 8, curY);
+
+      pdf.setFont("helvetica", "bold");
+      pdf.text("MachineCare Hub", startX + tagW - 8, curY, { align: "right" });
+
+      const fname = `${safeFilename}${plateNumber ? `_${plateNumber.replace(/\s+/g, "")}` : ""}-qr-tag${isA4 ? "-a4" : ""}.pdf`;
+      pdf.save(fname);
       toast.success("Asset Tag PDF downloaded successfully");
     } catch (e: any) {
       toast.error(e?.message ?? "Failed to generate PDF");
@@ -319,33 +489,28 @@ export function MachineQrDialog({
     }
   };
 
-  // Download high-resolution PNG for digital signage or printing shops
-  const downloadPng = async () => {
-    if (!badgeRef.current) return;
-    setDownloadingPng(true);
-    try {
-      const canvas = await html2canvas(badgeRef.current, {
-        scale: 3,
-        backgroundColor: "#ffffff",
-        useCORS: true,
-        allowTaint: true,
-        logging: false,
-      });
-      const dataUrl = canvas.toDataURL("image/png");
-      const a = document.createElement("a");
-      a.href = dataUrl;
-      a.download = `${safeFilename}${plateNumber ? `_${plateNumber.replace(/\s+/g, "")}` : ""}-qr-tag.png`;
-      a.click();
-      toast.success("Asset Tag image saved as PNG");
-    } catch (e: any) {
-      toast.error(e?.message ?? "Failed to save image");
-    } finally {
-      setDownloadingPng(false);
+  // Download high-resolution PNG
+  const downloadPng = () => {
+    const qrData = getQrDataUrl();
+    if (!qrData) {
+      toast.error("QR Code image is not ready. Please try again.");
+      return;
     }
+    const a = document.createElement("a");
+    a.href = qrData;
+    a.download = `${safeFilename}${plateNumber ? `_${plateNumber.replace(/\s+/g, "")}` : ""}-qr-code.png`;
+    a.click();
+    toast.success("QR Code saved as PNG");
   };
 
-  // Print function with dedicated print styling, cut guides, company logo, and vehicle details
+  // Print function
   const print = () => {
+    const qrData = getQrDataUrl();
+    if (!qrData) {
+      toast.error("QR Code is not ready yet. Please try again.");
+      return;
+    }
+
     const w = window.open("", "_blank", "width=700,height=880");
     if (!w) {
       toast.error("Couldn't open print window. Please check your browser popup blocker.");
@@ -358,8 +523,7 @@ export function MachineQrDialog({
     const safeReg = registrationNumber ? escapeHtml(registrationNumber) : "";
     const safeMakeModel = [make, model].filter(Boolean).join(" ");
     const safeCat = escapeHtml(category || "Vehicle");
-    const logoSrc = logoDataUrl || effectiveOrgLogo || "";
-    const qrSrc = qrDataUrl || "";
+    const logoSrc = effectiveOrgLogo ? escapeHtml(effectiveOrgLogo) : "";
 
     w.document.write(`<!DOCTYPE html>
 <html>
@@ -419,7 +583,7 @@ export function MachineQrDialog({
       margin-bottom: 14px;
     }
     .org-logo {
-      max-height: 42px;
+      max-height: 40px;
       max-width: 140px;
       object-fit: contain;
     }
@@ -550,7 +714,7 @@ export function MachineQrDialog({
       <div class="org-header">
         ${
           logoSrc
-            ? `<img class="org-logo" src="${escapeHtml(logoSrc)}" alt="${safeOrg}" onerror="this.style.display='none'" />`
+            ? `<img class="org-logo" src="${logoSrc}" alt="${safeOrg}" onerror="this.style.display='none'" />`
             : ""
         }
         <div class="org-name">${safeOrg}</div>
@@ -579,11 +743,7 @@ export function MachineQrDialog({
       }
 
       <div class="qr-box">
-        ${
-          qrSrc
-            ? `<img class="qr-img" src="${escapeHtml(qrSrc)}" alt="QR Code" />`
-            : `<div id="fallback-qr"></div>`
-        }
+        <img class="qr-img" src="${qrData}" alt="QR Code" />
       </div>
 
       <div class="scan-action">Scan With Phone Camera</div>
@@ -614,15 +774,6 @@ export function MachineQrDialog({
     setTimeout(doPrint, 500);
   };
 
-  const makeModelStr = [make, model].filter(Boolean).join(" ");
-  const metaLineStr = [
-    makeModelStr,
-    year ? `Year: ${year}` : null,
-    serialNumber ? `S/N: ${serialNumber}` : null,
-  ]
-    .filter(Boolean)
-    .join(" • ");
-
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-md max-h-[94vh] overflow-y-auto p-4 sm:p-6">
@@ -642,17 +793,6 @@ export function MachineQrDialog({
           </div>
         </DialogHeader>
 
-        {/* Offscreen hidden canvas for guaranteed immediate base64 QR generation */}
-        <div style={{ position: "absolute", left: "-9999px", top: "-9999px", opacity: 0 }}>
-          <QRCodeCanvas
-            id="offscreen-qr-canvas"
-            value={url}
-            size={360}
-            level="Q"
-            marginSize={1}
-          />
-        </div>
-
         <div className="space-y-3.5 py-1">
           {!qrEnabled && (
             <div className="flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 p-2.5 text-xs text-amber-800 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-300">
@@ -663,171 +803,59 @@ export function MachineQrDialog({
             </div>
           )}
 
-          {/* Realistic Printable Sticker Preview (Engineered for Pixel-Perfect HTML2Canvas & Print Capture) */}
+          {/* Clean Visual Preview Card */}
           <div className="flex justify-center p-2.5 bg-muted/40 rounded-xl border border-dashed border-border/80">
             <div
-              ref={badgeRef}
-              id="machine-asset-tag-badge"
-              style={{
-                width: "350px",
-                maxWidth: "100%",
-                backgroundColor: "#ffffff",
-                color: "#0f172a",
-                borderRadius: "16px",
-                border: "2.5px solid #0f172a",
-                padding: "18px 16px 14px",
-                textAlign: "center",
-                position: "relative",
-                boxSizing: "border-box",
-                fontFamily: "Arial, Helvetica, -apple-system, sans-serif",
-              }}
+              className="w-full max-w-[340px] bg-white text-slate-900 rounded-2xl border-2 border-slate-900 shadow-md p-4 text-center relative overflow-hidden select-none"
+              style={{ fontFamily: "Arial, Helvetica, sans-serif" }}
             >
               {/* Top Accent Stripe */}
-              <div
-                style={{
-                  position: "absolute",
-                  top: 0,
-                  left: 0,
-                  right: 0,
-                  height: "5px",
-                  backgroundColor: "#0284c7",
-                  borderTopLeftRadius: "14px",
-                  borderTopRightRadius: "14px",
-                }}
-              />
+              <div className="absolute top-0 left-0 right-0 h-1.5 bg-sky-600" />
 
               {/* Company Logo and Header */}
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  gap: "8px",
-                  paddingBottom: "8px",
-                  borderBottom: "1px solid #e2e8f0",
-                  marginBottom: "10px",
-                  minHeight: "42px",
-                }}
-              >
-                {logoDataUrl || effectiveOrgLogo ? (
+              <div className="flex items-center justify-center gap-2 pt-1 pb-2 border-b border-slate-200 mb-2.5 min-h-[42px]">
+                {effectiveOrgLogo ? (
                   <img
-                    src={logoDataUrl || effectiveOrgLogo || ""}
+                    src={effectiveOrgLogo}
                     alt={effectiveOrgName}
                     crossOrigin="anonymous"
-                    style={{
-                      maxHeight: "38px",
-                      maxWidth: "130px",
-                      objectFit: "contain",
-                      display: "inline-block",
-                    }}
+                    className="max-h-9 max-w-[130px] object-contain inline-block"
                     onError={(e) => {
                       (e.target as HTMLElement).style.display = "none";
                     }}
                   />
                 ) : (
-                  <div
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: "6px",
-                      fontSize: "12px",
-                      fontWeight: 900,
-                      textTransform: "uppercase",
-                      color: "#0f172a",
-                    }}
-                  >
+                  <div className="flex items-center gap-1.5 text-xs font-black uppercase text-slate-800">
                     <Building2 className="h-4 w-4 text-primary" />
                     <span>{effectiveOrgName}</span>
                   </div>
                 )}
-                <span
-                  style={{
-                    fontSize: "13px",
-                    fontWeight: 900,
-                    textTransform: "uppercase",
-                    color: "#0f172a",
-                    letterSpacing: "0.2px",
-                  }}
-                >
+                <span className="text-[13px] font-extrabold uppercase tracking-tight text-slate-800">
                   {effectiveOrgName}
                 </span>
               </div>
 
               {/* Tag Classification Badge */}
-              <div
-                style={{
-                  display: "inline-block",
-                  fontSize: "10px",
-                  fontWeight: 800,
-                  textTransform: "uppercase",
-                  color: "#0284c7",
-                  backgroundColor: "#f0f9ff",
-                  border: "1px solid #bae6fd",
-                  padding: "3px 10px",
-                  borderRadius: "9999px",
-                  marginBottom: "6px",
-                }}
-              >
+              <div className="inline-block text-[10px] font-extrabold uppercase text-sky-600 bg-sky-50 px-2.5 py-0.5 rounded-full border border-sky-200 mb-1.5">
+                <ShieldCheck className="h-3 w-3 inline mr-1 text-sky-600" />
                 OFFICIAL ASSET TAG · {category || "FLEET UNIT"}
               </div>
 
-              {/* Machine / Vehicle Name (Full visibility, no clipping) */}
-              <div
-                style={{
-                  fontSize: "19px",
-                  fontWeight: 900,
-                  color: "#0f172a",
-                  lineHeight: "1.25",
-                  margin: "2px 0 8px",
-                  wordBreak: "break-word",
-                  padding: "0 4px",
-                }}
-              >
+              {/* Machine / Vehicle Name */}
+              <h3 className="text-lg font-black text-slate-900 leading-snug px-1 mb-2 break-words">
                 {machineName}
-              </div>
+              </h3>
 
               {/* License Plate & Unit Number Badges */}
-              <div
-                style={{
-                  display: "flex",
-                  flexWrap: "wrap",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  gap: "6px",
-                  marginBottom: "8px",
-                }}
-              >
+              <div className="flex flex-wrap items-center justify-center gap-1.5 mb-2.5">
                 {plateNumber && (
-                  <span
-                    style={{
-                      display: "inline-block",
-                      backgroundColor: "#0f172a",
-                      color: "#ffffff",
-                      fontFamily: "monospace",
-                      fontWeight: 800,
-                      fontSize: "13px",
-                      padding: "4px 10px",
-                      borderRadius: "6px",
-                      letterSpacing: "0.5px",
-                    }}
-                  >
+                  <span className="inline-flex items-center gap-1 bg-slate-950 text-white font-mono font-black text-xs px-2.5 py-1 rounded shadow-sm border border-slate-800 tracking-wider">
+                    <Truck className="h-3 w-3 text-sky-400" />
                     PLATE: {plateNumber}
                   </span>
                 )}
                 {registrationNumber && (
-                  <span
-                    style={{
-                      display: "inline-block",
-                      backgroundColor: "#f1f5f9",
-                      color: "#1e293b",
-                      fontFamily: "monospace",
-                      fontWeight: 700,
-                      fontSize: "12px",
-                      padding: "4px 8px",
-                      borderRadius: "6px",
-                      border: "1px solid #cbd5e1",
-                    }}
-                  >
+                  <span className="inline-flex items-center gap-1 bg-slate-100 text-slate-800 font-mono font-bold text-[11px] px-2 py-0.5 rounded border border-slate-300">
                     UNIT: {registrationNumber}
                   </span>
                 )}
@@ -835,98 +863,41 @@ export function MachineQrDialog({
 
               {/* Make / Model / Year / Serial */}
               {metaLineStr && (
-                <div
-                  style={{
-                    fontSize: "11px",
-                    fontWeight: 600,
-                    color: "#475569",
-                    marginBottom: "8px",
-                    lineHeight: "1.3",
-                    padding: "0 4px",
-                  }}
-                >
+                <p className="text-[11px] text-slate-600 font-semibold mb-2 px-1">
                   {metaLineStr}
-                </div>
+                </p>
               )}
 
-              {/* Center QR Code (Guaranteed Bitmap for HTML2Canvas & Print) */}
-              <div
-                style={{
-                  backgroundColor: "#ffffff",
-                  padding: "10px",
-                  borderRadius: "12px",
-                  border: "2px solid #e2e8f0",
-                  display: "inline-block",
-                  marginBottom: "8px",
-                  boxShadow: "0 1px 3px rgba(0,0,0,0.06)",
-                }}
-              >
-                {qrDataUrl ? (
-                  <img
-                    src={qrDataUrl}
-                    alt="QR Code"
-                    style={{
-                      width: "175px",
-                      height: "175px",
-                      display: "block",
-                      margin: "0 auto",
-                    }}
-                  />
-                ) : (
-                  <QRCodeCanvas
-                    id="machine-qr-canvas"
-                    value={url}
-                    size={175}
-                    level="Q"
-                    marginSize={1}
-                    style={{ display: "block", margin: "0 auto" }}
-                  />
-                )}
+              {/* Center QR Code Canvas */}
+              <div className="inline-block p-2 bg-white rounded-xl border-2 border-slate-200 shadow-sm mb-2">
+                <QRCodeCanvas
+                  id="machine-qr-canvas"
+                  ref={qrCanvasRef}
+                  value={url}
+                  size={360}
+                  level="Q"
+                  marginSize={1}
+                  style={{
+                    width: "170px",
+                    height: "170px",
+                    display: "block",
+                    margin: "0 auto",
+                  }}
+                />
               </div>
 
               {/* Call to Action Text */}
-              <div
-                style={{
-                  fontSize: "12px",
-                  fontWeight: 900,
-                  textTransform: "uppercase",
-                  color: "#0f172a",
-                  letterSpacing: "0.3px",
-                  marginBottom: "2px",
-                }}
-              >
+              <p className="text-xs font-black uppercase text-slate-900 tracking-wide mb-0.5">
                 Scan With Phone Camera
-              </div>
-              <div
-                style={{
-                  fontSize: "10.5px",
-                  fontWeight: 500,
-                  color: "#64748b",
-                  lineHeight: "1.35",
-                  maxWidth: "270px",
-                  margin: "0 auto 8px",
-                }}
-              >
+              </p>
+              <p className="text-[10.5px] text-slate-500 font-medium leading-tight max-w-[260px] mx-auto mb-2">
                 Daily Inspection · Maintenance Log · Report Faults
-              </div>
+              </p>
 
               {/* Footer */}
-              <div
-                style={{
-                  borderTop: "1px solid #e2e8f0",
-                  paddingTop: "6px",
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center",
-                  fontSize: "9.5px",
-                  fontFamily: "monospace",
-                  color: "#94a3b8",
-                }}
-              >
+              <div className="pt-1.5 border-t border-slate-200 flex items-center justify-between text-[9.5px] text-slate-400 font-mono">
                 <span>TAG: {machineId.slice(0, 8).toUpperCase()}</span>
-                <span style={{ fontFamily: "sans-serif", fontWeight: 600 }}>
-                  MachineCare Hub
-                </span>
+                <span className="font-sans font-semibold text-[9px]">MachineCare Hub</span>
               </div>
             </div>
           </div>
@@ -989,10 +960,9 @@ export function MachineQrDialog({
               size="sm"
               className="flex-1 text-xs gap-1.5"
               onClick={downloadPng}
-              disabled={downloadingPng}
             >
               <Download className="h-3.5 w-3.5" />
-              {downloadingPng ? "Saving..." : "Save Image (PNG)"}
+              Save Image (PNG)
             </Button>
             <Button
               type="button"
