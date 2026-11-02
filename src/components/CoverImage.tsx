@@ -25,10 +25,38 @@ export function CoverImage({ value, alt, className, fallback = null }: Props) {
     supabase.storage
       .from("machine-docs")
       .createSignedUrl(value, 60 * 60)
-      .then(({ data }) => { if (active) setSrc(data?.signedUrl ?? null); });
+      .then(({ data, error }) => {
+        if (!active) return;
+        if (!error && data?.signedUrl) {
+          setSrc(data.signedUrl);
+        } else {
+          // Fallback to getPublicUrl
+          const { data: pubData } = supabase.storage.from("machine-docs").getPublicUrl(value);
+          if (pubData?.publicUrl) setSrc(pubData.publicUrl);
+        }
+      })
+      .catch(() => {
+        if (!active) return;
+        const { data: pubData } = supabase.storage.from("machine-docs").getPublicUrl(value);
+        if (pubData?.publicUrl) setSrc(pubData.publicUrl);
+      });
     return () => { active = false; };
   }, [value]);
 
   if (!src) return <>{fallback}</>;
-  return <img src={src} alt={alt} className={className} />;
+  return (
+    <img
+      src={src}
+      alt={alt}
+      className={className}
+      onError={() => {
+        if (!value) return;
+        // If signed URL failed, try raw public URL
+        const { data: pubData } = supabase.storage.from("machine-docs").getPublicUrl(value);
+        if (pubData?.publicUrl && src !== pubData.publicUrl) {
+          setSrc(pubData.publicUrl);
+        }
+      }}
+    />
+  );
 }

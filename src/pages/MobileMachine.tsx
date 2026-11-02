@@ -808,35 +808,62 @@ export default function MobileMachine() {
         {/* Identity card with Enhanced Vehicle Photo */}
         <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
           {machine.cover_image_url ? (
-            <div className="relative aspect-[16/9] w-full overflow-hidden bg-muted group">
+            <div className="relative h-64 sm:h-72 w-full overflow-hidden bg-slate-950 flex items-center justify-center group">
+              {/* Ambient blurred backdrop of the vehicle image to fill background naturally */}
+              <div className="absolute inset-0 filter blur-xl scale-125 opacity-35 pointer-events-none">
+                <CoverImage
+                  value={machine.cover_image_url}
+                  alt=""
+                  className="w-full h-full object-cover"
+                />
+              </div>
+
+              {/* Sharp foreground vehicle image - centered and never cropped awkwardly */}
               <CoverImage
                 value={machine.cover_image_url}
                 alt={machine.name}
-                className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
+                className="relative z-10 max-h-full max-w-full object-contain mx-auto transition-transform duration-500 group-hover:scale-105 drop-shadow-2xl p-2"
               />
-              <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent pointer-events-none" />
-              
+
+              {/* Bottom vignette gradient for contrast */}
+              <div className="absolute inset-x-0 bottom-0 h-28 bg-gradient-to-t from-black/90 via-black/40 to-transparent pointer-events-none z-20" />
+
               {/* Overlaid Badges */}
-              <div className="absolute top-3 left-3 flex items-center gap-1.5 rounded-full bg-black/60 backdrop-blur-md px-3 py-1 text-xs font-semibold text-white shadow-md border border-white/10">
+              <div className="absolute top-3 left-3 z-30 flex items-center gap-1.5 rounded-full bg-black/60 backdrop-blur-md px-3 py-1 text-xs font-semibold text-white shadow-md border border-white/10">
                 <Car className="h-3.5 w-3.5 text-primary" /> {machine.category || "Vehicle"}
               </div>
 
-              <span className={`absolute top-3 right-3 rounded-full px-3 py-1 text-[11px] font-bold uppercase tracking-wider shadow-md backdrop-blur-md ${statusClass}`}>
+              <span className={`absolute top-3 right-3 z-30 rounded-full px-3 py-1 text-[11px] font-bold uppercase tracking-wider shadow-md backdrop-blur-md ${statusClass}`}>
                 {machine.status}
               </span>
 
               {machine.plate_number && (
-                <div className="absolute bottom-3 left-3 flex items-center gap-2">
-                  <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-amber-400 text-black font-mono font-black text-xs tracking-wider border-2 border-amber-500 shadow-lg">
+                <div className="absolute bottom-3 left-3 z-30 flex items-center gap-2">
+                  <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded bg-amber-400 text-black font-mono font-black text-xs tracking-wider border-2 border-amber-500 shadow-xl">
                     <span className="text-[9px] uppercase font-sans font-black bg-black/10 px-1 rounded">TZ</span>
                     {machine.plate_number}
                   </div>
                 </div>
               )}
+
+              {user && isOwnOrg && (
+                <label className="absolute bottom-3 right-3 z-30 cursor-pointer text-[11px] text-white/90 hover:text-white bg-black/60 hover:bg-black/80 backdrop-blur-md px-2.5 py-1 rounded-lg border border-white/20 flex items-center gap-1 shadow-md transition-colors">
+                  <Camera className="h-3 w-3" />
+                  <span>{uploadingCover ? "Updating…" : "Change photo"}</span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    capture="environment"
+                    className="hidden"
+                    disabled={uploadingCover}
+                    onChange={handleUploadCover}
+                  />
+                </label>
+              )}
             </div>
           ) : (
-            <div className="relative aspect-[16/9] w-full overflow-hidden bg-gradient-to-br from-slate-900 via-slate-800 to-primary/20 rounded-t-2xl flex flex-col justify-between p-4">
-              <div className="absolute inset-0 opacity-10 bg-[radial-gradient(#ffffff_1px,transparent_1px)] [background-size:16px_16px]" />
+            <div className="relative h-60 sm:h-64 w-full overflow-hidden bg-gradient-to-br from-slate-950 via-slate-900 to-primary/20 rounded-t-2xl flex flex-col justify-between p-4">
+              <div className="absolute inset-0 opacity-15 bg-[radial-gradient(#ffffff_1px,transparent_1px)] [background-size:16px_16px]" />
               
               <div className="relative z-10 flex items-center justify-between w-full">
                 <div className="flex items-center gap-1.5 rounded-full bg-white/10 backdrop-blur-md px-3 py-1 text-xs font-semibold text-white border border-white/10">
@@ -848,26 +875,16 @@ export default function MobileMachine() {
               </div>
 
               <div className="relative z-10 flex flex-col items-center justify-center my-auto py-2">
-                <div className="p-3.5 rounded-2xl bg-white/5 border border-white/10 shadow-inner mb-2">
-                  <Car className="h-10 w-10 text-white/80" />
+                <div className="p-3.5 rounded-2xl bg-white/5 border border-white/10 shadow-2xl mb-2 backdrop-blur-sm">
+                  <Car className="h-12 w-12 text-white/90" />
                 </div>
-                <p className="text-white/70 text-xs font-medium tracking-wide">
+                <p className="text-white/80 text-sm font-semibold tracking-wide">
                   {[machine.make, machine.model, machine.year].filter(Boolean).join(" · ") || "Fleet Vehicle"}
                 </p>
-              </div>
-
-              <div className="relative z-10 flex items-center justify-between w-full">
-                {machine.plate_number ? (
-                  <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-amber-400 text-black font-mono font-black text-xs tracking-wider border border-amber-500 shadow-md">
-                    <span className="text-[9px] uppercase font-sans font-black bg-black/10 px-1 rounded">TZ</span>
-                    {machine.plate_number}
-                  </div>
-                ) : <div />}
-                
                 {user && isOwnOrg && (
-                  <label className="cursor-pointer text-[11px] text-white/90 hover:text-white bg-white/15 hover:bg-white/25 px-2.5 py-1 rounded-lg border border-white/15 flex items-center gap-1 shadow-sm transition-colors">
+                  <label className="mt-2.5 cursor-pointer inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-primary text-primary-foreground text-xs font-semibold shadow-lg hover:bg-primary/90 transition-transform active:scale-95">
                     <Camera className="h-3.5 w-3.5" />
-                    <span>{uploadingCover ? "Uploading…" : "Add photo"}</span>
+                    <span>{uploadingCover ? "Uploading…" : "Add Vehicle Photo"}</span>
                     <input
                       type="file"
                       accept="image/*"
@@ -878,6 +895,15 @@ export default function MobileMachine() {
                     />
                   </label>
                 )}
+              </div>
+
+              <div className="relative z-10 flex items-center justify-between w-full">
+                {machine.plate_number ? (
+                  <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-amber-400 text-black font-mono font-black text-xs tracking-wider border border-amber-500 shadow-md">
+                    <span className="text-[9px] uppercase font-sans font-black bg-black/10 px-1 rounded">TZ</span>
+                    {machine.plate_number}
+                  </div>
+                ) : <div />}
               </div>
             </div>
           )}
@@ -1279,12 +1305,37 @@ export default function MobileMachine() {
           </>
         )}
 
-        {/* Fault report form: for factory machines always available, for vehicles only shown if toggled */}
-        {(machine.category !== "Vehicle" ? (!user || !isOwnOrg || showFaultForm) : showFaultForm) && (
-          <div className="rounded-2xl border border-border bg-card p-5 space-y-3">
-            <div className="flex items-center gap-2">
-              <AlertTriangle className="h-5 w-5 text-amber-500" />
-              <h2 className="font-semibold">{t.reportFault}</h2>
+        {/* Quick Report Fault trigger button */}
+        <div className="pt-1">
+          <Button
+            type="button"
+            variant="outline"
+            className="w-full h-11 border-amber-500/30 bg-amber-500/10 hover:bg-amber-500/15 text-amber-900 dark:text-amber-200 gap-2 text-xs font-semibold shadow-xs transition-all"
+            onClick={() => {
+              setShowFaultForm(true);
+              setSubmitted(false);
+              setSubmittedOffline(false);
+              setTimeout(() => {
+                document.getElementById("fault-report-section")?.scrollIntoView({ behavior: "smooth" });
+              }, 50);
+            }}
+          >
+            <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0" />
+            <span>{t.reportFault} (Mechanical / Breakdown Issue)</span>
+          </Button>
+        </div>
+
+        {/* Fault report form: always available to report any mechanical issue or breakdown */}
+        {(!user || !isOwnOrg || showFaultForm) && (
+          <div id="fault-report-section" className="rounded-2xl border border-border bg-card p-5 space-y-3 shadow-sm scroll-mt-6">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <AlertTriangle className="h-5 w-5 text-amber-500" />
+                <h2 className="font-semibold">{t.reportFault}</h2>
+              </div>
+              <Badge variant="outline" className="text-[10px] text-amber-600 border-amber-500/30">
+                Maintenance
+              </Badge>
             </div>
             {submitted ? (
               <div className={`flex items-start gap-2 rounded-lg p-3 text-sm ${submittedOffline ? "bg-amber-500/10 text-amber-700 dark:text-amber-400" : "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"}`}>
