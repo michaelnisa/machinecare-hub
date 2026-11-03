@@ -10,6 +10,7 @@ import { PageLoader, EmptyState } from "@/components/PageLoader";
 import { Boxes, Plus, Loader2, Pencil, ShoppingCart, Trash2, Layers, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { formatMoney, formatNumber, formatDate } from "@/lib/format";
+import { ConfirmDialog } from "@/components/ConfirmDialog";
 
 const ITEM_TYPES = ["spare_part", "consumable", "tool", "other"];
 
@@ -24,7 +25,26 @@ export default function GarageInventory() {
   const [search, setSearch] = useState("");
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<any>(null);
+  const [confirmDelete, setConfirmDelete] = useState<any>(null);
   const [purchaseOpen, setPurchaseOpen] = useState(false);
+
+  const handleDelete = async () => {
+    if (!confirmDelete) return;
+    const { error } = await supabase.from("inventory_items").delete().eq("id", confirmDelete.id);
+    if (error) {
+      // If foreign key constraint or dependency, fallback to archiving so historical records stay intact
+      const { error: softErr } = await supabase.from("inventory_items").update({ status: "archived" }).eq("id", confirmDelete.id);
+      if (softErr) {
+        toast.error(error.message);
+        return;
+      }
+      toast.success("Part archived and removed from active inventory");
+    } else {
+      toast.success("Part deleted");
+    }
+    setConfirmDelete(null);
+    load();
+  };
 
   const load = async () => {
     if (!profile) return;
@@ -139,7 +159,20 @@ export default function GarageInventory() {
                         <td className="px-5 py-3 text-muted-foreground">{formatMoney(i.unit_cost)}</td>
                         <td className="px-5 py-3">{i.selling_price != null ? formatMoney(i.selling_price) : "—"}</td>
                         <td className="px-5 py-3 text-right">
-                          <Button variant="ghost" size="icon" onClick={() => { setEditing(i); setFormOpen(true); }}><Pencil className="h-4 w-4" /></Button>
+                          <div className="flex items-center justify-end gap-1">
+                            <Button variant="ghost" size="icon" onClick={() => { setEditing(i); setFormOpen(true); }} title="Edit part">
+                              <Pencil className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => setConfirmDelete(i)}
+                              title="Delete part"
+                              className="text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
                         </td>
                       </tr>
                     );
@@ -183,8 +216,27 @@ export default function GarageInventory() {
         )
       )}
 
-      <PartFormDialog open={formOpen} setOpen={setFormOpen} editing={editing} orgId={profile?.organisation_id} userId={user?.id} onSaved={load} />
+      <PartFormDialog
+        open={formOpen}
+        setOpen={setFormOpen}
+        editing={editing}
+        orgId={profile?.organisation_id}
+        userId={user?.id}
+        onSaved={load}
+        onDelete={(item: any) => {
+          setConfirmDelete(item);
+          setFormOpen(false);
+        }}
+      />
       <RecordPurchaseDialog open={purchaseOpen} setOpen={setPurchaseOpen} items={items} suppliers={suppliers} onSaved={load} />
+      <ConfirmDialog
+        open={!!confirmDelete}
+        onOpenChange={(open) => !open && setConfirmDelete(null)}
+        title={`Delete ${confirmDelete?.name ?? "part"}?`}
+        description="Are you sure you want to delete this part from inventory? If it has historical repair records, it will be safely archived."
+        confirmLabel="Delete part"
+        onConfirm={handleDelete}
+      />
     </div>
   );
 }
@@ -198,7 +250,7 @@ interface VariantRow {
   initial_stock: string;
 }
 
-function PartFormDialog({ open, setOpen, editing, orgId, userId, onSaved }: any) {
+function PartFormDialog({ open, setOpen, editing, orgId, userId, onSaved, onDelete }: any) {
   const [saving, setSaving] = useState(false);
   const [mode, setMode] = useState<"single" | "batch">("single");
   const [quickInput, setQuickInput] = useState("");
@@ -838,24 +890,38 @@ function PartFormDialog({ open, setOpen, editing, orgId, userId, onSaved }: any)
           </div>
         )}
 
-        <DialogFooter className="mt-4 gap-2">
-          <Button variant="outline" onClick={() => setOpen(false)}>
-            Cancel
-          </Button>
-          <Button
-            onClick={mode === "batch" && !editing ? submitBatch : submitSingle}
-            disabled={saving}
-          >
-            {saving ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : editing ? (
-              "Save changes"
-            ) : mode === "batch" ? (
-              `Save all ${validRowCount > 0 ? validRowCount : ""} models`
-            ) : (
-              "Add part"
-            )}
-          </Button>
+        <DialogFooter className="mt-4 flex flex-wrap items-center justify-between gap-2 sm:justify-between">
+          {editing ? (
+            <Button
+              type="button"
+              variant="destructive"
+              size="sm"
+              onClick={() => onDelete?.(editing)}
+              className="gap-1.5"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+              Delete part
+            </Button>
+          ) : <div />}
+          <div className="flex items-center gap-2 ml-auto">
+            <Button variant="outline" onClick={() => setOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={mode === "batch" && !editing ? submitBatch : submitSingle}
+              disabled={saving}
+            >
+              {saving ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : editing ? (
+                "Save changes"
+              ) : mode === "batch" ? (
+                `Save all ${validRowCount > 0 ? validRowCount : ""} models`
+              ) : (
+                "Add part"
+              )}
+            </Button>
+          </div>
         </DialogFooter>
       </DialogContent>
     </Dialog>
