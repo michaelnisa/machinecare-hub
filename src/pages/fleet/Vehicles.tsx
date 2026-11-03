@@ -146,8 +146,12 @@ export default function Vehicles() {
     setSyncingTrakzee(false);
     if (!res.success) {
       toast.error(res.error || "Failed to sync Trakzee GPS");
+    } else if (res.vehicles_updated === 0 && (res.vehicles_returned ?? 0) === 0) {
+      toast.info("Trakzee API connected, but returned 0 online vehicles.");
+    } else if (res.vehicles_updated === 0 && (res.vehicles_returned ?? 0) > 0) {
+      toast.warning(`Trakzee returned ${res.vehicles_returned} vehicles, but none matched your fleet plate numbers.`);
     } else {
-      toast.success(`Trakzee GPS synced: ${res.vehicles_updated ?? 0} vehicles updated`);
+      toast.success(`Trakzee GPS synced: ${res.vehicles_updated} vehicle(s) updated`);
       load();
     }
   };

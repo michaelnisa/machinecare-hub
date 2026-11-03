@@ -48,6 +48,21 @@ function parseOdometerKm(rawOdo: string | number | undefined): number | null {
   return Math.round(num);
 }
 
+// Safely parse JSON from a response that might return HTML on 502/504 errors
+async function safeParseJson(res: Response): Promise<{ ok: boolean; data?: any; rawText?: string }> {
+  try {
+    const text = await res.text();
+    try {
+      const data = JSON.parse(text);
+      return { ok: true, data };
+    } catch {
+      return { ok: false, rawText: text.substring(0, 300) };
+    }
+  } catch (err: any) {
+    return { ok: false, rawText: err?.message };
+  }
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
@@ -58,7 +73,16 @@ serve(async (req) => {
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    const body = await req.json();
+    let body: any = {};
+    try {
+      body = await req.json();
+    } catch {
+      return new Response(
+        JSON.stringify({ success: false, error: "Invalid JSON request body" }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     const action = body.action || "sync_fleet";
 
     // ─────────────────────────────────────────────────────────────
@@ -72,25 +96,42 @@ serve(async (req) => {
       if (!username || !password) {
         return new Response(
           JSON.stringify({ success: false, error: "Username and password are required" }),
-          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-
-      const loginUrl = `${serverUrl}?token=generateAccessToken`;
-      const loginRes = await fetch(loginUrl, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username, password }),
-      });
-
-      if (!loginRes.ok) {
-        return new Response(
-          JSON.stringify({ success: false, error: `Server returned HTTP ${loginRes.status}: ${loginRes.statusText}` }),
           { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
 
-      const loginData = await loginRes.json();
+      const loginUrl = `${serverUrl}?token=generateAccessToken`;
+      let loginRes: Response;
+      try {
+        loginRes = await fetch(loginUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ username, password }),
+          signal: AbortSignal.timeout(15000), // 15 second timeout
+        });
+      } catch (netErr: any) {
+        return new Response(
+          JSON.stringify({
+            success: false,
+            error: `Could not reach Trakzee server at ${serverUrl} (${netErr?.message || "Connection timed out"}). Please verify the IP / server URL is accessible.`,
+          }),
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      const parsed = await safeParseJson(loginRes);
+      if (!parsed.ok) {
+        return new Response(
+          JSON.stringify({
+            success: false,
+            error: `Server at ${serverUrl} returned non-JSON response (HTTP ${loginRes.status}). Verify URL endpoint.`,
+            preview: parsed.rawText,
+          }),
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      const loginData = parsed.data;
       const token = loginData?.data?.token;
 
       if (!token) {
@@ -122,7 +163,7 @@ serve(async (req) => {
       if (!orgId) {
         return new Response(
           JSON.stringify({ success: false, error: "organisation_id is required" }),
-          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
 
@@ -131,12 +172,12 @@ serve(async (req) => {
         .from("organisations")
         .select("id, name, trakzee_enabled, trakzee_server_url, trakzee_username, trakzee_password, trakzee_company_name, trakzee_project_id")
         .eq("id", orgId)
-        .single();
+        .maybeSingle();
 
       if (orgErr || !org) {
         return new Response(
-          JSON.stringify({ success: false, error: "Organisation not found" }),
-          { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          JSON.stringify({ success: false, error: "Organisation not found or database query failed" }),
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
 
@@ -148,21 +189,21 @@ serve(async (req) => {
 
       if (!username || !password) {
         return new Response(
-          JSON.stringify({ success: false, error: "Trakzee credentials not configured for this organisation" }),
-          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          JSON.stringify({ success: false, error: "Trakzee credentials not configured for this organisation. Go to Settings > Trakzee Telematics." }),
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
 
       // 2. Fetch active vehicles for this organisation in MachineCare
       const { data: machines, error: mErr } = await supabase
         .from("machines")
-        .select("id, name, plate_number, telematics_imei, current_odometer_km, current_hours, status")
+        .select("id, name, plate_number, telematics_imei, current_odometer_km, current_hours, status, notes")
         .eq("organisation_id", orgId);
 
       if (mErr) {
         return new Response(
-          JSON.stringify({ success: false, error: mErr.message }),
-          { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          JSON.stringify({ success: false, error: `Error loading vehicles: ${mErr.message}` }),
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
 
@@ -177,28 +218,35 @@ serve(async (req) => {
 
       // 3. Step-1: Authenticate with Trakzee
       const loginUrl = `${serverUrl}?token=generateAccessToken`;
-      const loginRes = await fetch(loginUrl, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username, password }),
-      });
-
-      if (!loginRes.ok) {
+      let loginRes: Response;
+      try {
+        loginRes = await fetch(loginUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ username, password }),
+          signal: AbortSignal.timeout(15000),
+        });
+      } catch (netErr: any) {
         return new Response(
-          JSON.stringify({ success: false, error: `Authentication failed (HTTP ${loginRes.status})` }),
+          JSON.stringify({ success: false, error: `Trakzee login timeout or unreachable: ${netErr?.message}` }),
           { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
 
-      const loginData = await loginRes.json();
-      const token = loginData?.data?.token;
+      const loginParsed = await safeParseJson(loginRes);
+      if (!loginParsed.ok) {
+        return new Response(
+          JSON.stringify({ success: false, error: `Invalid server response during authentication (HTTP ${loginRes.status})` }),
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
 
+      const token = loginParsed.data?.data?.token;
       if (!token) {
         return new Response(
           JSON.stringify({
             success: false,
-            error: loginData?.message || loginData?.error || "Could not generate Trakzee token",
-            raw: loginData,
+            error: loginParsed.data?.message || loginParsed.data?.error || "Could not generate Trakzee token (invalid credentials)",
           }),
           { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
@@ -214,23 +262,33 @@ serve(async (req) => {
       if (plateList.length > 0) requestPayload.vehicle_nos = plateList.join(", ");
       if (imeiList.length > 0) requestPayload.imei_nos = imeiList.join(", ");
 
-      const liveRes = await fetch(liveDataUrl, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "auth-code": token,
-        },
-        body: JSON.stringify(requestPayload),
-      });
-
-      if (!liveRes.ok) {
+      let liveRes: Response;
+      try {
+        liveRes = await fetch(liveDataUrl, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "auth-code": token,
+          },
+          body: JSON.stringify(requestPayload),
+          signal: AbortSignal.timeout(20000),
+        });
+      } catch (netErr: any) {
         return new Response(
-          JSON.stringify({ success: false, error: `Live data request failed (HTTP ${liveRes.status})` }),
+          JSON.stringify({ success: false, error: `Telemetry request timeout: ${netErr?.message}` }),
           { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
 
-      const liveData = await liveRes.json();
+      const liveParsed = await safeParseJson(liveRes);
+      if (!liveParsed.ok) {
+        return new Response(
+          JSON.stringify({ success: false, error: `Invalid telematics response (HTTP ${liveRes.status})` }),
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      const liveData = liveParsed.data;
       const vehicleList: TrakzeeVehicleData[] =
         liveData?.root?.VehicleData ||
         liveData?.VehicleData ||
@@ -282,6 +340,7 @@ serve(async (req) => {
           }
         }
 
+        // Attempt full update
         const { error: updErr } = await supabase
           .from("machines")
           .update(updatePayload)
@@ -296,14 +355,48 @@ serve(async (req) => {
             speed,
             status: tVehicle.Status,
           });
+        } else {
+          // Fallback: If schema cache does not have new telematics columns yet,
+          // update core fields (odometer) and append telematics into notes
+          console.warn("Full telematics update failed, falling back to safe columns:", updErr.message);
+          const safePayload: any = {};
+          if (odoKm !== null && odoKm > 0) {
+            safePayload.current_odometer_km = odoKm;
+          }
+          try {
+            const existingNotes = match.notes || "";
+            const telematicsSnippet = `[GPS: ${lat?.toFixed(4)}, ${lng?.toFixed(4)} | Speed: ${speed}km/h | Status: ${tVehicle.Status} | Updated: ${new Date().toISOString()}]`;
+            safePayload.notes = existingNotes.includes("[GPS:")
+              ? existingNotes.replace(/\[GPS:.*?\]/g, telematicsSnippet)
+              : `${existingNotes}\n${telematicsSnippet}`.trim();
+          } catch (_) {}
+
+          const { error: fallbackErr } = await supabase
+            .from("machines")
+            .update(safePayload)
+            .eq("id", match.id);
+
+          if (!fallbackErr) {
+            updatedCount++;
+            syncLogs.push({
+              machine_id: match.id,
+              plate: match.plate_number,
+              odometer_km: odoKm ?? match.current_odometer_km,
+              speed,
+              status: tVehicle.Status,
+              fallback: true,
+            });
+          }
         }
       }
 
       // Update last synced timestamp on organisation
-      await supabase
-        .from("organisations")
-        .update({ trakzee_last_synced_at: new Date().toISOString() })
-        .eq("id", orgId);
+      try {
+        await supabase
+          .from("organisations")
+          .update({ trakzee_last_synced_at: new Date().toISOString() })
+          .eq("id", orgId);
+      } catch (_) {}
 
       return new Response(
         JSON.stringify({
@@ -319,12 +412,12 @@ serve(async (req) => {
 
     return new Response(
       JSON.stringify({ success: false, error: `Unknown action: ${action}` }),
-      { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (err: any) {
     return new Response(
       JSON.stringify({ success: false, error: err?.message || "Internal server error" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
 });

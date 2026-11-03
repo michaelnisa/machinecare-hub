@@ -1588,6 +1588,10 @@ function TrakzeeTelematicsSection({ orgId }: { orgId?: string }) {
     setSyncing(false);
     if (!res.success) {
       toast.error(res.error || "Failed to sync fleet telematics");
+    } else if (res.vehicles_updated === 0 && (res.vehicles_returned ?? 0) === 0) {
+      toast.info("Trakzee API connected, but returned 0 online vehicles.");
+    } else if (res.vehicles_updated === 0 && (res.vehicles_returned ?? 0) > 0) {
+      toast.warning(`Trakzee returned ${res.vehicles_returned} vehicles, but none matched your fleet plate numbers.`);
     } else {
       toast.success(
         `Fleet synced! Updated ${res.vehicles_updated ?? 0} of ${res.vehicles_returned ?? 0} vehicles.`

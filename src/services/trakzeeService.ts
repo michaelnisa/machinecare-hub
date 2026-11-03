@@ -34,6 +34,7 @@ export interface TrakzeeSyncResult {
     odometer_km: number | null;
     speed: number;
     status: string;
+    fallback?: boolean;
   }>;
 }
 
@@ -47,51 +48,86 @@ export const DEFAULT_TRAKZEE_CONFIG: TrakzeeConfig = {
   trakzee_last_synced_at: null,
 };
 
+// Helper to format edge function errors cleanly
+async function extractEdgeFunctionError(error: any): Promise<string> {
+  if (!error) return "Unknown error occurred";
+  if (error.context?.json) {
+    try {
+      const errJson = await error.context.json();
+      if (errJson?.error) return errJson.error;
+    } catch (_) {}
+  }
+  const msg = error.message || String(error);
+  if (msg.includes("Failed to send a request") || msg.includes("Relay Error")) {
+    return "Trakzee telematics edge function is offline or not yet deployed. Please deploy 'trakzee-telematics' on Supabase.";
+  }
+  return msg;
+}
+
 /**
  * Loads Trakzee configuration for a specific organisation.
+ * Gracefully defaults if columns do not exist in schema cache yet.
  */
 export async function getTrakzeeSettings(organisationId: string): Promise<TrakzeeConfig> {
-  const { data, error } = await (supabase as any)
-    .from("organisations")
-    .select("trakzee_enabled, trakzee_server_url, trakzee_username, trakzee_password, trakzee_company_name, trakzee_project_id, trakzee_last_synced_at")
-    .eq("id", organisationId)
-    .maybeSingle();
+  try {
+    const { data, error } = await (supabase as any)
+      .from("organisations")
+      .select("trakzee_enabled, trakzee_server_url, trakzee_username, trakzee_password, trakzee_company_name, trakzee_project_id, trakzee_last_synced_at")
+      .eq("id", organisationId)
+      .maybeSingle();
 
-  if (error || !data) {
+    if (error || !data) {
+      return DEFAULT_TRAKZEE_CONFIG;
+    }
+
+    return {
+      trakzee_enabled: data.trakzee_enabled ?? false,
+      trakzee_server_url: data.trakzee_server_url || DEFAULT_TRAKZEE_CONFIG.trakzee_server_url,
+      trakzee_username: data.trakzee_username || "",
+      trakzee_password: data.trakzee_password || "",
+      trakzee_company_name: data.trakzee_company_name || DEFAULT_TRAKZEE_CONFIG.trakzee_company_name,
+      trakzee_project_id: data.trakzee_project_id || DEFAULT_TRAKZEE_CONFIG.trakzee_project_id,
+      trakzee_last_synced_at: data.trakzee_last_synced_at || null,
+    };
+  } catch {
     return DEFAULT_TRAKZEE_CONFIG;
   }
-
-  return {
-    trakzee_enabled: data.trakzee_enabled ?? false,
-    trakzee_server_url: data.trakzee_server_url || DEFAULT_TRAKZEE_CONFIG.trakzee_server_url,
-    trakzee_username: data.trakzee_username || "",
-    trakzee_password: data.trakzee_password || "",
-    trakzee_company_name: data.trakzee_company_name || DEFAULT_TRAKZEE_CONFIG.trakzee_company_name,
-    trakzee_project_id: data.trakzee_project_id || DEFAULT_TRAKZEE_CONFIG.trakzee_project_id,
-    trakzee_last_synced_at: data.trakzee_last_synced_at || null,
-  };
 }
 
 /**
  * Persists Trakzee configuration for the organisation.
+ * Handles schema cache resilience gracefully.
  */
-export async function saveTrakzeeSettings(organisationId: string, cfg: TrakzeeConfig): Promise<{ success: boolean; error?: string }> {
-  const { error } = await (supabase as any)
-    .from("organisations")
-    .update({
-      trakzee_enabled: cfg.trakzee_enabled,
-      trakzee_server_url: cfg.trakzee_server_url.trim(),
-      trakzee_username: cfg.trakzee_username.trim() || null,
-      trakzee_password: cfg.trakzee_password.trim() || null,
-      trakzee_company_name: cfg.trakzee_company_name.trim() || null,
-      trakzee_project_id: cfg.trakzee_project_id.trim() || null,
-    })
-    .eq("id", organisationId);
+export async function saveTrakzeeSettings(
+  organisationId: string,
+  cfg: TrakzeeConfig
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const { error } = await (supabase as any)
+      .from("organisations")
+      .update({
+        trakzee_enabled: cfg.trakzee_enabled,
+        trakzee_server_url: cfg.trakzee_server_url.trim(),
+        trakzee_username: cfg.trakzee_username.trim() || null,
+        trakzee_password: cfg.trakzee_password.trim() || null,
+        trakzee_company_name: cfg.trakzee_company_name.trim() || null,
+        trakzee_project_id: cfg.trakzee_project_id.trim() || null,
+      })
+      .eq("id", organisationId);
 
-  if (error) {
-    return { success: false, error: error.message };
+    if (error) {
+      if (error.message?.includes("schema cache") || error.code === "PGRST204") {
+        return {
+          success: false,
+          error: "Database column not found in schema cache. Please apply migration 20261103010000_trakzee_telematics.sql or reload Supabase schema cache.",
+        };
+      }
+      return { success: false, error: error.message };
+    }
+    return { success: true };
+  } catch (err: any) {
+    return { success: false, error: err?.message || "Failed to save settings" };
   }
-  return { success: true };
 }
 
 /**
@@ -109,7 +145,8 @@ export async function testTrakzeeConnection(cfg: Partial<TrakzeeConfig>): Promis
     });
 
     if (error) {
-      return { success: false, error: error.message };
+      const formatted = await extractEdgeFunctionError(error);
+      return { success: false, error: formatted };
     }
 
     if (!data?.success) {
@@ -139,7 +176,8 @@ export async function syncTrakzeeFleet(organisationId: string): Promise<TrakzeeS
     });
 
     if (error) {
-      return { success: false, error: error.message };
+      const formatted = await extractEdgeFunctionError(error);
+      return { success: false, error: formatted };
     }
 
     if (!data?.success) {
