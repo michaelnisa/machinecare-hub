@@ -33,10 +33,21 @@ import {
   Smartphone,
   ShieldCheck,
   Lock,
+  Radio,
+  RefreshCw,
+  Truck,
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { isPlatformAdmin } from "@/lib/admin";
 import { testSelcomConnection } from "@/services/selcomService";
+import {
+  getTrakzeeSettings,
+  saveTrakzeeSettings,
+  testTrakzeeConnection,
+  syncTrakzeeFleet,
+  type TrakzeeConfig,
+  DEFAULT_TRAKZEE_CONFIG,
+} from "@/services/trakzeeService";
 import { Switch } from "@/components/ui/switch";
 import {
   AlertDialog,
@@ -965,6 +976,8 @@ export default function Settings() {
 
       <ProductionSettingsSection orgId={organisation?.id} />
 
+      <TrakzeeTelematicsSection orgId={organisation?.id} />
+
       <Section title="Team members">
         <div className="overflow-hidden rounded-lg border border-border">
           <table className="w-full text-sm">
@@ -1527,3 +1540,196 @@ function ToggleRow({
     </div>
   );
 }
+
+function TrakzeeTelematicsSection({ orgId }: { orgId?: string }) {
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [testing, setTesting] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  const [cfg, setCfg] = useState<TrakzeeConfig>(DEFAULT_TRAKZEE_CONFIG);
+
+  useEffect(() => {
+    if (!orgId) return;
+    (async () => {
+      setLoading(true);
+      const data = await getTrakzeeSettings(orgId);
+      setCfg(data);
+      setLoading(false);
+    })();
+  }, [orgId]);
+
+  const handleSave = async () => {
+    if (!orgId) return;
+    setSaving(true);
+    const res = await saveTrakzeeSettings(orgId, cfg);
+    setSaving(false);
+    if (!res.success) {
+      toast.error(res.error || "Failed to save Trakzee settings");
+    } else {
+      toast.success("Trakzee Telematics settings saved");
+    }
+  };
+
+  const handleTest = async () => {
+    setTesting(true);
+    const res = await testTrakzeeConnection(cfg);
+    setTesting(false);
+    if (!res.success) {
+      toast.error(res.error || "Connection failed. Please check credentials & server URL.");
+    } else {
+      toast.success(res.message || "Connected to Trakzee API successfully!");
+    }
+  };
+
+  const handleSync = async () => {
+    if (!orgId) return;
+    setSyncing(true);
+    const res = await syncTrakzeeFleet(orgId);
+    setSyncing(false);
+    if (!res.success) {
+      toast.error(res.error || "Failed to sync fleet telematics");
+    } else {
+      toast.success(
+        `Fleet synced! Updated ${res.vehicles_updated ?? 0} of ${res.vehicles_returned ?? 0} vehicles.`
+      );
+      if (res.last_synced_at) {
+        setCfg((c) => ({ ...c, trakzee_last_synced_at: res.last_synced_at }));
+      }
+    }
+  };
+
+  if (loading) return null;
+
+  return (
+    <section className="rounded-xl border border-border bg-card p-6">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-2">
+        <div className="flex items-center gap-2">
+          <Radio className="h-5 w-5 text-primary" />
+          <h2 className="font-semibold text-foreground">
+            Trakzee Telematics &amp; GPS Tracking (Live Feed)
+          </h2>
+        </div>
+        {cfg.trakzee_last_synced_at && (
+          <span className="text-xs text-muted-foreground bg-muted/60 px-2.5 py-1 rounded-full w-fit">
+            Last synced: {new Date(cfg.trakzee_last_synced_at).toLocaleString()}
+          </span>
+        )}
+      </div>
+
+      <p className="mb-5 text-sm text-muted-foreground">
+        Live integration with Trakzee telematics platform for Logistixwave Tanzania Limited. Automatically syncs vehicle odometers, speeds, ignition status, and battery health to trigger preventive maintenance schedules without manual entries.
+      </p>
+
+      <div className="space-y-4">
+        <ToggleRow
+          label="Enable Trakzee Live GPS Sync"
+          desc="When enabled, MachineCare automatically syncs live odometers and telematics for active vehicles in this fleet."
+          checked={cfg.trakzee_enabled}
+          onChange={(v) => setCfg({ ...cfg, trakzee_enabled: v })}
+        />
+
+        <div className="grid gap-4 sm:grid-cols-2 pt-2">
+          <div>
+            <Label className="text-xs">Server Endpoint URL</Label>
+            <Input
+              value={cfg.trakzee_server_url}
+              onChange={(e) => setCfg({ ...cfg, trakzee_server_url: e.target.value })}
+              placeholder="http://165.22.222.196/webservice"
+              className="mt-1 font-mono text-xs"
+            />
+            <p className="text-[11px] text-muted-foreground mt-1">
+              Base URL of the Trakzee webservice (proxied securely via Edge Function).
+            </p>
+          </div>
+
+          <div>
+            <Label className="text-xs">Company Name (in Trakzee database)</Label>
+            <Input
+              value={cfg.trakzee_company_name}
+              onChange={(e) => setCfg({ ...cfg, trakzee_company_name: e.target.value })}
+              placeholder="e.g. Logistixwave Tanzania"
+              className="mt-1 text-xs"
+            />
+            <p className="text-[11px] text-muted-foreground mt-1">
+              Exact registered company name passed in the telematics query.
+            </p>
+          </div>
+
+          <div>
+            <Label className="text-xs">Project ID</Label>
+            <Input
+              value={cfg.trakzee_project_id}
+              onChange={(e) => setCfg({ ...cfg, trakzee_project_id: e.target.value })}
+              placeholder="37"
+              className="mt-1 font-mono text-xs"
+            />
+            <p className="text-[11px] text-muted-foreground mt-1">
+              Trakzee Project ID (defaults to 37 for Trakzee platform).
+            </p>
+          </div>
+
+          <div>
+            <Label className="text-xs">API Username / Account Email</Label>
+            <Input
+              value={cfg.trakzee_username}
+              onChange={(e) => setCfg({ ...cfg, trakzee_username: e.target.value })}
+              placeholder="e.g. machinecare01@gmail.com"
+              className="mt-1 text-xs"
+            />
+          </div>
+
+          <div className="sm:col-span-2">
+            <Label className="text-xs">API Password</Label>
+            <Input
+              type="password"
+              value={cfg.trakzee_password}
+              onChange={(e) => setCfg({ ...cfg, trakzee_password: e.target.value })}
+              placeholder="••••••••••••"
+              className="mt-1 font-mono text-xs max-w-md"
+            />
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center justify-between gap-2 pt-4 border-t border-border">
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={handleTest}
+              disabled={testing || !cfg.trakzee_username || !cfg.trakzee_password}
+              className="text-xs gap-1.5"
+            >
+              {testing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ShieldCheck className="h-3.5 w-3.5 text-emerald-600" />}
+              Test Connection
+            </Button>
+
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              onClick={handleSync}
+              disabled={syncing || !cfg.trakzee_username}
+              className="text-xs gap-1.5"
+            >
+              {syncing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+              Sync Fleet Now
+            </Button>
+          </div>
+
+          <Button
+            type="button"
+            size="sm"
+            onClick={handleSave}
+            disabled={saving}
+            className="text-xs"
+          >
+            {saving && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
+            Save Configuration
+          </Button>
+        </div>
+      </div>
+    </section>
+  );
+}
+

@@ -34,13 +34,15 @@ import {
   List,
   LayoutGrid,
   RefreshCw,
-  Eye
+  Eye,
+  Radio,
 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 import { useI18n } from "@/i18n/I18nProvider";
 import { MachineQrDialog } from "@/components/MachineQrDialog";
 import { BulkImporterModal } from "@/components/BulkImporterModal";
+import { syncTrakzeeFleet } from "@/services/trakzeeService";
 import {
   SAFE_MACHINE_COLUMNS,
   parseMachine,
@@ -135,6 +137,20 @@ export default function Vehicles() {
   const [qrOpen, setQrOpen] = useState(false);
   const [qrMachine, setQrMachine] = useState<FleetVehicle | null>(null);
   const [importOpen, setImportOpen] = useState(false);
+  const [syncingTrakzee, setSyncingTrakzee] = useState(false);
+
+  const handleSyncTrakzee = async () => {
+    if (!organisation?.id) return;
+    setSyncingTrakzee(true);
+    const res = await syncTrakzeeFleet(organisation.id);
+    setSyncingTrakzee(false);
+    if (!res.success) {
+      toast.error(res.error || "Failed to sync Trakzee GPS");
+    } else {
+      toast.success(`Trakzee GPS synced: ${res.vehicles_updated ?? 0} vehicles updated`);
+      load();
+    }
+  };
 
   const load = async () => {
     if (!profile) return;
@@ -245,6 +261,16 @@ export default function Vehicles() {
         </div>
         {canWrite && (
           <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              onClick={handleSyncTrakzee}
+              disabled={syncingTrakzee}
+              className="gap-1.5 text-xs text-primary border-primary/30 hover:bg-primary/5"
+              title="Sync live odometer, speed, and GPS location from Trakzee"
+            >
+              <Radio className={`h-3.5 w-3.5 ${syncingTrakzee ? "animate-pulse text-amber-500" : "text-emerald-500"}`} />
+              {syncingTrakzee ? "Syncing GPS..." : "Sync GPS"}
+            </Button>
             <Button variant="outline" onClick={() => setImportOpen(true)}>
               <FileSpreadsheet className="mr-2 h-4 w-4" /> Import Excel / CSV
             </Button>

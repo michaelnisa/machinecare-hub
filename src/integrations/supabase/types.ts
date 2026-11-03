@@ -3383,6 +3383,14 @@ export type Database = {
           serial_number: string | null
           status: string
           tank_capacity_l: number | null
+          telematics_battery_volt: number | null
+          telematics_ignition: boolean | null
+          telematics_imei: string | null
+          telematics_last_at: string | null
+          telematics_latitude: number | null
+          telematics_longitude: number | null
+          telematics_raw: Json | null
+          telematics_speed: number | null
           total_tank_capacity_l: number | null
           trailer_make_model: string | null
           trailer_plate: string | null
@@ -3417,6 +3425,14 @@ export type Database = {
           serial_number?: string | null
           status?: string
           tank_capacity_l?: number | null
+          telematics_battery_volt?: number | null
+          telematics_ignition?: boolean | null
+          telematics_imei?: string | null
+          telematics_last_at?: string | null
+          telematics_latitude?: number | null
+          telematics_longitude?: number | null
+          telematics_raw?: Json | null
+          telematics_speed?: number | null
           total_tank_capacity_l?: number | null
           trailer_make_model?: string | null
           trailer_plate?: string | null
@@ -3451,6 +3467,14 @@ export type Database = {
           serial_number?: string | null
           status?: string
           tank_capacity_l?: number | null
+          telematics_battery_volt?: number | null
+          telematics_ignition?: boolean | null
+          telematics_imei?: string | null
+          telematics_last_at?: string | null
+          telematics_latitude?: number | null
+          telematics_longitude?: number | null
+          telematics_raw?: Json | null
+          telematics_speed?: number | null
           total_tank_capacity_l?: number | null
           trailer_make_model?: string | null
           trailer_plate?: string | null
@@ -4112,6 +4136,13 @@ export type Database = {
           production_cost_per_downtime_minute: number | null
           production_cost_per_scrap_unit: number | null
           stock_count_variance_approval_threshold: number | null
+          trakzee_company_name: string | null
+          trakzee_enabled: boolean | null
+          trakzee_last_synced_at: string | null
+          trakzee_password: string | null
+          trakzee_project_id: string | null
+          trakzee_server_url: string | null
+          trakzee_username: string | null
         }
         Insert: {
           accepted_payment_methods?: string[]
@@ -4143,6 +4174,13 @@ export type Database = {
           production_cost_per_downtime_minute?: number | null
           production_cost_per_scrap_unit?: number | null
           stock_count_variance_approval_threshold?: number | null
+          trakzee_company_name?: string | null
+          trakzee_enabled?: boolean | null
+          trakzee_last_synced_at?: string | null
+          trakzee_password?: string | null
+          trakzee_project_id?: string | null
+          trakzee_server_url?: string | null
+          trakzee_username?: string | null
         }
         Update: {
           accepted_payment_methods?: string[]
@@ -4174,6 +4212,13 @@ export type Database = {
           production_cost_per_downtime_minute?: number | null
           production_cost_per_scrap_unit?: number | null
           stock_count_variance_approval_threshold?: number | null
+          trakzee_company_name?: string | null
+          trakzee_enabled?: boolean | null
+          trakzee_last_synced_at?: string | null
+          trakzee_password?: string | null
+          trakzee_project_id?: string | null
+          trakzee_server_url?: string | null
+          trakzee_username?: string | null
         }
         Relationships: []
       }

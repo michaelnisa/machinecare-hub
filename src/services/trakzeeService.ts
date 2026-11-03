@@ -1,0 +1,159 @@
+/**
+ * Trakzee Telematics & GPS Tracking Service
+ * Coordinates live telemetry sync between MachineCare and Trakzee for Logistixwave Tanzania.
+ */
+
+import { supabase } from "@/integrations/supabase/client";
+
+export interface TrakzeeConfig {
+  trakzee_enabled: boolean;
+  trakzee_server_url: string;
+  trakzee_username: string;
+  trakzee_password: string;
+  trakzee_company_name: string;
+  trakzee_project_id: string;
+  trakzee_last_synced_at?: string | null;
+}
+
+export interface TrakzeeTestResult {
+  success: boolean;
+  message?: string;
+  error?: string;
+  token_preview?: string;
+}
+
+export interface TrakzeeSyncResult {
+  success: boolean;
+  vehicles_returned?: number;
+  vehicles_updated?: number;
+  last_synced_at?: string;
+  error?: string;
+  details?: Array<{
+    machine_id: string;
+    plate: string | null;
+    odometer_km: number | null;
+    speed: number;
+    status: string;
+  }>;
+}
+
+export const DEFAULT_TRAKZEE_CONFIG: TrakzeeConfig = {
+  trakzee_enabled: false,
+  trakzee_server_url: "http://165.22.222.196/webservice",
+  trakzee_username: "",
+  trakzee_password: "",
+  trakzee_company_name: "Logistixwave Tanzania",
+  trakzee_project_id: "37",
+  trakzee_last_synced_at: null,
+};
+
+/**
+ * Loads Trakzee configuration for a specific organisation.
+ */
+export async function getTrakzeeSettings(organisationId: string): Promise<TrakzeeConfig> {
+  const { data, error } = await (supabase as any)
+    .from("organisations")
+    .select("trakzee_enabled, trakzee_server_url, trakzee_username, trakzee_password, trakzee_company_name, trakzee_project_id, trakzee_last_synced_at")
+    .eq("id", organisationId)
+    .maybeSingle();
+
+  if (error || !data) {
+    return DEFAULT_TRAKZEE_CONFIG;
+  }
+
+  return {
+    trakzee_enabled: data.trakzee_enabled ?? false,
+    trakzee_server_url: data.trakzee_server_url || DEFAULT_TRAKZEE_CONFIG.trakzee_server_url,
+    trakzee_username: data.trakzee_username || "",
+    trakzee_password: data.trakzee_password || "",
+    trakzee_company_name: data.trakzee_company_name || DEFAULT_TRAKZEE_CONFIG.trakzee_company_name,
+    trakzee_project_id: data.trakzee_project_id || DEFAULT_TRAKZEE_CONFIG.trakzee_project_id,
+    trakzee_last_synced_at: data.trakzee_last_synced_at || null,
+  };
+}
+
+/**
+ * Persists Trakzee configuration for the organisation.
+ */
+export async function saveTrakzeeSettings(organisationId: string, cfg: TrakzeeConfig): Promise<{ success: boolean; error?: string }> {
+  const { error } = await (supabase as any)
+    .from("organisations")
+    .update({
+      trakzee_enabled: cfg.trakzee_enabled,
+      trakzee_server_url: cfg.trakzee_server_url.trim(),
+      trakzee_username: cfg.trakzee_username.trim() || null,
+      trakzee_password: cfg.trakzee_password.trim() || null,
+      trakzee_company_name: cfg.trakzee_company_name.trim() || null,
+      trakzee_project_id: cfg.trakzee_project_id.trim() || null,
+    })
+    .eq("id", organisationId);
+
+  if (error) {
+    return { success: false, error: error.message };
+  }
+  return { success: true };
+}
+
+/**
+ * Tests connection and credentials against Trakzee API via the secure Edge Function.
+ */
+export async function testTrakzeeConnection(cfg: Partial<TrakzeeConfig>): Promise<TrakzeeTestResult> {
+  try {
+    const { data, error } = await supabase.functions.invoke("trakzee-telematics", {
+      body: {
+        action: "test_connection",
+        server_url: cfg.trakzee_server_url || DEFAULT_TRAKZEE_CONFIG.trakzee_server_url,
+        username: cfg.trakzee_username,
+        password: cfg.trakzee_password,
+      },
+    });
+
+    if (error) {
+      return { success: false, error: error.message };
+    }
+
+    if (!data?.success) {
+      return { success: false, error: data?.error || "Authentication failed" };
+    }
+
+    return {
+      success: true,
+      message: data.message || "Connected to Trakzee successfully!",
+      token_preview: data.token_preview,
+    };
+  } catch (err: any) {
+    return { success: false, error: err?.message || "Failed to reach telematics server" };
+  }
+}
+
+/**
+ * Triggers a live telematics sync for the fleet.
+ */
+export async function syncTrakzeeFleet(organisationId: string): Promise<TrakzeeSyncResult> {
+  try {
+    const { data, error } = await supabase.functions.invoke("trakzee-telematics", {
+      body: {
+        action: "sync_fleet",
+        organisation_id: organisationId,
+      },
+    });
+
+    if (error) {
+      return { success: false, error: error.message };
+    }
+
+    if (!data?.success) {
+      return { success: false, error: data?.error || "Failed to sync fleet" };
+    }
+
+    return {
+      success: true,
+      vehicles_returned: data.vehicles_returned ?? 0,
+      vehicles_updated: data.vehicles_updated ?? 0,
+      last_synced_at: data.last_synced_at,
+      details: data.details,
+    };
+  } catch (err: any) {
+    return { success: false, error: err?.message || "Network error syncing fleet" };
+  }
+}
