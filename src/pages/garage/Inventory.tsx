@@ -135,14 +135,15 @@ export default function GarageInventory() {
                   {filtered.map((i) => {
                     const stock = available[i.id] ?? 0;
                     const low = stock <= Number(i.reorder_level ?? 0);
+                    const modelBadge = i.vehicle_model || (i.name?.includes(" - ") ? i.name.split(" - ").slice(1).join(" - ").trim() : null);
                     return (
                       <tr key={i.id} className="border-t border-border">
                         <td className="px-5 py-3">
                           <div className="flex flex-wrap items-center gap-1.5">
                             <span className="font-medium">{i.name}</span>
-                            {i.vehicle_model && (
+                            {modelBadge && (
                               <span className="inline-flex items-center rounded-md bg-primary/10 px-1.5 py-0.5 text-[11px] font-medium text-primary">
-                                {i.vehicle_model}
+                                {modelBadge}
                               </span>
                             )}
                           </div>
@@ -380,16 +381,31 @@ function PartFormDialog({ open, setOpen, editing, orgId, userId, onSaved, onDele
     };
 
     if (editing) {
-      const { error } = await supabase.from("inventory_items").update(payload).eq("id", editing.id);
+      let { error } = await supabase.from("inventory_items").update(payload).eq("id", editing.id);
+      if (error && (error.message?.includes("vehicle_model") || error.code === "PGRST204")) {
+        const { vehicle_model, ...fallback } = payload;
+        const res = await supabase.from("inventory_items").update(fallback).eq("id", editing.id);
+        error = res.error;
+      }
       setSaving(false);
       if (error) return toast.error(error.message);
       toast.success("Part updated");
     } else {
-      const { data: item, error } = await supabase
+      let { data: item, error } = await supabase
         .from("inventory_items")
         .insert({ ...payload, organisation_id: orgId })
         .select()
         .single();
+      if (error && (error.message?.includes("vehicle_model") || error.code === "PGRST204")) {
+        const { vehicle_model, ...fallback } = payload;
+        const res = await supabase
+          .from("inventory_items")
+          .insert({ ...fallback, organisation_id: orgId })
+          .select()
+          .single();
+        item = res.data;
+        error = res.error;
+      }
       if (error) {
         setSaving(false);
         return toast.error(error.message);
@@ -457,10 +473,20 @@ function PartFormDialog({ open, setOpen, editing, orgId, userId, onSaved, onDele
       };
     });
 
-    const { data: insertedItems, error } = await supabase
+    let { data: insertedItems, error } = await supabase
       .from("inventory_items")
       .insert(payloads)
       .select("id, name");
+
+    if (error && (error.message?.includes("vehicle_model") || error.code === "PGRST204")) {
+      const fallbackPayloads = payloads.map(({ vehicle_model, ...rest }: any) => rest);
+      const res = await supabase
+        .from("inventory_items")
+        .insert(fallbackPayloads)
+        .select("id, name");
+      insertedItems = res.data;
+      error = res.error;
+    }
 
     if (error) {
       setSaving(false);

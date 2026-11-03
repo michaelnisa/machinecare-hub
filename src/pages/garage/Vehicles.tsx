@@ -24,6 +24,7 @@ export default function GarageVehicles() {
   const [customers, setCustomers] = useState<any[]>([]);
   const [search, setSearch] = useState("");
   const [customerFilter, setCustomerFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState<"active" | "all">("active");
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<any>(null);
   const [deleteTarget, setDeleteTarget] = useState<any>(null);
@@ -46,6 +47,7 @@ export default function GarageVehicles() {
 
   const filtered = useMemo(() => {
     let out = vehicles;
+    if (statusFilter === "active") out = out.filter((v) => v.status !== "inactive");
     if (customerFilter !== "all") out = out.filter((v) => v.customer_id === customerFilter);
     if (search.trim()) {
       const q = search.toLowerCase();
@@ -57,13 +59,28 @@ export default function GarageVehicles() {
       );
     }
     return out;
-  }, [vehicles, customerFilter, search]);
+  }, [vehicles, customerFilter, search, statusFilter]);
 
   const remove = async () => {
-    const { error } = await (supabase as any).from("garage_vehicles").delete().eq("id", deleteTarget.id);
+    if (!deleteTarget) return;
+    const target = deleteTarget;
     setDeleteTarget(null);
-    if (error) return toast.error(error.message);
-    toast.success("Vehicle removed");
+
+    // Try hard delete first
+    const { error } = await (supabase as any).from("garage_vehicles").delete().eq("id", target.id);
+    if (error) {
+      // If constrained by foreign keys (e.g. garage_jobs_vehicle_id_fkey on garage_jobs),
+      // soft-delete / archive it so historical jobs and invoices stay intact
+      const { error: archiveError } = await (supabase as any)
+        .from("garage_vehicles")
+        .update({ status: "inactive" })
+        .eq("id", target.id);
+
+      if (archiveError) return toast.error(error.message);
+      toast.success("Vehicle archived (job history and invoices preserved)");
+    } else {
+      toast.success("Vehicle removed");
+    }
     load();
   };
 

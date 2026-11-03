@@ -400,7 +400,7 @@ function EstimateReadOnly({ estimate, job, onChanged }: any) {
 
   useEffect(() => {
     if (showRequisition) {
-      supabase.from("inventory_items").select("id, name, sku, vehicle_model, unit_cost, selling_price").eq("status", "active").order("name")
+      supabase.from("inventory_items").select("id, name, sku, unit_cost, selling_price").eq("status", "active").order("name")
         .then(({ data }) => setStockParts(data ?? []));
     }
   }, [showRequisition]);
@@ -517,7 +517,7 @@ function EstimateEditor({ estimate, job, onChanged }: any) {
   }, [estimate.id]);
 
   useEffect(() => {
-    supabase.from("inventory_items").select("id, name, sku, vehicle_model, unit_cost, selling_price").eq("status", "active").order("name")
+    supabase.from("inventory_items").select("id, name, sku, unit_cost, selling_price").eq("status", "active").order("name")
       .then(({ data }) => setParts(data ?? []));
   }, []);
 
