@@ -95,7 +95,7 @@ export function QuickCounterSaleModal({
   const loadData = async () => {
     const [{ data: custs }, { data: inv }, { data: b }] = await Promise.all([
       (supabase as any).from("garage_customers").select("id, name, phone").order("name"),
-      supabase.from("inventory_items").select("id, name, part_number, unit_cost, selling_price").eq("status", "active").order("name"),
+      supabase.from("inventory_items").select("id, name, sku, part_number, vehicle_model, unit_cost, selling_price").eq("status", "active").order("name"),
       (supabase as any).from("stock_balances").select("item_id, available_stock"),
     ]);
 
@@ -492,7 +492,7 @@ export function QuickCounterSaleModal({
                     const avail = stockBalances[p.id] ?? 0;
                     return (
                       <option key={p.id} value={p.id}>
-                        {p.name} ({avail} in stock) — {formatMoney(Number(p.selling_price || p.unit_cost || 0))}
+                        {p.name} {p.sku ? `[${p.sku}]` : ""} ({avail} in stock) — {formatMoney(Number(p.selling_price || p.unit_cost || 0))}
                       </option>
                     );
                   })}

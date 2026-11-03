@@ -221,7 +221,7 @@ function NewQuotationDialog({ open, onOpenChange, orgId, userId, onSaved }: any)
 
       Promise.all([
         (supabase as any).from("garage_customers").select("id, name, phone").order("name"),
-        supabase.from("inventory_items").select("id, name, unit_cost, selling_price").eq("status", "active").order("name"),
+        supabase.from("inventory_items").select("id, name, sku, vehicle_model, unit_cost, selling_price").eq("status", "active").order("name"),
       ]).then(([{ data: c }, { data: p }]) => {
         setCustomers(c ?? []);
         setStockParts(p ?? []);
@@ -534,7 +534,7 @@ function NewQuotationDialog({ open, onOpenChange, orgId, userId, onSaved }: any)
               <option value="">Pick part from inventory…</option>
               {stockParts.map((p) => (
                 <option key={p.id} value={p.id}>
-                  {p.name} — {formatMoney(Number(p.selling_price || p.unit_cost || 0))}
+                  {p.name} {p.sku ? `[${p.sku}]` : ""} — {formatMoney(Number(p.selling_price || p.unit_cost || 0))}
                 </option>
               ))}
             </select>

@@ -2872,6 +2872,8 @@ export type Database = {
           unit: string
           unit_cost: number
           updated_at: string
+          parent_id: string | null
+          vehicle_model: string | null
         }
         Insert: {
           avg_monthly_consumption?: number | null
@@ -2910,6 +2912,8 @@ export type Database = {
           unit?: string
           unit_cost?: number
           updated_at?: string
+          parent_id?: string | null
+          vehicle_model?: string | null
         }
         Update: {
           avg_monthly_consumption?: number | null
@@ -2948,6 +2952,8 @@ export type Database = {
           unit?: string
           unit_cost?: number
           updated_at?: string
+          parent_id?: string | null
+          vehicle_model?: string | null
         }
         Relationships: []
       }

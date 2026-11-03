@@ -400,7 +400,7 @@ function EstimateReadOnly({ estimate, job, onChanged }: any) {
 
   useEffect(() => {
     if (showRequisition) {
-      supabase.from("inventory_items").select("id, name, unit_cost, selling_price").eq("status", "active").order("name")
+      supabase.from("inventory_items").select("id, name, sku, vehicle_model, unit_cost, selling_price").eq("status", "active").order("name")
         .then(({ data }) => setStockParts(data ?? []));
     }
   }, [showRequisition]);
@@ -468,7 +468,7 @@ function EstimateReadOnly({ estimate, job, onChanged }: any) {
                   <option value="">Select stocked part…</option>
                   {stockParts.map((p) => (
                     <option key={p.id} value={p.id}>
-                      {p.name} ({formatMoney(Number(p.selling_price || p.unit_cost || 0))})
+                      {p.name} {p.sku ? `[${p.sku}]` : ""} ({formatMoney(Number(p.selling_price || p.unit_cost || 0))})
                     </option>
                   ))}
                 </select>
@@ -517,7 +517,7 @@ function EstimateEditor({ estimate, job, onChanged }: any) {
   }, [estimate.id]);
 
   useEffect(() => {
-    supabase.from("inventory_items").select("id, name, unit_cost, selling_price").eq("status", "active").order("name")
+    supabase.from("inventory_items").select("id, name, sku, vehicle_model, unit_cost, selling_price").eq("status", "active").order("name")
       .then(({ data }) => setParts(data ?? []));
   }, []);
 
@@ -585,7 +585,7 @@ function EstimateEditor({ estimate, job, onChanged }: any) {
           <Label className="text-xs">Pick from stock (optional — auto-fills price and deducts stock)</Label>
           <select value={newItem.item_id} onChange={(e) => pickPart(e.target.value)} className="mt-1 h-9 w-full rounded-md border border-input bg-background px-2 text-sm">
             <option value="">— Type a custom line instead —</option>
-            {parts.map((p: any) => <option key={p.id} value={p.id}>{p.name}</option>)}
+            {parts.map((p: any) => <option key={p.id} value={p.id}>{p.name} {p.sku ? `[${p.sku}]` : ""}</option>)}
           </select>
         </div>
       )}
