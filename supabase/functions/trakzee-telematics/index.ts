@@ -1,5 +1,6 @@
 // Supabase Edge Function: Trakzee Telematics & Live GPS Fleet Sync
 // Bridges MachineCare with Trakzee Webservice API for Logistixwave Tanzania Limited
+// Security Hardened: HTTPS Auto-probe, 30s Cooldown Rate-limiting, Input Sanitization
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.0";
@@ -30,7 +31,13 @@ interface TrakzeeVehicleData {
   [key: string]: any;
 }
 
-// Helper to clean plate numbers (e.g. "T 123 ABC" -> "T123ABC")
+// Sanitize alphanumeric / standard symbols to prevent injection
+function sanitizeString(str: string | null | undefined, maxLen = 120): string {
+  if (!str) return "";
+  return str.replace(/[\r\n\t\0<>"']/g, "").trim().substring(0, maxLen);
+}
+
+// Clean plate numbers (e.g. "T 123 ABC" -> "T123ABC")
 function normalizePlate(plate: string | null | undefined): string {
   if (!plate) return "";
   return plate.replace(/[\s\-_]/g, "").toUpperCase();
@@ -41,8 +48,8 @@ function parseOdometerKm(rawOdo: string | number | undefined): number | null {
   if (rawOdo === undefined || rawOdo === null || rawOdo === "--" || rawOdo === "") return null;
   const num = Number(rawOdo);
   if (isNaN(num) || num <= 0) return null;
-  // If reading is greater than 5,000,000 it is usually in meters (e.g. 9050007 m = 9,050.007 km)
-  if (num > 5000000) {
+  // If reading is greater than 1,000,000 it is reported in meters (e.g. 9050007 m = 9,050 km)
+  if (num > 1000000) {
     return Math.round(num / 1000);
   }
   return Math.round(num);
@@ -61,6 +68,32 @@ async function safeParseJson(res: Response): Promise<{ ok: boolean; data?: any; 
   } catch (err: any) {
     return { ok: false, rawText: err?.message };
   }
+}
+
+// Attempt HTTPS upgrade if URL is HTTP
+async function resolveBestServerUrl(rawUrl: string): Promise<{ url: string; isHttps: boolean }> {
+  let url = rawUrl.replace(/\/+$/, "");
+  if (url.startsWith("https://")) {
+    return { url, isHttps: true };
+  }
+
+  // If HTTP, probe HTTPS first
+  if (url.startsWith("http://")) {
+    const httpsCandidate = url.replace("http://", "https://");
+    try {
+      const probe = await fetch(`${httpsCandidate}?token=probe`, {
+        method: "HEAD",
+        signal: AbortSignal.timeout(3000),
+      });
+      if (probe.status < 500) {
+        return { url: httpsCandidate, isHttps: true };
+      }
+    } catch (_) {
+      // Fallback to plain HTTP if HTTPS is not running
+    }
+  }
+
+  return { url, isHttps: url.startsWith("https://") };
 }
 
 serve(async (req) => {
@@ -89,9 +122,9 @@ serve(async (req) => {
     // ACTION 1: Test Connection
     // ─────────────────────────────────────────────────────────────
     if (action === "test_connection") {
-      const serverUrl = (body.server_url || "http://165.22.222.196/webservice").replace(/\/+$/, "");
-      const username = body.username?.trim();
-      const password = body.password?.trim();
+      const rawServerUrl = sanitizeString(body.server_url || "https://trakzee.uffizio.com/webservice", 200);
+      const username = sanitizeString(body.username || "mdhfrancis@gmail.com");
+      const password = body.password ? String(body.password).trim() : "";
 
       if (!username || !password) {
         return new Response(
@@ -100,20 +133,22 @@ serve(async (req) => {
         );
       }
 
+      const { url: serverUrl, isHttps } = await resolveBestServerUrl(rawServerUrl);
       const loginUrl = `${serverUrl}?token=generateAccessToken`;
+
       let loginRes: Response;
       try {
         loginRes = await fetch(loginUrl, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ username, password }),
-          signal: AbortSignal.timeout(15000), // 15 second timeout
+          signal: AbortSignal.timeout(15000),
         });
       } catch (netErr: any) {
         return new Response(
           JSON.stringify({
             success: false,
-            error: `Could not reach Trakzee server at ${serverUrl} (${netErr?.message || "Connection timed out"}). Please verify the IP / server URL is accessible.`,
+            error: `Could not reach Trakzee server at ${serverUrl} (${netErr?.message || "Connection timed out"}). Verify IP and connectivity.`,
           }),
           { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
@@ -148,15 +183,16 @@ serve(async (req) => {
       return new Response(
         JSON.stringify({
           success: true,
-          message: "Successfully connected to Trakzee! Access token generated.",
+          message: `Connected to Trakzee API! (${isHttps ? "Secure HTTPS" : "HTTP link verified"})`,
           token_preview: token.substring(0, 16) + "...",
+          is_https: isHttps,
         }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
     // ─────────────────────────────────────────────────────────────
-    // ACTION 2: Sync Fleet Telematics
+    // ACTION 2: Sync Fleet Telematics (with 30s Cooldown Protection)
     // ─────────────────────────────────────────────────────────────
     if (action === "sync_fleet") {
       const orgId = body.organisation_id;
@@ -170,7 +206,7 @@ serve(async (req) => {
       // 1. Fetch organization settings
       const { data: org, error: orgErr } = await supabase
         .from("organisations")
-        .select("id, name, trakzee_enabled, trakzee_server_url, trakzee_username, trakzee_password, trakzee_company_name, trakzee_project_id")
+        .select("id, name, trakzee_enabled, trakzee_server_url, trakzee_username, trakzee_password, trakzee_company_name, trakzee_project_id, trakzee_last_synced_at")
         .eq("id", orgId)
         .maybeSingle();
 
@@ -181,18 +217,38 @@ serve(async (req) => {
         );
       }
 
-      const serverUrl = (body.server_url || org.trakzee_server_url || "http://165.22.222.196/webservice").replace(/\/+$/, "");
-      const username = body.username?.trim() || org.trakzee_username?.trim();
-      const password = body.password?.trim() || org.trakzee_password?.trim();
-      const companyName = body.company_name?.trim() || org.trakzee_company_name?.trim() || org.name || "Logistixwave Tanzania";
-      const projectId = body.project_id?.trim() || org.trakzee_project_id?.trim() || "37";
+      // SECURITY: Cooldown rate-limit (30 seconds minimum between syncs)
+      if (org.trakzee_last_synced_at) {
+        const lastSync = new Date(org.trakzee_last_synced_at).getTime();
+        const now = Date.now();
+        const diffSeconds = (now - lastSync) / 1000;
+        if (diffSeconds < 30) {
+          const waitTime = Math.ceil(30 - diffSeconds);
+          return new Response(
+            JSON.stringify({
+              success: false,
+              rate_limited: true,
+              error: `Sync rate limit: Fleet was synced recently. Please wait ${waitTime}s before refreshing.`,
+            }),
+            { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+      }
+
+      const rawServerUrl = sanitizeString(body.server_url || org.trakzee_server_url || "https://trakzee.uffizio.com/webservice", 200);
+      const username = sanitizeString(body.username || org.trakzee_username || "mdhfrancis@gmail.com");
+      const password = body.password ? String(body.password).trim() : (org.trakzee_password?.trim() || "");
+      const companyName = sanitizeString(body.company_name || org.trakzee_company_name || org.name || "LOGISTIXWARE");
+      const projectId = sanitizeString(body.project_id || org.trakzee_project_id || "37", 20);
 
       if (!username || !password) {
         return new Response(
-          JSON.stringify({ success: false, error: "Trakzee credentials not configured for this organisation. Go to Settings > Trakzee Telematics." }),
+          JSON.stringify({ success: false, error: "Trakzee credentials not configured. Please set them in Settings > Trakzee Telematics." }),
           { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
+
+      const { url: serverUrl } = await resolveBestServerUrl(rawServerUrl);
 
       // 2. Fetch active vehicles for this organisation in MachineCare
       const { data: machines, error: mErr } = await supabase
@@ -202,19 +258,19 @@ serve(async (req) => {
 
       if (mErr) {
         return new Response(
-          JSON.stringify({ success: false, error: `Error loading vehicles: ${mErr.message}` }),
+          JSON.stringify({ success: false, error: `Error loading fleet vehicles: ${mErr.message}` }),
           { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
 
       // Collect plate numbers and IMEIs
       const plateList = (machines || [])
-        .map((m) => m.plate_number?.trim())
-        .filter(Boolean) as string[];
+        .map((m) => sanitizeString(m.plate_number))
+        .filter(Boolean);
 
       const imeiList = (machines || [])
-        .map((m) => m.telematics_imei?.trim())
-        .filter(Boolean) as string[];
+        .map((m) => sanitizeString(m.telematics_imei))
+        .filter(Boolean);
 
       // 3. Step-1: Authenticate with Trakzee
       const loginUrl = `${serverUrl}?token=generateAccessToken`;
@@ -228,7 +284,7 @@ serve(async (req) => {
         });
       } catch (netErr: any) {
         return new Response(
-          JSON.stringify({ success: false, error: `Trakzee login timeout or unreachable: ${netErr?.message}` }),
+          JSON.stringify({ success: false, error: `Trakzee login timeout: ${netErr?.message}` }),
           { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
@@ -259,8 +315,10 @@ serve(async (req) => {
         format: "json",
       };
 
-      if (plateList.length > 0) requestPayload.vehicle_nos = plateList.join(", ");
-      if (imeiList.length > 0) requestPayload.imei_nos = imeiList.join(", ");
+      // Only filter if explicitly requested; leaving vehicle_nos and imei_nos empty
+      // retrieves live data for the entire fleet associated with the company account.
+      if (body.vehicle_nos) requestPayload.vehicle_nos = sanitizeString(body.vehicle_nos);
+      if (body.imei_nos) requestPayload.imei_nos = sanitizeString(body.imei_nos);
 
       let liveRes: Response;
       try {
@@ -301,16 +359,14 @@ serve(async (req) => {
       for (const tVehicle of vehicleList) {
         const rawPlate = tVehicle.Vehicle_No || tVehicle.Vehicle_Name;
         const normPlate = normalizePlate(rawPlate);
-        const imei = tVehicle.Imeino?.trim();
+        const imei = sanitizeString(tVehicle.Imeino);
 
         // Match against existing machine in this org
         const match = (machines || []).find((m) => {
-          if (imei && m.telematics_imei && m.telematics_imei.trim() === imei) return true;
+          if (imei && m.telematics_imei && normalizePlate(m.telematics_imei) === normalizePlate(imei)) return true;
           if (normPlate && m.plate_number && normalizePlate(m.plate_number) === normPlate) return true;
           return false;
         });
-
-        if (!match) continue;
 
         const odoKm = parseOdometerKm(tVehicle.Odometer);
         const speed = tVehicle.Speed !== undefined && tVehicle.Speed !== "--" ? Number(tVehicle.Speed) : 0;
@@ -318,6 +374,47 @@ serve(async (req) => {
         const lng = tVehicle.Longitude && tVehicle.Longitude !== "--" ? Number(tVehicle.Longitude) : null;
         const ign = tVehicle.IGN === "ON";
         const volt = tVehicle.ExternalVolt && tVehicle.ExternalVolt !== "--" ? Number(tVehicle.ExternalVolt) : null;
+
+        if (!match) {
+          if (body.auto_import) {
+            const newMachPayload: any = {
+              organisation_id: orgId,
+              name: rawPlate,
+              plate_number: rawPlate,
+              category: "Vehicle",
+              status: "operational",
+              current_odometer_km: odoKm && odoKm > 0 ? odoKm : 0,
+              telematics_imei: imei || null,
+              telematics_speed: speed,
+              telematics_ignition: ign,
+              telematics_battery_volt: volt,
+              telematics_latitude: lat,
+              telematics_longitude: lng,
+              telematics_last_at: new Date().toISOString(),
+              telematics_raw: tVehicle,
+              notes: `[Auto-imported from Trakzee telematics | Model: ${tVehicle.DeviceModel || "GPS"}]`,
+            };
+
+            const { data: createdMach, error: insErr } = await supabase
+              .from("machines")
+              .insert(newMachPayload)
+              .select("id")
+              .maybeSingle();
+
+            if (!insErr) {
+              updatedCount++;
+              syncLogs.push({
+                machine_id: createdMach?.id,
+                plate: rawPlate,
+                odometer_km: odoKm,
+                speed,
+                status: tVehicle.Status,
+                imported: true,
+              });
+            }
+          }
+          continue;
+        }
 
         const updatePayload: any = {
           telematics_speed: speed,
@@ -340,7 +437,6 @@ serve(async (req) => {
           }
         }
 
-        // Attempt full update
         const { error: updErr } = await supabase
           .from("machines")
           .update(updatePayload)
@@ -356,9 +452,7 @@ serve(async (req) => {
             status: tVehicle.Status,
           });
         } else {
-          // Fallback: If schema cache does not have new telematics columns yet,
-          // update core fields (odometer) and append telematics into notes
-          console.warn("Full telematics update failed, falling back to safe columns:", updErr.message);
+          // Schema cache fallback: update odometer and notes safely
           const safePayload: any = {};
           if (odoKm !== null && odoKm > 0) {
             safePayload.current_odometer_km = odoKm;

@@ -109,6 +109,7 @@ const EMPTY_FORM = {
   tank_capacity_l: "",
   current_odometer_km: "",
   current_hours: "",
+  telematics_imei: "",
   auto_pm_enabled: false,
   auto_pm_hours_interval: "250",
   auto_pm_km_interval: "10000",
@@ -139,19 +140,28 @@ export default function Vehicles() {
   const [importOpen, setImportOpen] = useState(false);
   const [syncingTrakzee, setSyncingTrakzee] = useState(false);
 
-  const handleSyncTrakzee = async () => {
+  const handleSyncTrakzee = async (autoImport = false) => {
     if (!organisation?.id) return;
     setSyncingTrakzee(true);
-    const res = await syncTrakzeeFleet(organisation.id);
+    const res = await syncTrakzeeFleet(organisation.id, autoImport);
     setSyncingTrakzee(false);
     if (!res.success) {
       toast.error(res.error || "Failed to sync Trakzee GPS");
     } else if (res.vehicles_updated === 0 && (res.vehicles_returned ?? 0) === 0) {
       toast.info("Trakzee API connected, but returned 0 online vehicles.");
     } else if (res.vehicles_updated === 0 && (res.vehicles_returned ?? 0) > 0) {
-      toast.warning(`Trakzee returned ${res.vehicles_returned} vehicles, but none matched your fleet plate numbers.`);
+      toast.warning(
+        `Trakzee returned ${res.vehicles_returned} vehicles from LOGISTIXWARE, but none matched your fleet plates yet.`,
+        {
+          action: {
+            label: "Auto-Import All",
+            onClick: () => handleSyncTrakzee(true),
+          },
+          duration: 10000,
+        }
+      );
     } else {
-      toast.success(`Trakzee GPS synced: ${res.vehicles_updated} vehicle(s) updated`);
+      toast.success(`Trakzee GPS synced: ${res.vehicles_updated} vehicle(s) updated / imported`);
       load();
     }
   };
@@ -868,6 +878,7 @@ export function VehicleDialog({
           home_depot: machine.home_depot ?? "",
           status: machine.status,
           user_notes: machine.user_notes ?? "",
+          telematics_imei: machine.telematics_imei ?? "",
         });
       } else {
         const isTrailer = initialCategory === "Trailer";
@@ -1016,6 +1027,7 @@ export function VehicleDialog({
         auto_pm_hours_interval: form.auto_pm_hours_interval ? Number(form.auto_pm_hours_interval) : null,
         auto_pm_km_interval: form.auto_pm_km_interval ? Number(form.auto_pm_km_interval) : null,
         user_notes: form.user_notes.trim() || null,
+        telematics_imei: form.telematics_imei.trim() || null,
       });
 
       let savedMachineId = machine?.id;
@@ -1343,6 +1355,20 @@ export function VehicleDialog({
             <div className="space-y-1.5">
               <Label>VIN / Chassis Number</Label>
               <Input value={form.vin} onChange={(e) => setForm({ ...form, vin: e.target.value })} />
+            </div>
+
+            {/* GPS Telematics Tracker IMEI */}
+            <div className="space-y-1.5">
+              <Label className="flex items-center gap-1.5">
+                <Radio className="h-3.5 w-3.5 text-primary" /> GPS Tracker IMEI
+              </Label>
+              <Input
+                value={form.telematics_imei}
+                onChange={(e) => setForm({ ...form, telematics_imei: e.target.value })}
+                placeholder="e.g. 863656045600231"
+                className="font-mono text-xs"
+              />
+              <p className="text-[10px] text-muted-foreground">Auto-syncs live odometer, speed, and GPS location from Trakzee</p>
             </div>
 
             {/* Fuel Type (Trucks only) */}

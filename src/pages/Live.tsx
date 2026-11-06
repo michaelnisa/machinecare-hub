@@ -13,10 +13,30 @@ type FleetKpis = {
   idle: number;
   workshop: number;
   offRoad: number;
-  vehicles: { label: string; status: "on_road" | "idle" | "workshop" | "off_road" }[];
+  total: number;
+  availabilityPct: number;
+  utilizationPct: number;
+  vehicles: {
+    id: string;
+    label: string;
+    plate: string;
+    speed: number;
+    ignition: boolean;
+    batteryVolt: number | null;
+    status: "on_road" | "idle" | "workshop" | "off_road";
+  }[];
 };
 
-const emptyFleet: FleetKpis = { onRoad: 0, idle: 0, workshop: 0, offRoad: 0, vehicles: [] };
+const emptyFleet: FleetKpis = {
+  onRoad: 0,
+  idle: 0,
+  workshop: 0,
+  offRoad: 0,
+  total: 0,
+  availabilityPct: 100,
+  utilizationPct: 0,
+  vehicles: [],
+};
 
 type GarageKpis = {
   inProgress: number;
@@ -183,21 +203,74 @@ export default function Live() {
   const loadFleet = useCallback(async () => {
     if (!organisation?.id) return;
     const orgId = organisation.id;
-    const [{ data: machines }, { data: trips }] = await Promise.all([
-      supabase.from("machines").select("id, name, plate_number, status").eq("organisation_id", orgId),
+    const [{ data: machines }, { data: trips }, { data: openWos }] = await Promise.all([
+      supabase
+        .from("machines")
+        .select("id, name, plate_number, status, telematics_speed, telematics_ignition, telematics_battery_volt, telematics_latitude, telematics_longitude")
+        .eq("organisation_id", orgId),
       supabase.from("trips").select("machine_id, status").eq("organisation_id", orgId).eq("status", "in_progress"),
+      supabase.from("work_orders").select("machine_id").eq("organisation_id", orgId).in("status", ["open", "assigned", "in_progress", "waiting_parts"]),
     ]);
-    const onRoadIds = new Set((trips ?? []).map((t) => t.machine_id));
+
+    const activeTripIds = new Set((trips ?? []).map((t) => t.machine_id));
+    const maintenanceIds = new Set((openWos ?? []).map((w: any) => w.machine_id));
+
     let onRoad = 0, idle = 0, workshop = 0, offRoad = 0;
     const vehicles: FleetKpis["vehicles"] = [];
-    for (const m of machines ?? []) {
-      const label = m.plate_number ? `${m.name} (${m.plate_number})` : m.name;
-      if (m.status === "under_maintenance") { workshop++; vehicles.push({ label, status: "workshop" }); }
-      else if (m.status === "retired") { offRoad++; vehicles.push({ label, status: "off_road" }); }
-      else if (onRoadIds.has(m.id)) { onRoad++; vehicles.push({ label, status: "on_road" }); }
-      else { idle++; vehicles.push({ label, status: "idle" }); }
+
+    for (const m of (machines ?? []) as any[]) {
+      const plate = m.plate_number || m.name;
+      const label = plate;
+      const speed = Number(m.telematics_speed || 0);
+      const ignition = Boolean(m.telematics_ignition);
+      const isUnderMaint = m.status === "under_maintenance" || maintenanceIds.has(m.id);
+      const isRetired = m.status === "retired";
+
+      let status: "on_road" | "idle" | "workshop" | "off_road" = "idle";
+
+      if (isRetired) {
+        offRoad++;
+        status = "off_road";
+      } else if (isUnderMaint) {
+        workshop++;
+        status = "workshop";
+      } else if (speed > 0 || ignition || activeTripIds.has(m.id)) {
+        // Smart Telematics: Actively moving or engine running or active trip
+        onRoad++;
+        status = "on_road";
+      } else {
+        // Parked at depot / yard with engine off
+        idle++;
+        status = "idle";
+      }
+
+      vehicles.push({
+        id: m.id,
+        label,
+        plate,
+        speed,
+        ignition,
+        batteryVolt: m.telematics_battery_volt,
+        status,
+      });
     }
-    setFleetKpis({ onRoad, idle, workshop, offRoad, vehicles });
+
+    const total = (machines ?? []).length;
+    const availableCount = onRoad + idle;
+    const activeFleet = total - offRoad;
+    const availabilityPct = activeFleet > 0 ? Math.round((availableCount / activeFleet) * 100) : 100;
+    const utilizationPct = activeFleet > 0 ? Math.round((onRoad / activeFleet) * 100) : 0;
+
+    setFleetKpis({
+      onRoad,
+      idle,
+      workshop,
+      offRoad,
+      total,
+      availabilityPct,
+      utilizationPct,
+      vehicles,
+    });
     setLastUpdated(new Date());
   }, [organisation?.id]);
 
@@ -328,34 +401,72 @@ export default function Live() {
         {isFleet ? (
           <>
             {/* FLEET AVAILABILITY */}
-            <SectionTitle icon={<Truck className="h-5 w-5" />} title="Vehicle Availability" />
+            <SectionTitle icon={<Truck className="h-5 w-5" />} title="Fleet Availability & Telematics" />
             <div className="grid grid-cols-2 gap-5 md:grid-cols-4">
-              <Tile icon={<Truck className="h-6 w-6" />} label="On Road" value={String(fleetKpis.onRoad)} accent="text-emerald-400" />
-              <Tile icon={<ParkingCircle className="h-6 w-6" />} label="Idle" value={String(fleetKpis.idle)} accent="text-sky-400" />
-              <Tile icon={<Wrench className="h-6 w-6" />} label="Workshop" value={String(fleetKpis.workshop)} accent="text-amber-400" />
-              <Tile icon={<AlertTriangle className="h-6 w-6" />} label="Off Road" value={String(fleetKpis.offRoad)} accent="text-rose-400" />
+              <Tile
+                icon={<Gauge className="h-6 w-6" />}
+                label="Instant Availability"
+                value={`${fleetKpis.availabilityPct}%`}
+                sub={`${fleetKpis.onRoad + fleetKpis.idle}/${Math.max(fleetKpis.total - fleetKpis.offRoad, 0)} operational`}
+                accent={fleetKpis.availabilityPct >= 85 ? "text-emerald-400" : fleetKpis.availabilityPct >= 70 ? "text-amber-400" : "text-rose-400"}
+              />
+              <Tile
+                icon={<Truck className="h-6 w-6" />}
+                label="On Road (Live)"
+                value={String(fleetKpis.onRoad)}
+                sub="Actively moving / Ignition ON"
+                accent="text-emerald-400"
+              />
+              <Tile
+                icon={<ParkingCircle className="h-6 w-6" />}
+                label="Depot / Idle"
+                value={String(fleetKpis.idle)}
+                sub="Parked at yard (Ignition OFF)"
+                accent="text-sky-400"
+              />
+              <Tile
+                icon={<Wrench className="h-6 w-6" />}
+                label="In Workshop"
+                value={String(fleetKpis.workshop)}
+                sub="Service or repair"
+                accent="text-amber-400"
+              />
             </div>
 
             {/* FLEET STATUS BOARD */}
-            <SectionTitle icon={<Activity className="h-5 w-5" />} title="Fleet Status Board" />
-            <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-4">
+            <SectionTitle icon={<Activity className="h-5 w-5" />} title="Live Fleet Telemetry Board" />
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
               {fleetKpis.vehicles.map((v) => (
                 <div
-                  key={v.label}
-                  className="flex items-center justify-between rounded-xl border border-white/10 bg-white/5 px-4 py-3"
+                  key={v.id || v.label}
+                  className="flex flex-col justify-between rounded-xl border border-white/10 bg-white/5 p-3.5 hover:bg-white/[0.08] transition-colors"
                 >
-                  <span className="truncate text-lg font-medium">{v.label}</span>
-                  <span
-                    className={
-                      v.status === "on_road" ? "text-emerald-400" :
-                      v.status === "idle" ? "text-sky-400" :
-                      v.status === "workshop" ? "text-amber-400" : "text-rose-400"
-                    }
-                  >
-                    ●
-                  </span>
+                  <div className="flex items-center justify-between">
+                    <span className="font-mono text-base font-bold text-white tracking-wider">{v.plate}</span>
+                    <span
+                      className={`inline-flex items-center gap-1.5 text-xs font-semibold uppercase px-2 py-0.5 rounded-full ${
+                        v.status === "on_road" ? "bg-emerald-500/20 text-emerald-400" :
+                        v.status === "idle" ? "bg-sky-500/20 text-sky-400" :
+                        v.status === "workshop" ? "bg-amber-500/20 text-amber-400" : "bg-rose-500/20 text-rose-400"
+                      }`}
+                    >
+                      <span className={`h-1.5 w-1.5 rounded-full ${v.status === "on_road" ? "bg-emerald-400 animate-pulse" : "bg-current"}`} />
+                      {v.status === "on_road" ? (v.speed > 0 ? `${v.speed} km/h` : "Idling") :
+                       v.status === "idle" ? "Parked" :
+                       v.status === "workshop" ? "Workshop" : "Off Road"}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between text-xs text-white/50 mt-2 pt-2 border-t border-white/5">
+                    <span>{v.ignition ? "Engine ON" : "Engine OFF"}</span>
+                    {v.batteryVolt != null && <span>{v.batteryVolt}V</span>}
+                  </div>
                 </div>
               ))}
+              {fleetKpis.vehicles.length === 0 && (
+                <div className="col-span-full rounded-xl border border-white/10 bg-white/5 p-8 text-center text-white/50">
+                  No active fleet vehicles loaded. Auto-import from Trakzee via Fleet &gt; Vehicles.
+                </div>
+              )}
             </div>
           </>
         ) : isGarage ? (

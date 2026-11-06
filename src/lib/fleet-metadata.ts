@@ -8,7 +8,7 @@
 import type { TruckLayoutConfigId } from "./fleet-constants";
 
 export const SAFE_MACHINE_COLUMNS =
-  "id, name, plate_number, make, model, year, vin, category, fuel_type, tank_capacity_l, current_odometer_km, current_hours, home_depot, cover_image_url, status, notes";
+  "id, name, plate_number, make, model, year, vin, category, fuel_type, tank_capacity_l, current_odometer_km, current_hours, home_depot, cover_image_url, status, notes, telematics_imei, telematics_speed, telematics_ignition, telematics_battery_volt, telematics_latitude, telematics_longitude, telematics_last_at";
 
 export const SAFE_DRIVER_COLUMNS =
   "id, full_name, phone, status, notes, photo_url";
@@ -47,6 +47,15 @@ export interface FleetVehicle {
   cover_image_url: string | null;
   status: string;
   notes: string | null;
+
+  // Live Telematics & GPS data
+  telematics_imei?: string | null;
+  telematics_speed?: number | null;
+  telematics_ignition?: boolean | null;
+  telematics_battery_volt?: number | null;
+  telematics_latitude?: number | null;
+  telematics_longitude?: number | null;
+  telematics_last_at?: string | null;
 
   // Rich metadata attributes (stored safely in notes)
   vehicle_type: string; // 'prime_mover' | 'rigid_truck' | 'tanker' | 'trailer' | 'van' | 'pickup' | 'bus' | 'other'
@@ -188,6 +197,7 @@ export function serializeMachinePayload(data: {
   home_depot: string | null;
   status: string;
   cover_image_url: string | null;
+  telematics_imei?: string | null;
 
   // Metadata attributes
   vehicle_type: string;
@@ -221,7 +231,7 @@ export function serializeMachinePayload(data: {
     text: data.user_notes ?? "",
   };
 
-  return {
+  const payload: any = {
     name: data.name,
     plate_number: data.plate_number,
     make: data.make,
@@ -238,6 +248,12 @@ export function serializeMachinePayload(data: {
     cover_image_url: data.cover_image_url,
     notes: JSON.stringify(meta),
   };
+
+  if (data.telematics_imei !== undefined) {
+    payload.telematics_imei = data.telematics_imei ? data.telematics_imei.trim() : null;
+  }
+
+  return payload;
 }
 
 export function generateDriverCode(seed?: string, index?: number): string {

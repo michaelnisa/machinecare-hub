@@ -36,6 +36,7 @@ import {
   Radio,
   RefreshCw,
   Truck,
+  AlertTriangle,
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { isPlatformAdmin } from "@/lib/admin";
@@ -1546,6 +1547,7 @@ function TrakzeeTelematicsSection({ orgId }: { orgId?: string }) {
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
   const [syncing, setSyncing] = useState(false);
+  const [changePasswordOpen, setChangePasswordOpen] = useState(false);
   const [cfg, setCfg] = useState<TrakzeeConfig>(DEFAULT_TRAKZEE_CONFIG);
 
   useEffect(() => {
@@ -1567,6 +1569,10 @@ function TrakzeeTelematicsSection({ orgId }: { orgId?: string }) {
       toast.error(res.error || "Failed to save Trakzee settings");
     } else {
       toast.success("Trakzee Telematics settings saved");
+      if (cfg.trakzee_password) {
+        setCfg((c) => ({ ...c, has_password: true, trakzee_password: "" }));
+        setChangePasswordOpen(false);
+      }
     }
   };
 
@@ -1604,6 +1610,8 @@ function TrakzeeTelematicsSection({ orgId }: { orgId?: string }) {
 
   if (loading) return null;
 
+  const isHttps = cfg.trakzee_server_url.toLowerCase().startsWith("https://");
+
   return (
     <section className="rounded-xl border border-border bg-card p-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-2">
@@ -1621,7 +1629,7 @@ function TrakzeeTelematicsSection({ orgId }: { orgId?: string }) {
       </div>
 
       <p className="mb-5 text-sm text-muted-foreground">
-        Live integration with Trakzee telematics platform for Logistixwave Tanzania Limited. Automatically syncs vehicle odometers, speeds, ignition status, and battery health to trigger preventive maintenance schedules without manual entries.
+        Live integration with Trakzee telematics platform for LOGISTIXWARE Tanzania. Automatically syncs vehicle odometers, speeds, ignition status, and battery health to trigger preventive maintenance schedules without manual entries.
       </p>
 
       <div className="space-y-4">
@@ -1634,15 +1642,26 @@ function TrakzeeTelematicsSection({ orgId }: { orgId?: string }) {
 
         <div className="grid gap-4 sm:grid-cols-2 pt-2">
           <div>
-            <Label className="text-xs">Server Endpoint URL</Label>
+            <div className="flex items-center justify-between">
+              <Label className="text-xs">Server Endpoint URL</Label>
+              {isHttps ? (
+                <span className="flex items-center gap-1 text-[11px] text-emerald-600 font-medium">
+                  <ShieldCheck className="h-3 w-3" /> HTTPS Encrypted
+                </span>
+              ) : (
+                <span className="flex items-center gap-1 text-[11px] text-amber-600 font-medium">
+                  <AlertTriangle className="h-3 w-3" /> Plain HTTP
+                </span>
+              )}
+            </div>
             <Input
               value={cfg.trakzee_server_url}
               onChange={(e) => setCfg({ ...cfg, trakzee_server_url: e.target.value })}
-              placeholder="http://165.22.222.196/webservice"
+              placeholder="https://trakzee.uffizio.com/webservice"
               className="mt-1 font-mono text-xs"
             />
             <p className="text-[11px] text-muted-foreground mt-1">
-              Base URL of the Trakzee webservice (proxied securely via Edge Function).
+              Base URL of the Trakzee webservice (e.g. https://trakzee.uffizio.com/webservice).
             </p>
           </div>
 
@@ -1651,11 +1670,11 @@ function TrakzeeTelematicsSection({ orgId }: { orgId?: string }) {
             <Input
               value={cfg.trakzee_company_name}
               onChange={(e) => setCfg({ ...cfg, trakzee_company_name: e.target.value })}
-              placeholder="e.g. Logistixwave Tanzania"
+              placeholder="LOGISTIXWARE"
               className="mt-1 text-xs"
             />
             <p className="text-[11px] text-muted-foreground mt-1">
-              Exact registered company name passed in the telematics query.
+              Exact registered company name (e.g. LOGISTIXWARE).
             </p>
           </div>
 
@@ -1668,7 +1687,7 @@ function TrakzeeTelematicsSection({ orgId }: { orgId?: string }) {
               className="mt-1 font-mono text-xs"
             />
             <p className="text-[11px] text-muted-foreground mt-1">
-              Trakzee Project ID (defaults to 37 for Trakzee platform).
+              Trakzee Project ID (37 for Trakzee Premium platform).
             </p>
           </div>
 
@@ -1677,20 +1696,54 @@ function TrakzeeTelematicsSection({ orgId }: { orgId?: string }) {
             <Input
               value={cfg.trakzee_username}
               onChange={(e) => setCfg({ ...cfg, trakzee_username: e.target.value })}
-              placeholder="e.g. machinecare01@gmail.com"
+              placeholder="mdhfrancis@gmail.com"
               className="mt-1 text-xs"
             />
           </div>
 
           <div className="sm:col-span-2">
             <Label className="text-xs">API Password</Label>
-            <Input
-              type="password"
-              value={cfg.trakzee_password}
-              onChange={(e) => setCfg({ ...cfg, trakzee_password: e.target.value })}
-              placeholder="••••••••••••"
-              className="mt-1 font-mono text-xs max-w-md"
-            />
+            {cfg.has_password && !changePasswordOpen ? (
+              <div className="mt-1 flex items-center justify-between rounded-lg border border-border bg-muted/30 px-3 py-2 text-xs max-w-md">
+                <span className="flex items-center gap-2 font-mono text-muted-foreground">
+                  <Lock className="h-3.5 w-3.5 text-emerald-600" />
+                  •••••••••••• (Encrypted in database)
+                </span>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setChangePasswordOpen(true)}
+                  className="h-7 text-xs"
+                >
+                  Change password
+                </Button>
+              </div>
+            ) : (
+              <div className="space-y-1.5 mt-1 max-w-md">
+                <Input
+                  type="password"
+                  value={cfg.trakzee_password}
+                  onChange={(e) => setCfg({ ...cfg, trakzee_password: e.target.value })}
+                  placeholder="Enter API password"
+                  className="font-mono text-xs"
+                />
+                {cfg.has_password && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      setChangePasswordOpen(false);
+                      setCfg((c) => ({ ...c, trakzee_password: "" }));
+                    }}
+                    className="h-6 text-[11px] text-muted-foreground"
+                  >
+                    Keep existing password
+                  </Button>
+                )}
+              </div>
+            )}
           </div>
         </div>
 
@@ -1701,7 +1754,7 @@ function TrakzeeTelematicsSection({ orgId }: { orgId?: string }) {
               variant="outline"
               size="sm"
               onClick={handleTest}
-              disabled={testing || !cfg.trakzee_username || !cfg.trakzee_password}
+              disabled={testing || !cfg.trakzee_username || (!cfg.trakzee_password && !cfg.has_password)}
               className="text-xs gap-1.5"
             >
               {testing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ShieldCheck className="h-3.5 w-3.5 text-emerald-600" />}

@@ -296,6 +296,7 @@ export function Sidebar() {
         id: "fleet",
         label: "Fleet",
         items: [
+          { to: "/fleet/live-map", label: "Live GPS Map", icon: MapPin },
           { to: "/fleet/vehicles", label: "Vehicles", icon: Truck },
           { to: "/fleet/drivers", label: "Drivers", icon: Contact },
           { to: "/fleet/trips", label: "Trips", icon: Route },

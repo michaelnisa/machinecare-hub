@@ -112,6 +112,7 @@ const FaultReports = lazy(() => import("./pages/FaultReports"));
 const Unsubscribe = lazy(() => import("./pages/Unsubscribe"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 const Vehicles = lazy(() => import("./pages/fleet/Vehicles"));
+const LiveFleetMap = lazy(() => import("./pages/fleet/LiveFleetMap"));
 const FleetVehicleDetail = lazy(() => import("./pages/fleet/VehicleDetail"));
 const Drivers = lazy(() => import("./pages/fleet/Drivers"));
 const FleetDocuments = lazy(() => import("./pages/fleet/FleetDocuments"));
@@ -193,6 +194,7 @@ const App = () => (
                 <Route path="/unsubscribe" element={<Unsubscribe />} />
                 <Route element={<AppLayout />}>
                   <Route path="/dashboard" element={<DashboardRouter />} />
+                  <Route path="/fleet/live-map" element={<LiveFleetMap />} />
                   <Route path="/fleet/vehicles" element={<Vehicles />} />
                   <Route path="/fleet/vehicles/:id" element={<FleetVehicleDetail />} />
                   <Route path="/fleet/drivers" element={<Drivers />} />

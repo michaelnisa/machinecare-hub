@@ -58,6 +58,7 @@ import {
   Upload,
   Loader2,
   ExternalLink,
+  Radio,
 } from "lucide-react";
 
 type Trip = {
@@ -449,7 +450,7 @@ export default function FleetVehicleDetail() {
       </div>
 
       {/* Fleet KPI Quick Stats Strip */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5">
         {/* Odometer / Operating Hours */}
         <div className="p-4 rounded-xl border border-border bg-card shadow-2xs flex flex-col justify-between">
           <div className="flex items-center justify-between text-xs font-medium text-muted-foreground">
@@ -570,6 +571,47 @@ export default function FleetVehicleDetail() {
             </div>
           ) : (
             <span className="text-[11px] text-muted-foreground mt-2">All checks recorded</span>
+          )}
+        </div>
+
+        {/* Live GPS & Telematics */}
+        <div className="p-4 rounded-xl border border-border bg-card shadow-2xs flex flex-col justify-between">
+          <div className="flex items-center justify-between text-xs font-medium text-muted-foreground">
+            <span className="flex items-center gap-1.5">
+              <span className={`h-2 w-2 rounded-full ${vehicle.telematics_ignition ? "bg-emerald-500 animate-pulse" : "bg-muted-foreground/40"}`} />
+              Live Telematics
+            </span>
+            <Radio className={`h-4 w-4 ${vehicle.telematics_ignition ? "text-emerald-600 animate-pulse" : "text-muted-foreground"}`} />
+          </div>
+          <div className="mt-2 space-y-1">
+            <div className="flex items-center gap-2">
+              <span className="font-bold text-foreground text-base">
+                {vehicle.telematics_speed != null ? `${vehicle.telematics_speed} km/h` : "0 km/h"}
+              </span>
+              <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase ${
+                vehicle.telematics_ignition ? "bg-emerald-500/10 text-emerald-600 border border-emerald-500/20" : "bg-muted text-muted-foreground"
+              }`}>
+                {vehicle.telematics_ignition ? "Ignition ON" : "Parked"}
+              </span>
+            </div>
+            <div className="text-[11px] text-muted-foreground truncate">
+              {vehicle.telematics_battery_volt != null && <span>Battery: {vehicle.telematics_battery_volt}V • </span>}
+              {vehicle.telematics_imei ? `IMEI: ${vehicle.telematics_imei}` : "No IMEI set"}
+            </div>
+          </div>
+          {vehicle.telematics_latitude != null && vehicle.telematics_longitude != null ? (
+            <a
+              href={`https://maps.google.com/?q=${vehicle.telematics_latitude},${vehicle.telematics_longitude}`}
+              target="_blank"
+              rel="noreferrer"
+              className="text-[11px] font-semibold text-primary hover:underline mt-2 inline-flex items-center gap-1"
+            >
+              <Navigation className="h-3 w-3" /> Live GPS Map →
+            </a>
+          ) : (
+            <span className="text-[11px] text-muted-foreground mt-2 italic">
+              {vehicle.telematics_imei ? "Awaiting GPS fix" : "No GPS tracker"}
+            </span>
           )}
         </div>
       </div>

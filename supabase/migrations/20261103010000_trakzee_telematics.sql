@@ -4,10 +4,10 @@
 -- 1. Organization-level Trakzee Telematics configuration
 ALTER TABLE public.organisations 
 ADD COLUMN IF NOT EXISTS trakzee_enabled boolean DEFAULT false,
-ADD COLUMN IF NOT EXISTS trakzee_server_url text DEFAULT 'http://165.22.222.196/webservice',
+ADD COLUMN IF NOT EXISTS trakzee_server_url text DEFAULT 'https://trakzee.uffizio.com/webservice',
 ADD COLUMN IF NOT EXISTS trakzee_username text,
 ADD COLUMN IF NOT EXISTS trakzee_password text,
-ADD COLUMN IF NOT EXISTS trakzee_company_name text DEFAULT 'Logistixwave Tanzania',
+ADD COLUMN IF NOT EXISTS trakzee_company_name text,
 ADD COLUMN IF NOT EXISTS trakzee_project_id text DEFAULT '37',
 ADD COLUMN IF NOT EXISTS trakzee_last_synced_at timestamptz;
 

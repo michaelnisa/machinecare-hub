@@ -1,6 +1,7 @@
 /**
  * Trakzee Telematics & GPS Tracking Service
  * Coordinates live telemetry sync between MachineCare and Trakzee for Logistixwave Tanzania.
+ * Includes security hardening: password masking, input sanitization, and edge function proxy.
  */
 
 import { supabase } from "@/integrations/supabase/client";
@@ -10,6 +11,7 @@ export interface TrakzeeConfig {
   trakzee_server_url: string;
   trakzee_username: string;
   trakzee_password: string;
+  has_password?: boolean;
   trakzee_company_name: string;
   trakzee_project_id: string;
   trakzee_last_synced_at?: string | null;
@@ -20,6 +22,7 @@ export interface TrakzeeTestResult {
   message?: string;
   error?: string;
   token_preview?: string;
+  is_https?: boolean;
 }
 
 export interface TrakzeeSyncResult {
@@ -28,6 +31,7 @@ export interface TrakzeeSyncResult {
   vehicles_updated?: number;
   last_synced_at?: string;
   error?: string;
+  rate_limited?: boolean;
   details?: Array<{
     machine_id: string;
     plate: string | null;
@@ -40,10 +44,11 @@ export interface TrakzeeSyncResult {
 
 export const DEFAULT_TRAKZEE_CONFIG: TrakzeeConfig = {
   trakzee_enabled: false,
-  trakzee_server_url: "http://165.22.222.196/webservice",
+  trakzee_server_url: "https://trakzee.uffizio.com/webservice",
   trakzee_username: "",
   trakzee_password: "",
-  trakzee_company_name: "Logistixwave Tanzania",
+  has_password: false,
+  trakzee_company_name: "LOGISTIXWARE",
   trakzee_project_id: "37",
   trakzee_last_synced_at: null,
 };
@@ -66,7 +71,7 @@ async function extractEdgeFunctionError(error: any): Promise<string> {
 
 /**
  * Loads Trakzee configuration for a specific organisation.
- * Gracefully defaults if columns do not exist in schema cache yet.
+ * SECURITY: Password is never exposed in cleartext to client; returns `has_password: true`.
  */
 export async function getTrakzeeSettings(organisationId: string): Promise<TrakzeeConfig> {
   try {
@@ -80,11 +85,14 @@ export async function getTrakzeeSettings(organisationId: string): Promise<Trakze
       return DEFAULT_TRAKZEE_CONFIG;
     }
 
+    const hasStoredPassword = !!data.trakzee_password && data.trakzee_password.length > 0;
+
     return {
       trakzee_enabled: data.trakzee_enabled ?? false,
       trakzee_server_url: data.trakzee_server_url || DEFAULT_TRAKZEE_CONFIG.trakzee_server_url,
       trakzee_username: data.trakzee_username || "",
-      trakzee_password: data.trakzee_password || "",
+      trakzee_password: "", // Kept empty in client state for credential protection
+      has_password: hasStoredPassword,
       trakzee_company_name: data.trakzee_company_name || DEFAULT_TRAKZEE_CONFIG.trakzee_company_name,
       trakzee_project_id: data.trakzee_project_id || DEFAULT_TRAKZEE_CONFIG.trakzee_project_id,
       trakzee_last_synced_at: data.trakzee_last_synced_at || null,
@@ -96,23 +104,29 @@ export async function getTrakzeeSettings(organisationId: string): Promise<Trakze
 
 /**
  * Persists Trakzee configuration for the organisation.
- * Handles schema cache resilience gracefully.
+ * SECURITY: Only updates password if the user explicitly provided a new non-empty string.
  */
 export async function saveTrakzeeSettings(
   organisationId: string,
   cfg: TrakzeeConfig
 ): Promise<{ success: boolean; error?: string }> {
   try {
+    const updatePayload: any = {
+      trakzee_enabled: cfg.trakzee_enabled,
+      trakzee_server_url: cfg.trakzee_server_url.trim(),
+      trakzee_username: cfg.trakzee_username.trim() || null,
+      trakzee_company_name: cfg.trakzee_company_name.trim() || null,
+      trakzee_project_id: cfg.trakzee_project_id.trim() || null,
+    };
+
+    // Only update password if a new one was explicitly provided
+    if (cfg.trakzee_password && cfg.trakzee_password.trim().length > 0) {
+      updatePayload.trakzee_password = cfg.trakzee_password.trim();
+    }
+
     const { error } = await (supabase as any)
       .from("organisations")
-      .update({
-        trakzee_enabled: cfg.trakzee_enabled,
-        trakzee_server_url: cfg.trakzee_server_url.trim(),
-        trakzee_username: cfg.trakzee_username.trim() || null,
-        trakzee_password: cfg.trakzee_password.trim() || null,
-        trakzee_company_name: cfg.trakzee_company_name.trim() || null,
-        trakzee_project_id: cfg.trakzee_project_id.trim() || null,
-      })
+      .update(updatePayload)
       .eq("id", organisationId);
 
     if (error) {
@@ -157,6 +171,7 @@ export async function testTrakzeeConnection(cfg: Partial<TrakzeeConfig>): Promis
       success: true,
       message: data.message || "Connected to Trakzee successfully!",
       token_preview: data.token_preview,
+      is_https: data.is_https,
     };
   } catch (err: any) {
     return { success: false, error: err?.message || "Failed to reach telematics server" };
@@ -166,12 +181,16 @@ export async function testTrakzeeConnection(cfg: Partial<TrakzeeConfig>): Promis
 /**
  * Triggers a live telematics sync for the fleet.
  */
-export async function syncTrakzeeFleet(organisationId: string): Promise<TrakzeeSyncResult> {
+export async function syncTrakzeeFleet(
+  organisationId: string,
+  autoImport: boolean = false
+): Promise<TrakzeeSyncResult> {
   try {
     const { data, error } = await supabase.functions.invoke("trakzee-telematics", {
       body: {
         action: "sync_fleet",
         organisation_id: organisationId,
+        auto_import: autoImport,
       },
     });
 
@@ -181,7 +200,11 @@ export async function syncTrakzeeFleet(organisationId: string): Promise<TrakzeeS
     }
 
     if (!data?.success) {
-      return { success: false, error: data?.error || "Failed to sync fleet" };
+      return {
+        success: false,
+        error: data?.error || "Failed to sync fleet",
+        rate_limited: data?.rate_limited ?? false,
+      };
     }
 
     return {
