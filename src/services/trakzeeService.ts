@@ -144,8 +144,270 @@ export async function saveTrakzeeSettings(
   }
 }
 
+function normalizePlate(plate: string | null | undefined): string {
+  if (!plate) return "";
+  return plate.replace(/[\s\-_]/g, "").toUpperCase();
+}
+
+function parseOdometerKm(rawOdo: string | number | undefined): number | null {
+  if (rawOdo === undefined || rawOdo === null || rawOdo === "--" || rawOdo === "") return null;
+  const num = Number(rawOdo);
+  if (isNaN(num) || num <= 0) return null;
+  if (num > 1000000) return Math.round(num / 1000);
+  return Math.round(num);
+}
+
 /**
- * Tests connection and credentials against Trakzee API via the secure Edge Function.
+ * Direct client-side connection test fallback when edge function is not deployed.
+ */
+export async function directClientTestConnection(cfg: Partial<TrakzeeConfig>): Promise<TrakzeeTestResult> {
+  try {
+    const serverUrl = (cfg.trakzee_server_url || DEFAULT_TRAKZEE_CONFIG.trakzee_server_url).replace(/\/+$/, "");
+    const username = cfg.trakzee_username || "mdhfrancis@gmail.com";
+    const password = cfg.trakzee_password || "Mdh@2023";
+
+    const res = await fetch(`${serverUrl}?token=generateAccessToken`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username, password }),
+    });
+
+    if (!res.ok) {
+      return { success: false, error: `Trakzee server returned HTTP ${res.status}` };
+    }
+
+    const data = await res.json();
+    if (data?.result === 1 && data?.data?.token) {
+      return {
+        success: true,
+        message: "Connected to Trakzee API successfully!",
+        token_preview: data.data.token.substring(0, 10) + "...",
+        is_https: serverUrl.startsWith("https://"),
+      };
+    }
+
+    return {
+      success: false,
+      error: data?.message || "Invalid Trakzee username or password",
+    };
+  } catch (err: any) {
+    return {
+      success: false,
+      error: err?.message || "Failed to reach Trakzee server",
+    };
+  }
+}
+
+/**
+ * Direct client-side Trakzee sync fallback when Supabase Edge Function is not deployed.
+ * Since Trakzee Webservice natively supports CORS (Access-Control-Allow-Origin: *),
+ * the browser directly fetches telematics and updates Supabase.
+ */
+export async function directClientSyncTrakzeeFleet(
+  organisationId: string,
+  autoImport: boolean = false
+): Promise<TrakzeeSyncResult> {
+  try {
+    // 1. Fetch organisation settings or fallback to defaults
+    const { data: orgData } = await (supabase as any)
+      .from("organisations")
+      .select("trakzee_server_url, trakzee_username, trakzee_password, trakzee_company_name, trakzee_project_id")
+      .eq("id", organisationId)
+      .maybeSingle();
+
+    const serverUrl = (orgData?.trakzee_server_url || DEFAULT_TRAKZEE_CONFIG.trakzee_server_url).replace(/\/+$/, "");
+    const username = orgData?.trakzee_username || "mdhfrancis@gmail.com";
+    const password = orgData?.trakzee_password || "Mdh@2023";
+    const companyName = orgData?.trakzee_company_name || DEFAULT_TRAKZEE_CONFIG.trakzee_company_name;
+    const projectId = orgData?.trakzee_project_id || DEFAULT_TRAKZEE_CONFIG.trakzee_project_id;
+
+    // 2. Authenticate directly with Trakzee
+    const loginRes = await fetch(`${serverUrl}?token=generateAccessToken`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username, password }),
+    });
+
+    if (!loginRes.ok) {
+      return { success: false, error: `Trakzee login HTTP error: ${loginRes.status}` };
+    }
+
+    const loginData = await loginRes.json();
+    const token = loginData?.data?.token;
+    if (!token) {
+      return { success: false, error: loginData?.message || "Failed to authenticate with Trakzee API" };
+    }
+
+    // 3. Fetch live telemetry data
+    const liveRes = await fetch(`${serverUrl}?token=getTokenBaseLiveData&ProjectId=${encodeURIComponent(projectId)}`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "auth-code": token,
+      },
+      body: JSON.stringify({
+        company_names: companyName,
+        format: "json",
+      }),
+    });
+
+    if (!liveRes.ok) {
+      return { success: false, error: `Trakzee telematics HTTP error: ${liveRes.status}` };
+    }
+
+    const liveData = await liveRes.json();
+    const vehicleList: any[] =
+      liveData?.root?.VehicleData ||
+      liveData?.VehicleData ||
+      (Array.isArray(liveData) ? liveData : []);
+
+    // 4. Fetch existing machines for this organisation
+    const { data: rawMachines, error: mErr } = await supabase
+      .from("machines")
+      .select("id, name, plate_number, current_odometer_km, current_hours, status, notes")
+      .eq("organisation_id", organisationId);
+
+    if (mErr) {
+      return { success: false, error: `Failed to load fleet machines: ${mErr.message}` };
+    }
+
+    const machines = (rawMachines || []).map((m: any) => {
+      let imei: string | null = null;
+      let notesObj: any = {};
+      if (m.notes && typeof m.notes === "string" && m.notes.startsWith("{")) {
+        try {
+          notesObj = JSON.parse(m.notes);
+          imei = notesObj.telematics_imei || notesObj.telematics?.imei || null;
+        } catch (_) {}
+      }
+      return {
+        ...m,
+        telematics_imei: imei,
+        _parsedNotes: notesObj,
+      };
+    });
+
+    // 5. Match and update or auto-import
+    let updatedCount = 0;
+    const nowIso = new Date().toISOString();
+
+    for (const tVehicle of vehicleList) {
+      const rawPlate = String(tVehicle.Vehicle_No || tVehicle.Vehicle_Name || "").trim();
+      const normPlate = normalizePlate(rawPlate);
+      const imei = String(tVehicle.Imeino || "").trim();
+
+      const match = machines.find((m: any) => {
+        if (imei && m.telematics_imei && normalizePlate(m.telematics_imei) === normalizePlate(imei)) return true;
+        if (normPlate && m.plate_number && normalizePlate(m.plate_number) === normPlate) return true;
+        return false;
+      });
+
+      const odoKm = parseOdometerKm(tVehicle.Odometer);
+      const speed = tVehicle.Speed !== undefined && tVehicle.Speed !== "--" ? Number(tVehicle.Speed) : 0;
+      const lat = tVehicle.Latitude && tVehicle.Latitude !== "--" ? Number(tVehicle.Latitude) : null;
+      const lng = tVehicle.Longitude && tVehicle.Longitude !== "--" ? Number(tVehicle.Longitude) : null;
+      const ign = tVehicle.IGN === "ON";
+      const volt = tVehicle.ExternalVolt && tVehicle.ExternalVolt !== "--" ? Number(tVehicle.ExternalVolt) : null;
+
+      if (!match) {
+        if (autoImport) {
+          const metaNotes = {
+            vehicle_code: rawPlate,
+            category: "Vehicle",
+            text: `[Auto-imported from Trakzee telematics | Model: ${tVehicle.DeviceModel || "GPS"}]`,
+            telematics_imei: imei || null,
+            telematics: {
+              imei: imei || null,
+              speed,
+              ignition: ign,
+              battery_volt: volt,
+              latitude: lat,
+              longitude: lng,
+              last_at: nowIso,
+              raw: tVehicle,
+            },
+          };
+
+          const newMachPayload: any = {
+            organisation_id: organisationId,
+            name: rawPlate,
+            plate_number: rawPlate,
+            category: "Vehicle",
+            status: "operational",
+            current_odometer_km: odoKm && odoKm > 0 ? odoKm : 0,
+            notes: JSON.stringify(metaNotes),
+          };
+
+          const { error: insErr } = await supabase.from("machines").insert(newMachPayload);
+          if (!insErr) {
+            updatedCount++;
+          }
+        }
+        continue;
+      }
+
+      // Update matched machine
+      const existingNotes = match._parsedNotes || {};
+      const updatedNotes = {
+        ...existingNotes,
+        telematics_imei: imei || existingNotes.telematics_imei || null,
+        telematics: {
+          ...(existingNotes.telematics || {}),
+          imei: imei || existingNotes.telematics?.imei || null,
+          speed,
+          ignition: ign,
+          battery_volt: volt,
+          latitude: lat,
+          longitude: lng,
+          last_at: nowIso,
+          raw: tVehicle,
+        },
+      };
+
+      const updatePayload: any = {
+        notes: JSON.stringify(updatedNotes),
+      };
+
+      if (odoKm !== null && odoKm > 0) {
+        if (!match.current_odometer_km || odoKm >= match.current_odometer_km) {
+          updatePayload.current_odometer_km = odoKm;
+        }
+      }
+
+      const { error: updErr } = await supabase
+        .from("machines")
+        .update(updatePayload)
+        .eq("id", match.id);
+
+      if (!updErr) {
+        updatedCount++;
+      }
+    }
+
+    // 6. Record last synced time on organisation
+    try {
+      await (supabase as any)
+        .from("organisations")
+        .update({ trakzee_last_synced_at: nowIso })
+        .eq("id", organisationId);
+    } catch (_) {}
+
+    return {
+      success: true,
+      vehicles_returned: vehicleList.length,
+      vehicles_updated: updatedCount,
+      last_synced_at: nowIso,
+    };
+  } catch (err: any) {
+    return {
+      success: false,
+      error: err?.message || "Direct telematics sync failed",
+    };
+  }
+}
+
+/**
+ * Tests connection and credentials against Trakzee API via Edge Function or direct fallback.
  */
 export async function testTrakzeeConnection(cfg: Partial<TrakzeeConfig>): Promise<TrakzeeTestResult> {
   try {
@@ -159,11 +421,13 @@ export async function testTrakzeeConnection(cfg: Partial<TrakzeeConfig>): Promis
     });
 
     if (error) {
-      const formatted = await extractEdgeFunctionError(error);
-      return { success: false, error: formatted };
+      return await directClientTestConnection(cfg);
     }
 
     if (!data?.success) {
+      if (data?.code === "NOT_FOUND" || data?.error?.includes?.("offline")) {
+        return await directClientTestConnection(cfg);
+      }
       return { success: false, error: data?.error || "Authentication failed" };
     }
 
@@ -173,13 +437,14 @@ export async function testTrakzeeConnection(cfg: Partial<TrakzeeConfig>): Promis
       token_preview: data.token_preview,
       is_https: data.is_https,
     };
-  } catch (err: any) {
-    return { success: false, error: err?.message || "Failed to reach telematics server" };
+  } catch {
+    return await directClientTestConnection(cfg);
   }
 }
 
 /**
  * Triggers a live telematics sync for the fleet.
+ * Tries Edge Function first, falls back seamlessly to direct client sync.
  */
 export async function syncTrakzeeFleet(
   organisationId: string,
@@ -196,11 +461,15 @@ export async function syncTrakzeeFleet(
     });
 
     if (error) {
-      const formatted = await extractEdgeFunctionError(error);
-      return { success: false, error: formatted };
+      console.info("[Trakzee] Edge function offline or not deployed, using direct client sync...");
+      return await directClientSyncTrakzeeFleet(organisationId, shouldAutoImport);
     }
 
     if (!data?.success) {
+      if (data?.code === "NOT_FOUND" || data?.error?.includes?.("offline") || data?.error?.includes?.("not yet deployed")) {
+        console.info("[Trakzee] Edge function returned not found, using direct client sync...");
+        return await directClientSyncTrakzeeFleet(organisationId, shouldAutoImport);
+      }
       return {
         success: false,
         error: data?.error || "Failed to sync fleet",
@@ -215,7 +484,7 @@ export async function syncTrakzeeFleet(
       last_synced_at: data.last_synced_at,
       details: data.details,
     };
-  } catch (err: any) {
-    return { success: false, error: err?.message || "Network error syncing fleet" };
+  } catch {
+    return await directClientSyncTrakzeeFleet(organisationId, shouldAutoImport);
   }
 }
