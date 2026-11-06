@@ -37,6 +37,7 @@ import {
 } from "lucide-react";
 import { TripExpensesListDialog } from "@/components/TripExpensesListDialog";
 import { CorridorExpenseCatalogDialog } from "@/components/CorridorExpenseCatalogDialog";
+import { TripReceiptDialog } from "@/components/TripReceiptDialog";
 import {
   CROSS_BORDER_CORRIDORS,
   DEFAULT_USD_TO_TZS_RATE,
@@ -98,6 +99,12 @@ type Trip = {
   currency?: "USD" | "TZS" | null;
   exchange_rate?: number | null;
   expenses?: any[] | null;
+  client_billing_amount?: number | null;
+  billing_currency?: "USD" | "TZS" | null;
+  payment_terms?: string | null;
+  tax_percent?: number | null;
+  include_statutory_tolls?: boolean | null;
+  custom_logo_url?: string | null;
 };
 
 const STATUS_CLASS: Record<string, string> = {
@@ -131,6 +138,12 @@ function parseTripRecord(raw: any): Trip {
   let currency = raw.currency ?? null;
   let exchange_rate = raw.exchange_rate ?? null;
   let expenses = raw.expenses ?? null;
+  let client_billing_amount = raw.client_billing_amount ?? null;
+  let billing_currency = raw.billing_currency ?? null;
+  let payment_terms = raw.payment_terms ?? null;
+  let tax_percent = raw.tax_percent ?? null;
+  let include_statutory_tolls = raw.include_statutory_tolls ?? null;
+  let custom_logo_url = raw.custom_logo_url ?? null;
 
   if (raw.cargo_description && typeof raw.cargo_description === "string" && raw.cargo_description.startsWith("{") && raw.cargo_description.endsWith("}")) {
     try {
@@ -149,6 +162,13 @@ function parseTripRecord(raw: any): Trip {
       if (parsed.currency) currency = parsed.currency;
       if (parsed.exchange_rate) exchange_rate = parsed.exchange_rate;
       if (parsed.expenses) expenses = parsed.expenses;
+      if (parsed.client_billing_amount != null) client_billing_amount = Number(parsed.client_billing_amount);
+      else if (parsed.client_price != null) client_billing_amount = Number(parsed.client_price);
+      if (parsed.billing_currency) billing_currency = parsed.billing_currency;
+      if (parsed.payment_terms) payment_terms = parsed.payment_terms;
+      if (parsed.tax_percent != null) tax_percent = Number(parsed.tax_percent);
+      if (parsed.include_statutory_tolls != null) include_statutory_tolls = Boolean(parsed.include_statutory_tolls);
+      if (parsed.custom_logo_url) custom_logo_url = parsed.custom_logo_url;
     } catch {}
   }
 
@@ -168,6 +188,12 @@ function parseTripRecord(raw: any): Trip {
     currency,
     exchange_rate,
     expenses,
+    client_billing_amount,
+    billing_currency,
+    payment_terms,
+    tax_percent,
+    include_statutory_tolls,
+    custom_logo_url,
   };
 }
 
@@ -237,6 +263,26 @@ export default function Trips() {
   const [expenseSummaries, setExpenseSummaries] = useState<Map<string, ExpenseSummary>>(new Map());
   const [expensesTrip, setExpensesTrip] = useState<Trip | null>(null);
   const [detailTrip, setDetailTrip] = useState<Trip | null>(null);
+  const [receiptTrip, setReceiptTrip] = useState<Trip | null>(null);
+
+  const openReceiptById = async (tripId: string) => {
+    const existing = trips.find((t) => t.id === tripId);
+    if (existing) {
+      setReceiptTrip(existing);
+      return;
+    }
+    const { data } = await supabase.from("trips").select("*").eq("id", tripId).maybeSingle();
+    if (data) {
+      setReceiptTrip(parseTripRecord(data));
+    }
+  };
+
+  const handleTripSaved = async (createdTripId?: string) => {
+    await load();
+    if (createdTripId) {
+      await openReceiptById(createdTripId);
+    }
+  };
 
   const load = async () => {
     if (!profile) return;
@@ -578,6 +624,15 @@ export default function Trips() {
                           <Button
                             variant="ghost"
                             size="icon"
+                            title="Client Freight Receipt & Waybill"
+                            onClick={() => setReceiptTrip(t)}
+                          >
+                            <FileText className="h-4 w-4 text-primary hover:text-primary/80" />
+                          </Button>
+
+                          <Button
+                            variant="ghost"
+                            size="icon"
                             title="Trip Expenses & Fines"
                             onClick={() => setExpensesTrip(t)}
                           >
@@ -621,7 +676,8 @@ export default function Trips() {
         onOpenChange={setNewOpen}
         machines={machines}
         drivers={drivers}
-        onSaved={load}
+        onSaved={handleTripSaved}
+        onOpenReceipt={openReceiptById}
         initialCorridor={corridorForNewTrip}
         onOpenCatalog={() => setCatalogOpen(true)}
       />
@@ -675,8 +731,23 @@ export default function Trips() {
             setDetailTrip(null);
             setCloseTrip(t);
           }}
+          onOpenReceipt={() => {
+            const t = detailTrip;
+            setDetailTrip(null);
+            setReceiptTrip(t);
+          }}
         />
       )}
+
+      <TripReceiptDialog
+        open={!!receiptTrip}
+        onOpenChange={(v) => !v && setReceiptTrip(null)}
+        trip={receiptTrip}
+        machine={receiptTrip ? machineMap.get(receiptTrip.machine_id) : undefined}
+        driver={receiptTrip?.driver_id ? driverMap.get(receiptTrip.driver_id) : undefined}
+        org={(profile as any)?.organisation}
+        onPriceUpdated={load}
+      />
 
       <ConfirmDialog
         open={!!confirmCancel}
@@ -695,6 +766,9 @@ type NewTripForm = {
   driver_id: string;
   client_name: string;
   client_order_no: string;
+  client_billing_amount: string;
+  payment_terms: string;
+  tax_percent: string;
   purpose: string;
   origin: string;
   destination: string;
@@ -711,6 +785,9 @@ const EMPTY_NEW_TRIP: NewTripForm = {
   driver_id: "",
   client_name: "",
   client_order_no: "",
+  client_billing_amount: "",
+  payment_terms: "Upon Delivery & Offloading",
+  tax_percent: "0",
   purpose: "",
   origin: "",
   destination: "",
@@ -739,6 +816,7 @@ function NewTripDialog({
   machines,
   drivers,
   onSaved,
+  onOpenReceipt,
   initialCorridor,
   onOpenCatalog,
 }: {
@@ -746,7 +824,8 @@ function NewTripDialog({
   onOpenChange: (v: boolean) => void;
   machines: Machine[];
   drivers: Driver[];
-  onSaved: () => void;
+  onSaved: (createdTripId?: string) => void;
+  onOpenReceipt?: (createdTripId: string) => void;
   initialCorridor?: CrossBorderCorridor | null;
   onOpenCatalog?: () => void;
 }) {
@@ -915,9 +994,17 @@ function NewTripDialog({
       notes: exp.notes || null,
     }));
 
+    const billingAmountNum = form.client_billing_amount.trim() ? Number(form.client_billing_amount) : null;
+    const taxPercentNum = form.tax_percent.trim() ? Number(form.tax_percent) : 0;
+
     const cargoMeta = {
       client: form.client_name.trim() || null,
       order_no: form.client_order_no.trim() || null,
+      client_billing_amount: billingAmountNum,
+      billing_currency: currencyMode,
+      payment_terms: form.payment_terms.trim() || "Upon Delivery & Offloading",
+      tax_percent: taxPercentNum,
+      include_statutory_tolls: true,
       est_hours: estHours,
       is_round_trip: form.is_round_trip,
       purpose: form.purpose.trim() || null,
@@ -1005,10 +1092,18 @@ function NewTripDialog({
     toast.success(
       form.start_now
         ? `Trip dispatched with ${cleanExpensesPayload.length} automated corridor expenses!`
-        : `Trip scheduled with ${cleanExpensesPayload.length} automated corridor expenses!`
+        : `Trip scheduled with ${cleanExpensesPayload.length} automated corridor expenses!`,
+      {
+        action: {
+          label: "View Client Receipt",
+          onClick: () => {
+            if (newTrip?.id) onOpenReceipt?.(newTrip.id);
+          },
+        },
+      }
     );
     onOpenChange(false);
-    onSaved();
+    onSaved(newTrip?.id);
   };
 
   return (
@@ -1282,11 +1377,17 @@ function NewTripDialog({
               </div>
             )}
 
-            {/* Client Order Information Section */}
-            <div className="sm:col-span-2 rounded-xl border border-primary/20 bg-primary/5 p-4 space-y-3">
-              <h4 className="text-sm font-semibold text-foreground flex items-center gap-2">
-                <Building2 className="h-4 w-4 text-primary" /> Client & Order Information
-              </h4>
+            {/* Client Order & Freight Billing Section */}
+            <div className="sm:col-span-2 rounded-xl border border-primary/20 bg-primary/5 p-4 space-y-4">
+              <div className="flex items-center justify-between">
+                <h4 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                  <Building2 className="h-4 w-4 text-primary" /> Client & Billing (For Receipt & Waybill)
+                </h4>
+                <Badge variant="outline" className="text-[10px] bg-background">
+                  Client Receipt Ready
+                </Badge>
+              </div>
+
               <div className="grid gap-3 sm:grid-cols-2">
                 <div className="space-y-1.5">
                   <Label className="text-xs">Client / Customer Name</Label>
@@ -1315,6 +1416,78 @@ function NewTripDialog({
                     className="h-9 text-sm"
                   />
                 </div>
+
+                {/* Freight Price to Pay & Payment Terms */}
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-xs font-bold text-foreground">
+                      Client Freight Price ({currencyMode})
+                    </Label>
+                    <span className="text-[10px] text-muted-foreground font-mono">
+                      {form.client_billing_amount && Number(form.client_billing_amount) > 0 ? (
+                        currencyMode === "USD"
+                          ? `≈ ${Math.round(Number(form.client_billing_amount) * exchangeRate).toLocaleString()} TZS`
+                          : `≈ $${(Number(form.client_billing_amount) / exchangeRate).toFixed(2)} USD`
+                      ) : null}
+                    </span>
+                  </div>
+                  <div className="relative">
+                    <Input
+                      type="number"
+                      step="any"
+                      value={form.client_billing_amount}
+                      onChange={(e) => setForm({ ...form, client_billing_amount: e.target.value })}
+                      placeholder={currencyMode === "USD" ? "e.g. 2800" : "e.g. 7280000"}
+                      className="h-9 text-sm font-mono font-bold pr-14"
+                    />
+                    <span className="absolute right-3 top-2.5 text-xs font-semibold text-muted-foreground pointer-events-none">
+                      {currencyMode}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Payment Terms</Label>
+                  <Input
+                    value={form.payment_terms}
+                    onChange={(e) => setForm({ ...form, payment_terms: e.target.value })}
+                    placeholder="e.g. Upon Delivery & Offloading / 50% Advance"
+                    className="h-9 text-sm"
+                  />
+                </div>
+
+                <div className="space-y-1.5 sm:col-span-2">
+                  <div className="flex items-center justify-between text-xs text-muted-foreground">
+                    <span>Applicable VAT / Tax Rate</span>
+                    <span className="font-mono font-semibold">{form.tax_percent}%</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant={form.tax_percent === "0" ? "default" : "outline"}
+                      className="h-7 text-xs flex-1"
+                      onClick={() => setForm({ ...form, tax_percent: "0" })}
+                    >
+                      0% (Zero-rated Cross-Border Export)
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant={form.tax_percent === "18" ? "default" : "outline"}
+                      className="h-7 text-xs flex-1"
+                      onClick={() => setForm({ ...form, tax_percent: "18" })}
+                    >
+                      18% Standard VAT
+                    </Button>
+                  </div>
+                </div>
+              </div>
+
+              <div className="rounded-lg bg-background/80 border border-border p-2.5 text-[11px] text-muted-foreground flex items-center justify-between">
+                <span>
+                  🏢 Logo & payment accounts (CRDB, Stanbic, M-Pesa / Tigo Pesa Lipa Namba) are automatically branded on the client receipt.
+                </span>
               </div>
             </div>
 
@@ -1578,6 +1751,7 @@ function TripDetailDialog({
   onOpenChange,
   onStart,
   onCloseTrip,
+  onOpenReceipt,
 }: {
   trip: Trip;
   machine?: Machine;
@@ -1587,6 +1761,7 @@ function TripDetailDialog({
   onOpenChange: (v: boolean) => void;
   onStart: () => void;
   onCloseTrip: () => void;
+  onOpenReceipt?: () => void;
 }) {
   const rt = calculateRoundtripDisplay(trip);
   const totalCost = (Number(trip.cost) || 0) + (expenseSummary?.total || 0);
@@ -1677,10 +1852,24 @@ function TripDetailDialog({
           </div>
 
           {/* Client Order Card */}
-          <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 space-y-2">
-            <div className="text-xs font-semibold uppercase tracking-wider text-primary flex items-center gap-1.5">
-              <Building2 className="h-4 w-4" /> Client Order Information
+          <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="text-xs font-semibold uppercase tracking-wider text-primary flex items-center gap-1.5">
+                <Building2 className="h-4 w-4" /> Client Order & Billing
+              </div>
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 text-xs gap-1.5 border-primary/30 text-primary hover:bg-primary/10"
+                onClick={() => {
+                  onOpenChange(false);
+                  onOpenReceipt?.();
+                }}
+              >
+                <FileText className="h-3.5 w-3.5" /> View Receipt
+              </Button>
             </div>
+
             <div className="grid sm:grid-cols-2 gap-3 text-sm">
               <div>
                 <span className="text-xs text-muted-foreground block">Client / Customer:</span>
@@ -1694,6 +1883,29 @@ function TripDetailDialog({
                 <div className="sm:col-span-2">
                   <span className="text-xs text-muted-foreground block">Cargo Description:</span>
                   <span className="text-foreground">{trip.cargo_description}</span>
+                </div>
+              )}
+              {trip.client_billing_amount != null && trip.client_billing_amount > 0 && (
+                <div className="sm:col-span-2 rounded-lg bg-background p-2.5 border border-primary/20 flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <span className="text-[10px] text-muted-foreground block uppercase font-semibold">Agreed Freight Price</span>
+                    <span className="font-black text-sm text-primary font-mono">
+                      {trip.billing_currency === "USD"
+                        ? `$${trip.client_billing_amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD`
+                        : `${Math.round(trip.client_billing_amount).toLocaleString()} TZS`}
+                    </span>
+                    <span className="text-[10px] text-muted-foreground ml-2 font-mono">
+                      {trip.billing_currency === "USD"
+                        ? `(≈ ${Math.round(trip.client_billing_amount * (trip.exchange_rate || 2600)).toLocaleString()} TZS)`
+                        : `(≈ $${(trip.client_billing_amount / (trip.exchange_rate || 2600)).toFixed(2)} USD)`}
+                    </span>
+                  </div>
+                  {trip.payment_terms && (
+                    <div className="text-right">
+                      <span className="text-[10px] text-muted-foreground block uppercase font-semibold">Terms</span>
+                      <span className="text-xs font-medium text-foreground">{trip.payment_terms}</span>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -1840,7 +2052,7 @@ function TripDetailDialog({
         </div>
 
         <DialogFooter className="flex sm:justify-between items-center gap-2">
-          <div>
+          <div className="flex items-center gap-2">
             {trip.status === "planned" && (
               <Button onClick={onStart} size="sm" className="gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white">
                 <Play className="h-3.5 w-3.5" /> Start Trip
@@ -1851,6 +2063,17 @@ function TripDetailDialog({
                 <Square className="h-3.5 w-3.5" /> Close & Complete Trip
               </Button>
             )}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                onOpenChange(false);
+                onOpenReceipt?.();
+              }}
+              className="gap-1.5 border-primary/30 text-primary hover:bg-primary/10"
+            >
+              <FileText className="h-4 w-4" /> Client Receipt
+            </Button>
           </div>
           <Button variant="outline" size="sm" onClick={() => onOpenChange(false)}>
             Close

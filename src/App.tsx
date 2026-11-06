@@ -102,6 +102,7 @@ const ChemicalDetailPublic = lazy(() => import("./pages/safety/ChemicalDetailPub
 const Vendors = lazy(() => import("./pages/Vendors"));
 const WorkOrderPrint = lazy(() => import("./pages/WorkOrderPrint"));
 const ChecklistTemplatePrint = lazy(() => import("./pages/ChecklistTemplatePrint"));
+const TripReceiptPrint = lazy(() => import("./pages/fleet/TripReceiptPrint"));
 const WorkOrderNew = lazy(() => import("./pages/WorkOrderNew"));
 const WorkOrderDetail = lazy(() => import("./pages/WorkOrderDetail"));
 const VendorDetail = lazy(() => import("./pages/VendorDetail"));
@@ -177,6 +178,7 @@ const App = () => (
                 <Route path="/m/:id/inspect" element={<PreStartInspection />} />
                 <Route path="/work-orders/:id/print" element={<WorkOrderPrint />} />
                 <Route path="/checklist-templates/:id/print" element={<ChecklistTemplatePrint />} />
+                <Route path="/fleet/trips/:id/receipt" element={<TripReceiptPrint />} />
                 <Route path="/induction/run/:recordId" element={<InductionRun />} />
                 <Route path="/induction/certificate/:recordId" element={<InductionCertificate />} />
                 <Route path="/induction/qr/:programmeId" element={<InductionPublicRun />} />
