@@ -205,7 +205,7 @@ export async function directClientTestConnection(cfg: Partial<TrakzeeConfig>): P
  */
 export async function directClientSyncTrakzeeFleet(
   organisationId: string,
-  autoImport: boolean = false
+  autoImport: boolean = true
 ): Promise<TrakzeeSyncResult> {
   try {
     // 1. Fetch organisation settings safely or fallback to defaults
@@ -457,9 +457,9 @@ export async function testTrakzeeConnection(cfg: Partial<TrakzeeConfig>): Promis
  */
 export async function syncTrakzeeFleet(
   organisationId: string,
-  autoImport: boolean | unknown = false
+  autoImport: boolean | unknown = true
 ): Promise<TrakzeeSyncResult> {
-  const shouldAutoImport = typeof autoImport === "boolean" ? autoImport : false;
+  const shouldAutoImport = typeof autoImport === "boolean" ? autoImport : true;
   try {
     const { data, error } = await supabase.functions.invoke("trakzee-telematics", {
       body: {

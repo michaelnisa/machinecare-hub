@@ -140,8 +140,8 @@ export default function Live() {
   }, []);
 
   const load = useCallback(async () => {
-    if (!organisation?.id) return;
-    const orgId = organisation.id;
+    const orgId = organisation?.id || profile?.organisation_id;
+    if (!orgId) return;
     const today = new Date().toISOString().slice(0, 10);
     const d30 = new Date(Date.now() - 30 * 86400000).toISOString();
 
@@ -277,8 +277,8 @@ export default function Live() {
   }, [organisation?.id, profile?.organisation_id]);
 
   const loadGarage = useCallback(async () => {
-    if (!organisation?.id) return;
-    const orgId = organisation.id;
+    const orgId = organisation?.id || profile?.organisation_id;
+    if (!orgId) return;
     const today = new Date().toISOString().slice(0, 10);
     const { data: jobs } = await (supabase as any)
       .from("garage_jobs")
@@ -313,11 +313,12 @@ export default function Live() {
     }
     setGarageKpis({ inProgress, estimate, awaitingApproval, readyForPickup, completedToday, jobs: recentJobs });
     setLastUpdated(new Date());
-  }, [organisation?.id]);
+  }, [organisation?.id, profile?.organisation_id]);
 
   // Initial + polling fallback
   useEffect(() => {
-    if (!organisation?.id) return;
+    const orgId = organisation?.id || profile?.organisation_id;
+    if (!orgId) return;
     if (isFleet) loadFleet();
     else if (isGarage) loadGarage();
     else load();
@@ -328,31 +329,32 @@ export default function Live() {
       else load();
     }, 30000);
     return () => clearInterval(t);
-  }, [organisation?.id, isFleet, isGarage, load, loadFleet, loadGarage]);
+  }, [organisation?.id, profile?.organisation_id, isFleet, isGarage, load, loadFleet, loadGarage]);
 
   // Realtime subscriptions
   useEffect(() => {
-    if (!organisation?.id) return;
-    const channel = supabase.channel(`${organisation.id}:live-kpis`);
+    const orgId = organisation?.id || profile?.organisation_id;
+    if (!orgId) return;
+    const channel = supabase.channel(`${orgId}:live-kpis`);
     if (isFleet) {
       channel
-        .on("postgres_changes", { event: "*", schema: "public", table: "machines", filter: `organisation_id=eq.${organisation.id}` }, () => loadFleet())
-        .on("postgres_changes", { event: "*", schema: "public", table: "trips", filter: `organisation_id=eq.${organisation.id}` }, () => loadFleet());
+        .on("postgres_changes", { event: "*", schema: "public", table: "machines", filter: `organisation_id=eq.${orgId}` }, () => loadFleet())
+        .on("postgres_changes", { event: "*", schema: "public", table: "trips", filter: `organisation_id=eq.${orgId}` }, () => loadFleet());
     } else if (isGarage) {
       channel
-        .on("postgres_changes", { event: "*", schema: "public", table: "garage_jobs", filter: `organisation_id=eq.${organisation.id}` }, () => loadGarage());
+        .on("postgres_changes", { event: "*", schema: "public", table: "garage_jobs", filter: `organisation_id=eq.${orgId}` }, () => loadGarage());
     } else {
       channel
-        .on("postgres_changes", { event: "*", schema: "public", table: "machines", filter: `organisation_id=eq.${organisation.id}` }, () => load())
-        .on("postgres_changes", { event: "*", schema: "public", table: "work_orders", filter: `organisation_id=eq.${organisation.id}` }, () => load())
+        .on("postgres_changes", { event: "*", schema: "public", table: "machines", filter: `organisation_id=eq.${orgId}` }, () => load())
+        .on("postgres_changes", { event: "*", schema: "public", table: "work_orders", filter: `organisation_id=eq.${orgId}` }, () => load())
         .on("postgres_changes", { event: "*", schema: "public", table: "service_schedules" }, () => load())
-        .on("postgres_changes", { event: "*", schema: "public", table: "meter_readings", filter: `organisation_id=eq.${organisation.id}` }, () => load())
-        .on("postgres_changes", { event: "*", schema: "public", table: "machine_downtime_events", filter: `organisation_id=eq.${organisation.id}` }, () => load())
-        .on("postgres_changes", { event: "*", schema: "public", table: "safety_incidents", filter: `organisation_id=eq.${organisation.id}` }, () => load());
+        .on("postgres_changes", { event: "*", schema: "public", table: "meter_readings", filter: `organisation_id=eq.${orgId}` }, () => load())
+        .on("postgres_changes", { event: "*", schema: "public", table: "machine_downtime_events", filter: `organisation_id=eq.${orgId}` }, () => load())
+        .on("postgres_changes", { event: "*", schema: "public", table: "safety_incidents", filter: `organisation_id=eq.${orgId}` }, () => load());
     }
     channel.subscribe();
     return () => { supabase.removeChannel(channel); };
-  }, [organisation?.id, isFleet, isGarage, load, loadFleet, loadGarage]);
+  }, [organisation?.id, profile?.organisation_id, isFleet, isGarage, load, loadFleet, loadGarage]);
 
   const toggleFullscreen = () => {
     if (!document.fullscreenElement) document.documentElement.requestFullscreen?.().catch(() => {});

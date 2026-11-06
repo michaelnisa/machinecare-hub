@@ -228,14 +228,18 @@ serve(async (req) => {
         if (basicOrg) {
           org = basicOrg;
         } else {
-          // If orgId wasn't found, find any existing organisation
-          const { data: anyOrg } = await supabase
+          // If orgId wasn't found, prioritize LOGISTIXWARE organisation
+          const { data: logistixOrg } = await supabase
             .from("organisations")
             .select("id, name")
-            .limit(1)
+            .ilike("name", "%LOGISTIX%")
             .maybeSingle();
 
-          org = anyOrg || { id: orgId, name: "LOGISTIXWARE" };
+          const { data: anyOrg } = !logistixOrg
+            ? await supabase.from("organisations").select("id, name").limit(1).maybeSingle()
+            : { data: logistixOrg };
+
+          org = logistixOrg || anyOrg || { id: orgId, name: "LOGISTIXWARE" };
         }
       }
 
@@ -410,7 +414,8 @@ serve(async (req) => {
         const volt = tVehicle.ExternalVolt && tVehicle.ExternalVolt !== "--" ? Number(tVehicle.ExternalVolt) : null;
 
         if (!match) {
-          const shouldAutoImport = Boolean(body.auto_import === true || body.auto_import === "true" || body.auto_import === 1);
+          // Default to auto-importing any unmatched vehicles from Trakzee unless explicitly disabled
+          const shouldAutoImport = body.auto_import !== false && body.auto_import !== "false";
           if (shouldAutoImport) {
             const metaNotes: any = {
               vehicle_code: rawPlate,

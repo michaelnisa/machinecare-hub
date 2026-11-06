@@ -128,10 +128,10 @@ export default function LiveFleetMap() {
   }, [organisation?.id, profile?.organisation_id]);
 
   // Sync with Trakzee live API
-  const handleSync = async (autoImport: boolean | unknown = false) => {
+  const handleSync = async (autoImport: boolean | unknown = true) => {
     const orgId = organisation?.id || profile?.organisation_id;
     if (!orgId) return;
-    const shouldImport = typeof autoImport === "boolean" ? autoImport : false;
+    const shouldImport = typeof autoImport === "boolean" ? autoImport : true;
     setSyncing(true);
     try {
       const res = await syncTrakzeeFleet(orgId, shouldImport);
@@ -333,7 +333,7 @@ export default function LiveFleetMap() {
           <Button
             variant="outline"
             size="sm"
-            onClick={() => handleSync(false)}
+            onClick={() => handleSync(true)}
             disabled={syncing}
             className="gap-1.5 text-xs border-primary/30 text-primary hover:bg-primary/5"
           >

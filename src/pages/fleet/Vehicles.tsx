@@ -140,13 +140,13 @@ export default function Vehicles() {
   const [importOpen, setImportOpen] = useState(false);
   const [syncingTrakzee, setSyncingTrakzee] = useState(false);
 
-  const handleSyncTrakzee = async (autoImport: boolean | unknown = false) => {
+  const handleSyncTrakzee = async (autoImport: boolean | unknown = true) => {
     const orgId = organisation?.id || profile?.organisation_id;
     if (!orgId) {
       toast.error("Organisation not loaded yet. Please wait a moment.");
       return;
     }
-    const shouldImport = typeof autoImport === "boolean" ? autoImport : false;
+    const shouldImport = typeof autoImport === "boolean" ? autoImport : true;
     setSyncingTrakzee(true);
     const res = await syncTrakzeeFleet(orgId, shouldImport);
     setSyncingTrakzee(false);
@@ -154,17 +154,6 @@ export default function Vehicles() {
       toast.error(res.error || "Failed to sync Trakzee GPS");
     } else if (res.vehicles_updated === 0 && (res.vehicles_returned ?? 0) === 0) {
       toast.info("Trakzee API connected, but returned 0 online vehicles.");
-    } else if (res.vehicles_updated === 0 && (res.vehicles_returned ?? 0) > 0) {
-      toast.warning(
-        `Trakzee returned ${res.vehicles_returned} vehicles from LOGISTIXWARE, but none matched your fleet plates yet.`,
-        {
-          action: {
-            label: "Auto-Import All",
-            onClick: () => handleSyncTrakzee(true),
-          },
-          duration: 10000,
-        }
-      );
     } else {
       toast.success(`Trakzee GPS synced: ${res.vehicles_updated} vehicle(s) updated / imported`);
       load();
@@ -282,7 +271,7 @@ export default function Vehicles() {
           <div className="flex items-center gap-2">
             <Button
               variant="outline"
-              onClick={() => handleSyncTrakzee(false)}
+              onClick={() => handleSyncTrakzee(true)}
               disabled={syncingTrakzee}
               className="gap-1.5 text-xs text-primary border-primary/30 hover:bg-primary/5"
               title="Sync live odometer, speed, and GPS location from Trakzee"

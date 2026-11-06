@@ -9,7 +9,15 @@ export type { IndustryProfile };
 
 export function useFeatureFlags() {
   const { organisation } = useAuth();
-  const profile: IndustryProfile = organisation?.industry_profile ?? "manufacturing";
+  const isLogisticsOrg = Boolean(
+    organisation?.name?.toLowerCase().includes("logistix") ||
+    organisation?.name?.toLowerCase().includes("transport") ||
+    organisation?.name?.toLowerCase().includes("fleet") ||
+    organisation?.industry?.toLowerCase().includes("logistics") ||
+    organisation?.industry?.toLowerCase().includes("transport")
+  );
+
+  const profile: IndustryProfile = organisation?.industry_profile ?? (isLogisticsOrg ? "fleet_logistics" : "manufacturing");
 
   const isFeatureEnabled = (featureKey: string): boolean => {
     // If organisation explicitly defines enabled_modules, respect it:
@@ -24,7 +32,7 @@ export function useFeatureFlags() {
     }
 
     // Dynamic feature flag resolution fallback:
-    if (featureKey === "fleet") return profile === "fleet_logistics" || profile === "mixed";
+    if (featureKey === "fleet") return profile === "fleet_logistics" || profile === "mixed" || isLogisticsOrg;
     if (featureKey === "garage" || featureKey === "workshop") return profile === "garage" || profile === "mixed";
     if (featureKey === "production") return profile === "manufacturing" || profile === "mixed";
     if (featureKey === "iot" || featureKey === "connected_data") return profile === "manufacturing" || profile === "mixed";
@@ -34,8 +42,8 @@ export function useFeatureFlags() {
 
   return {
     profile,
-    isFleet: profile === "fleet_logistics",
-    isManufacturing: profile === "manufacturing",
+    isFleet: profile === "fleet_logistics" || isLogisticsOrg,
+    isManufacturing: profile === "manufacturing" && !isLogisticsOrg,
     isGarage: profile === "garage",
     isMixed: profile === "mixed",
     isIoT: isFeatureEnabled("connected_data"),
