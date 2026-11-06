@@ -58,23 +58,32 @@ export default function TripReceiptPrint() {
       }
 
       let parsedMeta: any = {};
+      let cleanCargo: string | null = null;
       if (tripData.cargo_description && typeof tripData.cargo_description === "string" && tripData.cargo_description.startsWith("{")) {
         try {
           parsedMeta = JSON.parse(tripData.cargo_description);
+          if (parsedMeta.cargo && typeof parsedMeta.cargo === "string" && !parsedMeta.cargo.startsWith("{")) {
+            cleanCargo = parsedMeta.cargo;
+          }
         } catch {}
+      } else {
+        cleanCargo = tripData.cargo_description;
+      }
+      if (typeof cleanCargo === "string" && cleanCargo.startsWith("{")) {
+        cleanCargo = null;
       }
 
       const mergedTrip = {
         ...tripData,
         client_name: parsedMeta.client || tripData.client_name,
         client_order_no: parsedMeta.order_no || tripData.client_order_no,
-        cargo_description: parsedMeta.cargo || tripData.cargo_description,
+        cargo_description: cleanCargo || tripData.purpose || "Commercial Freight / General Cargo",
         corridor_id: parsedMeta.corridor_id,
         corridor_name: parsedMeta.corridor_name,
         border_post: parsedMeta.border_post,
         currency: parsedMeta.currency || parsedMeta.billing_currency || "USD",
         exchange_rate: parsedMeta.exchange_rate || DEFAULT_USD_TO_TZS_RATE,
-        client_billing_amount: parsedMeta.client_billing_amount ?? tripData.cost,
+        client_billing_amount: parsedMeta.client_billing_amount ?? null,
         payment_terms: parsedMeta.payment_terms || "Upon Delivery & Offloading",
         expenses: Array.isArray(parsedMeta.expenses) ? parsedMeta.expenses : [],
       };
@@ -206,18 +215,20 @@ export default function TripReceiptPrint() {
 
               <div className="text-right shrink-0">
                 {companyLogo ? (
-                  <img
-                    src={companyLogo}
-                    alt="Company Logo"
-                    className="h-14 w-auto max-w-[190px] ml-auto object-contain mb-1.5"
-                  />
+                  <div className="mb-1.5">
+                    <img
+                      src={companyLogo}
+                      alt="Company Logo"
+                      className="h-14 w-auto max-w-[190px] ml-auto object-contain"
+                    />
+                    <div className="text-xs font-bold text-slate-800 mt-1">{companyName}</div>
+                  </div>
                 ) : (
                   <div className="flex items-center justify-end gap-1.5 text-primary font-black text-xl mb-1">
                     <Truck className="h-6 w-6" />
                     <span>{companyName}</span>
                   </div>
                 )}
-                <div className="text-xs font-bold text-slate-800">{companyName}</div>
                 <div className="text-[11px] text-slate-600 max-w-[260px] ml-auto line-clamp-2">
                   {companyAddress}
                 </div>
@@ -235,16 +246,14 @@ export default function TripReceiptPrint() {
                   <Building2 className="h-3.5 w-3.5" /> Client / Consignee Information
                 </div>
                 <div className="text-sm font-bold text-slate-900">
-                  {trip.client_name || "Commercial Cargo Client"}
+                  {trip.client_name || "Commercial Cargo Consignee"}
                 </div>
                 <div className="text-slate-600">
                   Order / DO Reference: <strong className="font-mono text-slate-800">{trip.client_order_no || "N/A"}</strong>
                 </div>
-                {trip.cargo_description && (
-                  <div className="text-slate-600 pt-0.5">
-                    Consignment: <span className="font-medium text-slate-800">{trip.cargo_description}</span>
-                  </div>
-                )}
+                <div className="text-slate-600 pt-0.5">
+                  Consignment Specification: <span className="font-medium text-slate-800">{trip.cargo_description || "Commercial Cargo / General Freight"}</span>
+                </div>
                 <div className="text-slate-600 text-[11px]">
                   Payment Terms: <span className="font-semibold text-primary">{trip.payment_terms}</span>
                 </div>

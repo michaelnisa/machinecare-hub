@@ -15,6 +15,7 @@ import {
   Play,
   Square,
   Ban,
+  Trash2,
   Loader2,
   Receipt,
   AlertOctagon,
@@ -153,7 +154,11 @@ function parseTripRecord(raw: any): Trip {
       if (parsed.est_hours != null) roundtrip_hours_est = Number(parsed.est_hours);
       if (parsed.is_round_trip != null) is_round_trip = Boolean(parsed.is_round_trip);
       if (parsed.purpose) purpose = parsed.purpose;
-      if (parsed.cargo) cargo_description = parsed.cargo;
+      if (parsed.cargo && typeof parsed.cargo === "string" && !parsed.cargo.startsWith("{")) {
+        cargo_description = parsed.cargo;
+      } else {
+        cargo_description = null;
+      }
       if (parsed.route_notes) route_notes = parsed.route_notes;
       if (parsed.estimated_return_at) estimated_return_at = parsed.estimated_return_at;
       if (parsed.corridor_id) corridor_id = parsed.corridor_id;
@@ -169,7 +174,13 @@ function parseTripRecord(raw: any): Trip {
       if (parsed.tax_percent != null) tax_percent = Number(parsed.tax_percent);
       if (parsed.include_statutory_tolls != null) include_statutory_tolls = Boolean(parsed.include_statutory_tolls);
       if (parsed.custom_logo_url) custom_logo_url = parsed.custom_logo_url;
-    } catch {}
+    } catch {
+      cargo_description = null;
+    }
+  }
+
+  if (typeof cargo_description === "string" && cargo_description.startsWith("{")) {
+    cargo_description = null;
   }
 
   return {
@@ -260,6 +271,7 @@ export default function Trips() {
   const [corridorForNewTrip, setCorridorForNewTrip] = useState<CrossBorderCorridor | null>(null);
   const [closeTrip, setCloseTrip] = useState<Trip | null>(null);
   const [confirmCancel, setConfirmCancel] = useState<string | null>(null);
+  const [confirmDeleteTrip, setConfirmDeleteTrip] = useState<Trip | null>(null);
   const [expenseSummaries, setExpenseSummaries] = useState<Map<string, ExpenseSummary>>(new Map());
   const [expensesTrip, setExpensesTrip] = useState<Trip | null>(null);
   const [detailTrip, setDetailTrip] = useState<Trip | null>(null);
@@ -414,6 +426,27 @@ export default function Trips() {
     toast.success("Trip cancelled");
     setConfirmCancel(null);
     load();
+  };
+
+  const deleteTrip = async () => {
+    if (!confirmDeleteTrip) return;
+    const tripId = confirmDeleteTrip.id;
+    try {
+      // 1. Delete associated trip_expenses
+      await (supabase as any).from("trip_expenses").delete().eq("trip_id", tripId);
+
+      // 2. Delete trip record
+      const { error } = await supabase.from("trips").delete().eq("id", tripId);
+      if (error) throw error;
+
+      toast.success("Trip permanently deleted");
+      if (detailTrip?.id === tripId) setDetailTrip(null);
+      if (receiptTrip?.id === tripId) setReceiptTrip(null);
+      setConfirmDeleteTrip(null);
+      await load();
+    } catch (err: any) {
+      toast.error(err.message || "Failed to delete trip");
+    }
   };
 
   if (loading) return <PageLoader />;
@@ -660,6 +693,18 @@ export default function Trips() {
                               </Button>
                             </>
                           )}
+
+                          {canWrite && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              title="Delete trip permanently"
+                              onClick={() => setConfirmDeleteTrip(t)}
+                              className="text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -736,6 +781,12 @@ export default function Trips() {
             setDetailTrip(null);
             setReceiptTrip(t);
           }}
+          canManage={canWrite}
+          onDelete={() => {
+            const t = detailTrip;
+            setDetailTrip(null);
+            setConfirmDeleteTrip(t);
+          }}
         />
       )}
 
@@ -756,6 +807,16 @@ export default function Trips() {
         description="The trip will be marked as cancelled."
         confirmLabel="Cancel trip"
         onConfirm={async () => { await cancelTrip(); }}
+      />
+
+      <ConfirmDialog
+        open={!!confirmDeleteTrip}
+        onOpenChange={(v) => !v && setConfirmDeleteTrip(null)}
+        title="Delete this trip permanently?"
+        description={`Are you sure you want to permanently delete this trip (${confirmDeleteTrip?.origin || 'Origin'} → ${confirmDeleteTrip?.destination || 'Destination'}) and all its associated expense records? This action cannot be undone.`}
+        confirmLabel="Delete permanently"
+        confirmVariant="destructive"
+        onConfirm={deleteTrip}
       />
     </div>
   );
@@ -1752,6 +1813,8 @@ function TripDetailDialog({
   onStart,
   onCloseTrip,
   onOpenReceipt,
+  canManage,
+  onDelete,
 }: {
   trip: Trip;
   machine?: Machine;
@@ -1762,6 +1825,8 @@ function TripDetailDialog({
   onStart: () => void;
   onCloseTrip: () => void;
   onOpenReceipt?: () => void;
+  canManage?: boolean;
+  onDelete?: () => void;
 }) {
   const rt = calculateRoundtripDisplay(trip);
   const totalCost = (Number(trip.cost) || 0) + (expenseSummary?.total || 0);
@@ -2052,7 +2117,7 @@ function TripDetailDialog({
         </div>
 
         <DialogFooter className="flex sm:justify-between items-center gap-2">
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             {trip.status === "planned" && (
               <Button onClick={onStart} size="sm" className="gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white">
                 <Play className="h-3.5 w-3.5" /> Start Trip
@@ -2074,6 +2139,19 @@ function TripDetailDialog({
             >
               <FileText className="h-4 w-4" /> Client Receipt
             </Button>
+            {canManage && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  onOpenChange(false);
+                  onDelete?.();
+                }}
+                className="gap-1.5 text-destructive hover:bg-destructive/10"
+              >
+                <Trash2 className="h-4 w-4" /> Delete Trip
+              </Button>
+            )}
           </div>
           <Button variant="outline" size="sm" onClick={() => onOpenChange(false)}>
             Close

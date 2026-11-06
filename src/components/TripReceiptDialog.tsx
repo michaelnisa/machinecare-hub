@@ -173,6 +173,27 @@ export function TripReceiptDialog({
     };
   }, [clientPrice, billingCurrency, includeStatutoryTolls, taxPercent, trip, exchangeRate]);
 
+  const cleanCargo = useMemo(() => {
+    const raw = trip?.cargo_description;
+    if (!raw) return trip?.purpose || "Commercial Freight / General Cargo";
+    if (typeof raw === "string") {
+      if (raw.startsWith("{") || raw.endsWith("}")) {
+        try {
+          const parsed = JSON.parse(raw);
+          if (parsed.cargo && typeof parsed.cargo === "string" && !parsed.cargo.startsWith("{")) {
+            return parsed.cargo;
+          }
+          if (parsed.purpose && typeof parsed.purpose === "string") {
+            return parsed.purpose;
+          }
+        } catch {}
+        return trip?.purpose || "Commercial Freight / General Cargo";
+      }
+      return raw;
+    }
+    return trip?.purpose || "Commercial Freight / General Cargo";
+  }, [trip]);
+
   // Save updated pricing back to trip's cargo_description
   const handleSavePricingToTrip = async () => {
     if (!trip?.id) return;
@@ -453,18 +474,20 @@ export function TripReceiptDialog({
 
                 <div className="text-right shrink-0">
                   {customLogoUrl ? (
-                    <img
-                      src={customLogoUrl}
-                      alt="Company Logo"
-                      className="h-14 w-auto max-w-[190px] ml-auto object-contain mb-1.5"
-                    />
+                    <div className="mb-1.5">
+                      <img
+                        src={customLogoUrl}
+                        alt="Company Logo"
+                        className="h-14 w-auto max-w-[190px] ml-auto object-contain"
+                      />
+                      <div className="text-xs font-bold text-slate-800 mt-1">{companyName}</div>
+                    </div>
                   ) : (
                     <div className="flex items-center justify-end gap-1.5 text-primary font-black text-xl mb-1">
                       <Truck className="h-6 w-6" />
                       <span>{companyName}</span>
                     </div>
                   )}
-                  <div className="text-xs font-bold text-slate-800">{companyName}</div>
                   <div className="text-[11px] text-slate-600 max-w-[260px] ml-auto line-clamp-2">
                     {companyAddress}
                   </div>
@@ -486,11 +509,9 @@ export function TripReceiptDialog({
                   <div className="text-slate-600">
                     Order / Delivery Note Ref: <strong className="font-mono text-slate-800">{trip.client_order_no || "N/A"}</strong>
                   </div>
-                  {trip.cargo_description && (
-                    <div className="text-slate-600 pt-0.5">
-                      Consignment Specification: <span className="font-medium text-slate-800">{trip.cargo_description}</span>
-                    </div>
-                  )}
+                  <div className="text-slate-600 pt-0.5">
+                    Consignment Specification: <span className="font-medium text-slate-800">{cleanCargo}</span>
+                  </div>
                   <div className="text-slate-600 text-[11px]">
                     Payment Terms: <span className="font-semibold text-primary">{paymentTerms}</span>
                   </div>
