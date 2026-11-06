@@ -11,6 +11,11 @@ import {
   CircleDot,
   AlertTriangle,
   ClipboardCheck,
+  Radio,
+  RefreshCw,
+  Activity,
+  ArrowUpRight,
+  Navigation,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -22,6 +27,10 @@ import { formatDate, formatMoney, formatNumber } from "@/lib/format";
 import { formatWoNumber } from "@/components/WorkOrderPreview";
 import { formatDistanceToNow } from "date-fns";
 import { useI18n } from "@/i18n/I18nProvider";
+import { Button } from "@/components/ui/button";
+import { toast } from "sonner";
+import { parseMachine, SAFE_MACHINE_COLUMNS, type FleetVehicle } from "@/lib/fleet-metadata";
+import { syncTrakzeeFleet } from "@/services/trakzeeService";
 
 const toneClasses: Record<string, string> = {
   default: "bg-primary-soft text-primary",
@@ -33,7 +42,7 @@ const toneClasses: Record<string, string> = {
 const OPEN_WO_STATUSES = new Set(["open", "assigned", "in_progress", "waiting_parts"]);
 
 type ExpiryRow = { key: string; typeLabel: string; holderLabel: string; expiresOn: string };
-type MachineRow = { id: string; name: string; plate_number: string | null; status: string; current_odometer_km: number | null };
+type MachineRow = FleetVehicle;
 type TripRow = { id: string; machine_id: string; driver_id: string | null; status: string; start_at: string | null; end_at: string | null; start_odo: number | null; end_odo: number | null; fuel_used_l: number | null };
 type FuelLogRow = { machine_id: string; recorded_at: string; fuel_cost: number | null };
 type TyreRow = { id: string; machine_id: string; position: string; brand: string | null; target_replace_km: number | null; fitted_odo: number | null; removed_at: string | null };
@@ -69,6 +78,22 @@ export default function FleetDashboard() {
   const [recentFaults, setRecentFaults] = useState<FaultReportRow[]>([]);
   const [inspectionsToday, setInspectionsToday] = useState<{ machine_id: string }[]>([]);
 
+  const [syncingGps, setSyncingGps] = useState(false);
+
+  const handleQuickSync = async () => {
+    const orgId = organisation?.id || profile?.organisation_id;
+    if (!orgId) return;
+    setSyncingGps(true);
+    const res = await syncTrakzeeFleet(orgId, true);
+    setSyncingGps(false);
+    if (!res.success) {
+      toast.error(res.error || "Failed to sync Trakzee GPS");
+    } else {
+      toast.success(`Trakzee GPS Synced: ${res.vehicles_updated} vehicle(s) updated`);
+      load();
+    }
+  };
+
   const load = async () => {
     if (!profile) return;
     setLoading(true);
@@ -86,7 +111,7 @@ export default function FleetDashboard() {
       { data: fleetTemplates },
     ] = await Promise.all([
       supabase.from("vehicle_documents").select("id, machine_id, doc_type, expires_on").not("expires_on", "is", null),
-      supabase.from("machines").select("id, name, plate_number, status, current_odometer_km"),
+      supabase.from("machines").select(SAFE_MACHINE_COLUMNS).in("category", ["Vehicle", "Trailer"]).order("name"),
       supabase.from("drivers").select("id, full_name, licence_expiry, medical_expiry").eq("status", "active"),
       supabase.from("trips").select("id, machine_id, driver_id, status, start_at, end_at, start_odo, end_odo, fuel_used_l"),
       supabase.from("fuel_logs").select("machine_id, recorded_at, fuel_cost"),
@@ -110,7 +135,7 @@ export default function FleetDashboard() {
 
     type DocRow = { id: string; machine_id: string; doc_type: string; expires_on: string };
 
-    const machineList = (m ?? []) as MachineRow[];
+    const machineList = (m ?? []).map((raw, idx) => parseMachine(raw, idx));
     const machineMap = new Map(machineList.map((mm) => [mm.id, mm]));
     const rows: ExpiryRow[] = [];
     for (const d of (docs ?? []) as DocRow[]) {
@@ -152,12 +177,11 @@ export default function FleetDashboard() {
     };
   }, [profile]);
 
-
   const machineMap = useMemo(() => new Map(machines.map((m) => [m.id, m])), [machines]);
   const vehicleLabel = (machineId: string) => {
     const m = machineMap.get(machineId);
     if (!m) return "Vehicle";
-    return m.plate_number ? `${m.name} (${m.plate_number})` : m.name;
+    return m.plate_number ? `${m.plate_number} (${m.name})` : m.name;
   };
 
   const expiringWithin30 = useMemo(() => expiring.filter((r) => scheduleStatus(r.expiresOn) !== "ok"), [expiring]);
@@ -173,12 +197,38 @@ export default function FleetDashboard() {
     return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate();
   };
 
-  const onRoadMachineIds = useMemo(
-    () => new Set(trips.filter((t) => t.status === "in_progress").map((t) => t.machine_id)),
-    [trips],
-  );
-  const activeMachines = useMemo(() => machines.filter((m) => m.status === "active"), [machines]);
-  const availabilityPct = activeMachines.length > 0 ? Math.round((onRoadMachineIds.size / activeMachines.length) * 100) : 0;
+  const movingVehicles = useMemo(() => {
+    return machines.filter((m) => Number(m.telematics_speed || 0) > 0);
+  }, [machines]);
+
+  const idlingVehicles = useMemo(() => {
+    return machines.filter((m) => Number(m.telematics_speed || 0) === 0 && Boolean(m.telematics_ignition));
+  }, [machines]);
+
+  const totalOdometerKm = useMemo(() => {
+    return machines.reduce((acc, m) => acc + (Number(m.current_odometer_km) || 0), 0);
+  }, [machines]);
+
+  const onRoadMachineIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const m of machines) {
+      if (Number(m.telematics_speed || 0) > 0 || Boolean(m.telematics_ignition)) {
+        ids.add(m.id);
+      }
+    }
+    for (const t of trips) {
+      if (t.status === "in_progress") ids.add(t.machine_id);
+    }
+    return ids;
+  }, [machines, trips]);
+
+  const inWorkshopCount = useMemo(() => {
+    return new Set(openWorkOrders.map((w) => w.machine_id)).size;
+  }, [openWorkOrders]);
+
+  const activeMachines = useMemo(() => machines.filter((m) => m.status === "active" || m.status === "operational"), [machines]);
+  const operationalCount = Math.max(machines.length - inWorkshopCount, 0);
+  const availabilityPct = machines.length > 0 ? Math.round((operationalCount / machines.length) * 100) : 100;
 
   const tripsInProgressToday = trips.filter((t) => t.status === "in_progress").length;
   const tripsCompletedToday = trips.filter((t) => t.status === "completed" && isToday(t.end_at)).length;
@@ -224,16 +274,24 @@ export default function FleetDashboard() {
 
   const driverMap = useMemo(() => new Map(drivers.map((d) => [d.id, d.full_name])), [drivers]);
 
-  // Current driver per vehicle: driver on the latest in_progress trip, else the most recent trip's driver.
+  // Current driver per vehicle: prioritizes telematics driver name from Trakzee, else active trip driver
   const currentDriverByMachine = useMemo(() => {
     const map = new Map<string, { name: string; onTrip: boolean }>();
+    for (const m of machines) {
+      if (m.telematics_driver_name) {
+        map.set(m.id, {
+          name: m.telematics_driver_name,
+          onTrip: Number(m.telematics_speed || 0) > 0 || Boolean(m.telematics_ignition),
+        });
+      }
+    }
     const sorted = [...trips].sort((a, b) => new Date(b.start_at ?? 0).getTime() - new Date(a.start_at ?? 0).getTime());
     for (const t of sorted) {
       if (map.has(t.machine_id) || !t.driver_id) continue;
       map.set(t.machine_id, { name: driverMap.get(t.driver_id) ?? "—", onTrip: t.status === "in_progress" });
     }
     return map;
-  }, [trips, driverMap]);
+  }, [trips, driverMap, machines]);
 
   const nextDueByMachine = useMemo(() => {
     const map = new Map<string, string>();
@@ -271,31 +329,31 @@ export default function FleetDashboard() {
 
   const kpiCards = [
     {
-      label: t.fleet.vehiclesOnRoad,
-      value: loading ? "—" : String(onRoadMachineIds.size),
-      sub: loading ? "" : `${onRoadMachineIds.size} / ${activeMachines.length} active · ${availabilityPct}% availability`,
-      icon: Truck,
+      label: "Fleet Live Active",
+      value: loading ? "—" : `${onRoadMachineIds.size} / ${machines.length}`,
+      sub: loading ? "" : `${movingVehicles.length} driving · ${idlingVehicles.length} idling · ${availabilityPct}% operational`,
+      icon: Activity,
       tone: "default",
+    },
+    {
+      label: "Total Fleet Distance",
+      value: loading ? "—" : `${formatNumber(totalOdometerKm)} km`,
+      sub: loading ? "" : `Cached live from ${machines.length} vehicle ECUs`,
+      icon: Gauge,
+      tone: "success",
     },
     {
       label: t.fleet.tripsToday,
       value: loading ? "—" : String(tripsInProgressToday + tripsCompletedToday),
       sub: loading ? "" : `${tripsInProgressToday} in progress / ${tripsCompletedToday} completed`,
       icon: Route,
-      tone: "success",
+      tone: "warning",
     },
     {
       label: t.fleet.fuelCostWeek,
       value: loading ? "—" : formatMoney(fuelCostThisWeek),
       sub: fuelDeltaLabel,
       icon: Fuel,
-      tone: "warning",
-    },
-    {
-      label: t.fleet.docsExpiring30,
-      value: loading ? "—" : String(expiringWithin30.length),
-      sub: loading ? "" : `${expiringWithin7.length} expiring within 7 days`,
-      icon: FileWarning,
       tone: "destructive",
     },
   ] as const;
@@ -304,25 +362,52 @@ export default function FleetDashboard() {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      <div className="flex items-center gap-3">
-        {organisation?.logo_url ? (
-          <img
-            src={organisation.logo_url}
-            alt={companyDisplayName}
-            className="h-12 w-12 rounded-xl object-contain border border-border bg-card p-1 shadow-sm shrink-0"
-          />
-        ) : (
-          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10 text-primary font-bold text-lg border border-border shadow-sm shrink-0">
-            {companyDisplayName ? companyDisplayName.trim().charAt(0).toUpperCase() : "C"}
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-3">
+          {organisation?.logo_url ? (
+            <img
+              src={organisation.logo_url}
+              alt={companyDisplayName}
+              className="h-12 w-12 rounded-xl object-contain border border-border bg-card p-1 shadow-sm shrink-0"
+            />
+          ) : (
+            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10 text-primary font-bold text-lg border border-border shadow-sm shrink-0">
+              {companyDisplayName ? companyDisplayName.trim().charAt(0).toUpperCase() : "C"}
+            </div>
+          )}
+          <div>
+            <h1 className="text-2xl font-semibold tracking-tight">
+              {companyDisplayName ? `${companyDisplayName} — ${t.fleet.dashboardTitle}` : t.fleet.dashboardTitle}
+            </h1>
+            <p className="text-sm text-muted-foreground">
+              {t.fleet.dashboardSub}
+            </p>
           </div>
-        )}
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">
-            {companyDisplayName ? `${companyDisplayName} — ${t.fleet.dashboardTitle}` : t.fleet.dashboardTitle}
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            {t.fleet.dashboardSub}
-          </p>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleQuickSync}
+            disabled={syncingGps}
+            className="gap-2"
+          >
+            <RefreshCw className={`h-4 w-4 ${syncingGps ? "animate-spin text-primary" : ""}`} />
+            {syncingGps ? "Syncing GPS..." : "Sync GPS"}
+          </Button>
+          <Button variant="outline" size="sm" asChild className="gap-2">
+            <Link to="/fleet/live-map">
+              <Navigation className="h-4 w-4 text-emerald-500" />
+              Live Fleet Map
+            </Link>
+          </Button>
+          <Button size="sm" asChild className="gap-2">
+            <Link to="/live">
+              <Radio className="h-4 w-4 animate-pulse text-amber-300" />
+              TV Wallboard
+            </Link>
+          </Button>
         </div>
       </div>
 
@@ -435,8 +520,11 @@ export default function FleetDashboard() {
         <div className="rounded-xl border border-border bg-card p-5 lg:col-span-2">
           <div className="mb-3 flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <MapPin className="h-4 w-4 text-muted-foreground" />
+              <Truck className="h-4 w-4 text-muted-foreground" />
               <h2 className="text-sm font-medium text-foreground">{t.fleet.statusBoard}</h2>
+              <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-xs font-medium text-emerald-600 dark:text-emerald-400">
+                {machines.length} Connected Vehicles
+              </span>
             </div>
             <Link to="/fleet/vehicles" className="text-xs font-medium text-primary hover:underline">
               {t.fleet.viewAll}
@@ -450,39 +538,83 @@ export default function FleetDashboard() {
             />
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[560px] text-sm">
+              <table className="w-full min-w-[700px] text-sm">
                 <thead className="text-left text-xs uppercase tracking-wide text-muted-foreground">
                   <tr>
-                    <th className="py-2 pr-3 font-medium">Vehicle</th>
+                    <th className="py-2 pr-3 font-medium">Vehicle / Plate</th>
+                    <th className="py-2 pr-3 font-medium">Live Motion</th>
                     <th className="py-2 pr-3 font-medium">Driver</th>
-                    <th className="py-2 pr-3 font-medium">Status</th>
-                    <th className="py-2 pr-3 font-medium">Odometer</th>
+                    <th className="py-2 pr-3 font-medium">Location</th>
+                    <th className="py-2 pr-3 font-medium">Cached Odometer</th>
                     <th className="py-2 pr-3 font-medium">Next service</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {machines.slice(0, 8).map((m) => {
+                  {machines.slice(0, 10).map((m) => {
                     const driver = currentDriverByMachine.get(m.id);
                     const nextDue = nextDueByMachine.get(m.id) ?? null;
+                    const speed = Number(m.telematics_speed || 0);
+                    const isMoving = speed > 0;
+                    const isIdle = !isMoving && Boolean(m.telematics_ignition);
                     return (
-                      <tr key={m.id} className="border-t border-border">
-                        <td className="py-2 pr-3">
-                          <Link to={`/fleet/vehicles/${m.id}`} className="font-medium hover:underline">{m.name}</Link>
-                          {m.plate_number && <span className="ml-1.5 text-xs text-muted-foreground">{m.plate_number}</span>}
+                      <tr key={m.id} className="border-t border-border hover:bg-muted/30 transition-colors">
+                        <td className="py-2.5 pr-3">
+                          <Link to={`/fleet/vehicles/${m.id}`} className="font-semibold text-foreground hover:underline">
+                            {m.plate_number || m.name}
+                          </Link>
+                          {m.plate_number && (
+                            <div className="text-xs text-muted-foreground line-clamp-1">{m.name}</div>
+                          )}
                         </td>
-                        <td className="py-2 pr-3 text-muted-foreground">
-                          {driver ? (<>{driver.name}{driver.onTrip && <span className="ml-1.5 text-xs text-primary">· on trip</span>}</>) : "—"}
+                        <td className="py-2.5 pr-3">
+                          {isMoving ? (
+                            <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/10 px-2.5 py-0.5 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
+                              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                              {speed} km/h
+                            </span>
+                          ) : isIdle ? (
+                            <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-500/10 px-2.5 py-0.5 text-xs font-semibold text-amber-600 dark:text-amber-400">
+                              <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+                              Idling (Key ON)
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1.5 rounded-full bg-muted px-2.5 py-0.5 text-xs font-medium text-muted-foreground">
+                              <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/40" />
+                              Parked (Off)
+                            </span>
+                          )}
                         </td>
-                        <td className="py-2 pr-3"><StatusBadge status={m.status} /></td>
-                        <td className="py-2 pr-3 text-muted-foreground">{formatNumber(m.current_odometer_km)} km</td>
-                        <td className="py-2 pr-3">{nextDue ? <StatusBadge status={scheduleStatus(nextDue)} /> : <span className="text-muted-foreground">—</span>}</td>
+                        <td className="py-2.5 pr-3 text-sm">
+                          {driver ? (
+                            <div className="font-medium text-foreground">
+                              {driver.name}
+                              {driver.onTrip && <span className="ml-1 text-xs text-emerald-600">· active</span>}
+                            </div>
+                          ) : (
+                            <span className="text-muted-foreground">—</span>
+                          )}
+                        </td>
+                        <td className="py-2.5 pr-3 text-xs text-muted-foreground max-w-[220px] truncate" title={m.telematics_location || m.home_depot || ""}>
+                          {m.telematics_location || m.home_depot || "—"}
+                        </td>
+                        <td className="py-2.5 pr-3 font-mono font-medium text-foreground">
+                          {m.current_odometer_km ? `${formatNumber(m.current_odometer_km)} km` : "—"}
+                        </td>
+                        <td className="py-2.5 pr-3">
+                          {nextDue ? <StatusBadge status={scheduleStatus(nextDue)} /> : <span className="text-muted-foreground">—</span>}
+                        </td>
                       </tr>
                     );
                   })}
                 </tbody>
               </table>
-              {machines.length > 8 && (
-                <div className="mt-2 text-xs text-muted-foreground">+{machines.length - 8} more vehicles</div>
+              {machines.length > 10 && (
+                <div className="mt-3 flex items-center justify-between text-xs text-muted-foreground pt-2 border-t border-border">
+                  <span>Showing top 10 of {machines.length} live telematics vehicles</span>
+                  <Link to="/fleet/vehicles" className="font-medium text-primary hover:underline">
+                    View all {machines.length} vehicles →
+                  </Link>
+                </div>
               )}
             </div>
           )}

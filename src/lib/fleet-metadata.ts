@@ -53,6 +53,11 @@ export interface FleetVehicle {
   telematics_speed?: number | null;
   telematics_ignition?: boolean | null;
   telematics_battery_volt?: number | null;
+  telematics_battery_pct?: number | null;
+  telematics_location?: string | null;
+  telematics_driver_name?: string | null;
+  telematics_heading?: number | null;
+  telematics_device_model?: string | null;
   telematics_latitude?: number | null;
   telematics_longitude?: number | null;
   telematics_last_at?: string | null;
@@ -120,6 +125,11 @@ export function parseMachine(raw: any, index?: number): FleetVehicle {
   let telematics_speed: number | null = (raw as any).telematics_speed != null ? Number((raw as any).telematics_speed) : null;
   let telematics_ignition: boolean | null = (raw as any).telematics_ignition != null ? Boolean((raw as any).telematics_ignition) : null;
   let telematics_battery_volt: number | null = (raw as any).telematics_battery_volt != null ? Number((raw as any).telematics_battery_volt) : null;
+  let telematics_battery_pct: number | null = (raw as any).telematics_battery_pct != null ? Number((raw as any).telematics_battery_pct) : null;
+  let telematics_location: string | null = (raw as any).telematics_location ?? null;
+  let telematics_driver_name: string | null = (raw as any).telematics_driver_name ?? null;
+  let telematics_heading: number | null = (raw as any).telematics_heading != null ? Number((raw as any).telematics_heading) : null;
+  let telematics_device_model: string | null = (raw as any).telematics_device_model ?? null;
   let telematics_latitude: number | null = (raw as any).telematics_latitude != null ? Number((raw as any).telematics_latitude) : null;
   let telematics_longitude: number | null = (raw as any).telematics_longitude != null ? Number((raw as any).telematics_longitude) : null;
   let telematics_last_at: string | null = (raw as any).telematics_last_at ?? null;
@@ -152,10 +162,25 @@ export function parseMachine(raw: any, index?: number): FleetVehicle {
         if (telematics_speed == null && t.speed != null) telematics_speed = Number(t.speed);
         if (telematics_ignition == null && t.ignition != null) telematics_ignition = Boolean(t.ignition);
         if (telematics_battery_volt == null && t.battery_volt != null) telematics_battery_volt = Number(t.battery_volt);
+        if (telematics_battery_pct == null && t.battery_percentage != null) telematics_battery_pct = Number(t.battery_percentage);
+        if (telematics_location == null && t.location != null) telematics_location = String(t.location);
+        if (telematics_driver_name == null && t.driver_name != null) telematics_driver_name = String(t.driver_name);
+        if (telematics_heading == null && t.heading != null) telematics_heading = Number(t.heading);
+        if (telematics_device_model == null && t.device_model != null) telematics_device_model = String(t.device_model);
         if (telematics_latitude == null && t.latitude != null) telematics_latitude = Number(t.latitude);
         if (telematics_longitude == null && t.longitude != null) telematics_longitude = Number(t.longitude);
         if (telematics_last_at == null && t.last_at != null) telematics_last_at = String(t.last_at);
         if (telematics_raw == null && t.raw != null) telematics_raw = t.raw;
+
+        // Fallback directly to t.raw fields if not yet populated
+        if (!telematics_location && t.raw?.Location && t.raw.Location !== "--") telematics_location = String(t.raw.Location);
+        if (!telematics_driver_name && t.raw?.Driver_First_Name) {
+          const dn = [t.raw.Driver_First_Name, t.raw.Driver_Middle_Name, t.raw.Driver_Last_Name].filter((n: any) => n && n !== "--").join(" ");
+          if (dn) telematics_driver_name = dn;
+        }
+        if (telematics_battery_pct == null && t.raw?.battery_percentage != null && t.raw.battery_percentage !== "--") {
+          telematics_battery_pct = Number(t.raw.battery_percentage);
+        }
       }
       if (telematics_imei == null && parsed.telematics_imei != null) telematics_imei = String(parsed.telematics_imei);
     } catch {
@@ -207,6 +232,11 @@ export function parseMachine(raw: any, index?: number): FleetVehicle {
     telematics_speed,
     telematics_ignition,
     telematics_battery_volt,
+    telematics_battery_pct,
+    telematics_location,
+    telematics_driver_name,
+    telematics_heading,
+    telematics_device_model,
     telematics_latitude,
     telematics_longitude,
     telematics_last_at,

@@ -118,6 +118,122 @@ serve(async (req) => {
 
     const action = body.action || "sync_fleet";
 
+    if (action === "purge_manual_vehicles") {
+      const orgId = sanitizeString(body.organisation_id || "df6b0c4b-e56b-4694-838a-0381eb480043");
+      const targetOrgId = orgId;
+
+      // 1. Fetch live vehicles from Trakzee to build whitelist
+      const rawServerUrl = sanitizeString(body.server_url || "https://trakzee.uffizio.com/webservice", 200);
+      const username = sanitizeString(body.username || "mdhfrancis@gmail.com");
+      const password = body.password ? String(body.password).trim() : "Mdh@2023";
+      const companyName = sanitizeString(body.company_name || "LOGISTIXWARE");
+      const projectId = sanitizeString(body.project_id || "37", 20);
+
+      const { url: serverUrl } = await resolveBestServerUrl(rawServerUrl);
+      const loginRes = await fetch(`${serverUrl}?token=generateAccessToken`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, password }),
+        signal: AbortSignal.timeout(15000),
+      });
+      const loginParsed = await safeParseJson(loginRes);
+      const token = loginParsed.data?.data?.token;
+
+      if (!token) {
+        return new Response(
+          JSON.stringify({ success: false, error: "Could not authenticate with Trakzee to verify live fleet" }),
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      const liveRes = await fetch(`${serverUrl}?token=getTokenBaseLiveData&ProjectId=${encodeURIComponent(projectId)}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "auth-code": token },
+        body: JSON.stringify({ company_names: companyName, format: "json" }),
+        signal: AbortSignal.timeout(20000),
+      });
+      const liveParsed = await safeParseJson(liveRes);
+      const trakzeeVehicles = liveParsed.data?.root?.VehicleData || liveParsed.data?.VehicleData || (Array.isArray(liveParsed.data) ? liveParsed.data : []);
+
+      if (trakzeeVehicles.length === 0) {
+        return new Response(
+          JSON.stringify({ success: false, error: "Trakzee returned 0 vehicles; aborting purge to protect fleet." }),
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      const trakzeePlates = new Set(trakzeeVehicles.map((v) => normalizePlate(v.Vehicle_No || v.Vehicle_Name)));
+      const trakzeeImeis = new Set(trakzeeVehicles.map((v) => normalizePlate(v.Imeino)));
+
+      // 2. Fetch all machines for this organisation
+      const { data: allMachines } = await supabase
+        .from("machines")
+        .select("id, name, plate_number, notes")
+        .eq("organisation_id", targetOrgId);
+
+      const toDeleteIds: string[] = [];
+      const deletedDetails: any[] = [];
+
+      for (const m of (allMachines || [])) {
+        const normPlate = normalizePlate(m.plate_number || m.name);
+        let imei = "";
+        try {
+          if (m.notes && m.notes.startsWith("{")) {
+            const parsed = JSON.parse(m.notes);
+            imei = normalizePlate(parsed.telematics_imei || parsed.telematics?.imei);
+          }
+        } catch (_) {}
+
+        const isTrakzee = (normPlate && trakzeePlates.has(normPlate)) || (imei && trakzeeImeis.has(imei));
+        if (!isTrakzee) {
+          toDeleteIds.push(m.id);
+          deletedDetails.push({ id: m.id, name: m.name, plate: m.plate_number });
+        }
+      }
+
+      if (toDeleteIds.length > 0) {
+        // Cascade cleanup child references if any
+        for (const mid of toDeleteIds) {
+          await supabase.from("trips").delete().eq("machine_id", mid);
+          await supabase.from("service_schedules").delete().eq("machine_id", mid);
+          await supabase.from("service_logs").delete().eq("machine_id", mid);
+          await supabase.from("meter_readings").delete().eq("machine_id", mid);
+          await supabase.from("vehicle_documents").delete().eq("machine_id", mid);
+          await supabase.from("machine_downtime_events").delete().eq("machine_id", mid);
+          await supabase.from("tyres").delete().eq("machine_id", mid);
+          await supabase.from("fault_reports").delete().eq("machine_id", mid);
+          await supabase.from("work_orders").delete().eq("machine_id", mid);
+        }
+
+        const { error: delErr } = await supabase
+          .from("machines")
+          .delete()
+          .in("id", toDeleteIds);
+
+        if (delErr) {
+          return new Response(
+            JSON.stringify({ success: false, error: `Failed to remove manual vehicles: ${delErr.message}` }),
+            { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+      }
+
+      const { count: remainingCount } = await supabase
+        .from("machines")
+        .select("id", { count: "exact", head: true })
+        .eq("organisation_id", targetOrgId);
+
+      return new Response(
+        JSON.stringify({
+          success: true,
+          deletedCount: toDeleteIds.length,
+          deletedVehicles: deletedDetails,
+          remainingFleetCount: remainingCount,
+        }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     // ─────────────────────────────────────────────────────────────
     // ACTION 1: Test Connection
     // ─────────────────────────────────────────────────────────────
@@ -390,6 +506,13 @@ serve(async (req) => {
         liveData?.VehicleData ||
         (Array.isArray(liveData) ? liveData : []);
 
+      if (vehicleList.length === 0) {
+        return new Response(
+          JSON.stringify({ success: true, vehicles_returned: 0, vehicles_updated: 0, raw_response: liveData }),
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
       // 5. Match and update vehicles in Supabase
       let updatedCount = 0;
       const syncLogs: any[] = [];
@@ -406,12 +529,18 @@ serve(async (req) => {
           return false;
         });
 
-        const odoKm = parseOdometerKm(tVehicle.Odometer);
+        const odoKm = parseOdometerKm(tVehicle.can_odometer) ?? parseOdometerKm(tVehicle.Odometer);
         const speed = tVehicle.Speed !== undefined && tVehicle.Speed !== "--" ? Number(tVehicle.Speed) : 0;
         const lat = tVehicle.Latitude && tVehicle.Latitude !== "--" ? Number(tVehicle.Latitude) : null;
         const lng = tVehicle.Longitude && tVehicle.Longitude !== "--" ? Number(tVehicle.Longitude) : null;
         const ign = tVehicle.IGN === "ON";
         const volt = tVehicle.ExternalVolt && tVehicle.ExternalVolt !== "--" ? Number(tVehicle.ExternalVolt) : null;
+        const batteryPct = tVehicle.battery_percentage !== undefined && tVehicle.battery_percentage !== "--" ? Number(tVehicle.battery_percentage) : null;
+        const location = tVehicle.Location && tVehicle.Location !== "--" ? String(tVehicle.Location).trim() : null;
+        const driverName = [tVehicle.Driver_First_Name, tVehicle.Driver_Middle_Name, tVehicle.Driver_Last_Name].filter((n) => n && n !== "--").join(" ") || null;
+        const heading = tVehicle.Angle !== undefined && tVehicle.Angle !== "--" ? Number(tVehicle.Angle) : null;
+        const deviceModel = tVehicle.DeviceModel || "GPS";
+        const gpsTime = tVehicle.GPSActualTime || tVehicle.Datetime || new Date().toISOString();
 
         if (!match) {
           // Default to auto-importing any unmatched vehicles from Trakzee unless explicitly disabled
@@ -420,15 +549,21 @@ serve(async (req) => {
             const metaNotes: any = {
               vehicle_code: rawPlate,
               category: "Vehicle",
-              text: `[Auto-imported from Trakzee telematics | Model: ${tVehicle.DeviceModel || "GPS"}]`,
+              text: `[Auto-imported from Trakzee telematics | Model: ${deviceModel}]`,
               telematics_imei: imei || null,
               telematics: {
                 imei: imei || null,
                 speed,
                 ignition: ign,
                 battery_volt: volt,
+                battery_percentage: batteryPct,
                 latitude: lat,
                 longitude: lng,
+                location,
+                driver_name: driverName,
+                heading,
+                device_model: deviceModel,
+                gps_time: gpsTime,
                 last_at: new Date().toISOString(),
                 raw: tVehicle,
               },
@@ -443,6 +578,7 @@ serve(async (req) => {
               fuel_type: "Diesel",
               current_odometer_km: odoKm && odoKm > 0 ? odoKm : 0,
               current_hours: 0,
+              home_depot: location || "LOGISTIXWARE Depot",
               notes: JSON.stringify(metaNotes),
             };
 
@@ -478,8 +614,14 @@ serve(async (req) => {
             speed,
             ignition: ign,
             battery_volt: volt,
+            battery_percentage: batteryPct ?? existingNotes.telematics?.battery_percentage ?? null,
             latitude: lat,
             longitude: lng,
+            location: location || existingNotes.telematics?.location || null,
+            driver_name: driverName || existingNotes.telematics?.driver_name || null,
+            heading: heading ?? existingNotes.telematics?.heading ?? null,
+            device_model: deviceModel,
+            gps_time: gpsTime,
             last_at: new Date().toISOString(),
             raw: tVehicle,
           },
@@ -489,11 +631,15 @@ serve(async (req) => {
           notes: JSON.stringify(updatedNotes),
         };
 
-        // Only update odometer if valid and >= current
+        // Cache and persist odometer reading: only update if valid and >= current
         if (odoKm !== null && odoKm > 0) {
           if (!match.current_odometer_km || odoKm >= match.current_odometer_km) {
             updatePayload.current_odometer_km = odoKm;
           }
+        }
+
+        if (location && (!match.home_depot || match.home_depot === "LOGISTIXWARE Depot")) {
+          updatePayload.home_depot = location;
         }
 
         const { error: updErr } = await supabase
