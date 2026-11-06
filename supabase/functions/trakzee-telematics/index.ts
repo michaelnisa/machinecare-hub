@@ -659,6 +659,88 @@ serve(async (req) => {
         }
       }
 
+      // Automated Odometer PM Trigger: Evaluate active vehicle schedules against updated odometers
+      let pmTriggerCount = 0;
+      const pmTriggerDetails: string[] = [];
+      try {
+        const { data: activeSchedules } = await supabase
+          .from("service_schedules")
+          .select("id, machine_id, name, service_type, interval_hours, last_service_hours, next_due_hours, instructions, status")
+          .in("status", ["ok", "due_soon", "overdue"]);
+
+        if (activeSchedules && activeSchedules.length > 0) {
+          const scheduleMachineIds = Array.from(new Set(activeSchedules.map((s: any) => s.machine_id)));
+          const { data: openWos } = await supabase
+            .from("work_orders")
+            .select("id, machine_id, schedule_id")
+            .in("machine_id", scheduleMachineIds)
+            .in("status", ["open", "assigned", "in_progress", "waiting_parts"]);
+
+          const existingOpenWos = new Set(
+            (openWos || []).map((w: any) => `${w.machine_id}_${w.schedule_id}`)
+          );
+
+          const { data: freshMachines } = await supabase
+            .from("machines")
+            .select("id, name, plate_number, current_odometer_km")
+            .in("id", scheduleMachineIds);
+
+          const freshMachineMap = new Map((freshMachines || []).map((m: any) => [m.id, m]));
+
+          for (const s of activeSchedules) {
+            const m: any = freshMachineMap.get(s.machine_id);
+            if (!m) continue;
+
+            const currentOdo = Number(m.current_odometer_km || 0);
+            const nextDue = Number(s.next_due_hours || 0);
+            const interval = Number(s.interval_hours || 10000);
+
+            if (currentOdo <= 0 || nextDue <= 0) continue;
+
+            const remaining = nextDue - currentOdo;
+            if (remaining <= 500) {
+              const dedupeKey = `${s.machine_id}_${s.id}`;
+              const isOverdue = remaining <= 0;
+
+              await supabase
+                .from("service_schedules")
+                .update({ status: isOverdue ? "overdue" : "due_soon" })
+                .eq("id", s.id);
+
+              if (!existingOpenWos.has(dedupeKey)) {
+                const plate = m.plate_number || m.name;
+                const title = `PM: ${s.name} · ${plate}`;
+                const description = `Automated Odometer-Triggered PM Work Order.\n` +
+                  `Vehicle: ${plate} (${m.name})\n` +
+                  `Live Telematics Odometer: ${currentOdo.toLocaleString()} km\n` +
+                  `Target Threshold: ${nextDue.toLocaleString()} km (Interval: ${interval.toLocaleString()} km)\n` +
+                  `Status: ${isOverdue ? `Overdue by ${Math.abs(remaining).toLocaleString()} km` : `Due in ${remaining.toLocaleString()} km`}\n\n` +
+                  `Required Tasks:\n${s.instructions || "Inspect and replace scheduled maintenance items."}`;
+
+                const { error: woErr } = await supabase.from("work_orders").insert({
+                  organisation_id: targetOrgId,
+                  machine_id: s.machine_id,
+                  schedule_id: s.id,
+                  title,
+                  description,
+                  priority: isOverdue ? "high" : "normal",
+                  status: "open",
+                  due_date: new Date().toISOString().slice(0, 10),
+                });
+
+                if (!woErr) {
+                  existingOpenWos.add(dedupeKey);
+                  pmTriggerCount++;
+                  pmTriggerDetails.push(`${plate}: ${s.name} (${currentOdo.toLocaleString()} km)`);
+                }
+              }
+            }
+          }
+        }
+      } catch (pmErr) {
+        console.error("Error in automated PM evaluation:", pmErr);
+      }
+
       // Update last synced timestamp on organisation
       try {
         await supabase
@@ -673,8 +755,96 @@ serve(async (req) => {
           vehicles_returned: vehicleList.length,
           vehicles_updated: updatedCount,
           last_synced_at: new Date().toISOString(),
+          pm_work_orders_created: pmTriggerCount,
+          pm_details: pmTriggerDetails,
           details: syncLogs,
         }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    if (action === "evaluate_pm") {
+      const targetOrgId = body.organisation_id || "df6b0c4b-e56b-4694-838a-0381eb480043";
+      const { data: activeSchedules } = await supabase
+        .from("service_schedules")
+        .select("id, machine_id, name, service_type, interval_hours, last_service_hours, next_due_hours, instructions, status")
+        .in("status", ["ok", "due_soon", "overdue"]);
+
+      let pmCreated = 0;
+      const details: string[] = [];
+
+      if (activeSchedules && activeSchedules.length > 0) {
+        const scheduleMachineIds = Array.from(new Set(activeSchedules.map((s: any) => s.machine_id)));
+        const { data: openWos } = await supabase
+          .from("work_orders")
+          .select("id, machine_id, schedule_id")
+          .in("machine_id", scheduleMachineIds)
+          .in("status", ["open", "assigned", "in_progress", "waiting_parts"]);
+
+        const existingOpenWos = new Set(
+          (openWos || []).map((w: any) => `${w.machine_id}_${w.schedule_id}`)
+        );
+
+        const { data: freshMachines } = await supabase
+          .from("machines")
+          .select("id, name, plate_number, current_odometer_km")
+          .in("id", scheduleMachineIds);
+
+        const freshMachineMap = new Map((freshMachines || []).map((m: any) => [m.id, m]));
+
+        for (const s of activeSchedules) {
+          const m: any = freshMachineMap.get(s.machine_id);
+          if (!m) continue;
+
+          const currentOdo = Number(m.current_odometer_km || 0);
+          const nextDue = Number(s.next_due_hours || 0);
+          const interval = Number(s.interval_hours || 10000);
+
+          if (currentOdo <= 0 || nextDue <= 0) continue;
+
+          const remaining = nextDue - currentOdo;
+          if (remaining <= 500) {
+            const dedupeKey = `${s.machine_id}_${s.id}`;
+            const isOverdue = remaining <= 0;
+
+            await supabase
+              .from("service_schedules")
+              .update({ status: isOverdue ? "overdue" : "due_soon" })
+              .eq("id", s.id);
+
+            if (!existingOpenWos.has(dedupeKey)) {
+              const plate = m.plate_number || m.name;
+              const title = `PM: ${s.name} · ${plate}`;
+              const description = `Automated Odometer-Triggered PM Work Order.\n` +
+                `Vehicle: ${plate} (${m.name})\n` +
+                `Live Telematics Odometer: ${currentOdo.toLocaleString()} km\n` +
+                `Target Threshold: ${nextDue.toLocaleString()} km (Interval: ${interval.toLocaleString()} km)\n` +
+                `Status: ${isOverdue ? `Overdue by ${Math.abs(remaining).toLocaleString()} km` : `Due in ${remaining.toLocaleString()} km`}\n\n` +
+                `Required Tasks:\n${s.instructions || "Inspect and replace scheduled maintenance items."}`;
+
+              const { error: woErr } = await supabase.from("work_orders").insert({
+                organisation_id: targetOrgId,
+                machine_id: s.machine_id,
+                schedule_id: s.id,
+                title,
+                description,
+                priority: isOverdue ? "high" : "normal",
+                status: "open",
+                due_date: new Date().toISOString().slice(0, 10),
+              });
+
+              if (!woErr) {
+                existingOpenWos.add(dedupeKey);
+                pmCreated++;
+                details.push(`${plate}: ${s.name}`);
+              }
+            }
+          }
+        }
+      }
+
+      return new Response(
+        JSON.stringify({ success: true, pm_work_orders_created: pmCreated, details }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }

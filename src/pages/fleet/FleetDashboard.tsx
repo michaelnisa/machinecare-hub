@@ -31,6 +31,7 @@ import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { parseMachine, SAFE_MACHINE_COLUMNS, type FleetVehicle } from "@/lib/fleet-metadata";
 import { syncTrakzeeFleet } from "@/services/trakzeeService";
+import { computeOdoPmStatus } from "@/services/fleetPmService";
 
 const toneClasses: Record<string, string> = {
   default: "bg-primary-soft text-primary",
@@ -116,7 +117,7 @@ export default function FleetDashboard() {
       supabase.from("trips").select("id, machine_id, driver_id, status, start_at, end_at, start_odo, end_odo, fuel_used_l"),
       supabase.from("fuel_logs").select("machine_id, recorded_at, fuel_cost"),
       supabase.from("tyres").select("id, machine_id, position, brand, target_replace_km, fitted_odo, removed_at").is("removed_at", null),
-      supabase.from("service_schedules").select("machine_id, next_due_date"),
+      supabase.from("service_schedules").select("machine_id, next_due_date, interval_hours, last_service_hours, next_due_hours, name, status"),
       supabase.from("work_orders").select("id, machine_id, status, title, wo_number, wo_year, priority").in("status", Array.from(OPEN_WO_STATUSES)),
       supabase.from("fault_reports").select("id, machine_id, reporter_name, description, status, created_at").order("created_at", { ascending: false }).limit(5),
       supabase.from("checklist_templates").select("id").eq("is_fleet_pre_start", true),
@@ -294,14 +295,46 @@ export default function FleetDashboard() {
   }, [trips, driverMap, machines]);
 
   const nextDueByMachine = useMemo(() => {
-    const map = new Map<string, string>();
-    for (const s of schedules) {
-      if (!s.next_due_date) continue;
-      const existing = map.get(s.machine_id);
-      if (!existing || new Date(s.next_due_date) < new Date(existing)) map.set(s.machine_id, s.next_due_date);
+    const map = new Map<string, { label: string; status: "ok" | "due_soon" | "overdue"; isOdo: boolean }>();
+    for (const m of machines) {
+      const vehicleScheds = schedules.filter((s) => s.machine_id === m.id);
+      if (vehicleScheds.length === 0) continue;
+
+      let worstStatus: "ok" | "due_soon" | "overdue" = "ok";
+      let displayLabel = "—";
+      let isOdo = false;
+
+      for (const s of vehicleScheds) {
+        if (Number(s.interval_hours || 0) >= 1000 || (m.current_odometer_km ?? 0) > 0) {
+          const odo = computeOdoPmStatus(s, m.current_odometer_km);
+          isOdo = true;
+          if (odo.status === "overdue") {
+            worstStatus = "overdue";
+            displayLabel = odo.statusLabel;
+            break;
+          } else if (odo.status === "due_soon" && worstStatus !== "overdue") {
+            worstStatus = "due_soon";
+            displayLabel = odo.statusLabel;
+          } else if (displayLabel === "—") {
+            displayLabel = odo.statusLabel;
+          }
+        } else if (s.next_due_date) {
+          const dateStatus = scheduleStatus(s.next_due_date);
+          if (dateStatus === "overdue") {
+            worstStatus = "overdue";
+            displayLabel = `Overdue (${formatDate(s.next_due_date)})`;
+          } else if (dateStatus === "due_soon" && worstStatus !== "overdue") {
+            worstStatus = "due_soon";
+            displayLabel = `Due ${formatDate(s.next_due_date)}`;
+          } else if (displayLabel === "—") {
+            displayLabel = formatDate(s.next_due_date);
+          }
+        }
+      }
+      map.set(m.id, { label: displayLabel, status: worstStatus, isOdo });
     }
     return map;
-  }, [schedules]);
+  }, [schedules, machines]);
 
   const openWoGroups = useMemo<OpenWoGroup[]>(() => {
     const priorityRank: Record<string, number> = { critical: 3, high: 2, normal: 1, low: 0 };
@@ -601,7 +634,21 @@ export default function FleetDashboard() {
                           {m.current_odometer_km ? `${formatNumber(m.current_odometer_km)} km` : "—"}
                         </td>
                         <td className="py-2.5 pr-3">
-                          {nextDue ? <StatusBadge status={scheduleStatus(nextDue)} /> : <span className="text-muted-foreground">—</span>}
+                          {nextDue ? (
+                            <span
+                              className={`inline-block text-xs font-semibold px-2 py-0.5 rounded-full border ${
+                                nextDue.status === "overdue"
+                                  ? "text-red-600 bg-red-500/10 border-red-500/20"
+                                  : nextDue.status === "due_soon"
+                                  ? "text-amber-600 bg-amber-500/10 border-amber-500/20"
+                                  : "text-muted-foreground bg-muted/60 border-border"
+                              }`}
+                            >
+                              {nextDue.label}
+                            </span>
+                          ) : (
+                            <span className="text-muted-foreground">—</span>
+                          )}
                         </td>
                       </tr>
                     );

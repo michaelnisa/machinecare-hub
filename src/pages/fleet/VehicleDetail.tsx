@@ -30,6 +30,8 @@ import {
   type FleetTrip,
 } from "@/lib/fleet-metadata";
 import { VehicleDialog } from "./Vehicles";
+import { ScheduleFormDialog } from "@/components/ScheduleFormDialog";
+import { computeOdoPmStatus, recordCompletedPmService } from "@/services/fleetPmService";
 import {
   Truck,
   Container,
@@ -155,6 +157,18 @@ export default function FleetVehicleDetail() {
   const [docExpiry, setDocExpiry] = useState("");
   const [docNotes, setDocNotes] = useState("");
   const [docSaving, setDocSaving] = useState(false);
+
+  // PM Schedule & Service Logging Modals
+  const [scheduleDialogOpen, setScheduleDialogOpen] = useState(false);
+  const [editingSchedule, setEditingSchedule] = useState<any>(null);
+
+  const [logModalOpen, setLogModalOpen] = useState(false);
+  const [selectedScheduleForLog, setSelectedScheduleForLog] = useState<any>(null);
+  const [logOdo, setLogOdo] = useState("");
+  const [logCost, setLogCost] = useState("");
+  const [logTech, setLogTech] = useState("");
+  const [logNotes, setLogNotes] = useState("");
+  const [logSaving, setLogSaving] = useState(false);
 
   const load = async () => {
     if (!profile || !id) return;
@@ -302,6 +316,35 @@ export default function FleetVehicleDetail() {
       toast.error(err.message || "Failed to record document");
     } finally {
       setDocSaving(false);
+    }
+  };
+
+  const handleSaveCompletedService = async () => {
+    if (!selectedScheduleForLog || !vehicle) return;
+    const odoNum = Number(logOdo);
+    if (!odoNum || odoNum <= 0) {
+      toast.error("Please enter a valid completed odometer reading");
+      return;
+    }
+    setLogSaving(true);
+    try {
+      const res = await recordCompletedPmService({
+        scheduleId: selectedScheduleForLog.id,
+        machineId: vehicle.id,
+        completedOdometerKm: odoNum,
+        costTotal: logCost ? Number(logCost) : undefined,
+        performedBy: logTech.trim() || undefined,
+        notes: logNotes.trim() || undefined,
+      });
+
+      if (!res.success) throw new Error(res.error || "Failed to record service");
+      toast.success(`Service completed! Next due service target set to ${res.nextDueOdo.toLocaleString()} km.`);
+      setLogModalOpen(false);
+      load();
+    } catch (err: any) {
+      toast.error(err.message || "Failed to record completed service");
+    } finally {
+      setLogSaving(false);
     }
   };
 
@@ -940,37 +983,132 @@ export default function FleetVehicleDetail() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* PM Schedules */}
             <div className="p-5 rounded-2xl border border-border bg-card shadow-2xs space-y-4">
-              <div className="flex items-center justify-between pb-3 border-b border-border">
-                <h3 className="font-semibold text-base text-foreground flex items-center gap-2">
-                  <Calendar className="h-4 w-4 text-primary" /> Active PM Schedules
-                </h3>
-                <span className="text-xs text-muted-foreground">{schedules.length} schedules</span>
+              <div className="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-border">
+                <div>
+                  <h3 className="font-semibold text-base text-foreground flex items-center gap-2">
+                    <Gauge className="h-4 w-4 text-primary" /> Odometer-Triggered PM Schedules
+                  </h3>
+                  <div className="text-xs text-muted-foreground mt-0.5">
+                    Live Odometer: <span className="font-mono font-bold text-foreground">{vehicle?.current_odometer_km ? `${formatNumber(vehicle.current_odometer_km)} km` : "No GPS reading"}</span>
+                  </div>
+                </div>
+                {canWrite && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-8 gap-1.5 text-xs"
+                    onClick={() => {
+                      setEditingSchedule(null);
+                      setScheduleDialogOpen(true);
+                    }}
+                  >
+                    <Plus className="h-3.5 w-3.5" /> Add Interval
+                  </Button>
+                )}
               </div>
 
               {schedules.length === 0 ? (
-                <div className="text-center py-8 text-xs text-muted-foreground">
-                  No active preventive maintenance schedules set for this unit.
+                <div className="text-center py-8 text-xs text-muted-foreground space-y-3">
+                  <p>No active preventive maintenance schedules set for this unit.</p>
+                  {canWrite && (
+                    <Button
+                      size="sm"
+                      onClick={() => {
+                        setEditingSchedule(null);
+                        setScheduleDialogOpen(true);
+                      }}
+                    >
+                      <Plus className="mr-1.5 h-3.5 w-3.5" /> Add Service Interval
+                    </Button>
+                  )}
                 </div>
               ) : (
                 <div className="space-y-3">
-                  {schedules.map((s) => (
-                    <div key={s.id} className="p-3 rounded-xl border border-border/60 bg-muted/20 flex items-center justify-between">
-                      <div>
-                        <div className="font-semibold text-foreground text-sm">{s.name}</div>
-                        <div className="text-xs text-muted-foreground mt-0.5">
-                          {s.interval_hours ? `Every ${s.interval_hours} operating hours` : `Every ${s.interval_days ?? 90} days`}
+                  {schedules.map((s) => {
+                    const odoStatus = computeOdoPmStatus(s, vehicle?.current_odometer_km);
+                    const isOdo = Number(s.interval_hours || 0) >= 1000 || (vehicle?.current_odometer_km ?? 0) > 0;
+                    return (
+                      <div key={s.id} className="p-3.5 rounded-xl border border-border/70 bg-muted/20 space-y-2.5">
+                        <div className="flex items-start justify-between gap-2">
+                          <div>
+                            <div className="font-semibold text-foreground text-sm flex items-center gap-2">
+                              {s.name}
+                              <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground capitalize">
+                                {s.service_type}
+                              </span>
+                            </div>
+                            <div className="text-xs text-muted-foreground mt-0.5">
+                              {isOdo
+                                ? `Every ${odoStatus.intervalKm.toLocaleString()} km · Target: ${odoStatus.nextDueOdo.toLocaleString()} km`
+                                : (s.interval_hours ? `Every ${s.interval_hours} operating hours` : `Every ${s.interval_days ?? 90} days`)}
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <span
+                              className={`inline-block text-xs font-semibold px-2.5 py-0.5 rounded-full border ${
+                                odoStatus.status === "overdue"
+                                  ? "text-red-600 bg-red-500/10 border-red-500/20"
+                                  : odoStatus.status === "due_soon"
+                                  ? "text-amber-600 bg-amber-500/10 border-amber-500/20"
+                                  : "text-emerald-600 bg-emerald-500/10 border-emerald-500/20"
+                              }`}
+                            >
+                              {isOdo ? odoStatus.statusLabel : (s.next_due_date ? formatDate(s.next_due_date) : "Active")}
+                            </span>
+                          </div>
                         </div>
+
+                        {/* Progress bar towards service */}
+                        {isOdo && (
+                          <div className="space-y-1">
+                            <div className="flex items-center justify-between text-[11px] text-muted-foreground">
+                              <span>Service progress</span>
+                              <span className="font-mono font-medium">{odoStatus.progressPct}%</span>
+                            </div>
+                            <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+                              <div
+                                className={`h-full rounded-full transition-all ${
+                                  odoStatus.status === "overdue" ? "bg-red-500" : odoStatus.status === "due_soon" ? "bg-amber-500" : "bg-emerald-500"
+                                }`}
+                                style={{ width: `${Math.min(100, Math.max(5, odoStatus.progressPct))}%` }}
+                              />
+                            </div>
+                          </div>
+                        )}
+
+                        {canWrite && (
+                          <div className="flex items-center justify-end gap-2 pt-1 border-t border-border/40">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-7 text-xs gap-1"
+                              onClick={() => {
+                                setSelectedScheduleForLog(s);
+                                setLogOdo(vehicle?.current_odometer_km ? String(vehicle.current_odometer_km) : "");
+                                setLogCost("");
+                                setLogTech("");
+                                setLogNotes("");
+                                setLogModalOpen(true);
+                              }}
+                            >
+                              <Wrench className="h-3 w-3 text-primary" /> Log Completed Service
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-7 text-xs text-muted-foreground"
+                              onClick={() => {
+                                setEditingSchedule(s);
+                                setScheduleDialogOpen(true);
+                              }}
+                            >
+                              <Pencil className="h-3 w-3" /> Edit
+                            </Button>
+                          </div>
+                        )}
                       </div>
-                      <div className="text-right">
-                        <div className="text-xs font-bold text-foreground">
-                          {s.next_due_date ? formatDate(s.next_due_date) : (s.next_due_hours ? `${formatNumber(s.next_due_hours)} hrs` : "Pending")}
-                        </div>
-                        <span className="inline-block mt-0.5 text-[10px] font-semibold text-emerald-600 bg-emerald-500/10 px-1.5 py-0.2 rounded border border-emerald-500/20">
-                          Active PM
-                        </span>
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -1256,6 +1394,90 @@ export default function FleetVehicleDetail() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Log Completed Service Modal */}
+      <Dialog open={logModalOpen} onOpenChange={setLogModalOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Wrench className="h-5 w-5 text-primary" />
+              Record Completed Maintenance Service
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-4 py-2">
+            <div className="rounded-lg bg-muted/40 p-3 border border-border">
+              <div className="font-semibold text-sm text-foreground">{selectedScheduleForLog?.name}</div>
+              <div className="text-xs text-muted-foreground mt-0.5">
+                Service Interval: {Number(selectedScheduleForLog?.interval_hours || 10000).toLocaleString()} km
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label>Completed Odometer Reading (km) *</Label>
+              <Input
+                type="number"
+                value={logOdo}
+                onChange={(e) => setLogOdo(e.target.value)}
+                placeholder="e.g. 95000"
+                required
+              />
+              <p className="text-[11px] text-muted-foreground">
+                Next service will automatically be scheduled at {logOdo ? `${(Number(logOdo) + Number(selectedScheduleForLog?.interval_hours || 10000)).toLocaleString()} km` : "..."}
+              </p>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label>Total Cost (TZS)</Label>
+                <Input
+                  type="number"
+                  value={logCost}
+                  onChange={(e) => setLogCost(e.target.value)}
+                  placeholder="e.g. 350000"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label>Technician / Garage</Label>
+                <Input
+                  value={logTech}
+                  onChange={(e) => setLogTech(e.target.value)}
+                  placeholder="e.g. Master Tech John"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label>Service Notes & Parts Replaced</Label>
+              <Input
+                value={logNotes}
+                onChange={(e) => setLogNotes(e.target.value)}
+                placeholder="e.g. 15W40 Castrol, oil filter, air filter"
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setLogModalOpen(false)}>Cancel</Button>
+            <Button onClick={handleSaveCompletedService} disabled={logSaving || !logOdo}>
+              {logSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Save & Advance Odometer Target
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Schedule Form Dialog */}
+      <ScheduleFormDialog
+        open={scheduleDialogOpen}
+        onOpenChange={setScheduleDialogOpen}
+        machineId={vehicle?.id}
+        machines={vehicle ? [vehicle] : []}
+        schedule={editingSchedule}
+        onSaved={load}
+      />
     </div>
   );
 }
+
