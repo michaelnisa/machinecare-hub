@@ -87,7 +87,7 @@ function createVehicleIcon(status: "moving" | "idling" | "parked" | "workshop") 
 }
 
 export default function LiveFleetMap() {
-  const { organisation } = useAuth();
+  const { organisation, profile } = useAuth();
   const { canWrite } = useUserRole();
 
   const [vehicles, setVehicles] = useState<TrackedVehicle[]>([]);
@@ -103,12 +103,13 @@ export default function LiveFleetMap() {
 
   // Load vehicles from Supabase
   const loadVehicles = async () => {
-    if (!organisation?.id) return;
+    const orgId = organisation?.id || profile?.organisation_id;
+    if (!orgId) return;
     try {
       const { data, error } = await supabase
         .from("machines")
         .select(SAFE_MACHINE_COLUMNS)
-        .eq("organisation_id", organisation.id)
+        .eq("organisation_id", orgId)
         .in("category", ["Vehicle", "Trailer"])
         .order("name");
 
@@ -124,15 +125,16 @@ export default function LiveFleetMap() {
 
   useEffect(() => {
     loadVehicles();
-  }, [organisation?.id]);
+  }, [organisation?.id, profile?.organisation_id]);
 
   // Sync with Trakzee live API
   const handleSync = async (autoImport: boolean | unknown = false) => {
-    if (!organisation?.id) return;
+    const orgId = organisation?.id || profile?.organisation_id;
+    if (!orgId) return;
     const shouldImport = typeof autoImport === "boolean" ? autoImport : false;
     setSyncing(true);
     try {
-      const res = await syncTrakzeeFleet(organisation.id, shouldImport);
+      const res = await syncTrakzeeFleet(orgId, shouldImport);
       if (!res.success) {
         toast.error(res.error || "Failed to sync Trakzee GPS");
       } else {

@@ -141,10 +141,14 @@ export default function Vehicles() {
   const [syncingTrakzee, setSyncingTrakzee] = useState(false);
 
   const handleSyncTrakzee = async (autoImport: boolean | unknown = false) => {
-    if (!organisation?.id) return;
+    const orgId = organisation?.id || profile?.organisation_id;
+    if (!orgId) {
+      toast.error("Organisation not loaded yet. Please wait a moment.");
+      return;
+    }
     const shouldImport = typeof autoImport === "boolean" ? autoImport : false;
     setSyncingTrakzee(true);
-    const res = await syncTrakzeeFleet(organisation.id, shouldImport);
+    const res = await syncTrakzeeFleet(orgId, shouldImport);
     setSyncingTrakzee(false);
     if (!res.success) {
       toast.error(res.error || "Failed to sync Trakzee GPS");

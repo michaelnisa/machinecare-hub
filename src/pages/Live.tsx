@@ -101,7 +101,7 @@ function Tile({
 }
 
 export default function Live() {
-  const { user, loading, organisation } = useAuth();
+  const { user, loading, organisation, profile } = useAuth();
   const { isFleet, isGarage } = useIndustry();
   const [kpis, setKpis] = useState<Kpis>(empty);
   const [fleetKpis, setFleetKpis] = useState<FleetKpis>(emptyFleet);
@@ -202,8 +202,8 @@ export default function Live() {
   }, [organisation?.id]);
 
   const loadFleet = useCallback(async () => {
-    if (!organisation?.id) return;
-    const orgId = organisation.id;
+    const orgId = organisation?.id || profile?.organisation_id;
+    if (!orgId) return;
     const [{ data: rawMachines }, { data: trips }, { data: openWos }] = await Promise.all([
       supabase
         .from("machines")
@@ -274,7 +274,7 @@ export default function Live() {
       vehicles,
     });
     setLastUpdated(new Date());
-  }, [organisation?.id]);
+  }, [organisation?.id, profile?.organisation_id]);
 
   const loadGarage = useCallback(async () => {
     if (!organisation?.id) return;

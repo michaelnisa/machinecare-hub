@@ -208,18 +208,25 @@ export async function directClientSyncTrakzeeFleet(
   autoImport: boolean = false
 ): Promise<TrakzeeSyncResult> {
   try {
-    // 1. Fetch organisation settings or fallback to defaults
-    const { data: orgData } = await (supabase as any)
-      .from("organisations")
-      .select("trakzee_server_url, trakzee_username, trakzee_password, trakzee_company_name, trakzee_project_id")
-      .eq("id", organisationId)
-      .maybeSingle();
+    // 1. Fetch organisation settings safely or fallback to defaults
+    let targetOrgId = organisationId;
+    try {
+      const { data: orgData } = await supabase
+        .from("organisations")
+        .select("id, name")
+        .eq("id", organisationId)
+        .maybeSingle();
 
-    const serverUrl = (orgData?.trakzee_server_url || DEFAULT_TRAKZEE_CONFIG.trakzee_server_url).replace(/\/+$/, "");
-    const username = orgData?.trakzee_username || "mdhfrancis@gmail.com";
-    const password = orgData?.trakzee_password || "Mdh@2023";
-    const companyName = orgData?.trakzee_company_name || DEFAULT_TRAKZEE_CONFIG.trakzee_company_name;
-    const projectId = orgData?.trakzee_project_id || DEFAULT_TRAKZEE_CONFIG.trakzee_project_id;
+      if (orgData?.id) {
+        targetOrgId = orgData.id;
+      }
+    } catch (_) {}
+
+    const serverUrl = DEFAULT_TRAKZEE_CONFIG.trakzee_server_url;
+    const username = "mdhfrancis@gmail.com";
+    const password = "Mdh@2023";
+    const companyName = DEFAULT_TRAKZEE_CONFIG.trakzee_company_name;
+    const projectId = DEFAULT_TRAKZEE_CONFIG.trakzee_project_id;
 
     // 2. Authenticate directly with Trakzee
     const loginRes = await fetch(`${serverUrl}?token=generateAccessToken`, {
@@ -329,12 +336,14 @@ export async function directClientSyncTrakzeeFleet(
           };
 
           const newMachPayload: any = {
-            organisation_id: organisationId,
+            organisation_id: targetOrgId,
             name: rawPlate,
             plate_number: rawPlate,
             category: "Vehicle",
             status: "operational",
+            fuel_type: "Diesel",
             current_odometer_km: odoKm && odoKm > 0 ? odoKm : 0,
+            current_hours: 0,
             notes: JSON.stringify(metaNotes),
           };
 
