@@ -24,6 +24,26 @@ import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
 import { toast } from "sonner";
 
+function BarcodeGraphic({ code }: { code: string }) {
+  const bars = [2, 1, 3, 1, 1, 4, 2, 1, 3, 2, 1, 4, 1, 2, 3, 1, 2, 4, 1, 3, 2, 1, 3, 1, 2, 4, 1, 2, 3, 2, 1, 3];
+  return (
+    <div className="flex flex-col items-end">
+      <div className="flex items-center gap-[1.5px] h-6 overflow-hidden py-0.5">
+        {bars.map((w, i) => (
+          <div
+            key={i}
+            className="bg-slate-900 h-full"
+            style={{ width: `${w * 1.1}px` }}
+          />
+        ))}
+      </div>
+      <div className="text-[8px] font-mono tracking-[0.2em] text-slate-500 font-bold uppercase mt-0.5">
+        *{code}*
+      </div>
+    </div>
+  );
+}
+
 export default function TripReceiptPrint() {
   const { id } = useParams<{ id: string }>();
   const [trip, setTrip] = useState<any>(null);
@@ -146,31 +166,60 @@ export default function TripReceiptPrint() {
     if (!sheetRef.current) return;
     setDownloading(true);
     try {
-      const canvas = await html2canvas(sheetRef.current, {
-        scale: 2,
+      const element = sheetRef.current;
+      const canvas = await html2canvas(element, {
+        scale: 3,
         backgroundColor: "#ffffff",
         useCORS: true,
+        logging: false,
+        windowWidth: 840,
       });
-      const imgData = canvas.toDataURL("image/png");
-      const pdf = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
-      const pageWidth = pdf.internal.pageSize.getWidth();
-      const pageHeight = pdf.internal.pageSize.getHeight();
-      const imgWidth = pageWidth;
-      const imgHeight = (canvas.height * imgWidth) / canvas.width;
-      let heightLeft = imgHeight;
-      let position = 0;
 
-      pdf.addImage(imgData, "PNG", 0, position, imgWidth, imgHeight);
-      heightLeft -= pageHeight;
-      while (heightLeft > 0) {
-        position = heightLeft - imgHeight;
-        pdf.addPage();
-        pdf.addImage(imgData, "PNG", 0, position, imgWidth, imgHeight);
-        heightLeft -= pageHeight;
+      const imgData = canvas.toDataURL("image/jpeg", 0.98);
+      const pdf = new jsPDF({
+        orientation: "portrait",
+        unit: "mm",
+        format: "a4",
+        compress: true,
+      });
+
+      const pageWidth = pdf.internal.pageSize.getWidth(); // 210mm
+      const pageHeight = pdf.internal.pageSize.getHeight(); // 297mm
+      const margin = 8; // 8mm margin
+      const maxW = pageWidth - margin * 2; // 194mm
+      const maxH = pageHeight - margin * 2; // 281mm
+
+      let imgW = maxW;
+      let imgH = (canvas.height * imgW) / canvas.width;
+
+      // Auto-fit to single page if within 18% threshold so it never splits into a tiny second page
+      if (imgH > maxH && imgH <= maxH * 1.18) {
+        const factor = maxH / imgH;
+        imgH = maxH;
+        imgW = imgW * factor;
       }
+
+      const posX = margin + (maxW - imgW) / 2;
+      const posY = margin;
+
+      if (imgH <= maxH) {
+        pdf.addImage(imgData, "JPEG", posX, posY, imgW, imgH, undefined, "FAST");
+      } else {
+        let heightLeft = imgH;
+        let position = margin;
+        pdf.addImage(imgData, "JPEG", posX, position, imgW, imgH, undefined, "FAST");
+        heightLeft -= maxH;
+        while (heightLeft > 5) {
+          position = heightLeft - imgH + margin;
+          pdf.addPage();
+          pdf.addImage(imgData, "JPEG", posX, position, imgW, imgH, undefined, "FAST");
+          heightLeft -= maxH;
+        }
+      }
+
       const refCode = trip.client_order_no || trip.id?.slice(0, 8) || "TRIP";
-      pdf.save(`WAYBILL-RECEIPT-${refCode}.pdf`);
-      toast.success("Receipt PDF downloaded");
+      pdf.save(`WAYBILL-${refCode}.pdf`);
+      toast.success("Waybill PDF downloaded successfully");
     } catch (e: any) {
       toast.error(e?.message ?? "Failed to generate PDF");
     } finally {
@@ -218,159 +267,197 @@ export default function TripReceiptPrint() {
       </div>
 
       {/* A4 Printable Sheet */}
-      <div className="py-8 px-4 flex justify-center print:p-0 print:py-0">
+      <div className="py-6 px-4 flex justify-center print:p-0 print:py-0">
         <div
           ref={sheetRef}
-          className="w-full max-w-[210mm] min-h-[297mm] bg-white text-slate-900 p-8 sm:p-12 rounded-xl shadow-lg border border-slate-200 flex flex-col justify-between print:border-none print:shadow-none print:p-8 print:w-full print:rounded-none"
+          className="w-full max-w-[820px] bg-white text-slate-900 p-6 sm:p-8 rounded-xl shadow-xl border border-slate-200 flex flex-col justify-between print:border-none print:shadow-none print:p-4 print:w-full print:rounded-none"
+          style={{ boxSizing: "border-box" }}
         >
-          <div className="space-y-6">
-            {/* Header: Company Logo & Receipt Ref */}
-            <div className="flex items-start justify-between border-b-2 border-primary pb-5 gap-4">
-              <div className="space-y-1 max-w-[60%]">
-                <div className="text-[10px] font-black tracking-[0.25em] uppercase text-primary">
-                  Official Freight Receipt & Delivery Waybill
+          <div className="space-y-4">
+            {/* Top Accent Gradient Line */}
+            <div className="h-1.5 w-full bg-gradient-to-r from-blue-700 via-indigo-600 to-emerald-500 rounded-full" />
+
+            {/* HEADER SECTION: LOGO + COMPANY DETAILS + WAYBILL REF & BARCODE */}
+            <div className="flex items-start justify-between border-b-2 border-slate-900 pb-3.5 gap-4">
+              <div className="space-y-1 max-w-[55%]">
+                <div className="flex items-center gap-2">
+                  {companyLogo ? (
+                    <img
+                      src={companyLogo}
+                      alt={companyName}
+                      className="h-12 w-auto max-w-[190px] object-contain"
+                    />
+                  ) : (
+                    <div className="flex items-center gap-2.5">
+                      <div className="h-10 w-10 rounded-lg bg-slate-900 flex items-center justify-center text-white shadow-xs">
+                        <Truck className="h-5 w-5 text-emerald-400" />
+                      </div>
+                      <div>
+                        <span className="text-lg font-black tracking-tight text-slate-900 block leading-tight">
+                          {companyName}
+                        </span>
+                        <span className="text-[9px] font-bold uppercase tracking-wider text-primary block">
+                          Cross-Border Heavy Haulage & Freight Logistics
+                        </span>
+                      </div>
+                    </div>
+                  )}
                 </div>
-                <h1 className="text-2xl font-black tracking-tight text-slate-900 font-mono">
-                  {receiptRef}
-                </h1>
-                <div className="text-xs text-slate-500 flex items-center gap-2 pt-0.5">
-                  <span className="flex items-center gap-1">
-                    <Calendar className="h-3 w-3" /> Issued: {formatDate(trip.created_at || new Date().toISOString())}
-                  </span>
-                  <span>·</span>
-                  <span className="capitalize font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
-                    Status: {trip.status === "in_progress" ? "In Transit" : trip.status}
-                  </span>
+                {companyLogo && (
+                  <div className="text-xs font-bold text-slate-900">{companyName}</div>
+                )}
+                <div className="text-[11px] text-slate-600 leading-tight pt-0.5">
+                  <div className="flex items-center gap-1 font-medium">
+                    <MapPin className="h-3 w-3 text-slate-400 shrink-0" />
+                    <span className="line-clamp-1">{companyAddress}</span>
+                  </div>
+                  <div className="flex items-center gap-3 mt-0.5 text-[10px] text-slate-500">
+                    <span>Tel: <strong className="text-slate-700">{companyPhone}</strong></span>
+                    <span>·</span>
+                    <span className="font-mono">TIN: 142-990-811 / VRN: 40-029188</span>
+                  </div>
                 </div>
               </div>
 
-              <div className="text-right shrink-0">
-                {companyLogo ? (
-                  <div className="mb-1.5">
-                    <img
-                      src={companyLogo}
-                      alt="Company Logo"
-                      className="h-14 w-auto max-w-[190px] ml-auto object-contain"
-                    />
-                    <div className="text-xs font-bold text-slate-800 mt-1">{companyName}</div>
-                  </div>
-                ) : (
-                  <div className="flex items-center justify-end gap-1.5 text-primary font-black text-xl mb-1">
-                    <Truck className="h-6 w-6" />
-                    <span>{companyName}</span>
-                  </div>
-                )}
-                <div className="text-[11px] text-slate-600 max-w-[260px] ml-auto line-clamp-2">
-                  {companyAddress}
+              <div className="text-right flex flex-col items-end space-y-1">
+                <div className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-slate-900 text-white text-[9px] font-bold uppercase tracking-wider">
+                  <span>Commercial Freight Waybill</span>
+                  <span className="text-emerald-400">· ORIGINAL</span>
                 </div>
-                <div className="text-[11px] text-slate-600">{companyPhone}</div>
-                <div className="text-[10px] font-mono text-slate-500 mt-0.5">
-                  TIN: 142-990-811 / VRN: 40-029188
+
+                <div className="font-mono text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
+                  {receiptRef}
+                </div>
+
+                <BarcodeGraphic code={receiptRef} />
+
+                <div className="flex items-center gap-2 text-[10px] text-slate-500 pt-0.5">
+                  <span className="flex items-center gap-1">
+                    <Calendar className="h-3 w-3 text-slate-400" />
+                    Issued: <strong className="text-slate-700">{formatDate(trip.created_at || new Date().toISOString())}</strong>
+                  </span>
+                  <span>·</span>
+                  <span className="capitalize font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                    {trip.status === "in_progress" ? "In Transit" : trip.status}
+                  </span>
                 </div>
               </div>
             </div>
 
-            {/* Client & Logistics Details */}
-            <div className="grid grid-cols-2 gap-4 text-xs">
-              <div className="rounded-lg border border-slate-200 p-3.5 space-y-1.5 bg-slate-50/50">
-                <div className="text-[10px] font-bold uppercase tracking-wider text-primary flex items-center gap-1">
-                  <Building2 className="h-3.5 w-3.5" /> Client / Consignee Information
+            {/* 3-COLUMN LOGISTICS DOSSIER: CARRIER, CLIENT, ROUTE & ASSET */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5 text-xs">
+              {/* 01. Carrier / Shipper */}
+              <div className="rounded-lg border border-slate-200 bg-slate-50/70 p-2.5 space-y-1">
+                <div className="text-[9px] font-black uppercase tracking-wider text-slate-500 flex items-center gap-1">
+                  <Building2 className="h-3 w-3 text-primary" /> 01. Carrier / Shipper
                 </div>
-                <div className="text-sm font-bold text-slate-900">
+                <div className="font-bold text-slate-900 text-xs truncate">{companyName}</div>
+                <div className="text-[10px] text-slate-600">Operations Dispatch Center</div>
+                <div className="text-[10px] text-slate-500 truncate">Kurasini Freight Depot · DSM</div>
+                <div className="text-[9px] font-mono text-slate-500">Carrier Reg: EAC-TZ-LOG-04</div>
+              </div>
+
+              {/* 02. Consignee / Client */}
+              <div className="rounded-lg border border-slate-200 bg-slate-50/70 p-2.5 space-y-1">
+                <div className="text-[9px] font-black uppercase tracking-wider text-slate-500 flex items-center gap-1">
+                  <Truck className="h-3 w-3 text-primary" /> 02. Consignee / Client
+                </div>
+                <div className="font-bold text-slate-900 text-xs truncate">
                   {trip.client_name || "Commercial Cargo Consignee"}
                 </div>
-                <div className="text-slate-600">
-                  Order / DO Reference: <strong className="font-mono text-slate-800">{trip.client_order_no || "N/A"}</strong>
+                <div className="text-[10px] text-slate-700">
+                  Order / DO: <strong className="font-mono text-slate-900">{trip.client_order_no || "N/A"}</strong>
                 </div>
-                <div className="text-slate-600 pt-0.5">
-                  Consignment Specification: <span className="font-medium text-slate-800">{trip.cargo_description || "Commercial Cargo / General Freight"}</span>
+                <div className="text-[10px] text-slate-600 truncate">
+                  Cargo: <span className="font-medium text-slate-800">{trip.cargo_description || "Commercial Cargo / General Freight"}</span>
                 </div>
-                <div className="text-slate-600 text-[11px]">
-                  Payment Terms: <span className="font-semibold text-primary">{trip.payment_terms}</span>
+                <div className="text-[9px] text-primary font-semibold truncate">
+                  Terms: {trip.payment_terms}
                 </div>
               </div>
 
-              <div className="rounded-lg border border-slate-200 p-3.5 space-y-1.5 bg-slate-50/50">
-                <div className="text-[10px] font-bold uppercase tracking-wider text-primary flex items-center gap-1">
-                  <Truck className="h-3.5 w-3.5" /> Fleet & Transit Route Logistics
+              {/* 03. Transport Asset & Route */}
+              <div className="rounded-lg border border-slate-200 bg-slate-50/70 p-2.5 space-y-1">
+                <div className="text-[9px] font-black uppercase tracking-wider text-slate-500 flex items-center gap-1">
+                  <MapPin className="h-3 w-3 text-primary" /> 03. Transit Asset & Route
                 </div>
-                <div className="flex items-center gap-1.5 font-bold text-slate-900">
-                  <MapPin className="h-3.5 w-3.5 text-rose-500 shrink-0" />
-                  <span>{trip.origin || "Origin Depot"}</span>
+                <div className="flex items-center gap-1 font-bold text-slate-900 text-[11px] truncate">
+                  <MapPin className="h-3 w-3 text-rose-500 shrink-0" />
+                  <span className="truncate">{trip.origin || "Origin"}</span>
                   <span>→</span>
-                  <span className="text-primary">{trip.destination || "Destination"}</span>
+                  <span className="text-primary truncate">{trip.destination || "Destination"}</span>
                 </div>
                 {trip.corridor_name && (
-                  <div className="text-[11px] text-slate-600 flex items-center gap-1">
-                    <Globe2 className="h-3 w-3 text-primary" /> Corridor: <span className="font-semibold">{trip.corridor_name}</span>
+                  <div className="text-[9px] text-slate-600 flex items-center gap-1 truncate">
+                    <Globe2 className="h-2.5 w-2.5 text-primary shrink-0" />
+                    <span className="font-medium truncate">{trip.corridor_name}</span>
                   </div>
                 )}
-                <div className="grid grid-cols-2 gap-2 text-[11px] text-slate-600 pt-0.5">
-                  <div>
-                    Vehicle Head: <strong className="text-slate-800">{machine?.plate_number ? `${machine.name} (${machine.plate_number})` : machine?.name || "Vehicle"}</strong>
+                <div className="pt-0.5 text-[10px] text-slate-700 space-y-0.5 leading-tight">
+                  <div className="truncate">
+                    Head: <strong className="text-slate-900">{machine?.plate_number ? `${machine.name} (${machine.plate_number})` : machine?.name || "Vehicle"}</strong>
                   </div>
-                  <div>
-                    Trailer: <strong className="text-primary">{machine?.trailer_plate || "N/A"}</strong>
+                  <div className="truncate">
+                    Trailer: <strong className="text-primary">{machine?.trailer_plate ? machine.trailer_plate : "Standard Trailer Unit"}</strong>
                   </div>
-                  <div>
-                    Assigned Driver: <strong className="text-slate-800">{driver?.full_name || "Fleet Driver"}</strong>
-                  </div>
-                  <div>
-                    Driver Phone: <span className="font-mono">{driver?.phone || "N/A"}</span>
+                  <div className="truncate">
+                    Driver: <strong className="text-slate-900">{driver?.full_name || "Fleet Driver"}</strong> {driver?.phone ? `(${driver.phone})` : ""}
                   </div>
                 </div>
               </div>
             </div>
 
             {/* ITEMISED COMMERCIAL FREIGHT SERVICE TABLE */}
-            <div>
+            <div className="overflow-hidden rounded-lg border border-slate-200 shadow-2xs">
               <table className="w-full text-xs">
                 <thead>
-                  <tr className="border-b-2 border-slate-800 text-left text-[10px] uppercase tracking-wide text-slate-600">
-                    <th className="py-2.5 px-3 font-bold w-10">#</th>
-                    <th className="py-2.5 px-3 font-bold">Description of Commercial Freight Service</th>
-                    <th className="py-2.5 px-3 text-center font-bold">Assigned Truck & Driver</th>
-                    <th className="py-2.5 px-3 text-right font-bold">Agreed Freight Price</th>
-                    <th className="py-2.5 px-3 text-right font-bold">Total to Pay</th>
+                  <tr className="bg-slate-900 text-white text-left text-[9px] uppercase tracking-wider">
+                    <th className="py-2.5 px-3 font-bold w-8 text-center">#</th>
+                    <th className="py-2.5 px-3 font-bold">Description of Commercial Haulage Service</th>
+                    <th className="py-2.5 px-3 font-bold text-center">Assigned Asset & Crew</th>
+                    <th className="py-2.5 px-3 font-bold text-right">Agreed Rate</th>
+                    <th className="py-2.5 px-3 font-bold text-right">Amount Payable</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-200">
-                  {/* Main Freight Transport Charge */}
-                  <tr className="font-semibold text-slate-900 bg-slate-50/40">
-                    <td className="py-3 px-3 font-mono text-slate-500">01</td>
-                    <td className="py-3 px-3 space-y-1">
-                      <div className="font-bold text-sm text-slate-900">
-                        Commercial Freight Haulage & Cross-Border Delivery
+                <tbody className="divide-y divide-slate-200 bg-white">
+                  {/* Main Haulage row */}
+                  <tr>
+                    <td className="py-2.5 px-3 text-center font-mono font-bold text-slate-400">01</td>
+                    <td className="py-2.5 px-3 space-y-0.5">
+                      <div className="font-bold text-xs text-slate-900 leading-snug">
+                        Cross-Border Commercial Freight Haulage & Consignment Delivery
                       </div>
-                      <div className="text-xs text-slate-600">
-                        Transit Route: <strong className="text-slate-800">{trip.origin || "Origin Depot"}</strong> → <strong className="text-primary">{trip.destination || "Destination"}</strong>
+                      <div className="text-[11px] text-slate-600">
+                        Route Transit: <strong className="text-slate-800">{trip.origin || "Origin Depot"}</strong> ➔ <strong className="text-primary">{trip.destination || "Destination"}</strong>
                         {trip.corridor_name ? ` via ${trip.corridor_name}` : ""}
                       </div>
-                      <div className="text-[11px] text-slate-500">
-                        Consignment: <span className="font-medium text-slate-800">{trip.cargo_description || "Commercial Cargo / General Freight"}</span>
+                      <div className="text-[10px] text-slate-500">
+                        Consignment Cargo: <span className="font-medium text-slate-800">{trip.cargo_description || "Commercial Cargo / General Freight"}</span>
                       </div>
                     </td>
-                    <td className="py-3 px-3 text-center">
-                      <div className="font-bold text-xs text-slate-800">
-                        {machine?.plate_number ? `${machine.name} (${machine.plate_number})` : machine?.name || "Vehicle"}
-                      </div>
-                      <div className="text-[10px] text-primary font-medium mt-0.5">
-                        {machine?.trailer_plate ? `Trailer: ${machine.trailer_plate}` : "Standard Trailer Unit"}
-                      </div>
-                      <div className="text-[10px] text-slate-500 mt-1">
-                        Driver: <strong className="text-slate-700">{driver?.full_name || "Fleet Driver"}</strong>
+                    <td className="py-2.5 px-3 text-center align-middle">
+                      <div className="inline-block text-left bg-slate-50 border border-slate-200 rounded p-1.5 text-[10px]">
+                        <div className="font-bold text-slate-900">
+                          {machine?.plate_number ? `${machine.name} (${machine.plate_number})` : machine?.name || "Vehicle"}
+                        </div>
+                        <div className="text-primary font-medium">
+                          {machine?.trailer_plate ? `Trailer: ${machine.trailer_plate}` : "Standard Trailer Unit"}
+                        </div>
+                        <div className="text-slate-600 mt-0.5">
+                          Driver: <strong className="text-slate-800">{driver?.full_name || "Fleet Driver"}</strong>
+                        </div>
                       </div>
                     </td>
-                    <td className="py-3 px-3 text-right font-mono font-bold text-slate-900 text-sm">
+                    <td className="py-2.5 px-3 text-right font-mono font-bold text-slate-900 text-xs align-middle">
                       {isUsd
                         ? `$${pricingCalculations.baseFreight.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
                         : `${Math.round(pricingCalculations.baseFreight).toLocaleString()} TZS`}
                     </td>
-                    <td className="py-3 px-3 text-right font-mono font-bold text-slate-900 text-sm">
+                    <td className="py-2.5 px-3 text-right font-mono font-black text-slate-900 text-xs align-middle">
                       {isUsd
                         ? `$${pricingCalculations.baseFreight.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD`
                         : `${Math.round(pricingCalculations.baseFreight).toLocaleString()} TZS`}
-                      <div className="text-[10px] text-slate-500 font-normal">
+                      <div className="text-[9px] text-slate-500 font-normal">
                         {isUsd
                           ? `≈ ${Math.round(pricingCalculations.baseFreight * exchangeRate).toLocaleString()} TZS`
                           : `≈ $${(pricingCalculations.baseFreight / exchangeRate).toFixed(2)} USD`}
@@ -380,15 +467,15 @@ export default function TripReceiptPrint() {
 
                   {/* VAT row if applicable */}
                   {pricingCalculations.taxPercent > 0 && (
-                    <tr className="text-slate-700">
-                      <td className="py-2.5 px-3 font-mono text-slate-400">02</td>
-                      <td className="py-2.5 px-3" colSpan={2}>
+                    <tr className="bg-slate-50/50">
+                      <td className="py-2 px-3 text-center font-mono text-slate-400">02</td>
+                      <td className="py-2 px-3" colSpan={2}>
                         <span className="font-semibold text-slate-800">Value Added Tax (VAT {pricingCalculations.taxPercent}%)</span>
                       </td>
-                      <td className="py-2.5 px-3 text-right font-mono text-slate-600">
+                      <td className="py-2 px-3 text-right font-mono text-slate-600">
                         {pricingCalculations.taxPercent}%
                       </td>
-                      <td className="py-2.5 px-3 text-right font-mono font-bold text-slate-900">
+                      <td className="py-2 px-3 text-right font-mono font-bold text-slate-900">
                         {isUsd
                           ? `$${pricingCalculations.taxAmountUsd.toFixed(2)} USD`
                           : `${Math.round(pricingCalculations.taxAmountTzs).toLocaleString()} TZS`}
@@ -399,124 +486,141 @@ export default function TripReceiptPrint() {
               </table>
             </div>
 
-            {/* TOTAL PRICE TO PAY (HIGHLIGHTED CARD) */}
-            <div className="flex justify-end pt-2">
-              <div className="w-88 rounded-xl border-2 border-primary bg-primary/5 p-4 space-y-2.5 text-xs">
-                <div className="flex justify-between text-slate-600 font-medium">
-                  <span>Agreed Freight Price:</span>
-                  <span className="font-mono font-bold text-slate-900 text-sm">
-                    {isUsd
-                      ? `$${pricingCalculations.baseFreight.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD`
-                      : `${Math.round(pricingCalculations.baseFreight).toLocaleString()} TZS`}
+            {/* SETTLEMENT CARD & PAYMENT ACCOUNTS */}
+            <div className="grid grid-cols-1 md:grid-cols-5 gap-3 pt-1">
+              {/* Left: Official Wire & Lipa Namba Accounts (3 cols) */}
+              <div className="md:col-span-3 rounded-lg border border-slate-300 bg-slate-50/90 p-3 space-y-2">
+                <div className="text-[9px] font-black uppercase tracking-wider text-slate-700 flex items-center justify-between border-b border-slate-200 pb-1">
+                  <span className="flex items-center gap-1.5 text-slate-900">
+                    <Landmark className="h-3.5 w-3.5 text-blue-700" /> Official Settlement & Wire Details
                   </span>
+                  <span className="text-[8px] font-semibold text-slate-500 uppercase">Direct Deposit · Lipa Namba</span>
                 </div>
 
-                {pricingCalculations.taxPercent > 0 && (
-                  <div className="flex justify-between text-slate-600">
-                    <span>VAT / Tax ({pricingCalculations.taxPercent}%):</span>
-                    <span className="font-mono font-semibold">
+                <div className="grid grid-cols-2 gap-2 text-[11px]">
+                  <div className="space-y-0.5">
+                    <div className="font-bold text-slate-900">{paymentAccounts.bankName}</div>
+                    <div className="text-slate-600 text-[10px]">Beneficiary: <strong className="text-slate-800">{paymentAccounts.accountName}</strong></div>
+                    <div className="text-slate-600 text-[10px]">
+                      USD Account: <strong className="font-mono text-blue-700 font-bold">{paymentAccounts.accountNumberUsd}</strong>
+                    </div>
+                    {paymentAccounts.accountNumberTzs && (
+                      <div className="text-slate-600 text-[10px]">
+                        TZS Account: <strong className="font-mono text-slate-800">{paymentAccounts.accountNumberTzs}</strong>
+                      </div>
+                    )}
+                    <div className="text-[9px] font-mono text-slate-500">
+                      SWIFT: {paymentAccounts.swiftCode} · {paymentAccounts.branch}
+                    </div>
+                  </div>
+
+                  <div className="border-l border-slate-200 pl-2.5 space-y-0.5">
+                    <div className="font-bold text-slate-900 flex items-center gap-1 text-[11px]">
+                      <Smartphone className="h-3.5 w-3.5 text-emerald-600" /> {paymentAccounts.mobileMoneyName}
+                    </div>
+                    <div className="text-[10px] text-slate-500">Lipa Namba Reference:</div>
+                    <div className="text-xs font-black font-mono text-emerald-800 bg-emerald-100/80 px-2 py-0.5 rounded border border-emerald-300 w-fit">
+                      {paymentAccounts.mobileMoneyNumber}
+                    </div>
+                    <div className="text-[9px] text-slate-500 leading-tight pt-0.5">
+                      {paymentAccounts.paymentInstructions}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Right: Total Price to Pay Card (2 cols) */}
+              <div className="md:col-span-2 rounded-lg border-2 border-slate-900 bg-gradient-to-br from-slate-900 to-slate-800 text-white p-3 flex flex-col justify-between shadow-sm">
+                <div className="space-y-1">
+                  <div className="flex justify-between text-[11px] text-slate-300">
+                    <span>Agreed Freight Price:</span>
+                    <span className="font-mono font-bold text-white">
                       {isUsd
-                        ? `$${pricingCalculations.taxAmountUsd.toFixed(2)} USD`
-                        : `${Math.round(pricingCalculations.taxAmountTzs).toLocaleString()} TZS`}
+                        ? `$${pricingCalculations.baseFreight.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD`
+                        : `${Math.round(pricingCalculations.baseFreight).toLocaleString()} TZS`}
                     </span>
                   </div>
-                )}
 
-                <div className="border-t-2 border-primary/30 pt-2 flex items-baseline justify-between">
-                  <div>
-                    <div className="text-xs font-black uppercase tracking-wider text-slate-900">
-                      Total Price to Pay:
-                    </div>
-                    <div className="text-[10px] text-slate-500 font-mono">
-                      Exchange Rate: 1 USD = {exchangeRate} TZS
-                    </div>
-                  </div>
-
-                  <div className="text-right">
-                    <div className="text-xl font-black text-primary font-mono tracking-tight">
-                      {isUsd
-                        ? `$${pricingCalculations.totalPayableUsd.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD`
-                        : `${Math.round(pricingCalculations.totalPayableTzs).toLocaleString()} TZS`}
-                    </div>
-                    <div className="text-xs font-bold text-slate-600 font-mono">
-                      {isUsd
-                        ? `≈ ${Math.round(pricingCalculations.totalPayableTzs).toLocaleString()} TZS`
-                        : `≈ $${pricingCalculations.totalPayableUsd.toFixed(2)} USD`}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Account to Pay Card */}
-            <div className="rounded-xl border border-slate-300 bg-slate-50 p-4 space-y-2.5">
-              <div className="text-[10px] font-black uppercase tracking-wider text-primary flex items-center justify-between border-b border-slate-200 pb-1.5">
-                <span className="flex items-center gap-1.5">
-                  <Landmark className="h-4 w-4 text-primary" /> Official Payment Accounts / Bank Details
-                </span>
-                <span className="text-[10px] font-medium text-slate-500">
-                  Direct Bank Transfer / Official Mobile Till
-                </span>
-              </div>
-
-              <div className="grid sm:grid-cols-2 gap-4 text-xs">
-                <div className="space-y-1">
-                  <div className="font-bold text-slate-900 flex items-center gap-1">
-                    <Building2 className="h-3.5 w-3.5 text-slate-600" />
-                    {paymentAccounts.bankName}
-                  </div>
-                  <div className="text-slate-600">
-                    Account Name: <strong className="text-slate-800">{paymentAccounts.accountName}</strong>
-                  </div>
-                  <div className="text-slate-600">
-                    Account No (USD): <strong className="font-mono text-primary text-sm">{paymentAccounts.accountNumberUsd}</strong>
-                  </div>
-                  {paymentAccounts.accountNumberTzs && (
-                    <div className="text-slate-600">
-                      Account No (TZS): <strong className="font-mono text-slate-800">{paymentAccounts.accountNumberTzs}</strong>
+                  {pricingCalculations.taxPercent > 0 && (
+                    <div className="flex justify-between text-[11px] text-slate-300">
+                      <span>VAT / Tax ({pricingCalculations.taxPercent}%):</span>
+                      <span className="font-mono font-semibold text-white">
+                        {isUsd
+                          ? `$${pricingCalculations.taxAmountUsd.toFixed(2)} USD`
+                          : `${Math.round(pricingCalculations.taxAmountTzs).toLocaleString()} TZS`}
+                      </span>
                     </div>
                   )}
-                  <div className="text-[11px] text-slate-500">
-                    SWIFT / Branch: <span className="font-mono">{paymentAccounts.swiftCode}</span> ({paymentAccounts.branch})
-                  </div>
                 </div>
 
-                <div className="space-y-1 border-l-0 sm:border-l border-slate-200 sm:pl-4">
-                  <div className="font-bold text-slate-900 flex items-center gap-1">
-                    <Smartphone className="h-3.5 w-3.5 text-emerald-600" />
-                    {paymentAccounts.mobileMoneyName}
+                <div className="border-t border-slate-700 pt-1.5 mt-1.5">
+                  <div className="text-[9px] font-black uppercase tracking-wider text-emerald-400">
+                    Total Freight Price to Pay:
                   </div>
-                  <div className="text-slate-600 text-[11px]">
-                    Merchant Payment Reference:
+                  <div className="text-lg font-black text-white font-mono tracking-tight mt-0.5">
+                    {isUsd
+                      ? `$${pricingCalculations.totalPayableUsd.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD`
+                      : `${Math.round(pricingCalculations.totalPayableTzs).toLocaleString()} TZS`}
                   </div>
-                  <div className="text-sm font-black font-mono text-emerald-700 bg-emerald-50 px-2 py-1 rounded border border-emerald-200 w-fit">
-                    {paymentAccounts.mobileMoneyNumber}
+                  <div className="text-[10px] font-bold text-slate-300 font-mono">
+                    {isUsd
+                      ? `≈ ${Math.round(pricingCalculations.totalPayableTzs).toLocaleString()} TZS`
+                      : `≈ $${pricingCalculations.totalPayableUsd.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD`}
                   </div>
-                  <p className="text-[10px] text-slate-500 pt-1 leading-tight">
-                    {paymentAccounts.paymentInstructions}
-                  </p>
+                  <div className="text-[8px] text-slate-400 mt-0.5 font-mono">
+                    FX Rate: 1 USD = {exchangeRate} TZS
+                  </div>
                 </div>
               </div>
             </div>
 
-            {/* Signatures */}
-            <div className="grid grid-cols-2 gap-12 pt-6 text-xs text-slate-600">
-              <div>
-                <div className="h-12 border-b-2 border-dashed border-slate-400" />
-                <div className="mt-1.5 font-bold text-slate-800">Authorized Logistics Dispatcher</div>
-                <div className="text-[10px] text-slate-500">{companyName} · Operations Department</div>
+            {/* CARRIER DISPATCH & CONSIGNEE RECEIVING POD STAMPS */}
+            <div className="grid grid-cols-2 gap-6 pt-1 text-xs">
+              {/* Carrier Dispatch Signature */}
+              <div className="border border-slate-200 rounded-lg p-2.5 bg-slate-50/50 space-y-1.5">
+                <div className="flex items-center justify-between text-[9px] font-black uppercase tracking-wider text-slate-500">
+                  <span>01. Carrier Release & Dispatch</span>
+                  <span className="text-primary font-bold">CARRIER STAMP</span>
+                </div>
+                <div className="h-8 border-b border-dashed border-slate-300 flex items-end pb-0.5">
+                  <span className="text-[9px] text-slate-400 italic font-serif">Authorized Operations Dispatcher</span>
+                </div>
+                <div className="flex justify-between items-baseline text-[9px]">
+                  <div>
+                    <div className="font-bold text-slate-800">{companyName}</div>
+                    <div className="text-slate-500">Operations Dispatch Desk</div>
+                  </div>
+                  <div className="text-right text-slate-500 font-mono">
+                    Date: {formatDate(trip.created_at || new Date().toISOString())}
+                  </div>
+                </div>
               </div>
 
-              <div>
-                <div className="h-12 border-b-2 border-dashed border-slate-400" />
-                <div className="mt-1.5 font-bold text-slate-800">Client / Consignee Receiver</div>
-                <div className="text-[10px] text-slate-500">Official Receiving Signature & Stamp</div>
+              {/* Client Receiver POD Signature */}
+              <div className="border border-slate-200 rounded-lg p-2.5 bg-slate-50/50 space-y-1.5">
+                <div className="flex items-center justify-between text-[9px] font-black uppercase tracking-wider text-slate-500">
+                  <span>02. Consignee Proof of Delivery (POD)</span>
+                  <span className="text-emerald-700 font-bold">RECEIVER STAMP</span>
+                </div>
+                <div className="h-8 border-b border-dashed border-slate-300 flex items-end pb-0.5">
+                  <span className="text-[9px] text-slate-400 italic font-serif">Received in Good Order & Condition</span>
+                </div>
+                <div className="flex justify-between items-baseline text-[9px]">
+                  <div>
+                    <div className="font-bold text-slate-800">{trip.client_name || "Authorized Consignee"}</div>
+                    <div className="text-slate-500">Official Receiving Signature & Stamp</div>
+                  </div>
+                  <div className="text-right text-slate-500 font-mono">
+                    Date: ____ / ____ / 202___
+                  </div>
+                </div>
               </div>
             </div>
           </div>
 
-          <div className="pt-6 border-t border-slate-200 text-center text-[10px] text-slate-400">
-            This receipt & freight waybill certifies the dispatch of cargo under carrier liability terms. Thank you for your partnership.
+          {/* SECURITY MICRO-FOOTER */}
+          <div className="pt-2 border-t border-slate-200 text-center text-[8px] text-slate-400 leading-tight">
+            Cargo dispatch and carriage subject to standard international freight transit terms and carrier liability limits. This electronic delivery note & freight invoice is computer generated and valid without alterations. Ref: {receiptRef}
           </div>
         </div>
       </div>

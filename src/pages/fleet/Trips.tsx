@@ -655,12 +655,14 @@ export default function Trips() {
                           </Button>
 
                           <Button
-                            variant="ghost"
-                            size="icon"
-                            title="Client Freight Receipt & Waybill"
+                            variant="outline"
+                            size="sm"
+                            className="h-7 px-2 text-xs gap-1 border-primary/30 text-primary hover:bg-primary/10 font-semibold"
+                            title="Official Client Waybill & Freight Receipt"
                             onClick={() => setReceiptTrip(t)}
                           >
-                            <FileText className="h-4 w-4 text-primary hover:text-primary/80" />
+                            <FileText className="h-3.5 w-3.5 text-primary" />
+                            <span>Waybill</span>
                           </Button>
 
                           <Button
@@ -1924,14 +1926,13 @@ function TripDetailDialog({
               </div>
               <Button
                 size="sm"
-                variant="outline"
-                className="h-7 text-xs gap-1.5 border-primary/30 text-primary hover:bg-primary/10"
+                className="h-7 text-xs gap-1.5 bg-primary text-primary-foreground hover:bg-primary/90 shadow-2xs font-semibold px-2.5"
                 onClick={() => {
                   onOpenChange(false);
                   onOpenReceipt?.();
                 }}
               >
-                <FileText className="h-3.5 w-3.5" /> View Receipt
+                <FileText className="h-3.5 w-3.5" /> Official Waybill & Invoice
               </Button>
             </div>
 
