@@ -133,24 +133,17 @@ export function TripReceiptDialog({
 
   const exchangeRate = Number(trip?.exchange_rate) || DEFAULT_USD_TO_TZS_RATE;
 
-  // Calculate pricing numbers
+  // Calculate customer pricing numbers
   const pricingCalculations = useMemo(() => {
     const baseFreight = Number(clientPrice) || 0;
-    const statutorySumTzs = Array.isArray(trip?.expenses)
-      ? trip.expenses.reduce((sum: number, e: any) => sum + (Number(e.amountTzs) || (Number(e.amountUsd) * exchangeRate) || 0), 0)
-      : 0;
-    const statutorySumUsd = Array.isArray(trip?.expenses)
-      ? trip.expenses.reduce((sum: number, e: any) => sum + (Number(e.amountUsd) || ((Number(e.amountTzs) || 0) / exchangeRate)), 0)
-      : 0;
-
     let subtotalUsd = 0;
     let subtotalTzs = 0;
 
     if (billingCurrency === "USD") {
-      subtotalUsd = baseFreight + (includeStatutoryTolls ? statutorySumUsd : 0);
+      subtotalUsd = baseFreight;
       subtotalTzs = Math.round(subtotalUsd * exchangeRate);
     } else {
-      subtotalTzs = baseFreight + (includeStatutoryTolls ? statutorySumTzs : 0);
+      subtotalTzs = baseFreight;
       subtotalUsd = Number((subtotalTzs / exchangeRate).toFixed(2));
     }
 
@@ -162,8 +155,6 @@ export function TripReceiptDialog({
 
     return {
       baseFreight,
-      statutorySumUsd,
-      statutorySumTzs,
       subtotalUsd,
       subtotalTzs,
       taxAmountUsd,
@@ -171,7 +162,7 @@ export function TripReceiptDialog({
       totalPayableUsd,
       totalPayableTzs,
     };
-  }, [clientPrice, billingCurrency, includeStatutoryTolls, taxPercent, trip, exchangeRate]);
+  }, [clientPrice, billingCurrency, taxPercent, exchangeRate]);
 
   const cleanCargo = useMemo(() => {
     const raw = trip?.cargo_description;
@@ -445,6 +436,51 @@ export function TripReceiptDialog({
           </div>
         )}
 
+        {/* QUICK CUSTOMER PRICE ENTRY BAR (shown when freight price is 0) */}
+        {!editingSettings && pricingCalculations.baseFreight === 0 && (
+          <div className="px-6 py-2.5 bg-amber-500/10 border-b border-amber-500/20 flex flex-wrap items-center justify-between gap-3 text-xs text-amber-900 dark:text-amber-200 print:hidden">
+            <div className="flex items-center gap-2">
+              <span className="font-bold">⚠️ Customer Agreed Freight Price is not set ($0.00).</span>
+              <span className="text-amber-800/90 dark:text-amber-300/90">
+                Enter the amount the client agreed to pay for this shipment:
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="flex rounded bg-muted/80 p-0.5 text-[10px] font-semibold border border-amber-300/50">
+                <button
+                  type="button"
+                  onClick={() => setBillingCurrency("USD")}
+                  className={`px-1.5 py-0.5 rounded ${billingCurrency === "USD" ? "bg-primary text-primary-foreground" : "text-muted-foreground"}`}
+                >
+                  USD
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setBillingCurrency("TZS")}
+                  className={`px-1.5 py-0.5 rounded ${billingCurrency === "TZS" ? "bg-primary text-primary-foreground" : "text-muted-foreground"}`}
+                >
+                  TZS
+                </button>
+              </div>
+              <Input
+                type="number"
+                min={0}
+                placeholder="e.g. 3500"
+                value={clientPrice}
+                onChange={(e) => setClientPrice(e.target.value)}
+                className="h-7 w-28 text-xs font-mono font-bold bg-white dark:bg-slate-900 border-amber-400"
+              />
+              <Button
+                size="sm"
+                onClick={handleSavePricingToTrip}
+                className="h-7 text-xs px-2.5 bg-amber-600 hover:bg-amber-700 text-white font-semibold"
+              >
+                Save Price
+              </Button>
+            </div>
+          </div>
+        )}
+
         {/* PRINTABLE SHEET CONTAINER */}
         <div className="flex-1 overflow-y-auto p-4 sm:p-8 flex justify-center bg-muted/40 print:p-0 print:bg-white print:overflow-visible">
           <div
@@ -550,76 +586,89 @@ export function TripReceiptDialog({
                 </div>
               </div>
 
-              {/* ITEMISED FINANCIAL SERVICES & TOLLS TABLE */}
+              {/* ITEMISED COMMERCIAL FREIGHT SERVICE TABLE */}
               <div>
                 <table className="w-full text-xs">
                   <thead>
                     <tr className="border-b-2 border-slate-800 text-left text-[10px] uppercase tracking-wide text-slate-600">
-                      <th className="py-2.5 px-2 font-bold">#</th>
-                      <th className="py-2.5 px-2 font-bold">Description of Freight Service & Tolls</th>
-                      <th className="py-2.5 px-2 text-center font-bold">Category</th>
-                      <th className="py-2.5 px-2 text-right font-bold">Amount ({billingCurrency})</th>
-                      <th className="py-2.5 px-2 text-right font-bold">Equivalent</th>
+                      <th className="py-2.5 px-3 font-bold w-10">#</th>
+                      <th className="py-2.5 px-3 font-bold">Description of Commercial Freight Service</th>
+                      <th className="py-2.5 px-3 text-center font-bold">Assigned Truck & Driver</th>
+                      <th className="py-2.5 px-3 text-right font-bold">Agreed Freight Price</th>
+                      <th className="py-2.5 px-3 text-right font-bold">Total to Pay</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-200">
                     {/* Main Freight Transport Charge */}
                     <tr className="font-semibold text-slate-900 bg-slate-50/40">
-                      <td className="py-2.5 px-2 font-mono">01</td>
-                      <td className="py-2.5 px-2">
-                        <div className="font-bold">Commercial Freight Haulage & Cross-Border Delivery</div>
-                        <div className="text-[11px] text-slate-500">
-                          Route transit from {trip.origin || "Origin"} to {trip.destination || "Destination"}
+                      <td className="py-3 px-3 font-mono text-slate-500">01</td>
+                      <td className="py-3 px-3 space-y-1">
+                        <div className="font-bold text-sm text-slate-900">
+                          Commercial Freight Haulage & Cross-Border Delivery
+                        </div>
+                        <div className="text-xs text-slate-600">
+                          Transit Route: <strong className="text-slate-800">{trip.origin || "Origin Depot"}</strong> → <strong className="text-primary">{trip.destination || "Destination"}</strong>
                           {trip.corridor_name ? ` via ${trip.corridor_name}` : ""}
                         </div>
+                        <div className="text-[11px] text-slate-500">
+                          Consignment: <span className="font-medium text-slate-800">{cleanCargo}</span>
+                        </div>
                       </td>
-                      <td className="py-2.5 px-2 text-center">
-                        <Badge variant="outline" className="text-[9px] px-1 py-0">Haulage</Badge>
+                      <td className="py-3 px-3 text-center">
+                        <div className="font-bold text-xs text-slate-800">
+                          {machine?.plate_number ? `${machine.name} (${machine.plate_number})` : machine?.name || "Vehicle"}
+                        </div>
+                        <div className="text-[10px] text-primary font-medium mt-0.5">
+                          {machine?.trailer_plate ? `Trailer: ${machine.trailer_plate}` : "Standard Trailer Unit"}
+                        </div>
+                        <div className="text-[10px] text-slate-500 mt-1">
+                          Driver: <strong className="text-slate-700">{driver?.full_name || "Fleet Driver"}</strong>
+                        </div>
                       </td>
-                      <td className="py-2.5 px-2 text-right font-mono font-bold text-slate-900">
+                      <td className="py-3 px-3 text-right font-mono font-bold text-slate-900 text-sm">
                         {billingCurrency === "USD"
-                          ? `$${pricingCalculations.baseFreight.toLocaleString(undefined, { minimumFractionDigits: 2 })}`
+                          ? `$${pricingCalculations.baseFreight.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
                           : `${Math.round(pricingCalculations.baseFreight).toLocaleString()} TZS`}
+                        {pricingCalculations.baseFreight === 0 && (
+                          <div className="print:hidden">
+                            <button
+                              type="button"
+                              onClick={() => setEditingSettings(true)}
+                              className="text-[10px] text-amber-600 hover:underline font-sans font-medium"
+                            >
+                              + Set Price
+                            </button>
+                          </div>
+                        )}
                       </td>
-                      <td className="py-2.5 px-2 text-right font-mono text-slate-500 text-[11px]">
+                      <td className="py-3 px-3 text-right font-mono font-bold text-slate-900 text-sm">
                         {billingCurrency === "USD"
-                          ? `≈ ${Math.round(pricingCalculations.baseFreight * exchangeRate).toLocaleString()} TZS`
-                          : `≈ $${(pricingCalculations.baseFreight / exchangeRate).toFixed(2)} USD`}
+                          ? `$${pricingCalculations.baseFreight.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD`
+                          : `${Math.round(pricingCalculations.baseFreight).toLocaleString()} TZS`}
+                        <div className="text-[10px] text-slate-500 font-normal">
+                          {billingCurrency === "USD"
+                            ? `≈ ${Math.round(pricingCalculations.baseFreight * exchangeRate).toLocaleString()} TZS`
+                            : `≈ $${(pricingCalculations.baseFreight / exchangeRate).toFixed(2)} USD`}
+                        </div>
                       </td>
                     </tr>
 
-                    {/* Pre-loaded Statutory Corridor Fees (if any) */}
-                    {includeStatutoryTolls && Array.isArray(trip.expenses) && trip.expenses.length > 0 && (
-                      trip.expenses.map((exp: any, idx: number) => {
-                        const feeUsd = Number(exp.amountUsd) || (Number(exp.amount) / exchangeRate) || 0;
-                        const feeTzs = Number(exp.amountTzs) || (feeUsd * exchangeRate) || 0;
-                        return (
-                          <tr key={exp.id || idx} className="text-slate-700">
-                            <td className="py-2 px-2 font-mono text-slate-400">
-                              {String(idx + 2).padStart(2, "0")}
-                            </td>
-                            <td className="py-2 px-2">
-                              <span className="font-medium">{exp.title}</span>
-                              {exp.notes && (
-                                <span className="text-[10px] text-slate-400 block line-clamp-1">{exp.notes}</span>
-                              )}
-                            </td>
-                            <td className="py-2 px-2 text-center">
-                              <span className="text-[10px] text-slate-500 capitalize">{exp.category}</span>
-                            </td>
-                            <td className="py-2 px-2 text-right font-mono text-slate-800">
-                              {billingCurrency === "USD"
-                                ? `$${feeUsd.toFixed(2)}`
-                                : `${Math.round(feeTzs).toLocaleString()} TZS`}
-                            </td>
-                            <td className="py-2 px-2 text-right font-mono text-slate-400 text-[10px]">
-                              {billingCurrency === "USD"
-                                ? `≈ ${Math.round(feeTzs).toLocaleString()} TZS`
-                                : `≈ $${feeUsd.toFixed(2)} USD`}
-                            </td>
-                          </tr>
-                        );
-                      })
+                    {/* VAT row if applicable */}
+                    {taxPercent > 0 && (
+                      <tr className="text-slate-700">
+                        <td className="py-2.5 px-3 font-mono text-slate-400">02</td>
+                        <td className="py-2.5 px-3" colSpan={2}>
+                          <span className="font-semibold text-slate-800">Value Added Tax (VAT {taxPercent}%)</span>
+                        </td>
+                        <td className="py-2.5 px-3 text-right font-mono text-slate-600">
+                          {taxPercent}%
+                        </td>
+                        <td className="py-2.5 px-3 text-right font-mono font-bold text-slate-900">
+                          {billingCurrency === "USD"
+                            ? `$${pricingCalculations.taxAmountUsd.toFixed(2)} USD`
+                            : `${Math.round(pricingCalculations.taxAmountTzs).toLocaleString()} TZS`}
+                        </td>
+                      </tr>
                     )}
                   </tbody>
                 </table>
@@ -627,41 +676,30 @@ export function TripReceiptDialog({
 
               {/* TOTAL PRICE TO PAY (HIGHLIGHTED CARD) */}
               <div className="flex justify-end pt-2">
-                <div className="w-80 rounded-xl border-2 border-primary bg-primary/5 p-4 space-y-2 text-xs">
-                  <div className="flex justify-between text-slate-600">
-                    <span>Freight Service:</span>
-                    <span className="font-mono font-medium">
+                <div className="w-88 rounded-xl border-2 border-primary bg-primary/5 p-4 space-y-2.5 text-xs">
+                  <div className="flex justify-between text-slate-600 font-medium">
+                    <span>Agreed Freight Price:</span>
+                    <span className="font-mono font-bold text-slate-900 text-sm">
                       {billingCurrency === "USD"
-                        ? `$${pricingCalculations.baseFreight.toLocaleString(undefined, { minimumFractionDigits: 2 })}`
+                        ? `$${pricingCalculations.baseFreight.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD`
                         : `${Math.round(pricingCalculations.baseFreight).toLocaleString()} TZS`}
                     </span>
                   </div>
 
-                  {includeStatutoryTolls && (
-                    <div className="flex justify-between text-slate-600">
-                      <span>Statutory Corridor Tolls:</span>
-                      <span className="font-mono font-medium">
-                        {billingCurrency === "USD"
-                          ? `$${pricingCalculations.statutorySumUsd.toFixed(2)}`
-                          : `${Math.round(pricingCalculations.statutorySumTzs).toLocaleString()} TZS`}
-                      </span>
-                    </div>
-                  )}
-
                   {taxPercent > 0 && (
                     <div className="flex justify-between text-slate-600">
                       <span>VAT / Tax ({taxPercent}%):</span>
-                      <span className="font-mono font-medium">
+                      <span className="font-mono font-semibold">
                         {billingCurrency === "USD"
-                          ? `$${pricingCalculations.taxAmountUsd.toFixed(2)}`
+                          ? `$${pricingCalculations.taxAmountUsd.toFixed(2)} USD`
                           : `${Math.round(pricingCalculations.taxAmountTzs).toLocaleString()} TZS`}
                       </span>
                     </div>
                   )}
 
-                  <div className="border-t-2 border-primary pt-2 flex items-baseline justify-between">
+                  <div className="border-t-2 border-primary/30 pt-2 flex items-baseline justify-between">
                     <div>
-                      <div className="text-[11px] font-black uppercase tracking-wider text-primary">
+                      <div className="text-xs font-black uppercase tracking-wider text-slate-900">
                         Total Price to Pay:
                       </div>
                       <div className="text-[10px] text-slate-500 font-mono">
@@ -670,7 +708,7 @@ export function TripReceiptDialog({
                     </div>
 
                     <div className="text-right">
-                      <div className="text-xl font-black text-primary font-mono">
+                      <div className="text-xl font-black text-primary font-mono tracking-tight">
                         {billingCurrency === "USD"
                           ? `$${pricingCalculations.totalPayableUsd.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD`
                           : `${Math.round(pricingCalculations.totalPayableTzs).toLocaleString()} TZS`}

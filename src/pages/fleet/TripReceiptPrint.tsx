@@ -85,6 +85,8 @@ export default function TripReceiptPrint() {
         exchange_rate: parsedMeta.exchange_rate || DEFAULT_USD_TO_TZS_RATE,
         client_billing_amount: parsedMeta.client_billing_amount ?? null,
         payment_terms: parsedMeta.payment_terms || "Upon Delivery & Offloading",
+        tax_percent: parsedMeta.tax_percent ?? 0,
+        custom_logo_url: parsedMeta.custom_logo_url || null,
         expenses: Array.isArray(parsedMeta.expenses) ? parsedMeta.expenses : [],
       };
 
@@ -110,6 +112,35 @@ export default function TripReceiptPrint() {
   const exchangeRate = Number(trip?.exchange_rate) || DEFAULT_USD_TO_TZS_RATE;
   const isUsd = (trip?.currency || "USD").toUpperCase() === "USD";
   const baseFreight = Number(trip?.client_billing_amount) || 0;
+  const taxPercent = Number(trip?.tax_percent) || 0;
+
+  const pricingCalculations = useMemo(() => {
+    let subtotalUsd = 0;
+    let subtotalTzs = 0;
+
+    if (isUsd) {
+      subtotalUsd = baseFreight;
+      subtotalTzs = Math.round(subtotalUsd * exchangeRate);
+    } else {
+      subtotalTzs = baseFreight;
+      subtotalUsd = Number((subtotalTzs / exchangeRate).toFixed(2));
+    }
+
+    const taxAmountUsd = (subtotalUsd * taxPercent) / 100;
+    const taxAmountTzs = Math.round((subtotalTzs * taxPercent) / 100);
+
+    const totalPayableUsd = subtotalUsd + taxAmountUsd;
+    const totalPayableTzs = subtotalTzs + taxAmountTzs;
+
+    return {
+      baseFreight,
+      taxPercent,
+      taxAmountUsd,
+      taxAmountTzs,
+      totalPayableUsd,
+      totalPayableTzs,
+    };
+  }, [baseFreight, isUsd, exchangeRate, taxPercent]);
 
   const handleDownloadPdf = async () => {
     if (!sheetRef.current) return;
@@ -164,7 +195,7 @@ export default function TripReceiptPrint() {
   const companyName = org?.name || "LOGISTIXWARE LOGISTICS LIMITED";
   const companyPhone = org?.phone || "+255 754 123 456 / +255 22 286 1900";
   const companyAddress = org?.address || "Kurasini Depot, Nelson Mandela Road, Dar es Salaam, Tanzania";
-  const companyLogo = org?.logo_url;
+  const companyLogo = trip?.custom_logo_url || org?.logo_url;
 
   return (
     <div className="min-h-screen bg-muted/40 print:bg-white text-slate-900">
@@ -291,86 +322,109 @@ export default function TripReceiptPrint() {
               </div>
             </div>
 
-            {/* Financial Services Table */}
+            {/* ITEMISED COMMERCIAL FREIGHT SERVICE TABLE */}
             <div>
               <table className="w-full text-xs">
                 <thead>
                   <tr className="border-b-2 border-slate-800 text-left text-[10px] uppercase tracking-wide text-slate-600">
-                    <th className="py-2.5 px-2 font-bold">#</th>
-                    <th className="py-2.5 px-2 font-bold">Description of Freight Service & Tolls</th>
-                    <th className="py-2.5 px-2 text-center font-bold">Category</th>
-                    <th className="py-2.5 px-2 text-right font-bold">Amount ({trip.currency})</th>
-                    <th className="py-2.5 px-2 text-right font-bold">Equivalent</th>
+                    <th className="py-2.5 px-3 font-bold w-10">#</th>
+                    <th className="py-2.5 px-3 font-bold">Description of Commercial Freight Service</th>
+                    <th className="py-2.5 px-3 text-center font-bold">Assigned Truck & Driver</th>
+                    <th className="py-2.5 px-3 text-right font-bold">Agreed Freight Price</th>
+                    <th className="py-2.5 px-3 text-right font-bold">Total to Pay</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-200">
+                  {/* Main Freight Transport Charge */}
                   <tr className="font-semibold text-slate-900 bg-slate-50/40">
-                    <td className="py-2.5 px-2 font-mono">01</td>
-                    <td className="py-2.5 px-2">
-                      <div className="font-bold">Commercial Freight Haulage & Cross-Border Delivery</div>
-                      <div className="text-[11px] text-slate-500">
-                        Route transit from {trip.origin || "Origin"} to {trip.destination || "Destination"}
+                    <td className="py-3 px-3 font-mono text-slate-500">01</td>
+                    <td className="py-3 px-3 space-y-1">
+                      <div className="font-bold text-sm text-slate-900">
+                        Commercial Freight Haulage & Cross-Border Delivery
+                      </div>
+                      <div className="text-xs text-slate-600">
+                        Transit Route: <strong className="text-slate-800">{trip.origin || "Origin Depot"}</strong> → <strong className="text-primary">{trip.destination || "Destination"}</strong>
                         {trip.corridor_name ? ` via ${trip.corridor_name}` : ""}
                       </div>
+                      <div className="text-[11px] text-slate-500">
+                        Consignment: <span className="font-medium text-slate-800">{trip.cargo_description || "Commercial Cargo / General Freight"}</span>
+                      </div>
                     </td>
-                    <td className="py-2.5 px-2 text-center">
-                      <Badge variant="outline" className="text-[9px] px-1 py-0">Haulage</Badge>
+                    <td className="py-3 px-3 text-center">
+                      <div className="font-bold text-xs text-slate-800">
+                        {machine?.plate_number ? `${machine.name} (${machine.plate_number})` : machine?.name || "Vehicle"}
+                      </div>
+                      <div className="text-[10px] text-primary font-medium mt-0.5">
+                        {machine?.trailer_plate ? `Trailer: ${machine.trailer_plate}` : "Standard Trailer Unit"}
+                      </div>
+                      <div className="text-[10px] text-slate-500 mt-1">
+                        Driver: <strong className="text-slate-700">{driver?.full_name || "Fleet Driver"}</strong>
+                      </div>
                     </td>
-                    <td className="py-2.5 px-2 text-right font-mono font-bold text-slate-900">
-                      {isUsd ? `$${baseFreight.toLocaleString(undefined, { minimumFractionDigits: 2 })}` : `${Math.round(baseFreight).toLocaleString()} TZS`}
-                    </td>
-                    <td className="py-2.5 px-2 text-right font-mono text-slate-500 text-[11px]">
+                    <td className="py-3 px-3 text-right font-mono font-bold text-slate-900 text-sm">
                       {isUsd
-                        ? `≈ ${Math.round(baseFreight * exchangeRate).toLocaleString()} TZS`
-                        : `≈ $${(baseFreight / exchangeRate).toFixed(2)} USD`}
+                        ? `$${pricingCalculations.baseFreight.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                        : `${Math.round(pricingCalculations.baseFreight).toLocaleString()} TZS`}
+                    </td>
+                    <td className="py-3 px-3 text-right font-mono font-bold text-slate-900 text-sm">
+                      {isUsd
+                        ? `$${pricingCalculations.baseFreight.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD`
+                        : `${Math.round(pricingCalculations.baseFreight).toLocaleString()} TZS`}
+                      <div className="text-[10px] text-slate-500 font-normal">
+                        {isUsd
+                          ? `≈ ${Math.round(pricingCalculations.baseFreight * exchangeRate).toLocaleString()} TZS`
+                          : `≈ $${(pricingCalculations.baseFreight / exchangeRate).toFixed(2)} USD`}
+                      </div>
                     </td>
                   </tr>
 
-                  {Array.isArray(trip.expenses) && trip.expenses.map((exp: any, idx: number) => {
-                    const feeUsd = Number(exp.amountUsd) || (Number(exp.amount) / exchangeRate) || 0;
-                    const feeTzs = Number(exp.amountTzs) || (feeUsd * exchangeRate) || 0;
-                    return (
-                      <tr key={exp.id || idx} className="text-slate-700">
-                        <td className="py-2 px-2 font-mono text-slate-400">
-                          {String(idx + 2).padStart(2, "0")}
-                        </td>
-                        <td className="py-2 px-2">
-                          <span className="font-medium">{exp.title}</span>
-                          {exp.notes && (
-                            <span className="text-[10px] text-slate-400 block line-clamp-1">{exp.notes}</span>
-                          )}
-                        </td>
-                        <td className="py-2 px-2 text-center">
-                          <span className="text-[10px] text-slate-500 capitalize">{exp.category}</span>
-                        </td>
-                        <td className="py-2 px-2 text-right font-mono text-slate-800">
-                          {isUsd ? `$${feeUsd.toFixed(2)}` : `${Math.round(feeTzs).toLocaleString()} TZS`}
-                        </td>
-                        <td className="py-2 px-2 text-right font-mono text-slate-400 text-[10px]">
-                          {isUsd
-                            ? `≈ ${Math.round(feeTzs).toLocaleString()} TZS`
-                            : `≈ $${feeUsd.toFixed(2)} USD`}
-                        </td>
-                      </tr>
-                    );
-                  })}
+                  {/* VAT row if applicable */}
+                  {pricingCalculations.taxPercent > 0 && (
+                    <tr className="text-slate-700">
+                      <td className="py-2.5 px-3 font-mono text-slate-400">02</td>
+                      <td className="py-2.5 px-3" colSpan={2}>
+                        <span className="font-semibold text-slate-800">Value Added Tax (VAT {pricingCalculations.taxPercent}%)</span>
+                      </td>
+                      <td className="py-2.5 px-3 text-right font-mono text-slate-600">
+                        {pricingCalculations.taxPercent}%
+                      </td>
+                      <td className="py-2.5 px-3 text-right font-mono font-bold text-slate-900">
+                        {isUsd
+                          ? `$${pricingCalculations.taxAmountUsd.toFixed(2)} USD`
+                          : `${Math.round(pricingCalculations.taxAmountTzs).toLocaleString()} TZS`}
+                      </td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </div>
 
-            {/* Total Price to Pay Box */}
+            {/* TOTAL PRICE TO PAY (HIGHLIGHTED CARD) */}
             <div className="flex justify-end pt-2">
-              <div className="w-80 rounded-xl border-2 border-primary bg-primary/5 p-4 space-y-2 text-xs">
-                <div className="flex justify-between text-slate-600">
-                  <span>Freight Service:</span>
-                  <span className="font-mono font-medium">
-                    {isUsd ? `$${baseFreight.toLocaleString(undefined, { minimumFractionDigits: 2 })}` : `${Math.round(baseFreight).toLocaleString()} TZS`}
+              <div className="w-88 rounded-xl border-2 border-primary bg-primary/5 p-4 space-y-2.5 text-xs">
+                <div className="flex justify-between text-slate-600 font-medium">
+                  <span>Agreed Freight Price:</span>
+                  <span className="font-mono font-bold text-slate-900 text-sm">
+                    {isUsd
+                      ? `$${pricingCalculations.baseFreight.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD`
+                      : `${Math.round(pricingCalculations.baseFreight).toLocaleString()} TZS`}
                   </span>
                 </div>
 
-                <div className="border-t-2 border-primary pt-2 flex items-baseline justify-between">
+                {pricingCalculations.taxPercent > 0 && (
+                  <div className="flex justify-between text-slate-600">
+                    <span>VAT / Tax ({pricingCalculations.taxPercent}%):</span>
+                    <span className="font-mono font-semibold">
+                      {isUsd
+                        ? `$${pricingCalculations.taxAmountUsd.toFixed(2)} USD`
+                        : `${Math.round(pricingCalculations.taxAmountTzs).toLocaleString()} TZS`}
+                    </span>
+                  </div>
+                )}
+
+                <div className="border-t-2 border-primary/30 pt-2 flex items-baseline justify-between">
                   <div>
-                    <div className="text-[11px] font-black uppercase tracking-wider text-primary">
+                    <div className="text-xs font-black uppercase tracking-wider text-slate-900">
                       Total Price to Pay:
                     </div>
                     <div className="text-[10px] text-slate-500 font-mono">
@@ -379,15 +433,15 @@ export default function TripReceiptPrint() {
                   </div>
 
                   <div className="text-right">
-                    <div className="text-xl font-black text-primary font-mono">
+                    <div className="text-xl font-black text-primary font-mono tracking-tight">
                       {isUsd
-                        ? `$${baseFreight.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD`
-                        : `${Math.round(baseFreight).toLocaleString()} TZS`}
+                        ? `$${pricingCalculations.totalPayableUsd.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD`
+                        : `${Math.round(pricingCalculations.totalPayableTzs).toLocaleString()} TZS`}
                     </div>
                     <div className="text-xs font-bold text-slate-600 font-mono">
                       {isUsd
-                        ? `≈ ${Math.round(baseFreight * exchangeRate).toLocaleString()} TZS`
-                        : `≈ $${(baseFreight / exchangeRate).toFixed(2)} USD`}
+                        ? `≈ ${Math.round(pricingCalculations.totalPayableTzs).toLocaleString()} TZS`
+                        : `≈ $${pricingCalculations.totalPayableUsd.toFixed(2)} USD`}
                     </div>
                   </div>
                 </div>
