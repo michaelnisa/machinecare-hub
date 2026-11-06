@@ -183,14 +183,15 @@ export async function testTrakzeeConnection(cfg: Partial<TrakzeeConfig>): Promis
  */
 export async function syncTrakzeeFleet(
   organisationId: string,
-  autoImport: boolean = false
+  autoImport: boolean | unknown = false
 ): Promise<TrakzeeSyncResult> {
+  const shouldAutoImport = typeof autoImport === "boolean" ? autoImport : false;
   try {
     const { data, error } = await supabase.functions.invoke("trakzee-telematics", {
       body: {
         action: "sync_fleet",
         organisation_id: organisationId,
-        auto_import: autoImport,
+        auto_import: shouldAutoImport,
       },
     });
 

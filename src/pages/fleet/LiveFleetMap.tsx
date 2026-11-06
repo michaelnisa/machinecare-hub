@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { syncTrakzeeFleet } from "@/services/trakzeeService";
+import { SAFE_MACHINE_COLUMNS, parseMachine } from "@/lib/fleet-metadata";
 import { formatNumber } from "@/lib/format";
 import { toast } from "sonner";
 import {
@@ -106,13 +107,14 @@ export default function LiveFleetMap() {
     try {
       const { data, error } = await supabase
         .from("machines")
-        .select("id, name, plate_number, make, model, status, current_odometer_km, telematics_speed, telematics_ignition, telematics_battery_volt, telematics_latitude, telematics_longitude, telematics_last_at, telematics_raw")
+        .select(SAFE_MACHINE_COLUMNS)
         .eq("organisation_id", organisation.id)
         .in("category", ["Vehicle", "Trailer"])
-        .order("plate_number");
+        .order("name");
 
       if (error) throw error;
-      setVehicles((data || []) as TrackedVehicle[]);
+      const parsed = (data || []).map((m, idx) => parseMachine(m, idx));
+      setVehicles(parsed as any as TrackedVehicle[]);
     } catch (err: any) {
       toast.error(err.message || "Failed to load vehicles");
     } finally {
@@ -125,11 +127,12 @@ export default function LiveFleetMap() {
   }, [organisation?.id]);
 
   // Sync with Trakzee live API
-  const handleSync = async (autoImport = false) => {
+  const handleSync = async (autoImport: boolean | unknown = false) => {
     if (!organisation?.id) return;
+    const shouldImport = typeof autoImport === "boolean" ? autoImport : false;
     setSyncing(true);
     try {
-      const res = await syncTrakzeeFleet(organisation.id, autoImport);
+      const res = await syncTrakzeeFleet(organisation.id, shouldImport);
       if (!res.success) {
         toast.error(res.error || "Failed to sync Trakzee GPS");
       } else {

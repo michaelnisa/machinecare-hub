@@ -8,7 +8,7 @@
 import type { TruckLayoutConfigId } from "./fleet-constants";
 
 export const SAFE_MACHINE_COLUMNS =
-  "id, name, plate_number, make, model, year, vin, category, fuel_type, tank_capacity_l, current_odometer_km, current_hours, home_depot, cover_image_url, status, notes, telematics_imei, telematics_speed, telematics_ignition, telematics_battery_volt, telematics_latitude, telematics_longitude, telematics_last_at";
+  "id, name, plate_number, make, model, year, vin, category, fuel_type, tank_capacity_l, current_odometer_km, current_hours, home_depot, cover_image_url, status, notes";
 
 export const SAFE_DRIVER_COLUMNS =
   "id, full_name, phone, status, notes, photo_url";
@@ -116,6 +116,16 @@ export function parseMachine(raw: any, index?: number): FleetVehicle {
   let auto_pm_hours_interval: number | null = null;
   let auto_pm_km_interval: number | null = null;
 
+  let telematics_imei: string | null = (raw as any).telematics_imei ?? null;
+  let telematics_speed: number | null = (raw as any).telematics_speed != null ? Number((raw as any).telematics_speed) : null;
+  let telematics_ignition: boolean | null = (raw as any).telematics_ignition != null ? Boolean((raw as any).telematics_ignition) : null;
+  let telematics_battery_volt: number | null = (raw as any).telematics_battery_volt != null ? Number((raw as any).telematics_battery_volt) : null;
+  let telematics_latitude: number | null = (raw as any).telematics_latitude != null ? Number((raw as any).telematics_latitude) : null;
+  let telematics_longitude: number | null = (raw as any).telematics_longitude != null ? Number((raw as any).telematics_longitude) : null;
+  let telematics_last_at: string | null = (raw as any).telematics_last_at ?? null;
+  let telematics_raw: any = (raw as any).telematics_raw ?? null;
+  let telematics_obj: any = null;
+
   if (raw.notes && typeof raw.notes === "string" && raw.notes.startsWith("{") && raw.notes.endsWith("}")) {
     try {
       const parsed = JSON.parse(raw.notes);
@@ -133,6 +143,21 @@ export function parseMachine(raw: any, index?: number): FleetVehicle {
       if (parsed.auto_pm_hours_interval != null) auto_pm_hours_interval = Number(parsed.auto_pm_hours_interval);
       if (parsed.auto_pm_km_interval != null) auto_pm_km_interval = Number(parsed.auto_pm_km_interval);
       user_notes = parsed.text ?? null;
+
+      // Extract telematics from structured notes JSON
+      if (parsed.telematics) {
+        telematics_obj = parsed.telematics;
+        const t = parsed.telematics;
+        if (telematics_imei == null && t.imei != null) telematics_imei = String(t.imei);
+        if (telematics_speed == null && t.speed != null) telematics_speed = Number(t.speed);
+        if (telematics_ignition == null && t.ignition != null) telematics_ignition = Boolean(t.ignition);
+        if (telematics_battery_volt == null && t.battery_volt != null) telematics_battery_volt = Number(t.battery_volt);
+        if (telematics_latitude == null && t.latitude != null) telematics_latitude = Number(t.latitude);
+        if (telematics_longitude == null && t.longitude != null) telematics_longitude = Number(t.longitude);
+        if (telematics_last_at == null && t.last_at != null) telematics_last_at = String(t.last_at);
+        if (telematics_raw == null && t.raw != null) telematics_raw = t.raw;
+      }
+      if (telematics_imei == null && parsed.telematics_imei != null) telematics_imei = String(parsed.telematics_imei);
     } catch {
       // Fallback on parse failure
     }
@@ -178,6 +203,15 @@ export function parseMachine(raw: any, index?: number): FleetVehicle {
     has_trailer,
     trailer_plate: linked_trailer_plate,
     trailer_make_model: linked_trailer_name,
+    telematics_imei,
+    telematics_speed,
+    telematics_ignition,
+    telematics_battery_volt,
+    telematics_latitude,
+    telematics_longitude,
+    telematics_last_at,
+    telematics_raw,
+    telematics_obj,
   };
 }
 
@@ -198,6 +232,7 @@ export function serializeMachinePayload(data: {
   status: string;
   cover_image_url: string | null;
   telematics_imei?: string | null;
+  existing_telematics?: any;
 
   // Metadata attributes
   vehicle_type: string;
@@ -214,7 +249,9 @@ export function serializeMachinePayload(data: {
   auto_pm_km_interval?: number | null;
   user_notes?: string | null;
 }) {
-  const meta = {
+  const cleanImei = data.telematics_imei ? data.telematics_imei.trim() : null;
+
+  const meta: any = {
     vehicle_code: data.vehicle_code ? data.vehicle_code.trim().toUpperCase() : null,
     vehicle_type: data.vehicle_type,
     axle_configuration: data.axle_configuration,
@@ -230,6 +267,16 @@ export function serializeMachinePayload(data: {
     auto_pm_km_interval: data.auto_pm_km_interval ?? null,
     text: data.user_notes ?? "",
   };
+
+  if (cleanImei) {
+    meta.telematics_imei = cleanImei;
+  }
+  if (data.existing_telematics) {
+    meta.telematics = {
+      ...data.existing_telematics,
+      ...(cleanImei ? { imei: cleanImei } : {}),
+    };
+  }
 
   const payload: any = {
     name: data.name,
@@ -248,10 +295,6 @@ export function serializeMachinePayload(data: {
     cover_image_url: data.cover_image_url,
     notes: JSON.stringify(meta),
   };
-
-  if (data.telematics_imei !== undefined) {
-    payload.telematics_imei = data.telematics_imei ? data.telematics_imei.trim() : null;
-  }
 
   return payload;
 }

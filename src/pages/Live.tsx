@@ -6,6 +6,7 @@ import { useIndustry } from "@/hooks/useIndustry";
 import { PageLoader } from "@/components/PageLoader";
 import { Button } from "@/components/ui/button";
 import { estimateUsageRate, predictScheduleDue } from "@/lib/pm-prediction";
+import { SAFE_MACHINE_COLUMNS, parseMachine } from "@/lib/fleet-metadata";
 import { Activity, Gauge, ShieldCheck, AlertTriangle, Wrench, ClipboardList, Maximize2, Truck, ParkingCircle, CalendarClock } from "lucide-react";
 
 type FleetKpis = {
@@ -203,10 +204,10 @@ export default function Live() {
   const loadFleet = useCallback(async () => {
     if (!organisation?.id) return;
     const orgId = organisation.id;
-    const [{ data: machines }, { data: trips }, { data: openWos }] = await Promise.all([
+    const [{ data: rawMachines }, { data: trips }, { data: openWos }] = await Promise.all([
       supabase
         .from("machines")
-        .select("id, name, plate_number, status, telematics_speed, telematics_ignition, telematics_battery_volt, telematics_latitude, telematics_longitude")
+        .select(SAFE_MACHINE_COLUMNS)
         .eq("organisation_id", orgId),
       supabase.from("trips").select("machine_id, status").eq("organisation_id", orgId).eq("status", "in_progress"),
       supabase.from("work_orders").select("machine_id").eq("organisation_id", orgId).in("status", ["open", "assigned", "in_progress", "waiting_parts"]),
@@ -218,7 +219,8 @@ export default function Live() {
     let onRoad = 0, idle = 0, workshop = 0, offRoad = 0;
     const vehicles: FleetKpis["vehicles"] = [];
 
-    for (const m of (machines ?? []) as any[]) {
+    for (const raw of (rawMachines ?? []) as any[]) {
+      const m = parseMachine(raw);
       const plate = m.plate_number || m.name;
       const label = plate;
       const speed = Number(m.telematics_speed || 0);
@@ -255,7 +257,7 @@ export default function Live() {
       });
     }
 
-    const total = (machines ?? []).length;
+    const total = (rawMachines ?? []).length;
     const availableCount = onRoad + idle;
     const activeFleet = total - offRoad;
     const availabilityPct = activeFleet > 0 ? Math.round((availableCount / activeFleet) * 100) : 100;

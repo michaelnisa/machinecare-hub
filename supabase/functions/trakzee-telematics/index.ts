@@ -251,9 +251,9 @@ serve(async (req) => {
       const { url: serverUrl } = await resolveBestServerUrl(rawServerUrl);
 
       // 2. Fetch active vehicles for this organisation in MachineCare
-      const { data: machines, error: mErr } = await supabase
+      const { data: rawMachines, error: mErr } = await supabase
         .from("machines")
-        .select("id, name, plate_number, telematics_imei, current_odometer_km, current_hours, status, notes")
+        .select("id, name, plate_number, current_odometer_km, current_hours, status, notes")
         .eq("organisation_id", orgId);
 
       if (mErr) {
@@ -263,13 +263,30 @@ serve(async (req) => {
         );
       }
 
+      // Parse telematics and notes JSON
+      const machines = (rawMachines || []).map((m: any) => {
+        let imei = (m as any).telematics_imei || null;
+        let notesObj: any = {};
+        if (m.notes && typeof m.notes === "string" && m.notes.startsWith("{")) {
+          try {
+            notesObj = JSON.parse(m.notes);
+            imei = imei || notesObj.telematics_imei || notesObj.telematics?.imei || null;
+          } catch (_) {}
+        }
+        return {
+          ...m,
+          telematics_imei: imei,
+          _parsedNotes: notesObj,
+        };
+      });
+
       // Collect plate numbers and IMEIs
       const plateList = (machines || [])
-        .map((m) => sanitizeString(m.plate_number))
+        .map((m: any) => sanitizeString(m.plate_number))
         .filter(Boolean);
 
       const imeiList = (machines || [])
-        .map((m) => sanitizeString(m.telematics_imei))
+        .map((m: any) => sanitizeString(m.telematics_imei))
         .filter(Boolean);
 
       // 3. Step-1: Authenticate with Trakzee
@@ -376,7 +393,25 @@ serve(async (req) => {
         const volt = tVehicle.ExternalVolt && tVehicle.ExternalVolt !== "--" ? Number(tVehicle.ExternalVolt) : null;
 
         if (!match) {
-          if (body.auto_import) {
+          const shouldAutoImport = Boolean(body.auto_import === true || body.auto_import === "true" || body.auto_import === 1);
+          if (shouldAutoImport) {
+            const metaNotes: any = {
+              vehicle_code: rawPlate,
+              category: "Vehicle",
+              text: `[Auto-imported from Trakzee telematics | Model: ${tVehicle.DeviceModel || "GPS"}]`,
+              telematics_imei: imei || null,
+              telematics: {
+                imei: imei || null,
+                speed,
+                ignition: ign,
+                battery_volt: volt,
+                latitude: lat,
+                longitude: lng,
+                last_at: new Date().toISOString(),
+                raw: tVehicle,
+              },
+            };
+
             const newMachPayload: any = {
               organisation_id: orgId,
               name: rawPlate,
@@ -384,15 +419,7 @@ serve(async (req) => {
               category: "Vehicle",
               status: "operational",
               current_odometer_km: odoKm && odoKm > 0 ? odoKm : 0,
-              telematics_imei: imei || null,
-              telematics_speed: speed,
-              telematics_ignition: ign,
-              telematics_battery_volt: volt,
-              telematics_latitude: lat,
-              telematics_longitude: lng,
-              telematics_last_at: new Date().toISOString(),
-              telematics_raw: tVehicle,
-              notes: `[Auto-imported from Trakzee telematics | Model: ${tVehicle.DeviceModel || "GPS"}]`,
+              notes: JSON.stringify(metaNotes),
             };
 
             const { data: createdMach, error: insErr } = await supabase
@@ -416,19 +443,27 @@ serve(async (req) => {
           continue;
         }
 
-        const updatePayload: any = {
-          telematics_speed: speed,
-          telematics_ignition: ign,
-          telematics_battery_volt: volt,
-          telematics_latitude: lat,
-          telematics_longitude: lng,
-          telematics_last_at: new Date().toISOString(),
-          telematics_raw: tVehicle,
+        // Merge telematics snapshot into notes JSON
+        const existingNotes = match._parsedNotes || {};
+        const updatedNotes = {
+          ...existingNotes,
+          telematics_imei: imei || existingNotes.telematics_imei || null,
+          telematics: {
+            ...(existingNotes.telematics || {}),
+            imei: imei || existingNotes.telematics?.imei || null,
+            speed,
+            ignition: ign,
+            battery_volt: volt,
+            latitude: lat,
+            longitude: lng,
+            last_at: new Date().toISOString(),
+            raw: tVehicle,
+          },
         };
 
-        if (imei && !match.telematics_imei) {
-          updatePayload.telematics_imei = imei;
-        }
+        const updatePayload: any = {
+          notes: JSON.stringify(updatedNotes),
+        };
 
         // Only update odometer if valid and >= current
         if (odoKm !== null && odoKm > 0) {
@@ -451,36 +486,6 @@ serve(async (req) => {
             speed,
             status: tVehicle.Status,
           });
-        } else {
-          // Schema cache fallback: update odometer and notes safely
-          const safePayload: any = {};
-          if (odoKm !== null && odoKm > 0) {
-            safePayload.current_odometer_km = odoKm;
-          }
-          try {
-            const existingNotes = match.notes || "";
-            const telematicsSnippet = `[GPS: ${lat?.toFixed(4)}, ${lng?.toFixed(4)} | Speed: ${speed}km/h | Status: ${tVehicle.Status} | Updated: ${new Date().toISOString()}]`;
-            safePayload.notes = existingNotes.includes("[GPS:")
-              ? existingNotes.replace(/\[GPS:.*?\]/g, telematicsSnippet)
-              : `${existingNotes}\n${telematicsSnippet}`.trim();
-          } catch (_) {}
-
-          const { error: fallbackErr } = await supabase
-            .from("machines")
-            .update(safePayload)
-            .eq("id", match.id);
-
-          if (!fallbackErr) {
-            updatedCount++;
-            syncLogs.push({
-              machine_id: match.id,
-              plate: match.plate_number,
-              odometer_km: odoKm ?? match.current_odometer_km,
-              speed,
-              status: tVehicle.Status,
-              fallback: true,
-            });
-          }
         }
       }
 

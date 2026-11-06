@@ -140,10 +140,11 @@ export default function Vehicles() {
   const [importOpen, setImportOpen] = useState(false);
   const [syncingTrakzee, setSyncingTrakzee] = useState(false);
 
-  const handleSyncTrakzee = async (autoImport = false) => {
+  const handleSyncTrakzee = async (autoImport: boolean | unknown = false) => {
     if (!organisation?.id) return;
+    const shouldImport = typeof autoImport === "boolean" ? autoImport : false;
     setSyncingTrakzee(true);
-    const res = await syncTrakzeeFleet(organisation.id, autoImport);
+    const res = await syncTrakzeeFleet(organisation.id, shouldImport);
     setSyncingTrakzee(false);
     if (!res.success) {
       toast.error(res.error || "Failed to sync Trakzee GPS");
@@ -277,7 +278,7 @@ export default function Vehicles() {
           <div className="flex items-center gap-2">
             <Button
               variant="outline"
-              onClick={handleSyncTrakzee}
+              onClick={() => handleSyncTrakzee(false)}
               disabled={syncingTrakzee}
               className="gap-1.5 text-xs text-primary border-primary/30 hover:bg-primary/5"
               title="Sync live odometer, speed, and GPS location from Trakzee"
@@ -1028,6 +1029,7 @@ export function VehicleDialog({
         auto_pm_km_interval: form.auto_pm_km_interval ? Number(form.auto_pm_km_interval) : null,
         user_notes: form.user_notes.trim() || null,
         telematics_imei: form.telematics_imei.trim() || null,
+        existing_telematics: (machine as any)?.telematics_obj ?? undefined,
       });
 
       let savedMachineId = machine?.id;
