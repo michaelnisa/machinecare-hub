@@ -59,6 +59,7 @@ export function TripExpenseDialog({
   const [expenseType, setExpenseType] = useState<string>(defaultType);
   const [title, setTitle] = useState("");
   const [amount, setAmount] = useState("");
+  const [currency, setCurrency] = useState<"TZS" | "USD">("TZS");
   const [referenceNumber, setReferenceNumber] = useState("");
   const [notes, setNotes] = useState("");
   const [photoFile, setPhotoFile] = useState<File | null>(null);
@@ -69,6 +70,7 @@ export function TripExpenseDialog({
     setExpenseType(defaultType);
     setTitle("");
     setAmount("");
+    setCurrency("TZS");
     setReferenceNumber("");
     setNotes("");
     setPhotoFile(null);
@@ -198,7 +200,7 @@ export function TripExpenseDialog({
           expense_type: expenseType,
           title: title.trim() || defaultTitle,
           amount: numAmount,
-          currency: "TZS",
+          currency: currency,
           reference_number: referenceNumber.trim() || null,
           receipt_url: uploadedReceiptUrl,
           notes: notes.trim() || null,
@@ -341,20 +343,53 @@ export function TripExpenseDialog({
           {/* Amount & Reference Number */}
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <Label htmlFor="te-amount" className="text-xs font-semibold">
-                Amount (TZS) *
-              </Label>
+              <div className="flex items-center justify-between">
+                <Label htmlFor="te-amount" className="text-xs font-semibold">
+                  Amount *
+                </Label>
+                <div className="flex rounded bg-muted p-0.5 text-[10px]">
+                  <button
+                    type="button"
+                    onClick={() => setCurrency("TZS")}
+                    className={`px-1.5 py-0.5 rounded font-semibold transition-colors ${
+                      currency === "TZS"
+                        ? "bg-primary text-primary-foreground shadow-xs"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    TZS
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCurrency("USD")}
+                    className={`px-1.5 py-0.5 rounded font-semibold transition-colors ${
+                      currency === "USD"
+                        ? "bg-primary text-primary-foreground shadow-xs"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    USD
+                  </button>
+                </div>
+              </div>
               <Input
                 id="te-amount"
                 type="number"
                 min={0}
                 step="any"
-                placeholder="e.g. 30000"
+                placeholder={currency === "USD" ? "e.g. 50" : "e.g. 50000"}
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
                 required
                 className="font-mono text-sm font-semibold"
               />
+              {amount && !isNaN(Number(amount)) && Number(amount) > 0 && (
+                <span className="text-[10px] text-muted-foreground block font-mono">
+                  {currency === "USD"
+                    ? `≈ ${Math.round(Number(amount) * 2600).toLocaleString()} TZS`
+                    : `≈ $${(Number(amount) / 2600).toFixed(2)} USD`}
+                </span>
+              )}
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="te-ref" className="text-xs font-semibold">

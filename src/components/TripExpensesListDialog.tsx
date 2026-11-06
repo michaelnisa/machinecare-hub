@@ -111,24 +111,37 @@ export function TripExpensesListDialog({
     }
   }, [open, tripId]);
 
-  // Calculations for total driver costs in this trip
+  // Calculations for total driver costs in this trip with dual currency support
   const costBreakdown = useMemo(() => {
-    const finesTotal = expenses
-      .filter((e) => e.expense_type === "fine")
-      .reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
+    const rate = 2600;
+    let finesTzs = 0;
+    let receiptsTzs = 0;
+    let totalUsdSum = 0;
 
-    const receiptsTotal = expenses
-      .filter((e) => e.expense_type !== "fine")
-      .reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
+    expenses.forEach((e) => {
+      const amt = Number(e.amount) || 0;
+      const isUsd = (e.currency || "").toUpperCase() === "USD";
+      const amtInTzs = isUsd ? amt * rate : amt;
+      const amtInUsd = isUsd ? amt : amt / rate;
+
+      totalUsdSum += amtInUsd;
+      if (e.expense_type === "fine") {
+        finesTzs += amtInTzs;
+      } else {
+        receiptsTzs += amtInTzs;
+      }
+    });
 
     const fuel = Number(fuelCost) || 0;
-    const grandTotal = finesTotal + receiptsTotal + fuel;
+    const grandTotalTzs = finesTzs + receiptsTzs + fuel;
+    const grandTotalUsd = totalUsdSum + fuel / rate;
 
     return {
-      finesTotal,
-      receiptsTotal,
+      finesTotal: finesTzs,
+      receiptsTotal: receiptsTzs,
       fuelCost: fuel,
-      grandTotal,
+      grandTotal: grandTotalTzs,
+      grandTotalUsd,
       expensesCount: expenses.length,
     };
   }, [expenses, fuelCost]);
@@ -230,6 +243,9 @@ export function TripExpensesListDialog({
                 </span>
                 <div className="text-2xl font-black text-foreground mt-0.5">
                   {formatMoney(costBreakdown.grandTotal)}
+                </div>
+                <div className="text-xs font-semibold text-primary font-mono mt-0.5">
+                  ≈ ${costBreakdown.grandTotalUsd.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD
                 </div>
               </div>
               <Badge className="bg-primary/15 text-primary border-primary/20 text-xs px-2.5 py-1">
@@ -357,14 +373,27 @@ export function TripExpensesListDialog({
                         </div>
                       </div>
 
-                      <div className="flex flex-col items-end shrink-0 gap-1.5">
-                        <span
-                          className={`font-mono text-sm font-bold ${
-                            isFine ? "text-rose-600 dark:text-rose-400" : "text-foreground"
-                          }`}
-                        >
-                          {formatMoney(item.amount)}
-                        </span>
+                      <div className="flex flex-col items-end shrink-0 gap-1">
+                        {(() => {
+                          const isUsd = (item.currency || "").toUpperCase() === "USD";
+                          const amt = Number(item.amount) || 0;
+                          return (
+                            <>
+                              <span
+                                className={`font-mono text-sm font-bold ${
+                                  isFine ? "text-rose-600 dark:text-rose-400" : "text-foreground"
+                                }`}
+                              >
+                                {isUsd ? `$${amt.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : formatMoney(amt)}
+                              </span>
+                              <span className="text-[10px] text-muted-foreground font-mono">
+                                {isUsd
+                                  ? `≈ ${Math.round(amt * 2600).toLocaleString()} TZS`
+                                  : `≈ $${(amt / 2600).toFixed(2)} USD`}
+                              </span>
+                            </>
+                          );
+                        })()}
 
                         {canManage && (
                           <Button

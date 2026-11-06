@@ -29,8 +29,25 @@ import {
   User,
   HeartHandshake,
   Phone,
+  Globe2,
+  DollarSign,
+  Check,
+  SlidersHorizontal,
+  Info,
 } from "lucide-react";
 import { TripExpensesListDialog } from "@/components/TripExpensesListDialog";
+import { CorridorExpenseCatalogDialog } from "@/components/CorridorExpenseCatalogDialog";
+import {
+  CROSS_BORDER_CORRIDORS,
+  DEFAULT_USD_TO_TZS_RATE,
+  convertUsdToTzs,
+  convertTzsToUsd,
+  formatDualCurrency,
+  formatTripCurrency,
+  type CrossBorderCorridor,
+  type CorridorExpenseItem,
+} from "@/services/crossBorderCorridors";
+import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { formatDate, formatNumber, formatMoney } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -75,6 +92,12 @@ type Trip = {
   fuel_used_l: number | null;
   cost: number | null;
   status: "planned" | "in_progress" | "completed" | "cancelled";
+  corridor_id?: string | null;
+  corridor_name?: string | null;
+  border_post?: string | null;
+  currency?: "USD" | "TZS" | null;
+  exchange_rate?: number | null;
+  expenses?: any[] | null;
 };
 
 const STATUS_CLASS: Record<string, string> = {
@@ -102,6 +125,12 @@ function parseTripRecord(raw: any): Trip {
   let purpose = raw.purpose ?? null;
   let route_notes = raw.route_notes ?? null;
   let estimated_return_at = raw.estimated_return_at ?? null;
+  let corridor_id = raw.corridor_id ?? null;
+  let corridor_name = raw.corridor_name ?? null;
+  let border_post = raw.border_post ?? null;
+  let currency = raw.currency ?? null;
+  let exchange_rate = raw.exchange_rate ?? null;
+  let expenses = raw.expenses ?? null;
 
   if (raw.cargo_description && typeof raw.cargo_description === "string" && raw.cargo_description.startsWith("{") && raw.cargo_description.endsWith("}")) {
     try {
@@ -114,6 +143,12 @@ function parseTripRecord(raw: any): Trip {
       if (parsed.cargo) cargo_description = parsed.cargo;
       if (parsed.route_notes) route_notes = parsed.route_notes;
       if (parsed.estimated_return_at) estimated_return_at = parsed.estimated_return_at;
+      if (parsed.corridor_id) corridor_id = parsed.corridor_id;
+      if (parsed.corridor_name) corridor_name = parsed.corridor_name;
+      if (parsed.border_post) border_post = parsed.border_post;
+      if (parsed.currency) currency = parsed.currency;
+      if (parsed.exchange_rate) exchange_rate = parsed.exchange_rate;
+      if (parsed.expenses) expenses = parsed.expenses;
     } catch {}
   }
 
@@ -127,6 +162,12 @@ function parseTripRecord(raw: any): Trip {
     purpose,
     route_notes,
     estimated_return_at,
+    corridor_id,
+    corridor_name,
+    border_post,
+    currency,
+    exchange_rate,
+    expenses,
   };
 }
 
@@ -189,6 +230,8 @@ export default function Trips() {
   const [tab, setTab] = useState<(typeof TABS)[number]>("all");
   const [search, setSearch] = useState("");
   const [newOpen, setNewOpen] = useState(false);
+  const [catalogOpen, setCatalogOpen] = useState(false);
+  const [corridorForNewTrip, setCorridorForNewTrip] = useState<CrossBorderCorridor | null>(null);
   const [closeTrip, setCloseTrip] = useState<Trip | null>(null);
   const [confirmCancel, setConfirmCancel] = useState<string | null>(null);
   const [expenseSummaries, setExpenseSummaries] = useState<Map<string, ExpenseSummary>>(new Map());
@@ -209,7 +252,7 @@ export default function Trips() {
         .select(SAFE_DRIVER_COLUMNS)
         .eq("status", "active")
         .order("full_name"),
-      (supabase as any).from("trip_expenses").select("id, trip_id, expense_type, amount"),
+      (supabase as any).from("trip_expenses").select("id, trip_id, expense_type, amount, currency"),
     ]);
 
     if (tErr) toast.error(tErr.message);
@@ -220,13 +263,15 @@ export default function Trips() {
     const expMap = new Map<string, ExpenseSummary>();
     (exp ?? []).forEach((e: any) => {
       const current = expMap.get(e.trip_id) || { total: 0, fines: 0, receipts: 0, count: 0 };
-      const amt = Number(e.amount) || 0;
-      current.total += amt;
+      const isUsd = (e.currency || "").toUpperCase() === "USD";
+      const rate = 2600;
+      const amtInTzs = isUsd ? (Number(e.amount) || 0) * rate : (Number(e.amount) || 0);
+      current.total += amtInTzs;
       current.count += 1;
       if (e.expense_type === "fine") {
-        current.fines += amt;
+        current.fines += amtInTzs;
       } else {
-        current.receipts += amt;
+        current.receipts += amtInTzs;
       }
       expMap.set(e.trip_id, current);
     });
@@ -239,14 +284,17 @@ export default function Trips() {
           if (Array.isArray(parsed.expenses) && parsed.expenses.length > 0) {
             const current = expMap.get(tripRaw.id) || { total: 0, fines: 0, receipts: 0, count: 0 };
             if (current.count === 0) {
+              const tripRate = Number(parsed.exchange_rate) || 2600;
               parsed.expenses.forEach((e: any) => {
-                const amt = Number(e.amount) || 0;
-                current.total += amt;
+                const isUsd = (e.currency || parsed.currency || "").toUpperCase() === "USD";
+                const rawAmt = Number(e.amount ?? e.amountTzs ?? e.amountUsd) || 0;
+                const amtInTzs = isUsd ? (Number(e.amountUsd ?? rawAmt) * tripRate) : (Number(e.amountTzs ?? rawAmt));
+                current.total += amtInTzs;
                 current.count += 1;
-                if (e.expense_type === "fine") {
-                  current.fines += amt;
+                if (e.expense_type === "fine" || e.category === "fine") {
+                  current.fines += amtInTzs;
                 } else {
-                  current.receipts += amt;
+                  current.receipts += amtInTzs;
                 }
               });
               expMap.set(tripRaw.id, current);
@@ -331,11 +379,20 @@ export default function Trips() {
           <h1 className="text-2xl font-semibold tracking-tight">{i18n.fleet.tripsTitle}</h1>
           <p className="text-sm text-muted-foreground">{i18n.fleet.tripsSub}</p>
         </div>
-        {canWrite && (
-          <Button onClick={() => setNewOpen(true)}>
-            <Plus className="mr-2 h-4 w-4" /> {i18n.fleet.newTrip}
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            variant="outline"
+            onClick={() => setCatalogOpen(true)}
+            className="border-primary/30 text-primary hover:bg-primary/5 shadow-xs"
+          >
+            <Globe2 className="mr-2 h-4 w-4" /> Cross-Border Corridors & Rates
           </Button>
-        )}
+          {canWrite && (
+            <Button onClick={() => { setCorridorForNewTrip(null); setNewOpen(true); }}>
+              <Plus className="mr-2 h-4 w-4" /> {i18n.fleet.newTrip}
+            </Button>
+          )}
+        </div>
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -450,6 +507,12 @@ export default function Trips() {
                       </td>
 
                       <td className="px-5 py-3 text-muted-foreground">
+                        {t.corridor_name && (
+                          <Badge variant="outline" className="mb-1 text-[10px] px-1.5 py-0 bg-primary/10 text-primary border-primary/20 flex items-center gap-1 w-fit">
+                            <Globe2 className="h-2.5 w-2.5" />
+                            {t.corridor_name.split("–")[0]?.trim()}
+                          </Badge>
+                        )}
                         <div className="flex items-center gap-1.5 font-medium text-foreground">
                           <MapPin className="h-3.5 w-3.5 text-rose-500 shrink-0" />
                           <span>{t.origin || "Origin"}</span>
@@ -481,8 +544,11 @@ export default function Trips() {
                         {grandTotal > 0 ? (
                           <div>
                             <span className="font-bold text-foreground text-xs">{formatMoney(grandTotal)}</span>
+                            <div className="text-[10px] text-muted-foreground font-mono">
+                              ≈ ${(grandTotal / 2600).toFixed(2)} USD
+                            </div>
                             {expCost > 0 && (
-                              <div className="text-[10px] text-muted-foreground">
+                              <div className="text-[10px] text-primary">
                                 Incl. {formatMoney(expCost)} expenses
                               </div>
                             )}
@@ -550,7 +616,24 @@ export default function Trips() {
         </div>
       )}
 
-      <NewTripDialog open={newOpen} onOpenChange={setNewOpen} machines={machines} drivers={drivers} onSaved={load} />
+      <NewTripDialog
+        open={newOpen}
+        onOpenChange={setNewOpen}
+        machines={machines}
+        drivers={drivers}
+        onSaved={load}
+        initialCorridor={corridorForNewTrip}
+        onOpenCatalog={() => setCatalogOpen(true)}
+      />
+
+      <CorridorExpenseCatalogDialog
+        open={catalogOpen}
+        onOpenChange={setCatalogOpen}
+        onSelectCorridor={(c) => {
+          setCorridorForNewTrip(c);
+          setNewOpen(true);
+        }}
+      />
 
       <CloseTripDialog
         trip={closeTrip}
@@ -639,24 +722,170 @@ const EMPTY_NEW_TRIP: NewTripForm = {
   start_now: true,
 };
 
-function NewTripDialog({ open, onOpenChange, machines, drivers, onSaved }: {
+interface EditableCorridorExpense {
+  id: string;
+  title: string;
+  category: "toll" | "receipt" | "parking" | "fine" | "fuel" | "repair" | "other";
+  amountUsd: number;
+  amountTzs: number;
+  selected: boolean;
+  isRequired: boolean;
+  notes?: string;
+}
+
+function NewTripDialog({
+  open,
+  onOpenChange,
+  machines,
+  drivers,
+  onSaved,
+  initialCorridor,
+  onOpenCatalog,
+}: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
   machines: Machine[];
   drivers: Driver[];
   onSaved: () => void;
+  initialCorridor?: CrossBorderCorridor | null;
+  onOpenCatalog?: () => void;
 }) {
   const { profile, user } = useAuth();
   const [submitting, setSubmitting] = useState(false);
   const [form, setForm] = useState<NewTripForm>(EMPTY_NEW_TRIP);
+  const [corridorId, setCorridorId] = useState<string>("custom");
+  const [currencyMode, setCurrencyMode] = useState<"USD" | "TZS">("USD");
+  const [exchangeRate, setExchangeRate] = useState<number>(DEFAULT_USD_TO_TZS_RATE);
+  const [expenseItems, setExpenseItems] = useState<EditableCorridorExpense[]>([]);
 
+  // Initialize or reset form and corridor items
   useEffect(() => {
-    if (open) setForm(EMPTY_NEW_TRIP);
-  }, [open]);
+    if (!open) return;
+    setForm(EMPTY_NEW_TRIP);
+    setCurrencyMode("USD");
+    setExchangeRate(DEFAULT_USD_TO_TZS_RATE);
+
+    if (initialCorridor) {
+      applyCorridor(initialCorridor);
+    } else {
+      setCorridorId("custom");
+      setExpenseItems([]);
+    }
+  }, [open, initialCorridor]);
+
+  const applyCorridor = (c: CrossBorderCorridor) => {
+    setCorridorId(c.id);
+    setForm((prev) => ({
+      ...prev,
+      origin: c.defaultOrigin,
+      destination: c.defaultDestination,
+      roundtrip_hours_est: String(c.estimatedRoundtripHours),
+      route_notes: `${c.description} (Primary Border: ${c.borderPost})`,
+      purpose: prev.purpose || `Transit Run: ${c.name}`,
+    }));
+
+    const mapped: EditableCorridorExpense[] = c.expenses.map((e) => ({
+      id: e.id,
+      title: e.title,
+      category: e.category,
+      amountUsd: e.defaultAmountUsd,
+      amountTzs: e.defaultAmountTzs || Math.round(e.defaultAmountUsd * exchangeRate),
+      selected: true,
+      isRequired: e.isRequired,
+      notes: e.notes,
+    }));
+    setExpenseItems(mapped);
+  };
+
+  const handleCorridorChange = (newId: string) => {
+    setCorridorId(newId);
+    if (newId === "custom") {
+      setExpenseItems([]);
+      return;
+    }
+    const c = CROSS_BORDER_CORRIDORS.find((x) => x.id === newId);
+    if (c) {
+      applyCorridor(c);
+    }
+  };
+
+  const handleRateChange = (newRate: number) => {
+    setExchangeRate(newRate);
+    setExpenseItems((prev) =>
+      prev.map((item) => ({
+        ...item,
+        amountTzs: Math.round(item.amountUsd * newRate),
+      }))
+    );
+  };
+
+  const toggleExpense = (id: string) => {
+    setExpenseItems((prev) =>
+      prev.map((item) => (item.id === id ? { ...item, selected: !item.selected } : item))
+    );
+  };
+
+  const selectAllExpenses = () => {
+    setExpenseItems((prev) => prev.map((item) => ({ ...item, selected: true })));
+  };
+
+  const selectRequiredOnly = () => {
+    setExpenseItems((prev) =>
+      prev.map((item) => ({ ...item, selected: item.isRequired }))
+    );
+  };
+
+  const updateExpenseAmount = (id: string, val: number) => {
+    setExpenseItems((prev) =>
+      prev.map((item) => {
+        if (item.id !== id) return item;
+        if (currencyMode === "USD") {
+          return {
+            ...item,
+            amountUsd: val,
+            amountTzs: Math.round(val * exchangeRate),
+          };
+        } else {
+          return {
+            ...item,
+            amountTzs: val,
+            amountUsd: Number((val / exchangeRate).toFixed(2)),
+          };
+        }
+      })
+    );
+  };
+
+  const addCustomExpenseRow = () => {
+    const customId = `custom_${Date.now()}`;
+    const defaultUsd = 25;
+    setExpenseItems((prev) => [
+      ...prev,
+      {
+        id: customId,
+        title: "Additional Road Expense / Stamp",
+        category: "receipt",
+        amountUsd: defaultUsd,
+        amountTzs: Math.round(defaultUsd * exchangeRate),
+        selected: true,
+        isRequired: false,
+        notes: "Custom transit expense added by dispatcher",
+      },
+    ]);
+  };
+
+  const selectedCorridor = CROSS_BORDER_CORRIDORS.find((c) => c.id === corridorId);
+  const activeSelectedExpenses = expenseItems.filter((e) => e.selected);
+  const totalSelectedUsd = activeSelectedExpenses.reduce((sum, e) => sum + e.amountUsd, 0);
+  const totalSelectedTzs = activeSelectedExpenses.reduce((sum, e) => sum + e.amountTzs, 0);
 
   const onMachineChange = (machineId: string) => {
     const m = machines.find((x) => x.id === machineId);
-    setForm({ ...form, machine_id: machineId, start_odo: m?.current_odometer_km != null ? String(m.current_odometer_km) : "" });
+    setForm({
+      ...form,
+      machine_id: machineId,
+      start_odo: m?.current_odometer_km != null ? String(m.current_odometer_km) : "",
+    });
   };
 
   const selectedMachine = machines.find((m) => m.id === form.machine_id);
@@ -675,6 +904,17 @@ function NewTripDialog({ open, onOpenChange, machines, drivers, onSaved }: {
       estReturnAt = new Date(now.getTime() + estHours * 3600 * 1000).toISOString();
     }
 
+    const cleanExpensesPayload = activeSelectedExpenses.map((exp) => ({
+      id: exp.id,
+      title: exp.title,
+      category: exp.category,
+      amountUsd: exp.amountUsd,
+      amountTzs: exp.amountTzs,
+      amount: currencyMode === "USD" ? exp.amountUsd : exp.amountTzs,
+      currency: currencyMode,
+      notes: exp.notes || null,
+    }));
+
     const cargoMeta = {
       client: form.client_name.trim() || null,
       order_no: form.client_order_no.trim() || null,
@@ -684,15 +924,22 @@ function NewTripDialog({ open, onOpenChange, machines, drivers, onSaved }: {
       cargo: form.cargo_description.trim() || null,
       route_notes: form.route_notes.trim() || null,
       estimated_return_at: estReturnAt,
+      corridor_id: selectedCorridor?.id || null,
+      corridor_name: selectedCorridor?.name || null,
+      border_post: selectedCorridor?.borderPost || null,
+      currency: currencyMode,
+      exchange_rate: exchangeRate,
+      expenses: cleanExpensesPayload,
     };
 
-    // Use confirmed schema columns for public.trips; extended client order and route metadata
-    // are stored safely in cargo_description JSON matching parseTripRecord and serializeTripPayload.
-    const safePayload = {
+    const safePayload: any = {
       organisation_id: profile.organisation_id,
       machine_id: form.machine_id,
       driver_id: form.driver_id || null,
-      purpose: form.purpose.trim() || (form.client_name.trim() ? `Client: ${form.client_name.trim()}` : null),
+      purpose:
+        form.purpose.trim() ||
+        (selectedCorridor ? selectedCorridor.name : null) ||
+        (form.client_name.trim() ? `Client: ${form.client_name.trim()}` : null),
       origin: form.origin.trim() || null,
       destination: form.destination.trim() || null,
       cargo_description: JSON.stringify(cargoMeta),
@@ -700,34 +947,89 @@ function NewTripDialog({ open, onOpenChange, machines, drivers, onSaved }: {
       status: form.start_now ? "in_progress" : "planned",
       start_at: form.start_now ? now.toISOString() : null,
       created_by: user?.id,
+      cost: totalSelectedTzs > 0 ? totalSelectedTzs : null,
     };
 
-    const { error } = await supabase.from("trips").insert(safePayload);
+    const { data: newTrip, error } = await supabase
+      .from("trips")
+      .insert(safePayload)
+      .select("id")
+      .single();
 
-    if (!error && form.start_now && safePayload.start_odo != null) {
+    if (error) {
+      setSubmitting(false);
+      return toast.error(error.message);
+    }
+
+    // Insert itemized expenses into public.trip_expenses if any were selected
+    if (newTrip?.id && cleanExpensesPayload.length > 0) {
+      const expenseInsertRows = cleanExpensesPayload.map((exp) => ({
+        trip_id: newTrip.id,
+        machine_id: form.machine_id,
+        organisation_id: profile.organisation_id,
+        driver_id: form.driver_id || null,
+        expense_type: exp.category,
+        title: exp.title,
+        amount: exp.amount,
+        currency: currencyMode,
+        notes: exp.notes
+          ? `${exp.notes}${selectedCorridor ? ` · [${selectedCorridor.name}]` : ""}`
+          : selectedCorridor
+          ? `[${selectedCorridor.name}]`
+          : null,
+        occurred_at: now.toISOString(),
+        created_by: user?.id ?? null,
+      }));
+
+      const { error: expErr } = await (supabase as any)
+        .from("trip_expenses")
+        .insert(expenseInsertRows);
+
+      if (expErr) {
+        console.warn("Direct trip_expenses insert error (safely retained in trip dossier):", expErr);
+      }
+    }
+
+    // Update vehicle odometer if dispatched now
+    if (form.start_now && safePayload.start_odo != null) {
       await supabase
         .from("machines")
-        .update({ current_odometer_km: safePayload.start_odo, current_hours: safePayload.start_odo })
+        .update({
+          current_odometer_km: safePayload.start_odo,
+          current_hours: safePayload.start_odo,
+        })
         .eq("id", form.machine_id);
     }
 
     setSubmitting(false);
-    if (error) return toast.error(error.message);
-    toast.success(form.start_now ? "Trip dispatched and active" : "Trip scheduled successfully");
+    toast.success(
+      form.start_now
+        ? `Trip dispatched with ${cleanExpensesPayload.length} automated corridor expenses!`
+        : `Trip scheduled with ${cleanExpensesPayload.length} automated corridor expenses!`
+    );
     onOpenChange(false);
     onSaved();
   };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
-        <DialogHeader><DialogTitle>Plan New Trip & Client Order</DialogTitle></DialogHeader>
+      <DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-3xl">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Route className="h-5 w-5 text-primary" />
+            Plan New Trip & Cross-Border Freight Order
+          </DialogTitle>
+        </DialogHeader>
+
         <form onSubmit={submit} className="space-y-4">
           <div className="grid gap-4 sm:grid-cols-2">
+            {/* Vehicle & Equipment */}
             <div className="space-y-1.5 sm:col-span-2">
               <Label>Vehicle & Equipment *</Label>
               <Select value={form.machine_id ?? ""} onValueChange={onMachineChange}>
-                <SelectTrigger><SelectValue placeholder="Select vehicle for trip" /></SelectTrigger>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select vehicle for trip" />
+                </SelectTrigger>
                 <SelectContent>
                   {machines.map((m) => (
                     <SelectItem key={m.id} value={m.id}>
@@ -741,24 +1043,244 @@ function NewTripDialog({ open, onOpenChange, machines, drivers, onSaved }: {
               {selectedMachine && selectedMachine.has_trailer && (
                 <p className="text-[11px] text-primary font-medium">
                   ✓ Attached Trailer: {selectedMachine.trailer_plate || "Hitched"}
-                  {selectedMachine.total_tank_capacity_l ? ` (Total Tank: ${selectedMachine.total_tank_capacity_l} L)` : ""}
+                  {selectedMachine.total_tank_capacity_l
+                    ? ` (Total Tank: ${selectedMachine.total_tank_capacity_l} L)`
+                    : ""}
                 </p>
               )}
             </div>
 
+            {/* Assigned Driver */}
             <div className="space-y-1.5 sm:col-span-2">
               <Label>Assigned Driver</Label>
-              <Select value={form.driver_id ?? ""} onValueChange={(v) => setForm({ ...form, driver_id: v })}>
-                <SelectTrigger><SelectValue placeholder="Pick an active licensed driver" /></SelectTrigger>
+              <Select
+                value={form.driver_id ?? ""}
+                onValueChange={(v) => setForm({ ...form, driver_id: v })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Pick an active licensed driver" />
+                </SelectTrigger>
                 <SelectContent>
                   {drivers.map((d) => (
                     <SelectItem key={d.id} value={d.id}>
-                      {d.driver_code ? `[${d.driver_code}] ` : ""}{d.full_name} {d.phone ? `(${d.phone})` : ""}
+                      {d.driver_code ? `[${d.driver_code}] ` : ""}
+                      {d.full_name} {d.phone ? `(${d.phone})` : ""}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
+
+            {/* Cross-Border Transit Route & Corridor Presets */}
+            <div className="space-y-2 sm:col-span-2 rounded-xl border border-primary/25 bg-primary/5 p-4">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <Label className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                  <Globe2 className="h-4 w-4 text-primary" />
+                  Cross-Border Route & Statutory Fee Corridor
+                </Label>
+                {onOpenCatalog && (
+                  <button
+                    type="button"
+                    onClick={onOpenCatalog}
+                    className="text-[11px] text-primary hover:underline font-semibold flex items-center gap-1"
+                  >
+                    Browse Complete Corridor Catalog →
+                  </button>
+                )}
+              </div>
+
+              <Select value={corridorId} onValueChange={handleCorridorChange}>
+                <SelectTrigger className="bg-background">
+                  <SelectValue placeholder="Select corridor to auto-populate route, tolls, & expenses" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="custom">Custom / Domestic Route (No template)</SelectItem>
+                  {CROSS_BORDER_CORRIDORS.map((c) => (
+                    <SelectItem key={c.id} value={c.id}>
+                      <span className="mr-2 text-base">{c.flag}</span>
+                      {c.name} ({c.expenses.length} statutory fees)
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              {selectedCorridor && (
+                <div className="text-[11px] text-muted-foreground flex items-center gap-2 pt-0.5">
+                  <span>Border Post: <strong className="text-foreground">{selectedCorridor.borderPost}</strong></span>
+                  <span>·</span>
+                  <span>Est. Turnaround: <strong className="text-foreground">{selectedCorridor.estimatedRoundtripHours} Hours</strong></span>
+                </div>
+              )}
+            </div>
+
+            {/* AUTOMATED CORRIDOR EXPENSES PANEL */}
+            {selectedCorridor && expenseItems.length > 0 && (
+              <div className="sm:col-span-2 rounded-2xl border border-primary/30 bg-card p-4 space-y-3 shadow-xs">
+                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border pb-2.5">
+                  <div>
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-primary flex items-center gap-1.5">
+                      <span>⚡ Automated Corridor Expenses</span>
+                      <Badge variant="outline" className="text-[10px] bg-primary/10 text-primary border-primary/20">
+                        {selectedCorridor.flag} {selectedCorridor.country}
+                      </Badge>
+                    </h4>
+                    <span className="text-[11px] text-muted-foreground">
+                      Pre-loaded statutory road tolls, permits, scanners, and driver allowances. Toggle items or adjust fees.
+                    </span>
+                  </div>
+
+                  {/* Dual Currency Switcher & Rate */}
+                  <div className="flex items-center gap-2">
+                    <div className="flex rounded-md bg-muted p-0.5 text-xs">
+                      <button
+                        type="button"
+                        onClick={() => setCurrencyMode("USD")}
+                        className={`px-2.5 py-1 rounded text-xs font-semibold transition-colors ${
+                          currencyMode === "USD"
+                            ? "bg-primary text-primary-foreground shadow-xs"
+                            : "text-muted-foreground hover:text-foreground"
+                        }`}
+                      >
+                        USD ($)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setCurrencyMode("TZS")}
+                        className={`px-2.5 py-1 rounded text-xs font-semibold transition-colors ${
+                          currencyMode === "TZS"
+                            ? "bg-primary text-primary-foreground shadow-xs"
+                            : "text-muted-foreground hover:text-foreground"
+                        }`}
+                      >
+                        TZS (Tsh)
+                      </button>
+                    </div>
+
+                    <div className="flex items-center gap-1 text-[11px] text-muted-foreground font-mono pl-1 border-l border-border">
+                      <span>1 USD =</span>
+                      <input
+                        type="number"
+                        value={exchangeRate}
+                        onChange={(e) =>
+                          handleRateChange(Number(e.target.value) || DEFAULT_USD_TO_TZS_RATE)
+                        }
+                        className="w-16 h-7 px-1 text-xs font-mono rounded border border-input bg-background"
+                      />
+                      <span>TZS</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Filter and Add actions */}
+                <div className="flex items-center justify-between text-[11px]">
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={selectAllExpenses}
+                      className="text-primary hover:underline font-semibold"
+                    >
+                      Select All ({expenseItems.length})
+                    </button>
+                    <span>·</span>
+                    <button
+                      type="button"
+                      onClick={selectRequiredOnly}
+                      className="text-muted-foreground hover:underline"
+                    >
+                      Required Only ({expenseItems.filter((e) => e.isRequired).length})
+                    </button>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={addCustomExpenseRow}
+                    className="text-primary font-semibold hover:underline flex items-center gap-1"
+                  >
+                    <Plus className="h-3 w-3" /> Add Custom Expense Line
+                  </button>
+                </div>
+
+                {/* Items List */}
+                <div className="max-h-60 overflow-y-auto space-y-1.5 pr-1 border border-border rounded-xl p-2 bg-muted/10 divide-y divide-border/40">
+                  {expenseItems.map((item) => (
+                    <div
+                      key={item.id}
+                      className={`pt-1.5 first:pt-0 flex items-center justify-between gap-3 text-xs ${
+                        item.selected ? "opacity-100" : "opacity-45"
+                      }`}
+                    >
+                      <div className="flex items-center gap-2 min-w-0 flex-1">
+                        <input
+                          type="checkbox"
+                          checked={item.selected}
+                          onChange={() => toggleExpense(item.id)}
+                          className="rounded border-input text-primary shrink-0 h-4 w-4"
+                        />
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="font-semibold text-foreground truncate">{item.title}</span>
+                            <Badge variant="outline" className="text-[9px] px-1 py-0 capitalize">
+                              {item.category}
+                            </Badge>
+                            {item.isRequired && (
+                              <span className="text-[9px] font-semibold text-emerald-600 dark:text-emerald-400">
+                                Required
+                              </span>
+                            )}
+                          </div>
+                          {item.notes && (
+                            <p className="text-[10px] text-muted-foreground line-clamp-1">{item.notes}</p>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Fee input & Conversion display */}
+                      <div className="flex items-center gap-2 shrink-0">
+                        <div className="flex items-center gap-1">
+                          <span className="font-mono text-[11px] text-muted-foreground">
+                            {currencyMode === "USD" ? "$" : "TZS"}
+                          </span>
+                          <input
+                            type="number"
+                            min={0}
+                            step={currencyMode === "USD" ? "0.01" : "100"}
+                            value={currencyMode === "USD" ? item.amountUsd : item.amountTzs}
+                            onChange={(e) =>
+                              updateExpenseAmount(item.id, Number(e.target.value) || 0)
+                            }
+                            className="w-24 h-7 text-xs font-mono font-semibold text-right px-1.5 rounded border border-input bg-background"
+                          />
+                        </div>
+                        <span className="text-[10px] text-muted-foreground font-mono w-28 text-right hidden sm:inline-block">
+                          {currencyMode === "USD"
+                            ? `≈ ${Math.round(item.amountUsd * exchangeRate).toLocaleString()} TZS`
+                            : `≈ $${(item.amountTzs / exchangeRate).toFixed(2)} USD`}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Summary Box */}
+                <div className="rounded-xl bg-primary/10 border border-primary/20 p-3 flex flex-wrap items-center justify-between gap-2 text-xs">
+                  <div>
+                    <span className="font-bold text-foreground">
+                      {activeSelectedExpenses.length} of {expenseItems.length} expenses selected
+                    </span>
+                    <span className="text-muted-foreground block text-[10px]">
+                      Will be automatically posted as trip expenses upon dispatch
+                    </span>
+                  </div>
+                  <div className="text-right">
+                    <div className="font-black text-sm text-primary font-mono">
+                      ${totalSelectedUsd.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD
+                    </div>
+                    <div className="text-[11px] font-semibold text-muted-foreground font-mono">
+                      ≈ {Math.round(totalSelectedTzs).toLocaleString()} TZS
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Client Order Information Section */}
             <div className="sm:col-span-2 rounded-xl border border-primary/20 bg-primary/5 p-4 space-y-3">
@@ -816,7 +1338,7 @@ function NewTripDialog({ open, onOpenChange, machines, drivers, onSaved }: {
                   <Input
                     value={form.destination}
                     onChange={(e) => setForm({ ...form, destination: e.target.value })}
-                    placeholder="e.g. Mwanza Fuel Depot / Client Site"
+                    placeholder="e.g. Lusaka / Ndola via Nakonde"
                     className="h-9 text-sm border-primary/40"
                   />
                 </div>
@@ -825,7 +1347,7 @@ function NewTripDialog({ open, onOpenChange, machines, drivers, onSaved }: {
                   <Input
                     value={form.route_notes}
                     onChange={(e) => setForm({ ...form, route_notes: e.target.value })}
-                    placeholder="e.g. Transit via Morogoro, Dodoma; Offload at client tank 4"
+                    placeholder="e.g. Transit via Morogoro, Mbeya, Tunduma; Offload at Lusaka client depot"
                     className="h-9 text-sm"
                   />
                 </div>
@@ -840,7 +1362,7 @@ function NewTripDialog({ open, onOpenChange, machines, drivers, onSaved }: {
                 min={1}
                 value={form.roundtrip_hours_est}
                 onChange={(e) => setForm({ ...form, roundtrip_hours_est: e.target.value })}
-                placeholder="e.g. 48 hours (2 days)"
+                placeholder="e.g. 96 hours"
               />
               <span className="text-[10px] text-muted-foreground">Expected total return turnaround</span>
             </div>
@@ -861,7 +1383,7 @@ function NewTripDialog({ open, onOpenChange, machines, drivers, onSaved }: {
               <Input
                 value={form.purpose}
                 onChange={(e) => setForm({ ...form, purpose: e.target.value })}
-                placeholder="e.g. Cross-country bulk delivery"
+                placeholder="e.g. Cross-border transit delivery"
               />
             </div>
 
@@ -889,7 +1411,9 @@ function NewTripDialog({ open, onOpenChange, machines, drivers, onSaved }: {
           </div>
 
           <DialogFooter>
-            <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>Cancel</Button>
+            <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
+              Cancel
+            </Button>
             <Button type="submit" disabled={submitting}>
               {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               {form.start_now ? "Start & Dispatch Trip" : "Save Planned Trip"}
@@ -1082,6 +1606,35 @@ function TripDetailDialog({
         </DialogHeader>
 
         <div className="space-y-4 pt-2">
+          {/* Cross-Border Corridor Banner (if present) */}
+          {trip.corridor_name && (
+            <div className="rounded-xl border border-primary/25 bg-gradient-to-r from-primary/10 via-primary/5 to-background p-4 flex flex-wrap items-center justify-between gap-3 shadow-xs">
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <Globe2 className="h-4 w-4 text-primary" />
+                  <span className="font-bold text-sm text-foreground">{trip.corridor_name}</span>
+                </div>
+                {trip.border_post && (
+                  <div className="text-xs text-muted-foreground flex items-center gap-1.5">
+                    <MapPin className="h-3 w-3 text-rose-500" />
+                    <span>Border Post: <strong className="text-foreground">{trip.border_post}</strong></span>
+                    {trip.exchange_rate && (
+                      <>
+                        <span>·</span>
+                        <span>Rate: 1 USD = <strong>{trip.exchange_rate} TZS</strong></span>
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
+              {trip.expenses && trip.expenses.length > 0 && (
+                <Badge className="bg-primary text-primary-foreground text-xs px-2.5 py-1">
+                  {trip.expenses.length} Corridor Fees Pre-loaded
+                </Badge>
+              )}
+            </div>
+          )}
+
           {/* Route & Destination (Where Car Go) Banner */}
           <div className="rounded-xl border border-border bg-muted/40 p-4">
             <div className="flex items-center justify-between text-xs text-muted-foreground pb-2 border-b border-border">
@@ -1238,6 +1791,52 @@ function TripDetailDialog({
               </div>
             </div>
           </div>
+
+          {/* Statutory Corridor Expense Breakdown (if present) */}
+          {trip.expenses && trip.expenses.length > 0 && (
+            <div className="rounded-xl border border-border bg-card p-4 space-y-2.5">
+              <div className="flex items-center justify-between text-xs pb-1 border-b border-border">
+                <span className="font-bold text-foreground uppercase tracking-wider flex items-center gap-1.5">
+                  <Receipt className="h-4 w-4 text-primary" /> Statutory Corridor Fees ({trip.expenses.length})
+                </span>
+                <span className="text-[11px] text-muted-foreground font-mono">
+                  Standard Pre-loaded Transit Costs
+                </span>
+              </div>
+              <div className="max-h-52 overflow-y-auto space-y-1.5 divide-y divide-border/40 pr-1 text-xs">
+                {trip.expenses.map((e: any, idx: number) => {
+                  const isUsd = (e.currency || trip.currency || "").toUpperCase() === "USD";
+                  const amt = Number(e.amount ?? e.amountUsd ?? e.amountTzs) || 0;
+                  const rate = trip.exchange_rate || 2600;
+                  return (
+                    <div key={e.id || idx} className="pt-1.5 first:pt-0 flex items-center justify-between gap-2">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="font-medium text-foreground">{e.title}</span>
+                          {e.category && (
+                            <Badge variant="outline" className="text-[9px] px-1 py-0 capitalize">
+                              {e.category}
+                            </Badge>
+                          )}
+                        </div>
+                        {e.notes && (
+                          <div className="text-[10px] text-muted-foreground line-clamp-1">{e.notes}</div>
+                        )}
+                      </div>
+                      <div className="text-right font-mono shrink-0">
+                        <span className="font-bold text-foreground">
+                          {isUsd ? `$${amt.toFixed(2)} USD` : `${Math.round(amt).toLocaleString()} TZS`}
+                        </span>
+                        <span className="text-[10px] text-muted-foreground ml-1.5 hidden sm:inline">
+                          ({isUsd ? `≈ ${Math.round(amt * rate).toLocaleString()} TZS` : `≈ $${(amt / rate).toFixed(2)} USD`})
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </div>
 
         <DialogFooter className="flex sm:justify-between items-center gap-2">
