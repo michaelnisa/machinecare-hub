@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { getOrCreateDefaultStockLocation, setItemStockCount } from "./stock-helpers";
+import { getOrCreateDefaultStockLocation, setItemStockCount, exportInventoryToExcel } from "./stock-helpers";
 import { supabase } from "@/integrations/supabase/client";
 
 vi.mock("@/integrations/supabase/client", () => {
@@ -127,6 +127,46 @@ describe("stock-helpers", () => {
         _reason: "Adjusted count",
       });
       expect(updateMock).toHaveBeenCalledWith({ quantity: 2 });
+    });
+  });
+
+  describe("exportInventoryToExcel", () => {
+    it("generates an Excel download with items and available stock", () => {
+      // Mock createObjectURL & revokeObjectURL
+      const createObjectURLMock = vi.fn().mockReturnValue("blob:mock-url");
+      const revokeObjectURLMock = vi.fn();
+      window.URL.createObjectURL = createObjectURLMock;
+      window.URL.revokeObjectURL = revokeObjectURLMock;
+
+      const appendChildMock = vi.spyOn(document.body, "appendChild");
+      const removeChildMock = vi.spyOn(document.body, "removeChild");
+
+      const items = [
+        {
+          id: "item-1",
+          name: "Brakepad Front",
+          part_number: "BP-001",
+          vehicle_model: "Hilux",
+          brand: "Toyota",
+          category: "spare_part",
+          quantity: 2,
+          unit: "pcs",
+          unit_cost: 25000,
+          selling_price: 40000,
+          reorder_level: 2,
+          notes: "Shelf A1",
+          status: "active",
+        },
+      ];
+
+      const available = { "item-1": 5 };
+
+      exportInventoryToExcel(items, available, "test_export.xlsx");
+
+      expect(createObjectURLMock).toHaveBeenCalled();
+      expect(appendChildMock).toHaveBeenCalled();
+      expect(removeChildMock).toHaveBeenCalled();
+      expect(revokeObjectURLMock).toHaveBeenCalledWith("blob:mock-url");
     });
   });
 });

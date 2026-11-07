@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import { createXlsxTemplate } from "@/lib/spreadsheetParser";
 
 /**
  * Resolves a valid stock location for an organisation:
@@ -157,4 +158,80 @@ export async function setItemStockCount({
   await (supabase as any).from("inventory_items").update({ quantity: target }).eq("id", itemId);
 
   return { success: true };
+}
+
+/**
+ * Exports inventory items into a formatted Excel (.xlsx) file and triggers download.
+ */
+export function exportInventoryToExcel(
+  items: any[],
+  availableStockMap?: Record<string, number>,
+  fileName = "machinecare_inventory.xlsx"
+) {
+  const headers = [
+    "Part Name",
+    "Part Number / SKU",
+    "Model / Vehicle",
+    "Brand",
+    "Category",
+    "Stock Quantity",
+    "Unit",
+    "Cost / Buying Price",
+    "Selling Price",
+    "Reorder Level",
+    "Location / Shelf",
+    "Status",
+  ];
+
+  const fieldKeys = [
+    "name",
+    "part_number",
+    "vehicle_model",
+    "brand",
+    "category",
+    "stock",
+    "unit",
+    "unit_cost",
+    "selling_price",
+    "reorder_level",
+    "location",
+    "status",
+  ];
+
+  const rows = items.map((i) => {
+    const stockVal =
+      availableStockMap && availableStockMap[i.id] !== undefined
+        ? availableStockMap[i.id]
+        : i.quantity != null
+        ? Number(i.quantity)
+        : 0;
+
+    return {
+      name: i.name || "",
+      part_number: i.part_number || i.sku || "",
+      vehicle_model: i.vehicle_model || "",
+      brand: i.brand || "",
+      category: i.category || "",
+      stock: String(stockVal),
+      unit: i.unit || "pcs",
+      unit_cost: i.unit_cost != null ? String(i.unit_cost) : "0",
+      selling_price: i.selling_price != null ? String(i.selling_price) : "",
+      reorder_level: i.reorder_level != null ? String(i.reorder_level) : "0",
+      location: i.location || i.notes || "",
+      status: i.status || "active",
+    };
+  });
+
+  const xlsxBuffer = createXlsxTemplate(headers, rows, fieldKeys);
+  const blob = new Blob([xlsxBuffer], {
+    type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.setAttribute("download", fileName.endsWith(".xlsx") ? fileName : `${fileName}.xlsx`);
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
 }

@@ -25,10 +25,11 @@ import {
   Wrench,
   X,
   FileSpreadsheet,
+  Download,
 } from "lucide-react";
 import { toast } from "sonner";
 import { formatMoney, formatNumber } from "@/lib/format";
-import { setItemStockCount } from "@/lib/stock-helpers";
+import { setItemStockCount, exportInventoryToExcel } from "@/lib/stock-helpers";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { BulkImporterModal } from "@/components/BulkImporterModal";
 
@@ -164,21 +165,28 @@ export default function Inventory() {
             Track stock and auto-deduct when parts are used in service logs.
           </p>
         </div>
-        {isManager && (
-          <div className="flex items-center gap-2">
-            <Button variant="outline" onClick={() => setImportOpen(true)}>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            variant="outline"
+            onClick={() => exportInventoryToExcel(filtered, available, "workshop_inventory.xlsx")}
+            title="Download parts inventory as Excel spreadsheet"
+          >
+            <Download className="mr-2 h-4 w-4" /> Download Excel
+          </Button>
+          {(isManager || profile?.role === "admin" || profile?.role === "manager") && (
+            <Button variant="outline" onClick={() => setImportOpen(true)} title="Import inventory from Excel or CSV file">
               <FileSpreadsheet className="mr-2 h-4 w-4" /> Import Excel / CSV
             </Button>
-            <Button
-              onClick={() => {
-                setEditing(null);
-                setOpen(true);
-              }}
-            >
-              <Plus className="mr-2 h-4 w-4" /> Add part
-            </Button>
-          </div>
-        )}
+          )}
+          <Button
+            onClick={() => {
+              setEditing(null);
+              setOpen(true);
+            }}
+          >
+            <Plus className="mr-2 h-4 w-4" /> Add part
+          </Button>
+        </div>
       </div>
 
       {lowStock > 0 && (

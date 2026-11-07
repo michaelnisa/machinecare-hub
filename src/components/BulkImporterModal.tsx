@@ -28,6 +28,7 @@ import {
   createXlsxTemplate,
   createCsvTemplate,
 } from "@/lib/spreadsheetParser";
+import { setItemStockCount } from "@/lib/stock-helpers";
 
 export type EntityType = "machine" | "vehicle" | "inventory";
 
@@ -105,19 +106,22 @@ const ENTITY_CONFIGS: Record<
     description: "Upload an Excel (.xlsx, .xls) or CSV file containing spare parts, stock levels, unit costs, and SKU numbers. Status will automatically be marked as Received.",
     sampleFilename: "machinecare_inventory_parts_template",
     fields: [
-      { key: "name", label: "Part Description", required: true, aliases: ["part name", "description", "item name", "name", "part description"] },
-      { key: "part_number", label: "Part Number / SKU", required: true, aliases: ["part number", "part no", "part #", "sku", "item code", "code"] },
+      { key: "name", label: "Part Description / Name", required: true, aliases: ["part name", "description", "item name", "name", "part description", "spea", "jina la spea"] },
+      { key: "part_number", label: "Part Number / SKU", required: false, aliases: ["part number", "part no", "part #", "sku", "item code", "code", "namba ya spea"] },
+      { key: "vehicle_model", label: "Model / Vehicle", required: false, aliases: ["model", "vehicle", "vehicle model", "gari", "car", "model number"] },
+      { key: "brand", label: "Brand / Make", required: false, aliases: ["brand", "make", "manufacturer"] },
       { key: "category", label: "Category", required: false, aliases: ["category", "part category", "group", "type"] },
-      { key: "unit", label: "Unit of Measure", required: false, aliases: ["unit", "uom", "unit of measure"] },
-      { key: "unit_cost", label: "Unit Cost", required: false, aliases: ["cost", "unit cost", "price", "unit price", "rate"] },
-      { key: "quantity", label: "Initial Quantity", required: false, aliases: ["qty", "quantity", "stock", "stock quantity", "balance", "count"] },
-      { key: "reorder_level", label: "Reorder Minimum", required: false, aliases: ["reorder", "reorder level", "min stock", "min quantity", "minimum"] },
+      { key: "unit", label: "Unit of Measure", required: false, defaultValue: "pcs", aliases: ["unit", "uom", "unit of measure"] },
+      { key: "unit_cost", label: "Buying Price / Cost", required: false, aliases: ["cost", "unit cost", "price", "unit price", "rate", "buying price", "bei ya kununua"] },
+      { key: "selling_price", label: "Selling Price", required: false, aliases: ["selling price", "retail price", "bei ya kuuza", "sell price"] },
+      { key: "quantity", label: "Stock Quantity", required: false, defaultValue: "1", aliases: ["qty", "quantity", "stock", "stock quantity", "balance", "count", "idadi", "pcs"] },
+      { key: "reorder_level", label: "Reorder Minimum", required: false, defaultValue: "0", aliases: ["reorder", "reorder level", "min stock", "min quantity", "minimum"] },
       { key: "order_status", label: "Order Status", required: false, defaultValue: "received", aliases: ["order status", "order_status", "status", "delivery status", "receiving status"] },
     ],
     sampleData: [
-      { name: "High Pressure Hydraulic Seal Kit", part_number: "HYD-SEAL-01", category: "Hydraulics", unit: "PCS", unit_cost: "45000", quantity: "25", reorder_level: "5", order_status: "received" },
-      { name: "ISO 68 Hydraulic Oil 20L Drum", part_number: "OIL-ISO-68", category: "Lubricants", unit: "DRUM", unit_cost: "180000", quantity: "12", reorder_level: "3", order_status: "received" },
-      { name: "Heavy Duty Air Filter Element", part_number: "FLT-AIR-99", category: "Filters", unit: "PCS", unit_cost: "28000", quantity: "15", reorder_level: "4", order_status: "received" },
+      { name: "High Pressure Hydraulic Seal Kit", part_number: "HYD-SEAL-01", vehicle_model: "CAT 320D", brand: "Caterpillar", category: "Hydraulics", unit: "pcs", unit_cost: "45000", selling_price: "65000", quantity: "25", reorder_level: "5", order_status: "received" },
+      { name: "ISO 68 Hydraulic Oil 20L Drum", part_number: "OIL-ISO-68", vehicle_model: "Universal", brand: "Total", category: "Lubricants", unit: "drum", unit_cost: "180000", selling_price: "240000", quantity: "12", reorder_level: "3", order_status: "received" },
+      { name: "Heavy Duty Air Filter Element", part_number: "FLT-AIR-99", vehicle_model: "Hilux 2.8", brand: "Toyota", category: "Filters", unit: "pcs", unit_cost: "28000", selling_price: "40000", quantity: "15", reorder_level: "4", order_status: "received" },
     ],
     targetTable: "inventory_items",
   },
@@ -356,12 +360,17 @@ export function BulkImporterModal({ entity, open, onOpenChange, onImported }: Pr
           payload.status = "active";
         } else if (entity === "inventory") {
           payload.name = item.name;
-          payload.part_number = item.part_number || null;
-          payload.category = item.category || "General";
-          payload.unit = item.unit || "PCS";
+          payload.part_number = item.part_number || item.sku || null;
+          payload.sku = item.part_number || item.sku || null;
+          payload.vehicle_model = item.vehicle_model || null;
+          payload.brand = item.brand || null;
+          payload.category = item.category || "spare_part";
+          payload.item_type = "spare_part";
+          payload.unit = item.unit || "pcs";
           payload.unit_cost = item.unit_cost ? Number(item.unit_cost) : 0;
-          payload.quantity = item.quantity ? Number(item.quantity) : 0;
-          payload.reorder_level = item.reorder_level ? Number(item.reorder_level) : 5;
+          payload.selling_price = item.selling_price ? Number(item.selling_price) : null;
+          payload.quantity = item.quantity && Number(item.quantity) > 0 ? Number(item.quantity) : 1;
+          payload.reorder_level = item.reorder_level ? Number(item.reorder_level) : 0;
           // Order status is explicitly set to "received" for imported inventory stock
           const rawStatus = item.order_status?.toString().trim().toLowerCase();
           payload.order_status = rawStatus || "received";
@@ -378,10 +387,21 @@ export function BulkImporterModal({ entity, open, onOpenChange, onImported }: Pr
 
     for (let i = 0; i < rowsToInsert.length; i += chunkSize) {
       const chunk = rowsToInsert.slice(i, i + chunkSize);
-      const { data, error } = await supabase
+      let { data, error } = await supabase
         .from(config.targetTable as any)
         .insert(chunk as any)
         .select("id");
+
+      // Fallback if vehicle_model column not supported
+      if (error && (error.message?.includes("vehicle_model") || error.code === "PGRST204")) {
+        const fallbackChunk = chunk.map(({ vehicle_model, ...rest }: any) => rest);
+        const res = await supabase
+          .from(config.targetTable as any)
+          .insert(fallbackChunk as any)
+          .select("id");
+        data = res.data;
+        error = res.error;
+      }
 
       if (error) {
         console.error("Batch insert error:", error);
@@ -396,6 +416,23 @@ export function BulkImporterModal({ entity, open, onOpenChange, onImported }: Pr
 
       const progressPct = Math.round(((i + chunk.length) / rowsToInsert.length) * 100);
       setImportProgress(progressPct);
+    }
+
+    // Synchronize initial stock into stock_balances for inventory items
+    if (entity === "inventory" && profile?.organisation_id && insertedIds.length > 0) {
+      const validRowsToSync = validatedRows.filter((r) => !r.hasError).map((r) => r.row);
+      const syncPromises = insertedIds.map((id, idx) => {
+        const itemRow = validRowsToSync[idx];
+        const qty = itemRow?.quantity && Number(itemRow.quantity) > 0 ? Number(itemRow.quantity) : 1;
+        return setItemStockCount({
+          itemId: id,
+          orgId: profile.organisation_id,
+          targetStock: qty,
+          currentStock: 0,
+          reason: "Initial stock on Excel import",
+        });
+      });
+      await Promise.all(syncPromises);
     }
 
     setLastImportedIds(insertedIds);

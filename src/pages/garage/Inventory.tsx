@@ -7,11 +7,12 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { PageLoader, EmptyState } from "@/components/PageLoader";
-import { Boxes, Plus, Loader2, Pencil, ShoppingCart, Trash2, Layers, Sparkles } from "lucide-react";
+import { Boxes, Plus, Loader2, Pencil, ShoppingCart, Trash2, Layers, Sparkles, FileSpreadsheet, Download } from "lucide-react";
 import { toast } from "sonner";
 import { formatMoney, formatNumber, formatDate } from "@/lib/format";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
-import { setItemStockCount } from "@/lib/stock-helpers";
+import { BulkImporterModal } from "@/components/BulkImporterModal";
+import { setItemStockCount, exportInventoryToExcel } from "@/lib/stock-helpers";
 
 const ITEM_TYPES = ["spare_part", "consumable", "tool", "other"];
 
@@ -28,6 +29,7 @@ export default function GarageInventory() {
   const [editing, setEditing] = useState<any>(null);
   const [confirmDelete, setConfirmDelete] = useState<any>(null);
   const [purchaseOpen, setPurchaseOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
 
   const handleDelete = async () => {
     if (!confirmDelete) return;
@@ -93,9 +95,31 @@ export default function GarageInventory() {
           <h1 className="text-2xl font-semibold tracking-tight">Parts &amp; stock</h1>
           <p className="text-sm text-muted-foreground">Parts, consumables and tools — what you have, what it costs, and what to charge.</p>
         </div>
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={() => setPurchaseOpen(true)}><ShoppingCart className="mr-2 h-4 w-4" />Record purchase</Button>
-          <Button onClick={() => { setEditing(null); setFormOpen(true); }}><Plus className="mr-2 h-4 w-4" />Add part</Button>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            variant="outline"
+            onClick={() => exportInventoryToExcel(filtered, available, "garage_parts_inventory.xlsx")}
+            title="Download parts inventory as Excel spreadsheet"
+          >
+            <Download className="mr-2 h-4 w-4" />
+            Download Excel
+          </Button>
+          <Button
+            variant="outline"
+            onClick={() => setImportOpen(true)}
+            title="Upload parts inventory from Excel or CSV file"
+          >
+            <FileSpreadsheet className="mr-2 h-4 w-4" />
+            Upload Excel
+          </Button>
+          <Button variant="outline" onClick={() => setPurchaseOpen(true)}>
+            <ShoppingCart className="mr-2 h-4 w-4" />
+            Record purchase
+          </Button>
+          <Button onClick={() => { setEditing(null); setFormOpen(true); }}>
+            <Plus className="mr-2 h-4 w-4" />
+            Add part
+          </Button>
         </div>
       </div>
 
@@ -239,6 +263,12 @@ export default function GarageInventory() {
         }}
       />
       <RecordPurchaseDialog open={purchaseOpen} setOpen={setPurchaseOpen} items={items} suppliers={suppliers} onSaved={load} />
+      <BulkImporterModal
+        entity="inventory"
+        open={importOpen}
+        onOpenChange={setImportOpen}
+        onImported={load}
+      />
       <ConfirmDialog
         open={!!confirmDelete}
         onOpenChange={(open) => !open && setConfirmDelete(null)}
