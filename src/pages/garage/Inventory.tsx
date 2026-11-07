@@ -11,6 +11,7 @@ import { Boxes, Plus, Loader2, Pencil, ShoppingCart, Trash2, Layers, Sparkles } 
 import { toast } from "sonner";
 import { formatMoney, formatNumber, formatDate } from "@/lib/format";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { setItemStockCount } from "@/lib/stock-helpers";
 
 const ITEM_TYPES = ["spare_part", "consumable", "tool", "other"];
 
@@ -133,7 +134,7 @@ export default function GarageInventory() {
                 </thead>
                 <tbody>
                   {filtered.map((i) => {
-                    const stock = available[i.id] ?? 0;
+                    const stock = available[i.id] ?? (i.quantity != null ? Number(i.quantity) : 0);
                     const low = stock <= Number(i.reorder_level ?? 0);
                     const modelBadge = i.vehicle_model || (i.name?.includes(" - ") ? i.name.split(" - ").slice(1).join(" - ").trim() : null);
                     return (
@@ -161,8 +162,15 @@ export default function GarageInventory() {
                         <td className="px-5 py-3">{i.selling_price != null ? formatMoney(i.selling_price) : "—"}</td>
                         <td className="px-5 py-3 text-right">
                           <div className="flex items-center justify-end gap-1">
-                            <Button variant="ghost" size="icon" onClick={() => { setEditing(i); setFormOpen(true); }} title="Edit part">
-                              <Pencil className="h-4 w-4" />
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => { setEditing(i); setFormOpen(true); }}
+                              title="Edit part or adjust stock"
+                              className="h-8 text-xs gap-1.5 px-2.5 font-medium text-foreground hover:border-primary hover:text-primary"
+                            >
+                              <Pencil className="h-3.5 w-3.5" />
+                              Edit / Stock
                             </Button>
                             <Button
                               variant="ghost"
@@ -221,6 +229,7 @@ export default function GarageInventory() {
         open={formOpen}
         setOpen={setFormOpen}
         editing={editing}
+        currentStock={editing ? (available[editing.id] ?? (editing.quantity != null ? Number(editing.quantity) : 0)) : 1}
         orgId={profile?.organisation_id}
         userId={user?.id}
         onSaved={load}
@@ -247,7 +256,7 @@ interface ModelRow {
   quantity: string;
 }
 
-function PartFormDialog({ open, setOpen, editing, orgId, userId, onSaved, onDelete }: any) {
+function PartFormDialog({ open, setOpen, editing, currentStock, orgId, userId, onSaved, onDelete }: any) {
   const [saving, setSaving] = useState(false);
   const [name, setName] = useState("");
   const [brand, setBrand] = useState("");
@@ -257,8 +266,9 @@ function PartFormDialog({ open, setOpen, editing, orgId, userId, onSaved, onDele
   const [models, setModels] = useState<ModelRow[]>([{ model: "", quantity: "1" }]);
   const [quickInput, setQuickInput] = useState("");
 
-  // Edit-only field
+  // Edit-only fields
   const [editModel, setEditModel] = useState("");
+  const [editStock, setEditStock] = useState("1");
 
   useEffect(() => {
     if (open) {
@@ -270,6 +280,7 @@ function PartFormDialog({ open, setOpen, editing, orgId, userId, onSaved, onDele
         setUnitCost(editing.unit_cost != null ? String(editing.unit_cost) : "");
         setSellingPrice(editing.selling_price != null ? String(editing.selling_price) : "");
         setNotes(editing.notes ?? "");
+        setEditStock(String(currentStock ?? editing.quantity ?? 1));
       } else {
         setName("");
         setBrand("");
@@ -277,10 +288,11 @@ function PartFormDialog({ open, setOpen, editing, orgId, userId, onSaved, onDele
         setSellingPrice("");
         setNotes("");
         setEditModel("");
+        setEditStock("1");
         setModels([{ model: "", quantity: "1" }]);
       }
     }
-  }, [open, editing]);
+  }, [open, editing, currentStock]);
 
   const addModelRow = () => {
     setModels((prev) => [...prev, { model: "", quantity: "1" }]);
@@ -333,6 +345,7 @@ function PartFormDialog({ open, setOpen, editing, orgId, userId, onSaved, onDele
     if (editing) {
       // Single edit flow
       const code = editModel.trim();
+      const newStockNum = Math.max(0, Number(editStock) || 0);
       const payload: any = {
         name: baseName,
         sku: code || null,
@@ -341,6 +354,7 @@ function PartFormDialog({ open, setOpen, editing, orgId, userId, onSaved, onDele
         brand: brand.trim() || null,
         category: editing.category || "spare_part",
         unit: editing.unit || "pcs",
+        quantity: newStockNum,
         unit_cost: Number(unitCost) || 0,
         selling_price: sellingPrice === "" ? null : Number(sellingPrice),
         notes: notes.trim() || null,
@@ -352,9 +366,22 @@ function PartFormDialog({ open, setOpen, editing, orgId, userId, onSaved, onDele
         const res = await supabase.from("inventory_items").update(fallback).eq("id", editing.id);
         error = res.error;
       }
+      if (error) {
+        setSaving(false);
+        return toast.error(error.message);
+      }
+
+      // Synchronize stock count with stock balances
+      await setItemStockCount({
+        itemId: editing.id,
+        orgId,
+        targetStock: newStockNum,
+        currentStock: Number(currentStock ?? editing.quantity ?? 0),
+        reason: "Part stock updated via edit",
+      });
+
       setSaving(false);
-      if (error) return toast.error(error.message);
-      toast.success("Part updated");
+      toast.success("Part and stock updated");
       setOpen(false);
       onSaved();
       return;
@@ -362,11 +389,13 @@ function PartFormDialog({ open, setOpen, editing, orgId, userId, onSaved, onDele
 
     // Adding flow (can be 1 model or multiple models)
     const validRows = models.filter((r) => r.model.trim());
-    const rowsToProcess = validRows.length > 0 ? validRows : [{ model: "", quantity: "0" }];
+    const fallbackQty = models[0]?.quantity && Number(models[0].quantity) > 0 ? models[0].quantity : "1";
+    const rowsToProcess = validRows.length > 0 ? validRows : [{ model: "", quantity: fallbackQty }];
 
     const payloads = rowsToProcess.map((r) => {
       const code = r.model.trim();
       const fullName = code ? `${baseName} - ${code}` : baseName;
+      const initialQty = Number(r.quantity) > 0 ? Number(r.quantity) : 1;
       return {
         name: fullName,
         sku: code || null,
@@ -376,6 +405,7 @@ function PartFormDialog({ open, setOpen, editing, orgId, userId, onSaved, onDele
         category: "spare_part",
         item_type: "spare_part",
         unit: "pcs",
+        quantity: initialQty,
         unit_cost: Number(unitCost) || 0,
         selling_price: sellingPrice === "" ? null : Number(sellingPrice),
         reorder_level: 0,
@@ -404,39 +434,26 @@ function PartFormDialog({ open, setOpen, editing, orgId, userId, onSaved, onDele
       return toast.error(error.message);
     }
 
-    // Record stock for items with quantity > 0
-    const hasInitialStock = rowsToProcess.some((r) => Number(r.quantity) > 0);
-    if (hasInitialStock && insertedItems && insertedItems.length > 0) {
-      const { data: loc } = await (supabase as any)
-        .from("stock_locations")
-        .select("id")
-        .eq("organisation_id", orgId)
-        .eq("is_default", true)
-        .maybeSingle();
-
-      if (loc) {
-        const promises = insertedItems.map((item, idx) => {
-          const qty = Number(rowsToProcess[idx]?.quantity) || 0;
-          if (qty > 0) {
-            return (supabase as any).rpc("record_stock_transaction", {
-              _item_id: item.id,
-              _location_id: loc.id,
-              _transaction_type: "receipt",
-              _quantity: qty,
-              _reason: "Initial stock",
-            });
-          }
-          return Promise.resolve();
+    // Record initial stock for inserted items
+    if (insertedItems && insertedItems.length > 0) {
+      const promises = insertedItems.map((item, idx) => {
+        const qty = Number(rowsToProcess[idx]?.quantity) > 0 ? Number(rowsToProcess[idx]?.quantity) : 1;
+        return setItemStockCount({
+          itemId: item.id,
+          orgId,
+          targetStock: qty,
+          currentStock: 0,
+          reason: "Initial stock on registration",
         });
-        await Promise.all(promises);
-      }
+      });
+      await Promise.all(promises);
     }
 
     setSaving(false);
     toast.success(
       rowsToProcess.length > 1
         ? `Added ${rowsToProcess.length} models of ${baseName} (${totalPcs} pcs total)!`
-        : `Added ${baseName} (${totalPcs} pcs)!`
+        : `Added ${baseName} (${Number(rowsToProcess[0]?.quantity) > 0 ? rowsToProcess[0]?.quantity : 1} pcs in stock)!`
     );
     setOpen(false);
     onSaved();
@@ -509,15 +526,78 @@ function PartFormDialog({ open, setOpen, editing, orgId, userId, onSaved, onDele
           </div>
 
           {editing ? (
-            /* Editing single model */
-            <div>
-              <Label className="text-xs font-medium">Model / Part Number (Namba ya Spea)</Label>
-              <Input
-                value={editModel}
-                onChange={(e) => setEditModel(e.target.value)}
-                className="mt-1 h-10 text-sm"
-                placeholder="e.g. 3455"
-              />
+            /* Editing single model + stock management */
+            <div className="space-y-4">
+              <div>
+                <Label className="text-xs font-medium">Model / Part Number (Namba ya Spea)</Label>
+                <Input
+                  value={editModel}
+                  onChange={(e) => setEditModel(e.target.value)}
+                  className="mt-1 h-10 text-sm"
+                  placeholder="e.g. 3455"
+                />
+              </div>
+
+              {/* Stock in Hand / Quantity */}
+              <div className="rounded-xl border border-primary/20 bg-primary/5 p-3.5 space-y-2.5">
+                <div>
+                  <Label className="text-xs font-semibold text-foreground">
+                    Stock in Hand / Quantity (Idadi ya Spea Ilivyopo Stoo)
+                  </Label>
+                  <p className="text-[11px] text-muted-foreground">
+                    Edit current count or tap quick buttons to add more if new stock arrived.
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    className="h-10 w-10 shrink-0 font-bold text-base"
+                    onClick={() => setEditStock((prev) => String(Math.max(0, (Number(prev) || 0) - 1)))}
+                  >
+                    -
+                  </Button>
+                  <div className="relative flex-1">
+                    <Input
+                      type="number"
+                      min={0}
+                      value={editStock}
+                      onChange={(e) => setEditStock(e.target.value)}
+                      className="h-10 text-center text-base font-semibold bg-background"
+                      placeholder="0"
+                    />
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    className="h-10 w-10 shrink-0 font-bold text-base"
+                    onClick={() => setEditStock((prev) => String((Number(prev) || 0) + 1))}
+                  >
+                    +
+                  </Button>
+                  <span className="text-xs font-medium text-muted-foreground shrink-0">{editing.unit || "pcs"}</span>
+                </div>
+
+                {/* Quick add buttons */}
+                <div className="flex items-center gap-2 pt-1 border-t border-border/50">
+                  <span className="text-[11px] text-muted-foreground">Add more:</span>
+                  {[1, 5, 10, 20].map((addAmt) => (
+                    <Button
+                      key={addAmt}
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      className="h-7 px-2.5 text-xs font-medium"
+                      onClick={() => setEditStock((prev) => String((Number(prev) || 0) + addAmt))}
+                    >
+                      +{addAmt}
+                    </Button>
+                  ))}
+                </div>
+              </div>
             </div>
           ) : (
             /* Adding Models and Pcs */

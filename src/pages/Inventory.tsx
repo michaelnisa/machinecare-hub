@@ -28,6 +28,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { formatMoney, formatNumber } from "@/lib/format";
+import { setItemStockCount } from "@/lib/stock-helpers";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { BulkImporterModal } from "@/components/BulkImporterModal";
 
@@ -106,11 +107,11 @@ export default function Inventory() {
     let out = items;
     if (filterParam === "low_stock")
       out = out.filter((i) => {
-        const a = available[i.id] ?? 0;
+        const a = available[i.id] ?? Number(i.quantity ?? 0);
         return a > 0 && a <= Number(i.reorder_level);
       });
     else if (filterParam === "out_of_stock")
-      out = out.filter((i) => (available[i.id] ?? 0) <= 0);
+      out = out.filter((i) => (available[i.id] ?? Number(i.quantity ?? 0)) <= 0);
     else if (filterParam === "critical")
       out = out.filter((i) => i.criticality === "critical");
     else if (filterParam === "inactive")
@@ -119,7 +120,7 @@ export default function Inventory() {
       );
     else if (filterParam === "healthy")
       out = out.filter((i) => {
-        const a = available[i.id] ?? 0;
+        const a = available[i.id] ?? Number(i.quantity ?? 0);
         return a > Number(i.reorder_level);
       });
 
@@ -391,7 +392,7 @@ function InventoryDialog({ open, onOpenChange, item, onSaved }: any) {
           part_number: "",
           category: "filter",
           unit: "pcs",
-          quantity: 0,
+          quantity: 1,
           reorder_level: 0,
           unit_cost: 0,
           supplier: "",
@@ -426,13 +427,14 @@ function InventoryDialog({ open, onOpenChange, item, onSaved }: any) {
     if (!profile) return;
     if (!form.name?.trim()) return toast.error("Name required");
     setSubmitting(true);
+    const targetQty = form.quantity !== "" && !isNaN(Number(form.quantity)) ? Math.max(0, Number(form.quantity)) : 1;
     const payload: any = {
       organisation_id: profile.organisation_id,
       name: form.name.trim(),
       part_number: form.part_number || null,
       category: form.category || null,
       unit: form.unit,
-      quantity: Number(form.quantity) || 0,
+      quantity: targetQty,
       reorder_level: Number(form.reorder_level) || 0,
       unit_cost: Number(form.unit_cost) || 0,
       supplier: form.supplier || null,
@@ -463,11 +465,40 @@ function InventoryDialog({ open, onOpenChange, item, onSaved }: any) {
       backup_supplier: form.backup_supplier || null,
       technical_specs: form.technical_specs || null,
     };
-    const { error } = item
-      ? await supabase.from("inventory_items").update(payload).eq("id", item.id)
-      : await supabase.from("inventory_items").insert(payload);
+    if (item) {
+      const { error } = await supabase.from("inventory_items").update(payload).eq("id", item.id);
+      if (error) {
+        setSubmitting(false);
+        return toast.error(error.message);
+      }
+      await setItemStockCount({
+        itemId: item.id,
+        orgId: profile.organisation_id,
+        targetStock: targetQty,
+        currentStock: Number(item.quantity ?? 0),
+        reason: "Stock updated via edit in inventory",
+      });
+    } else {
+      const { data: inserted, error } = await supabase
+        .from("inventory_items")
+        .insert(payload)
+        .select("id")
+        .single();
+      if (error) {
+        setSubmitting(false);
+        return toast.error(error.message);
+      }
+      if (inserted?.id) {
+        await setItemStockCount({
+          itemId: inserted.id,
+          orgId: profile.organisation_id,
+          targetStock: targetQty,
+          currentStock: 0,
+          reason: "Initial stock on registration",
+        });
+      }
+    }
     setSubmitting(false);
-    if (error) return toast.error(error.message);
     toast.success(item ? "Updated" : "Added");
     onOpenChange(false);
     onSaved();
@@ -516,8 +547,9 @@ function InventoryDialog({ open, onOpenChange, item, onSaved }: any) {
               <Label>Quantity in stock</Label>
               <Input
                 type="number"
+                min={0}
                 step="any"
-                value={form.quantity ?? 0}
+                value={form.quantity ?? 1}
                 onChange={(e) => setForm({ ...form, quantity: e.target.value })}
               />
             </div>
