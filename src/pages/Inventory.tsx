@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import { useSearchParams, Link as RouterLink } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -26,12 +26,14 @@ import {
   X,
   FileSpreadsheet,
   Download,
+  Camera,
 } from "lucide-react";
 import { toast } from "sonner";
 import { formatMoney, formatNumber } from "@/lib/format";
 import { setItemStockCount, exportInventoryToExcel } from "@/lib/stock-helpers";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { BulkImporterModal } from "@/components/BulkImporterModal";
+import { CoverImage } from "@/components/CoverImage";
 
 const CATEGORIES = [
   "filter",
@@ -268,12 +270,28 @@ export default function Inventory() {
                   return (
                     <tr key={i.id} className="border-t border-border">
                       <td className="px-5 py-3">
-                        <div className="font-medium">{i.name}</div>
-                        {i.part_number && (
-                          <div className="text-xs text-muted-foreground">
-                            {i.part_number}
+                        <div className="flex items-center gap-3">
+                          <div className="h-10 w-10 shrink-0 overflow-hidden rounded-lg border border-border bg-muted/40 flex items-center justify-center">
+                            {i.image_url ? (
+                              <CoverImage
+                                value={i.image_url}
+                                alt={i.name}
+                                className="h-full w-full object-cover"
+                                fallback={<Package className="h-5 w-5 text-muted-foreground/60" />}
+                              />
+                            ) : (
+                              <Package className="h-5 w-5 text-muted-foreground/60" />
+                            )}
                           </div>
-                        )}
+                          <div>
+                            <div className="font-medium">{i.name}</div>
+                            {i.part_number && (
+                              <div className="text-xs text-muted-foreground">
+                                {i.part_number}
+                              </div>
+                            )}
+                          </div>
+                        </div>
                       </td>
                       <td className="px-5 py-3 capitalize">
                         {i.category ?? "—"}
@@ -387,22 +405,49 @@ export default function Inventory() {
   );
 }
 
+interface WorkshopModelRow {
+  model: string;
+  quantity: string;
+  sellingPrice?: string;
+  unitCost?: string;
+}
+
 function InventoryDialog({ open, onOpenChange, item, onSaved }: any) {
   const { profile } = useAuth();
   const [submitting, setSubmitting] = useState(false);
   const [form, setForm] = useState<any>({});
+  const [models, setModels] = useState<WorkshopModelRow[]>([{ model: "", quantity: "1", sellingPrice: "", unitCost: "" }]);
+  const [quickInput, setQuickInput] = useState("");
+
+  // Photo state
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [imageUrl, setImageUrl] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     if (open) {
-      setForm(
-        item ?? {
+      setQuickInput("");
+      if (item) {
+        setForm({
+          ...item,
+          quantity: item.quantity != null ? String(item.quantity) : "1",
+          unit_cost: item.unit_cost != null ? String(item.unit_cost) : "0",
+          selling_price: item.selling_price != null ? String(item.selling_price) : "",
+        });
+        setImageUrl(item.image_url ?? null);
+        setImagePreview(null);
+        setImageFile(null);
+      } else {
+        setForm({
           name: "",
           part_number: "",
           category: "filter",
           unit: "pcs",
-          quantity: 1,
+          quantity: "1",
           reorder_level: 0,
           unit_cost: 0,
+          selling_price: "",
           supplier: "",
           location: "",
           notes: "",
@@ -425,26 +470,114 @@ function InventoryDialog({ open, onOpenChange, item, onSaved }: any) {
           avg_monthly_consumption: "",
           backup_supplier: "",
           technical_specs: "",
-        },
-      );
+        });
+        setModels([{ model: "", quantity: "1", sellingPrice: "", unitCost: "" }]);
+        setImageUrl(null);
+        setImagePreview(null);
+        setImageFile(null);
+      }
     }
   }, [open, item]);
+
+  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      toast.error("Please select an image file (PNG, JPG, WEBP)");
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error("Image size must be less than 10MB");
+      return;
+    }
+    setImageFile(file);
+    setImagePreview(URL.createObjectURL(file));
+  };
+
+  const handleRemovePhoto = () => {
+    setImageFile(null);
+    setImagePreview(null);
+    setImageUrl(null);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  const addModelRow = () => {
+    setModels((prev) => [...prev, { model: "", quantity: "1", sellingPrice: "", unitCost: "" }]);
+  };
+
+  const updateModel = (idx: number, patch: Partial<WorkshopModelRow>) => {
+    setModels((prev) => prev.map((row, i) => (i === idx ? { ...row, ...patch } : row)));
+  };
+
+  const removeModel = (idx: number) => {
+    if (models.length <= 1) {
+      setModels([{ model: "", quantity: "1", sellingPrice: "", unitCost: "" }]);
+      return;
+    }
+    setModels((prev) => prev.filter((_, i) => i !== idx));
+  };
+
+  const handleQuickAdd = () => {
+    if (!quickInput.trim()) return;
+    const parts = quickInput
+      .split(/[,\n]+/)
+      .map((s) => s.trim())
+      .filter(Boolean);
+
+    if (parts.length === 0) return;
+
+    const newRows: WorkshopModelRow[] = parts.map((m) => ({
+      model: m,
+      quantity: "1",
+      sellingPrice: "",
+      unitCost: "",
+    }));
+    const firstIsEmpty = models.length === 1 && !models[0].model.trim();
+
+    if (firstIsEmpty) {
+      setModels(newRows);
+    } else {
+      setModels((prev) => [...prev, ...newRows]);
+    }
+    setQuickInput("");
+    toast.success(`Added ${newRows.length} models to list`);
+  };
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!profile) return;
-    if (!form.name?.trim()) return toast.error("Name required");
+    const baseName = form.name?.trim();
+    if (!baseName) return toast.error("Name required");
     setSubmitting(true);
+
+    // Upload photo to machine-docs storage if selected
+    let finalImageUrl = imageUrl;
+    if (imageFile) {
+      const ext = imageFile.name.split(".").pop() || "jpg";
+      const path = `${profile.organisation_id || "common"}/parts/${crypto.randomUUID()}.${ext}`;
+      const { error: upErr } = await supabase.storage
+        .from("machine-docs")
+        .upload(path, imageFile, { upsert: true });
+      if (upErr) {
+        console.warn("Image upload warning:", upErr);
+        toast.error("Photo upload failed: " + upErr.message);
+      } else {
+        finalImageUrl = path;
+      }
+    }
+
     const targetQty = form.quantity !== "" && !isNaN(Number(form.quantity)) ? Math.max(0, Number(form.quantity)) : 1;
-    const payload: any = {
+    const basePayload: any = {
       organisation_id: profile.organisation_id,
-      name: form.name.trim(),
+      name: baseName,
       part_number: form.part_number || null,
       category: form.category || null,
-      unit: form.unit,
+      unit: form.unit || "pcs",
       quantity: targetQty,
       reorder_level: Number(form.reorder_level) || 0,
       unit_cost: Number(form.unit_cost) || 0,
+      selling_price: form.selling_price === "" || form.selling_price == null ? null : Number(form.selling_price),
+      image_url: finalImageUrl,
       supplier: form.supplier || null,
       location: form.location || null,
       notes: form.notes || null,
@@ -473,8 +606,14 @@ function InventoryDialog({ open, onOpenChange, item, onSaved }: any) {
       backup_supplier: form.backup_supplier || null,
       technical_specs: form.technical_specs || null,
     };
+
     if (item) {
-      const { error } = await supabase.from("inventory_items").update(payload).eq("id", item.id);
+      let { error } = await supabase.from("inventory_items").update(basePayload).eq("id", item.id);
+      if (error && (error.message?.includes("image_url") || error.code === "PGRST204")) {
+        const { image_url, ...fallback } = basePayload;
+        const res = await supabase.from("inventory_items").update(fallback).eq("id", item.id);
+        error = res.error;
+      }
       if (error) {
         setSubmitting(false);
         return toast.error(error.message);
@@ -486,28 +625,79 @@ function InventoryDialog({ open, onOpenChange, item, onSaved }: any) {
         currentStock: Number(item.quantity ?? 0),
         reason: "Stock updated via edit in inventory",
       });
-    } else {
-      const { data: inserted, error } = await supabase
+      setSubmitting(false);
+      toast.success("Updated");
+      onOpenChange(false);
+      onSaved();
+      return;
+    }
+
+    // Adding flow (can be 1 model or multiple models)
+    const validRows = models.filter((r) => r.model.trim());
+    const fallbackQty = form.quantity !== "" && !isNaN(Number(form.quantity)) ? Math.max(0, Number(form.quantity)) : 1;
+    const rowsToProcess = validRows.length > 0
+      ? validRows
+      : [{ model: form.part_number || "", quantity: String(fallbackQty), sellingPrice: form.selling_price, unitCost: form.unit_cost }];
+
+    const payloads = rowsToProcess.map((r) => {
+      const code = r.model.trim();
+      const fullName = code && validRows.length > 1 ? `${baseName} - ${code}` : baseName;
+      const initialQty = Number(r.quantity) > 0 ? Number(r.quantity) : 1;
+      const rowSellingPrice = r.sellingPrice && r.sellingPrice.trim() !== ""
+        ? Number(r.sellingPrice)
+        : form.selling_price === "" || form.selling_price == null ? null : Number(form.selling_price);
+      const rowUnitCost = r.unitCost && r.unitCost.trim() !== ""
+        ? Number(r.unitCost)
+        : (Number(form.unit_cost) || 0);
+
+      return {
+        ...basePayload,
+        name: fullName,
+        part_number: code || basePayload.part_number,
+        sku: code || basePayload.sku,
+        quantity: initialQty,
+        unit_cost: rowUnitCost,
+        selling_price: rowSellingPrice,
+        image_url: finalImageUrl,
+      };
+    });
+
+    let { data: insertedItems, error } = await supabase
+      .from("inventory_items")
+      .insert(payloads)
+      .select("id, name");
+
+    if (error && (error.message?.includes("image_url") || error.code === "PGRST204")) {
+      const fallbackPayloads = payloads.map(({ image_url, ...rest }: any) => rest);
+      const res = await supabase
         .from("inventory_items")
-        .insert(payload)
-        .select("id")
-        .single();
-      if (error) {
-        setSubmitting(false);
-        return toast.error(error.message);
-      }
-      if (inserted?.id) {
-        await setItemStockCount({
-          itemId: inserted.id,
+        .insert(fallbackPayloads)
+        .select("id, name");
+      insertedItems = res.data;
+      error = res.error;
+    }
+
+    if (error) {
+      setSubmitting(false);
+      return toast.error(error.message);
+    }
+
+    if (insertedItems && insertedItems.length > 0) {
+      const promises = insertedItems.map((ins, idx) => {
+        const qty = Number(rowsToProcess[idx]?.quantity) > 0 ? Number(rowsToProcess[idx]?.quantity) : 1;
+        return setItemStockCount({
+          itemId: ins.id,
           orgId: profile.organisation_id,
-          targetStock: targetQty,
+          targetStock: qty,
           currentStock: 0,
           reason: "Initial stock on registration",
         });
-      }
+      });
+      await Promise.all(promises);
     }
+
     setSubmitting(false);
-    toast.success(item ? "Updated" : "Added");
+    toast.success(rowsToProcess.length > 1 ? `Added ${rowsToProcess.length} models of ${baseName}` : "Added part");
     onOpenChange(false);
     onSaved();
   };
@@ -526,17 +716,101 @@ function InventoryDialog({ open, onOpenChange, item, onSaved }: any) {
                 value={form.name ?? ""}
                 onChange={(e) => setForm({ ...form, name: e.target.value })}
                 maxLength={150}
+                placeholder="e.g. Oil filter, Brakepad, Bearing"
               />
             </div>
-            <div className="space-y-1.5">
-              <Label>Part #</Label>
-              <Input
-                value={form.part_number ?? ""}
-                onChange={(e) =>
-                  setForm({ ...form, part_number: e.target.value })
-                }
+
+            {/* Photo Upload Section */}
+            <div className="sm:col-span-2">
+              <Label className="text-xs font-medium text-muted-foreground">
+                Part Photo (Picha ya Spea) — <span className="font-normal italic">Optional</span>
+              </Label>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                onChange={handleImageSelect}
+                className="hidden"
               />
+              <div className="mt-1.5 flex items-center gap-3">
+                {imagePreview || imageUrl ? (
+                  <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-lg border border-border bg-muted/40">
+                    {imagePreview ? (
+                      <img src={imagePreview} alt="Preview" className="h-full w-full object-cover" />
+                    ) : (
+                      <CoverImage
+                        value={imageUrl}
+                        alt="Current photo"
+                        className="h-full w-full object-cover"
+                        fallback={<Package className="h-6 w-6 text-muted-foreground/60 m-auto mt-5" />}
+                      />
+                    )}
+                    <button
+                      type="button"
+                      onClick={handleRemovePhoto}
+                      className="absolute top-0.5 right-0.5 rounded-full bg-black/70 p-1 text-white hover:bg-black"
+                      title="Remove photo"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </div>
+                ) : (
+                  <div
+                    onClick={() => fileInputRef.current?.click()}
+                    className="flex h-16 w-16 cursor-pointer flex-col items-center justify-center rounded-lg border border-dashed border-border bg-muted/20 text-muted-foreground transition hover:border-primary hover:text-primary"
+                    title="Upload photo"
+                  >
+                    <Camera className="h-5 w-5" />
+                    <span className="text-[10px] mt-0.5 font-medium">Photo</span>
+                  </div>
+                )}
+
+                <div className="flex-1 text-xs">
+                  {imagePreview || imageUrl ? (
+                    <div className="space-y-1">
+                      <p className="text-[11px] font-medium text-foreground">Photo selected</p>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => fileInputRef.current?.click()}
+                          className="h-7 text-xs px-2"
+                        >
+                          Change Photo
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={handleRemovePhoto}
+                          className="h-7 text-xs px-2 text-destructive hover:bg-destructive/10"
+                        >
+                          Remove
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="space-y-0.5">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => fileInputRef.current?.click()}
+                        className="h-7 text-xs gap-1.5"
+                      >
+                        <Camera className="h-3.5 w-3.5" />
+                        Upload Part Photo
+                      </Button>
+                      <p className="text-[11px] text-muted-foreground">
+                        Take or upload a picture of the spare part or packaging.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
+
             <div className="space-y-1.5">
               <Label>Category</Label>
               <select
@@ -551,16 +825,7 @@ function InventoryDialog({ open, onOpenChange, item, onSaved }: any) {
                 ))}
               </select>
             </div>
-            <div className="space-y-1.5">
-              <Label>Quantity in stock</Label>
-              <Input
-                type="number"
-                min={0}
-                step="any"
-                value={form.quantity ?? 1}
-                onChange={(e) => setForm({ ...form, quantity: e.target.value })}
-              />
-            </div>
+
             <div className="space-y-1.5">
               <Label>Unit</Label>
               <select
@@ -575,6 +840,248 @@ function InventoryDialog({ open, onOpenChange, item, onSaved }: any) {
                 ))}
               </select>
             </div>
+
+            <div className="space-y-1.5">
+              <Label>Unit cost (Buying Price)</Label>
+              <Input
+                type="number"
+                min={0}
+                step="any"
+                value={form.unit_cost ?? 0}
+                onChange={(e) =>
+                  setForm({ ...form, unit_cost: e.target.value })
+                }
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label>Selling Price (Bei ya Kuuza)</Label>
+              <Input
+                type="number"
+                min={0}
+                step="any"
+                value={form.selling_price ?? ""}
+                onChange={(e) =>
+                  setForm({ ...form, selling_price: e.target.value })
+                }
+                placeholder="e.g. 35000"
+              />
+            </div>
+
+            {!item ? (
+              /* Adding Models & Prices */
+              <div className="sm:col-span-2 space-y-3 rounded-xl border border-border bg-muted/20 p-3.5">
+                <div>
+                  <div className="text-xs font-semibold text-foreground">
+                    Models / Numbers &amp; Prices (Modeli, Bei na Idadi)
+                  </div>
+                  <p className="text-[11px] text-muted-foreground">
+                    Add each model/part number with its specific selling price and stock.
+                  </p>
+                </div>
+
+                <div className="hidden sm:grid grid-cols-12 gap-2 px-2 text-[11px] font-medium text-muted-foreground">
+                  <div className="col-span-5">Model / Part No.</div>
+                  <div className="col-span-2">Stock</div>
+                  <div className="col-span-2">Cost (optional)</div>
+                  <div className="col-span-3">Selling Price (optional)</div>
+                </div>
+
+                <div className="space-y-2 pt-1 max-h-[240px] overflow-y-auto pr-1">
+                  {models.map((row, idx) => (
+                    <div key={idx} className="p-2.5 rounded-lg border border-border/70 bg-card space-y-2">
+                      <div className="flex items-center justify-between gap-2 sm:hidden">
+                        <span className="text-[11px] font-semibold text-muted-foreground">
+                          Model #{idx + 1}
+                        </span>
+                        {models.length > 1 && (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => removeModel(idx)}
+                            className="h-6 w-6 text-muted-foreground hover:text-destructive"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        )}
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-center">
+                        <div className="sm:col-span-5">
+                          <Label className="text-[10px] text-muted-foreground sm:hidden">Model / Part No.</Label>
+                          <Input
+                            placeholder={`Model ${idx + 1} (e.g. ${idx === 0 ? "3455" : "4567"})`}
+                            value={row.model}
+                            onChange={(e) => updateModel(idx, { model: e.target.value })}
+                            className="h-8 text-xs font-medium bg-background"
+                          />
+                        </div>
+                        <div className="sm:col-span-2">
+                          <Label className="text-[10px] text-muted-foreground sm:hidden">Stock (pcs)</Label>
+                          <div className="flex items-center gap-1">
+                            <Input
+                              type="number"
+                              min={0}
+                              placeholder="Qty"
+                              value={row.quantity}
+                              onChange={(e) => updateModel(idx, { quantity: e.target.value })}
+                              className="h-8 text-xs font-semibold text-center bg-background"
+                            />
+                            <span className="text-[10px] text-muted-foreground font-medium">{form.unit || "pcs"}</span>
+                          </div>
+                        </div>
+                        <div className="sm:col-span-2">
+                          <Label className="text-[10px] text-muted-foreground sm:hidden">Cost</Label>
+                          <Input
+                            type="number"
+                            min={0}
+                            placeholder={form.unit_cost ? `Cost: ${form.unit_cost}` : "Cost"}
+                            value={row.unitCost ?? ""}
+                            onChange={(e) => updateModel(idx, { unitCost: e.target.value })}
+                            className="h-8 text-xs bg-background"
+                            title="Buying cost for this model"
+                          />
+                        </div>
+                        <div className="sm:col-span-3 flex items-center gap-1">
+                          <div className="flex-1">
+                            <Label className="text-[10px] text-muted-foreground sm:hidden">Selling Price</Label>
+                            <Input
+                              type="number"
+                              min={0}
+                              placeholder={form.selling_price ? `Sell: ${form.selling_price}` : "Sell price"}
+                              value={row.sellingPrice ?? ""}
+                              onChange={(e) => updateModel(idx, { sellingPrice: e.target.value })}
+                              className="h-8 text-xs font-semibold text-primary bg-background"
+                              title="Selling price for this model"
+                            />
+                          </div>
+                          {models.length > 1 && (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => removeModel(idx)}
+                              className="hidden sm:inline-flex h-8 w-8 text-muted-foreground hover:text-destructive shrink-0"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={addModelRow}
+                  className="w-full text-xs gap-1.5 h-8 border-dashed"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  Add Another Model (Ongeza Namba Nyingine)
+                </Button>
+
+                <div className="pt-2 border-t border-border/60">
+                  <div className="text-[11px] text-muted-foreground mb-1">
+                    Or type numbers separated by comma (Mfano: 3455, 4567, 3456):
+                  </div>
+                  <div className="flex gap-1.5">
+                    <Input
+                      value={quickInput}
+                      onChange={(e) => setQuickInput(e.target.value)}
+                      placeholder="3455, 4567, 3456..."
+                      className="h-8 text-xs bg-background"
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          handleQuickAdd();
+                        }
+                      }}
+                    />
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      onClick={handleQuickAdd}
+                      className="h-8 text-xs shrink-0"
+                    >
+                      + Add
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              /* Single Edit Stock Controls */
+              <div className="sm:col-span-2 rounded-xl border border-primary/20 bg-primary/5 p-3.5 space-y-2.5">
+                <div>
+                  <Label className="text-xs font-semibold text-foreground">
+                    Stock in Hand / Quantity (Idadi ya Spea Ilivyopo Stoo)
+                  </Label>
+                  <p className="text-[11px] text-muted-foreground">
+                    Edit current count or tap quick buttons to add more if new stock arrived.
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    className="h-10 w-10 shrink-0 font-bold text-base"
+                    onClick={() => setForm((prev: any) => ({ ...prev, quantity: Math.max(0, (Number(prev.quantity) || 0) - 1) }))}
+                  >
+                    -
+                  </Button>
+                  <div className="relative flex-1">
+                    <Input
+                      type="number"
+                      min={0}
+                      value={form.quantity ?? 1}
+                      onChange={(e) => setForm({ ...form, quantity: e.target.value })}
+                      className="h-10 text-center text-base font-semibold bg-background"
+                    />
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    className="h-10 w-10 shrink-0 font-bold text-base"
+                    onClick={() => setForm((prev: any) => ({ ...prev, quantity: (Number(prev.quantity) || 0) + 1 }))}
+                  >
+                    +
+                  </Button>
+                  <span className="text-xs font-medium text-muted-foreground shrink-0">{form.unit || "pcs"}</span>
+                </div>
+                <div className="flex items-center gap-2 pt-1 border-t border-border/50">
+                  <span className="text-[11px] text-muted-foreground">Add more:</span>
+                  {[1, 5, 10, 20].map((addAmt) => (
+                    <Button
+                      key={addAmt}
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      className="h-7 px-2.5 text-xs font-medium"
+                      onClick={() => setForm((prev: any) => ({ ...prev, quantity: (Number(prev.quantity) || 0) + addAmt }))}
+                    >
+                      +{addAmt}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div className="space-y-1.5">
+              <Label>Part # / Model Code</Label>
+              <Input
+                value={form.part_number ?? ""}
+                onChange={(e) =>
+                  setForm({ ...form, part_number: e.target.value })
+                }
+                placeholder="e.g. 3455"
+              />
+            </div>
+
             <div className="space-y-1.5">
               <Label>Reorder level</Label>
               <Input
@@ -586,17 +1093,7 @@ function InventoryDialog({ open, onOpenChange, item, onSaved }: any) {
                 }
               />
             </div>
-            <div className="space-y-1.5">
-              <Label>Unit cost</Label>
-              <Input
-                type="number"
-                step="any"
-                value={form.unit_cost ?? 0}
-                onChange={(e) =>
-                  setForm({ ...form, unit_cost: e.target.value })
-                }
-              />
-            </div>
+
             <div className="space-y-1.5">
               <Label>Supplier</Label>
               <Input
@@ -604,6 +1101,7 @@ function InventoryDialog({ open, onOpenChange, item, onSaved }: any) {
                 onChange={(e) => setForm({ ...form, supplier: e.target.value })}
               />
             </div>
+
             <div className="space-y-1.5">
               <Label>Location</Label>
               <Input
