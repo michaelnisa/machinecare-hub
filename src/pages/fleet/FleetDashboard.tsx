@@ -16,6 +16,7 @@ import {
   Activity,
   ArrowUpRight,
   Navigation,
+  Search,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -28,8 +29,9 @@ import { formatWoNumber } from "@/components/WorkOrderPreview";
 import { formatDistanceToNow } from "date-fns";
 import { useI18n } from "@/i18n/I18nProvider";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
-import { parseMachine, SAFE_MACHINE_COLUMNS, normalizeTelematicsStatus, type FleetVehicle } from "@/lib/fleet-metadata";
+import { parseMachine, SAFE_MACHINE_COLUMNS, normalizeTelematicsStatus, type FleetVehicle, type TelematicsStatus } from "@/lib/fleet-metadata";
 import { syncTrakzeeFleet } from "@/services/trakzeeService";
 import { computeOdoPmStatus } from "@/services/fleetPmService";
 
@@ -80,6 +82,9 @@ export default function FleetDashboard() {
   const [inspectionsToday, setInspectionsToday] = useState<{ machine_id: string }[]>([]);
 
   const [syncingGps, setSyncingGps] = useState(false);
+  const [showAllStatusBoard, setShowAllStatusBoard] = useState(false);
+  const [statusBoardSearch, setStatusBoardSearch] = useState("");
+  const [statusBoardStatusFilter, setStatusBoardStatusFilter] = useState<"all" | TelematicsStatus>("all");
 
   const handleQuickSync = async () => {
     const orgId = organisation?.id || profile?.organisation_id;
@@ -380,6 +385,43 @@ export default function FleetDashboard() {
     return map;
   }, [schedules, machines]);
 
+  const statusBoardVehicles = useMemo(() => {
+    return machines.filter((m) => {
+      const speed = Number(m.telematics_speed || 0);
+      const hasGps = m.telematics_latitude != null && m.telematics_longitude != null;
+      const vStatus = normalizeTelematicsStatus(
+        m.telematics_status,
+        m.telematics_speed,
+        m.telematics_ignition,
+        m.telematics_last_at,
+        hasGps
+      );
+
+      if (statusBoardStatusFilter !== "all" && vStatus !== statusBoardStatusFilter) {
+        return false;
+      }
+
+      if (statusBoardSearch) {
+        const q = statusBoardSearch.toLowerCase();
+        const driver = currentDriverByMachine.get(m.id);
+        const plate = (m.plate_number || "").toLowerCase();
+        const name = (m.name || "").toLowerCase();
+        const driverName = (driver?.name || "").toLowerCase();
+        const location = (m.telematics_location || m.home_depot || "").toLowerCase();
+        if (!plate.includes(q) && !name.includes(q) && !driverName.includes(q) && !location.includes(q)) {
+          return false;
+        }
+      }
+
+      return true;
+    });
+  }, [machines, statusBoardStatusFilter, statusBoardSearch, currentDriverByMachine]);
+
+  const displayedStatusVehicles = useMemo(() => {
+    if (showAllStatusBoard) return statusBoardVehicles;
+    return statusBoardVehicles.slice(0, 10);
+  }, [statusBoardVehicles, showAllStatusBoard]);
+
   const openWoGroups = useMemo<OpenWoGroup[]>(() => {
     const priorityRank: Record<string, number> = { critical: 3, high: 2, normal: 1, low: 0 };
     const map = new Map<string, { count: number; highestPriority: string }>();
@@ -595,7 +637,7 @@ export default function FleetDashboard() {
         </div>
 
         <div className="rounded-xl border border-border bg-card p-5 lg:col-span-2">
-          <div className="mb-3 flex items-center justify-between">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
             <div className="flex items-center gap-2">
               <Truck className="h-4 w-4 text-muted-foreground" />
               <h2 className="text-sm font-medium text-foreground">{t.fleet.statusBoard}</h2>
@@ -603,15 +645,87 @@ export default function FleetDashboard() {
                 {machines.length} Connected Vehicles
               </span>
             </div>
-            <Link to="/fleet/vehicles" className="text-xs font-medium text-primary hover:underline">
-              {t.fleet.viewAll}
-            </Link>
+            <div className="flex items-center gap-2">
+              <Button
+                variant={showAllStatusBoard ? "secondary" : "outline"}
+                size="sm"
+                className="h-8 text-xs gap-1.5 cursor-pointer font-medium"
+                onClick={() => setShowAllStatusBoard(!showAllStatusBoard)}
+              >
+                {showAllStatusBoard ? "Show top 10" : `View all (${machines.length})`}
+              </Button>
+              <Button variant="ghost" size="sm" className="h-8 text-xs gap-1.5" asChild>
+                <Link to="/fleet/live-map">
+                  <MapPin className="h-3.5 w-3.5 text-emerald-600" /> Live GPS Map
+                </Link>
+              </Button>
+            </div>
           </div>
+
+          {/* Quick Status Filter & Live Search Toolbar */}
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-border/60">
+            <div className="flex flex-wrap items-center gap-1.5">
+              {(["all", "Running", "Idle", "Stopped", "Inactive"] as const).map((st) => {
+                const count = st === "all"
+                  ? machines.length
+                  : st === "Running"
+                  ? runningVehicles.length
+                  : st === "Idle"
+                  ? idleVehicles.length
+                  : st === "Stopped"
+                  ? stoppedVehicles.length
+                  : inactiveVehicles.length;
+
+                return (
+                  <button
+                    key={st}
+                    type="button"
+                    onClick={() => setStatusBoardStatusFilter(st)}
+                    className={`px-2.5 py-1 rounded-md text-xs font-medium transition-all cursor-pointer ${
+                      statusBoardStatusFilter === st
+                        ? "bg-primary text-primary-foreground shadow-2xs"
+                        : "bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground"
+                    }`}
+                  >
+                    {st === "all" ? "All" : st} ({count})
+                  </button>
+                );
+              })}
+            </div>
+            <div className="relative w-full sm:w-64">
+              <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                value={statusBoardSearch}
+                onChange={(e) => setStatusBoardSearch(e.target.value)}
+                placeholder="Search plate, driver, location…"
+                className="h-8 pl-8 text-xs"
+              />
+            </div>
+          </div>
+
           {machines.length === 0 ? (
             <EmptyState
               icon={<MapPin className="h-5 w-5" />}
               title="No vehicles yet"
               description="Add vehicles to see plate, driver, odometer and next service at a glance."
+            />
+          ) : displayedStatusVehicles.length === 0 ? (
+            <EmptyState
+              icon={<Search className="h-5 w-5" />}
+              title="No matching vehicles"
+              description="Try adjusting your status filter or search term."
+              action={
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setStatusBoardSearch("");
+                    setStatusBoardStatusFilter("all");
+                  }}
+                >
+                  Clear filters
+                </Button>
+              }
             />
           ) : (
             <div className="overflow-x-auto">
@@ -627,7 +741,7 @@ export default function FleetDashboard() {
                   </tr>
                 </thead>
                 <tbody>
-                  {machines.slice(0, 10).map((m) => {
+                  {displayedStatusVehicles.map((m) => {
                     const driver = currentDriverByMachine.get(m.id);
                     const nextDue = nextDueByMachine.get(m.id) ?? null;
                     const speed = Number(m.telematics_speed || 0);
@@ -710,14 +824,28 @@ export default function FleetDashboard() {
                   })}
                 </tbody>
               </table>
-              {machines.length > 10 && (
-                <div className="mt-3 flex items-center justify-between text-xs text-muted-foreground pt-2 border-t border-border">
-                  <span>Showing top 10 of {machines.length} live telematics vehicles</span>
-                  <Link to="/fleet/vehicles" className="font-medium text-primary hover:underline">
-                    View all {machines.length} vehicles →
+
+              <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground pt-2 border-t border-border">
+                <span>
+                  Showing {displayedStatusVehicles.length} of {statusBoardVehicles.length} vehicles
+                  {statusBoardVehicles.length !== machines.length && ` (filtered from ${machines.length})`}
+                </span>
+                <div className="flex items-center gap-3">
+                  {machines.length > 10 && (
+                    <button
+                      type="button"
+                      onClick={() => setShowAllStatusBoard(!showAllStatusBoard)}
+                      className="font-medium text-primary hover:underline cursor-pointer"
+                    >
+                      {showAllStatusBoard ? "Collapse to top 10" : `View all ${machines.length} vehicles in board →`}
+                    </button>
+                  )}
+                  <span className="text-border">|</span>
+                  <Link to="/fleet/vehicles?view=live" className="font-medium text-primary hover:underline">
+                    Open in Fleet Registry →
                   </Link>
                 </div>
-              )}
+              </div>
             </div>
           )}
         </div>

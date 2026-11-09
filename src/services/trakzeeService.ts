@@ -5,7 +5,7 @@
  */
 
 import { supabase } from "@/integrations/supabase/client";
-import { normalizeTelematicsStatus, type TelematicsStatus } from "@/lib/fleet-metadata";
+import { normalizeTelematicsStatus, generateDriverCode, type TelematicsStatus } from "@/lib/fleet-metadata";
 
 export interface TrakzeeConfig {
   trakzee_enabled: boolean;
@@ -304,7 +304,11 @@ export async function directClientSyncTrakzeeFleet(
       odometer_km: number | null;
       speed: number;
       status: string;
+      driver?: string | null;
+      location?: string | null;
     }> = [];
+
+    const driversToSync = new Map<string, { fullName: string; vehiclePlate: string }>();
 
     for (const tVehicle of vehicleList) {
       const rawPlate = String(tVehicle.Vehicle_No || tVehicle.Vehicle_Name || "").trim();
@@ -323,6 +327,19 @@ export async function directClientSyncTrakzeeFleet(
       const lng = tVehicle.Longitude && tVehicle.Longitude !== "--" ? Number(tVehicle.Longitude) : null;
       const ign = tVehicle.IGN === "ON";
       const volt = tVehicle.ExternalVolt && tVehicle.ExternalVolt !== "--" ? Number(tVehicle.ExternalVolt) : null;
+      const location = tVehicle.Location && tVehicle.Location !== "--" ? String(tVehicle.Location).trim() : null;
+      const driverParts = [tVehicle.Driver_First_Name, tVehicle.Driver_Middle_Name, tVehicle.Driver_Last_Name].filter(
+        (n: any) => n && n !== "--" && n !== "null" && n !== "NA" && n !== "-"
+      );
+      const driverName = driverParts.join(" ").trim() || (tVehicle.Driver_Name && tVehicle.Driver_Name !== "--" ? String(tVehicle.Driver_Name).trim() : null) || null;
+
+      if (driverName && driverName.length > 1) {
+        const normKey = driverName.toLowerCase();
+        if (!driversToSync.has(normKey)) {
+          driversToSync.set(normKey, { fullName: driverName, vehiclePlate: rawPlate });
+        }
+      }
+
       const tStatus = normalizeTelematicsStatus(
         tVehicle.Status,
         speed,
@@ -345,6 +362,8 @@ export async function directClientSyncTrakzeeFleet(
               battery_volt: volt,
               latitude: lat,
               longitude: lng,
+              location: location || null,
+              driver_name: driverName || null,
               status: tStatus,
               last_at: nowIso,
               raw: tVehicle,
@@ -360,6 +379,7 @@ export async function directClientSyncTrakzeeFleet(
             fuel_type: "Diesel",
             current_odometer_km: odoKm && odoKm > 0 ? odoKm : 0,
             current_hours: 0,
+            home_depot: location || "LOGISTIXWARE Depot",
             notes: JSON.stringify(metaNotes),
           };
 
@@ -372,6 +392,8 @@ export async function directClientSyncTrakzeeFleet(
               odometer_km: odoKm,
               speed,
               status: tStatus,
+              driver: driverName,
+              location,
             });
           }
         }
@@ -391,6 +413,8 @@ export async function directClientSyncTrakzeeFleet(
           battery_volt: volt,
           latitude: lat,
           longitude: lng,
+          location: location || existingNotes.telematics?.location || null,
+          driver_name: driverName || existingNotes.telematics?.driver_name || null,
           status: tStatus,
           last_at: nowIso,
           raw: tVehicle,
@@ -407,6 +431,10 @@ export async function directClientSyncTrakzeeFleet(
         }
       }
 
+      if (location && (!match.home_depot || match.home_depot === "LOGISTIXWARE Depot")) {
+        updatePayload.home_depot = location;
+      }
+
       const { error: updErr } = await supabase
         .from("machines")
         .update(updatePayload)
@@ -420,7 +448,46 @@ export async function directClientSyncTrakzeeFleet(
           odometer_km: odoKm ?? match.current_odometer_km,
           speed,
           status: tStatus,
+          driver: driverName || existingNotes.telematics?.driver_name || null,
+          location: location || existingNotes.telematics?.location || null,
         });
+      }
+    }
+
+    // 5.b Ingest detected live drivers into the drivers table
+    if (driversToSync.size > 0) {
+      try {
+        const { data: existingDrivers } = await supabase
+          .from("drivers")
+          .select("id, full_name")
+          .eq("organisation_id", targetOrgId);
+
+        const existingNames = new Set(
+          (existingDrivers || []).map((d: any) => String(d.full_name || "").trim().toLowerCase())
+        );
+
+        for (const [normKey, dInfo] of driversToSync.entries()) {
+          if (!existingNames.has(normKey)) {
+            const newDriver = {
+              organisation_id: targetOrgId,
+              full_name: dInfo.fullName,
+              phone: null,
+              status: "active",
+              notes: JSON.stringify({
+                driver_code: generateDriverCode(dInfo.fullName),
+                text: `[Imported live from Trakzee telematics assigned to ${dInfo.vehiclePlate}]`,
+                source: "trakzee_telematics",
+                assigned_vehicle: dInfo.vehiclePlate,
+              }),
+            };
+            const { error: dErr } = await supabase.from("drivers").insert(newDriver);
+            if (!dErr) {
+              existingNames.add(normKey);
+            }
+          }
+        }
+      } catch (dErr) {
+        console.warn("[Trakzee] Error syncing drivers into drivers table:", dErr);
       }
     }
 
@@ -443,6 +510,149 @@ export async function directClientSyncTrakzeeFleet(
     return {
       success: false,
       error: err?.message || "Direct telematics sync failed",
+    };
+  }
+}
+
+/**
+ * Syncs drivers directly from Trakzee API into the system's drivers table.
+ * Extracts driver names across all fleet vehicles and inserts missing drivers.
+ */
+export async function syncTrakzeeDrivers(organisationId: string): Promise<{
+  success: boolean;
+  drivers_imported: number;
+  drivers_found: number;
+  drivers: string[];
+  error?: string;
+}> {
+  try {
+    let targetOrgId = organisationId;
+    try {
+      const { data: orgData } = await supabase
+        .from("organisations")
+        .select("id, name")
+        .eq("id", organisationId)
+        .maybeSingle();
+
+      if (orgData?.id) targetOrgId = orgData.id;
+    } catch (_) {}
+
+    const serverUrl = DEFAULT_TRAKZEE_CONFIG.trakzee_server_url;
+    const username = "mdhfrancis@gmail.com";
+    const password = "Mdh@2023";
+    const companyName = DEFAULT_TRAKZEE_CONFIG.trakzee_company_name;
+    const projectId = DEFAULT_TRAKZEE_CONFIG.trakzee_project_id;
+
+    // 1. Authenticate with Trakzee
+    const loginRes = await fetch(`${serverUrl}?token=generateAccessToken`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username, password }),
+    });
+
+    if (!loginRes.ok) {
+      return { success: false, drivers_imported: 0, drivers_found: 0, drivers: [], error: `Trakzee HTTP error ${loginRes.status}` };
+    }
+
+    const loginData = await loginRes.json();
+    const token = loginData?.data?.token;
+    if (!token) {
+      return { success: false, drivers_imported: 0, drivers_found: 0, drivers: [], error: loginData?.message || "Failed to authenticate with Trakzee" };
+    }
+
+    // 2. Fetch live telematics
+    const liveRes = await fetch(`${serverUrl}?token=getTokenBaseLiveData&ProjectId=${encodeURIComponent(projectId)}`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "auth-code": token,
+      },
+      body: JSON.stringify({
+        company_names: companyName,
+        format: "json",
+      }),
+    });
+
+    if (!liveRes.ok) {
+      return { success: false, drivers_imported: 0, drivers_found: 0, drivers: [], error: `Telemetry HTTP error ${liveRes.status}` };
+    }
+
+    const liveData = await liveRes.json();
+    const vehicleList: any[] =
+      liveData?.root?.VehicleData ||
+      liveData?.VehicleData ||
+      (Array.isArray(liveData) ? liveData : []);
+
+    const driversMap = new Map<string, { fullName: string; vehiclePlate: string }>();
+
+    for (const tVehicle of vehicleList) {
+      const rawPlate = String(tVehicle.Vehicle_No || tVehicle.Vehicle_Name || "").trim();
+      const driverParts = [tVehicle.Driver_First_Name, tVehicle.Driver_Middle_Name, tVehicle.Driver_Last_Name].filter(
+        (n: any) => n && n !== "--" && n !== "null" && n !== "NA" && n !== "-"
+      );
+      const driverName = driverParts.join(" ").trim() || (tVehicle.Driver_Name && tVehicle.Driver_Name !== "--" ? String(tVehicle.Driver_Name).trim() : null) || null;
+
+      if (driverName && driverName.length > 1) {
+        const key = driverName.toLowerCase();
+        if (!driversMap.has(key)) {
+          driversMap.set(key, { fullName: driverName, vehiclePlate: rawPlate });
+        }
+      }
+    }
+
+    // 3. Query existing drivers in this organisation
+    const { data: existingDrivers, error: dFetchErr } = await supabase
+      .from("drivers")
+      .select("id, full_name")
+      .eq("organisation_id", targetOrgId);
+
+    if (dFetchErr) {
+      return { success: false, drivers_imported: 0, drivers_found: driversMap.size, drivers: [], error: dFetchErr.message };
+    }
+
+    const existingNames = new Set(
+      (existingDrivers || []).map((d: any) => String(d.full_name || "").trim().toLowerCase())
+    );
+
+    let importedCount = 0;
+    const driverList: string[] = [];
+
+    for (const [key, dInfo] of driversMap.entries()) {
+      driverList.push(dInfo.fullName);
+      if (!existingNames.has(key)) {
+        const newDriver = {
+          organisation_id: targetOrgId,
+          full_name: dInfo.fullName,
+          phone: null,
+          status: "active",
+          notes: JSON.stringify({
+            driver_code: generateDriverCode(dInfo.fullName),
+            text: `[Imported live from Trakzee telematics assigned to ${dInfo.vehiclePlate}]`,
+            source: "trakzee_telematics",
+            assigned_vehicle: dInfo.vehiclePlate,
+          }),
+        };
+        const { error: insErr } = await supabase.from("drivers").insert(newDriver);
+        if (!insErr) {
+          importedCount++;
+          existingNames.add(key);
+        }
+      }
+    }
+
+    return {
+      success: true,
+      drivers_imported: importedCount,
+      drivers_found: driversMap.size,
+      drivers: driverList,
+    };
+  } catch (err: any) {
+    return {
+      success: false,
+      drivers_imported: 0,
+      drivers_found: 0,
+      drivers: [],
+      error: err?.message || "Failed to sync drivers",
     };
   }
 }

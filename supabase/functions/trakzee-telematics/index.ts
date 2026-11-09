@@ -547,6 +547,7 @@ serve(async (req) => {
       // 5. Match and update vehicles in Supabase
       let updatedCount = 0;
       const syncLogs: any[] = [];
+      const driversToSync = new Map<string, { fullName: string; vehiclePlate: string }>();
 
       for (const tVehicle of vehicleList) {
         const rawPlate = tVehicle.Vehicle_No || tVehicle.Vehicle_Name;
@@ -568,7 +569,18 @@ serve(async (req) => {
         const volt = tVehicle.ExternalVolt && tVehicle.ExternalVolt !== "--" ? Number(tVehicle.ExternalVolt) : null;
         const batteryPct = tVehicle.battery_percentage !== undefined && tVehicle.battery_percentage !== "--" ? Number(tVehicle.battery_percentage) : null;
         const location = tVehicle.Location && tVehicle.Location !== "--" ? String(tVehicle.Location).trim() : null;
-        const driverName = [tVehicle.Driver_First_Name, tVehicle.Driver_Middle_Name, tVehicle.Driver_Last_Name].filter((n) => n && n !== "--").join(" ") || null;
+        const driverParts = [tVehicle.Driver_First_Name, tVehicle.Driver_Middle_Name, tVehicle.Driver_Last_Name].filter(
+          (n) => n && n !== "--" && n !== "null" && n !== "NA" && n !== "-"
+        );
+        const driverName = driverParts.join(" ").trim() || (tVehicle.Driver_Name && tVehicle.Driver_Name !== "--" ? String(tVehicle.Driver_Name).trim() : null) || null;
+
+        if (driverName && driverName.length > 1) {
+          const normKey = driverName.toLowerCase();
+          if (!driversToSync.has(normKey)) {
+            driversToSync.set(normKey, { fullName: driverName, vehiclePlate: rawPlate || "" });
+          }
+        }
+
         const heading = tVehicle.Angle !== undefined && tVehicle.Angle !== "--" ? Number(tVehicle.Angle) : null;
         const deviceModel = tVehicle.DeviceModel || "GPS";
         const gpsTime = tVehicle.GPSActualTime || tVehicle.Datetime || new Date().toISOString();
@@ -698,6 +710,41 @@ serve(async (req) => {
             status: tStatus,
           });
         }
+      }
+
+      // Ingest detected live drivers into the drivers table
+      if (driversToSync.size > 0) {
+        try {
+          const { data: existingDrivers } = await supabase
+            .from("drivers")
+            .select("id, full_name")
+            .eq("organisation_id", targetOrgId);
+
+          const existingNames = new Set(
+            (existingDrivers || []).map((d: any) => String(d.full_name || "").trim().toLowerCase())
+          );
+
+          for (const [normKey, dInfo] of driversToSync.entries()) {
+            if (!existingNames.has(normKey)) {
+              const newDriver = {
+                organisation_id: targetOrgId,
+                full_name: dInfo.fullName,
+                phone: null,
+                status: "active",
+                notes: JSON.stringify({
+                  driver_code: `DRV-${String(Math.floor(100 + Math.random() * 900))}`,
+                  text: `[Imported live from Trakzee telematics assigned to ${dInfo.vehiclePlate}]`,
+                  source: "trakzee_telematics",
+                  assigned_vehicle: dInfo.vehiclePlate,
+                }),
+              };
+              const { error: dErr } = await supabase.from("drivers").insert(newDriver);
+              if (!dErr) {
+                existingNames.add(normKey);
+              }
+            }
+          }
+        } catch (_) {}
       }
 
       // Automated Odometer PM Trigger: Evaluate active vehicle schedules against updated odometers

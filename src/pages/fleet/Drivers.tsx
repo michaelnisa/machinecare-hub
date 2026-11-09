@@ -46,6 +46,7 @@ import {
   generateDriverCode,
   type FleetDriver,
 } from "@/lib/fleet-metadata";
+import { syncTrakzeeDrivers } from "@/services/trakzeeService";
 
 type Driver = FleetDriver;
 
@@ -103,8 +104,29 @@ export default function Drivers() {
   const [confirm, setConfirm] = useState<string | null>(null);
   const [nokDriver, setNokDriver] = useState<Driver | null>(null);
   const [search, setSearch] = useState("");
+  const [syncingTrakzee, setSyncingTrakzee] = useState(false);
 
   const [viewMode, setViewMode] = useState<"table" | "cards">("table");
+
+  const handleSyncDrivers = async () => {
+    const orgId = profile?.organisation_id;
+    if (!orgId) {
+      toast.error("Organisation not loaded yet");
+      return;
+    }
+    setSyncingTrakzee(true);
+    const res = await syncTrakzeeDrivers(orgId);
+    setSyncingTrakzee(false);
+    if (!res.success) {
+      toast.error(res.error || "Failed to sync drivers from Trakzee");
+    } else if (res.drivers_imported === 0) {
+      toast.info(`Found ${res.drivers_found} driver(s) in Trakzee. All are already registered.`);
+      load();
+    } else {
+      toast.success(`Successfully imported ${res.drivers_imported} new driver(s) from Trakzee telematics!`);
+      load();
+    }
+  };
 
   const load = async () => {
     if (!profile) return;
@@ -169,9 +191,21 @@ export default function Drivers() {
           <p className="text-sm text-muted-foreground">{t.fleet.driversSub}</p>
         </div>
         {canWrite && (
-          <Button onClick={() => { setEditing(null); setOpen(true); }} className="gap-2 shadow-xs cursor-pointer">
-            <Plus className="h-4 w-4" /> {t.fleet.addDriver}
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              variant="outline"
+              onClick={handleSyncDrivers}
+              disabled={syncingTrakzee}
+              className="gap-2 shadow-xs cursor-pointer"
+              title="Fetch and register assigned drivers from Trakzee telematics"
+            >
+              <RefreshCw className={`h-4 w-4 ${syncingTrakzee ? "animate-spin text-amber-500" : "text-emerald-600"}`} />
+              {syncingTrakzee ? "Syncing Drivers..." : "Sync Drivers from Trakzee"}
+            </Button>
+            <Button onClick={() => { setEditing(null); setOpen(true); }} className="gap-2 shadow-xs cursor-pointer">
+              <Plus className="h-4 w-4" /> {t.fleet.addDriver}
+            </Button>
+          </div>
         )}
       </div>
 
@@ -252,8 +286,20 @@ export default function Drivers() {
         <EmptyState
           icon={<Contact className="h-5 w-5" />}
           title="No drivers yet"
-          description="Add your first driver to start tracking licences, NIDA, and Next of Kin emergency details."
-          action={canWrite ? <Button onClick={() => { setEditing(null); setOpen(true); }}><Plus className="mr-2 h-4 w-4" /> New driver</Button> : undefined}
+          description="Add your first driver or sync live drivers directly from Trakzee telematics."
+          action={
+            canWrite ? (
+              <div className="flex flex-wrap items-center justify-center gap-2">
+                <Button variant="outline" onClick={handleSyncDrivers} disabled={syncingTrakzee}>
+                  <RefreshCw className={`mr-2 h-4 w-4 ${syncingTrakzee ? "animate-spin text-amber-500" : "text-emerald-600"}`} />
+                  Sync Drivers from Trakzee
+                </Button>
+                <Button onClick={() => { setEditing(null); setOpen(true); }}>
+                  <Plus className="mr-2 h-4 w-4" /> New driver
+                </Button>
+              </div>
+            ) : undefined
+          }
         />
       ) : viewMode === "cards" ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">

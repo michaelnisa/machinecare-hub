@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useUserRole } from "@/hooks/useUserRole";
@@ -36,6 +36,7 @@ import {
   RefreshCw,
   Eye,
   Radio,
+  MapPin,
 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
@@ -48,6 +49,7 @@ import {
   parseMachine,
   serializeMachinePayload,
   generateVehicleCode,
+  normalizeTelematicsStatus,
   type FleetVehicle,
   AXLE_CONFIG_OPTIONS
 } from "@/lib/fleet-metadata";
@@ -129,9 +131,9 @@ export default function Vehicles() {
   const [docs, setDocs] = useState<VehicleDoc[]>([]);
   const [drivers, setDrivers] = useState<Driver[]>([]);
   const [search, setSearch] = useState("");
-  const [status, setStatus] = useState("all");
-  const [assetTab, setAssetTab] = useState<"all" | "vehicles" | "trailers">("all");
-  const [viewMode, setViewMode] = useState<"table" | "cards">("cards");
+  const [searchParams, setSearchParams] = useSearchParams();
+  const initialView = searchParams.get("view") === "live" ? "live" : searchParams.get("view") === "table" ? "table" : "cards";
+  const [viewMode, setViewMode] = useState<"table" | "cards" | "live">(initialView);
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<FleetVehicle | null>(null);
   const [initialCategory, setInitialCategory] = useState<"Vehicle" | "Trailer">("Vehicle");
@@ -201,16 +203,23 @@ export default function Vehicles() {
   const fleetTrailers = useMemo(() => machines.filter((m) => m.is_trailer || m.category === "Trailer"), [machines]);
   const powerUnits = useMemo(() => machines.filter((m) => !m.is_trailer && m.category !== "Trailer"), [machines]);
 
-  // Current driver per vehicle: driver on the latest in_progress trip, else the most recent trip's driver.
+  // Current driver per vehicle: prioritizes telematics driver name from Trakzee, else active trip driver
   const currentDriver = useMemo(() => {
     const map = new Map<string, { name: string; onTrip: boolean }>();
+    for (const m of machines) {
+      if (m.telematics_driver_name) {
+        map.set(m.id, {
+          name: m.telematics_driver_name,
+          onTrip: Number(m.telematics_speed || 0) > 0 || Boolean(m.telematics_ignition),
+        });
+      }
+    }
     for (const t of trips) {
-      if (map.has(t.machine_id)) continue;
-      if (!t.driver_id) continue;
+      if (map.has(t.machine_id) || !t.driver_id) continue;
       map.set(t.machine_id, { name: driverMap.get(t.driver_id) ?? "—", onTrip: t.status === "in_progress" });
     }
     return map;
-  }, [trips, driverMap]);
+  }, [trips, driverMap, machines]);
 
   // Earliest upcoming service due date per vehicle
   const nextDueByMachine = useMemo(() => {
@@ -379,10 +388,26 @@ export default function Vehicles() {
           <div className="flex items-center rounded-lg border border-border bg-muted/40 p-0.5">
             <Button
               type="button"
+              variant={viewMode === "live" ? "secondary" : "ghost"}
+              size="sm"
+              className="h-8 px-2.5 text-xs gap-1.5 cursor-pointer font-medium"
+              onClick={() => {
+                setViewMode("live");
+                setSearchParams((p) => { p.set("view", "live"); return p; });
+              }}
+              title="Live Telematics & Motion Status"
+            >
+              <Radio className="h-3.5 w-3.5 text-emerald-600" /> Live Status
+            </Button>
+            <Button
+              type="button"
               variant={viewMode === "table" ? "secondary" : "ghost"}
               size="sm"
               className="h-8 px-2.5 text-xs gap-1.5 cursor-pointer"
-              onClick={() => setViewMode("table")}
+              onClick={() => {
+                setViewMode("table");
+                setSearchParams((p) => { p.set("view", "table"); return p; });
+              }}
               title="Table View"
             >
               <List className="h-3.5 w-3.5" /> Table
@@ -392,7 +417,10 @@ export default function Vehicles() {
               variant={viewMode === "cards" ? "secondary" : "ghost"}
               size="sm"
               className="h-8 px-2.5 text-xs gap-1.5 cursor-pointer"
-              onClick={() => setViewMode("cards")}
+              onClick={() => {
+                setViewMode("cards");
+                setSearchParams((p) => { p.set("view", "cards"); return p; });
+              }}
               title="Badges / Cards View"
             >
               <LayoutGrid className="h-3.5 w-3.5" /> Badges
@@ -553,6 +581,125 @@ export default function Vehicles() {
               </div>
             );
           })}
+        </div>
+      ) : viewMode === "live" ? (
+        <div className="overflow-hidden rounded-xl border border-border bg-card">
+          <div className="border-b border-border px-5 py-3 text-sm font-medium flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Radio className="h-4 w-4 text-emerald-600 animate-pulse" />
+              <span>Live Fleet Telematics & Motion Status ({filtered.length})</span>
+            </div>
+            <span className="text-xs text-muted-foreground">Real-time GPS fixes, drivers, and speed</span>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[1000px] text-sm">
+              <thead className="text-left text-xs uppercase tracking-wide text-muted-foreground bg-muted/20">
+                <tr>
+                  <th className="px-5 py-3 font-medium">Vehicle / Plate</th>
+                  <th className="px-5 py-3 font-medium">Live Motion</th>
+                  <th className="px-5 py-3 font-medium">Assigned Driver</th>
+                  <th className="px-5 py-3 font-medium">Location</th>
+                  <th className="px-5 py-3 font-medium">Cached Odometer</th>
+                  <th className="px-5 py-3 font-medium">Next Service</th>
+                  <th className="px-5 py-3 font-medium text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map((m) => {
+                  const driver = currentDriver.get(m.id);
+                  const nextDue = nextDueByMachine.get(m.id) ?? null;
+                  const speed = Number(m.telematics_speed || 0);
+                  const hasGps = m.telematics_latitude != null && m.telematics_longitude != null;
+                  const vStatus = normalizeTelematicsStatus(
+                    m.telematics_status,
+                    m.telematics_speed,
+                    m.telematics_ignition,
+                    m.telematics_last_at,
+                    hasGps
+                  );
+                  return (
+                    <tr key={m.id} className="border-t border-border hover:bg-muted/30 transition-colors">
+                      <td className="px-5 py-3">
+                        <Link to={`/fleet/vehicles/${m.id}`} className="font-semibold text-foreground hover:underline">
+                          {m.plate_number || m.name}
+                        </Link>
+                        {m.plate_number && (
+                          <div className="text-xs text-muted-foreground line-clamp-1">{m.name}</div>
+                        )}
+                      </td>
+                      <td className="px-5 py-3">
+                        {vStatus === "Running" ? (
+                          <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/10 px-2.5 py-0.5 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
+                            <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                            Running ({speed > 0 ? `${speed} km/h` : "Moving"})
+                          </span>
+                        ) : vStatus === "Idle" ? (
+                          <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-500/10 px-2.5 py-0.5 text-xs font-semibold text-amber-600 dark:text-amber-400">
+                            <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+                            Idle (Key ON)
+                          </span>
+                        ) : vStatus === "Inactive" ? (
+                          <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-500/10 px-2.5 py-0.5 text-xs font-semibold text-slate-500 dark:text-slate-400">
+                            <span className="h-1.5 w-1.5 rounded-full bg-slate-400" />
+                            Inactive (Offline)
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1.5 rounded-full bg-sky-500/10 px-2.5 py-0.5 text-xs font-semibold text-sky-600 dark:text-sky-400">
+                            <span className="h-1.5 w-1.5 rounded-full bg-sky-500" />
+                            Stopped (Off)
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-5 py-3 text-sm">
+                        {driver ? (
+                          <div className="font-medium text-foreground">
+                            {driver.name}
+                            {driver.onTrip && <span className="ml-1 text-xs text-emerald-600">· active</span>}
+                          </div>
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
+                      </td>
+                      <td className="px-5 py-3 text-xs text-muted-foreground max-w-[240px] truncate" title={m.telematics_location || m.home_depot || ""}>
+                        {m.telematics_location || m.home_depot || "—"}
+                      </td>
+                      <td className="px-5 py-3 font-mono font-medium text-foreground">
+                        {m.current_odometer_km ? `${formatNumber(m.current_odometer_km)} km` : "—"}
+                      </td>
+                      <td className="px-5 py-3">
+                        {nextDue ? (
+                          <span className="text-xs font-medium text-muted-foreground">
+                            {formatDate(nextDue)}
+                          </span>
+                        ) : (
+                          <span className="text-muted-foreground text-xs">—</span>
+                        )}
+                      </td>
+                      <td className="px-5 py-3 text-right">
+                        <div className="flex items-center justify-end gap-1">
+                          <Button variant="ghost" size="sm" className="h-7 text-xs" asChild>
+                            <Link to={`/fleet/vehicles/${m.id}`}>
+                              <Eye className="h-3.5 w-3.5 mr-1" /> View
+                            </Link>
+                          </Button>
+                          <Button variant="ghost" size="icon" className="h-7 w-7" asChild title="Live GPS Map">
+                            <Link to={`/fleet/live-map?selected=${m.id}`}>
+                              <MapPin className="h-3.5 w-3.5 text-emerald-600" />
+                            </Link>
+                          </Button>
+                          {canWrite && (
+                            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { setEditing(m); setOpen(true); }} title="Edit">
+                              <Pencil className="h-3.5 w-3.5" />
+                            </Button>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
         </div>
       ) : (
         <div className="overflow-hidden rounded-xl border border-border bg-card">
