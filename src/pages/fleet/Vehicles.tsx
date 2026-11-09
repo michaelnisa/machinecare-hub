@@ -203,7 +203,7 @@ export default function Vehicles() {
   const fleetTrailers = useMemo(() => machines.filter((m) => m.is_trailer || m.category === "Trailer"), [machines]);
   const powerUnits = useMemo(() => machines.filter((m) => !m.is_trailer && m.category !== "Trailer"), [machines]);
 
-  // Current driver per vehicle: prioritizes telematics driver name from Trakzee, else active trip driver
+  // Current driver per vehicle: prioritizes telematics driver name from Trakzee, else assigned driver, else active trip driver
   const currentDriver = useMemo(() => {
     const map = new Map<string, { name: string; onTrip: boolean }>();
     for (const m of machines) {
@@ -214,12 +214,30 @@ export default function Vehicles() {
         });
       }
     }
+    // Fallback: match drivers who have an assigned vehicle note
+    const driverByVehiclePlate = new Map<string, string>();
+    for (const d of drivers) {
+      if ((d as any).assigned_vehicle) {
+        driverByVehiclePlate.set(String((d as any).assigned_vehicle).trim().toLowerCase(), d.full_name);
+      }
+    }
+    for (const m of machines) {
+      if (!map.has(m.id)) {
+        const plateKey = (m.plate_number || m.name || "").trim().toLowerCase();
+        if (plateKey && driverByVehiclePlate.has(plateKey)) {
+          map.set(m.id, {
+            name: driverByVehiclePlate.get(plateKey)!,
+            onTrip: Number(m.telematics_speed || 0) > 0 || Boolean(m.telematics_ignition),
+          });
+        }
+      }
+    }
     for (const t of trips) {
       if (map.has(t.machine_id) || !t.driver_id) continue;
       map.set(t.machine_id, { name: driverMap.get(t.driver_id) ?? "—", onTrip: t.status === "in_progress" });
     }
     return map;
-  }, [trips, driverMap, machines]);
+  }, [trips, driverMap, machines, drivers]);
 
   // Earliest upcoming service due date per vehicle
   const nextDueByMachine = useMemo(() => {

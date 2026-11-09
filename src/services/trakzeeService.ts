@@ -5,7 +5,14 @@
  */
 
 import { supabase } from "@/integrations/supabase/client";
-import { normalizeTelematicsStatus, generateDriverCode, type TelematicsStatus } from "@/lib/fleet-metadata";
+import {
+  normalizeTelematicsStatus,
+  generateDriverCode,
+  cleanDriverName,
+  parseMachine,
+  SAFE_MACHINE_COLUMNS,
+  type TelematicsStatus,
+} from "@/lib/fleet-metadata";
 
 export interface TrakzeeConfig {
   trakzee_enabled: boolean;
@@ -328,10 +335,12 @@ export async function directClientSyncTrakzeeFleet(
       const ign = tVehicle.IGN === "ON";
       const volt = tVehicle.ExternalVolt && tVehicle.ExternalVolt !== "--" ? Number(tVehicle.ExternalVolt) : null;
       const location = tVehicle.Location && tVehicle.Location !== "--" ? String(tVehicle.Location).trim() : null;
-      const driverParts = [tVehicle.Driver_First_Name, tVehicle.Driver_Middle_Name, tVehicle.Driver_Last_Name].filter(
-        (n: any) => n && n !== "--" && n !== "null" && n !== "NA" && n !== "-"
+      const driverName = cleanDriverName(
+        tVehicle.Driver_First_Name,
+        tVehicle.Driver_Middle_Name,
+        tVehicle.Driver_Last_Name,
+        tVehicle.Driver_Name
       );
-      const driverName = driverParts.join(" ").trim() || (tVehicle.Driver_Name && tVehicle.Driver_Name !== "--" ? String(tVehicle.Driver_Name).trim() : null) || null;
 
       if (driverName && driverName.length > 1) {
         const normKey = driverName.toLowerCase();
@@ -515,8 +524,10 @@ export async function directClientSyncTrakzeeFleet(
 }
 
 /**
- * Syncs drivers directly from Trakzee API into the system's drivers table.
- * Extracts driver names across all fleet vehicles and inserts missing drivers.
+ * Syncs drivers from Trakzee telematics into the system's drivers table.
+ * 1. Synchronizes live fleet telematics so machines have fresh driver data.
+ * 2. Extracts all driver names across fleet vehicles using cleanDriverName.
+ * 3. Ingests any missing drivers into the drivers table with assigned vehicle notes.
  */
 export async function syncTrakzeeDrivers(organisationId: string): Promise<{
   success: boolean;
@@ -537,70 +548,91 @@ export async function syncTrakzeeDrivers(organisationId: string): Promise<{
       if (orgData?.id) targetOrgId = orgData.id;
     } catch (_) {}
 
-    const serverUrl = DEFAULT_TRAKZEE_CONFIG.trakzee_server_url;
-    const username = "mdhfrancis@gmail.com";
-    const password = "Mdh@2023";
-    const companyName = DEFAULT_TRAKZEE_CONFIG.trakzee_company_name;
-    const projectId = DEFAULT_TRAKZEE_CONFIG.trakzee_project_id;
-
-    // 1. Authenticate with Trakzee
-    const loginRes = await fetch(`${serverUrl}?token=generateAccessToken`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username, password }),
-    });
-
-    if (!loginRes.ok) {
-      return { success: false, drivers_imported: 0, drivers_found: 0, drivers: [], error: `Trakzee HTTP error ${loginRes.status}` };
+    // 1. First trigger fleet sync to ensure vehicles and telematics notes are up to date
+    try {
+      await syncTrakzeeFleet(targetOrgId, true);
+    } catch (syncErr) {
+      console.warn("[Trakzee] Fleet sync step before driver sync warning:", syncErr);
     }
-
-    const loginData = await loginRes.json();
-    const token = loginData?.data?.token;
-    if (!token) {
-      return { success: false, drivers_imported: 0, drivers_found: 0, drivers: [], error: loginData?.message || "Failed to authenticate with Trakzee" };
-    }
-
-    // 2. Fetch live telematics
-    const liveRes = await fetch(`${serverUrl}?token=getTokenBaseLiveData&ProjectId=${encodeURIComponent(projectId)}`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "auth-code": token,
-      },
-      body: JSON.stringify({
-        company_names: companyName,
-        format: "json",
-      }),
-    });
-
-    if (!liveRes.ok) {
-      return { success: false, drivers_imported: 0, drivers_found: 0, drivers: [], error: `Telemetry HTTP error ${liveRes.status}` };
-    }
-
-    const liveData = await liveRes.json();
-    const vehicleList: any[] =
-      liveData?.root?.VehicleData ||
-      liveData?.VehicleData ||
-      (Array.isArray(liveData) ? liveData : []);
 
     const driversMap = new Map<string, { fullName: string; vehiclePlate: string }>();
 
-    for (const tVehicle of vehicleList) {
-      const rawPlate = String(tVehicle.Vehicle_No || tVehicle.Vehicle_Name || "").trim();
-      const driverParts = [tVehicle.Driver_First_Name, tVehicle.Driver_Middle_Name, tVehicle.Driver_Last_Name].filter(
-        (n: any) => n && n !== "--" && n !== "null" && n !== "NA" && n !== "-"
-      );
-      const driverName = driverParts.join(" ").trim() || (tVehicle.Driver_Name && tVehicle.Driver_Name !== "--" ? String(tVehicle.Driver_Name).trim() : null) || null;
+    // 2. Extract drivers from machines stored in Supabase
+    try {
+      const { data: machinesData } = await supabase
+        .from("machines")
+        .select(SAFE_MACHINE_COLUMNS)
+        .eq("organisation_id", targetOrgId);
 
-      if (driverName && driverName.length > 1) {
-        const key = driverName.toLowerCase();
-        if (!driversMap.has(key)) {
-          driversMap.set(key, { fullName: driverName, vehiclePlate: rawPlate });
+      for (const rawMachine of (machinesData || [])) {
+        const m = parseMachine(rawMachine);
+        const plate = m.plate_number || m.name;
+        if (m.telematics_driver_name) {
+          const key = m.telematics_driver_name.toLowerCase();
+          if (!driversMap.has(key)) {
+            driversMap.set(key, { fullName: m.telematics_driver_name, vehiclePlate: plate });
+          }
         }
       }
+    } catch (mErr) {
+      console.warn("[Trakzee] Error reading machines for driver extraction:", mErr);
     }
 
-    // 3. Query existing drivers in this organisation
+    // 3. Fallback / Direct API check if possible
+    try {
+      const serverUrl = DEFAULT_TRAKZEE_CONFIG.trakzee_server_url;
+      const username = "mdhfrancis@gmail.com";
+      const password = "Mdh@2023";
+      const companyName = DEFAULT_TRAKZEE_CONFIG.trakzee_company_name;
+      const projectId = DEFAULT_TRAKZEE_CONFIG.trakzee_project_id;
+
+      const loginRes = await fetch(`${serverUrl}?token=generateAccessToken`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, password }),
+      });
+
+      if (loginRes.ok) {
+        const loginData = await loginRes.json();
+        const token = loginData?.data?.token;
+        if (token) {
+          const liveRes = await fetch(`${serverUrl}?token=getTokenBaseLiveData&ProjectId=${encodeURIComponent(projectId)}`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "auth-code": token },
+            body: JSON.stringify({ company_names: companyName, format: "json" }),
+          });
+
+          if (liveRes.ok) {
+            const liveData = await liveRes.json();
+            const vehicleList: any[] =
+              liveData?.root?.VehicleData ||
+              liveData?.VehicleData ||
+              (Array.isArray(liveData) ? liveData : []);
+
+            for (const tVehicle of vehicleList) {
+              const rawPlate = String(tVehicle.Vehicle_No || tVehicle.Vehicle_Name || "").trim();
+              const driverName = cleanDriverName(
+                tVehicle.Driver_First_Name,
+                tVehicle.Driver_Middle_Name,
+                tVehicle.Driver_Last_Name,
+                tVehicle.Driver_Name
+              );
+
+              if (driverName && driverName.length > 1) {
+                const key = driverName.toLowerCase();
+                if (!driversMap.has(key)) {
+                  driversMap.set(key, { fullName: driverName, vehiclePlate: rawPlate });
+                }
+              }
+            }
+          }
+        }
+      }
+    } catch (_) {
+      // Direct fetch may be blocked by CORS in some browsers; server edge function sync above handles this.
+    }
+
+    // 4. Query existing drivers in this organisation
     const { data: existingDrivers, error: dFetchErr } = await supabase
       .from("drivers")
       .select("id, full_name")

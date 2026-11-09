@@ -118,6 +118,37 @@ export function normalizeTelematicsStatus(
   return "Stopped";
 }
 
+/**
+ * Robustly cleans and formats driver names from telematics payloads.
+ * Filters out placeholder strings like '--', 'null', 'NA', 'None', etc.
+ */
+export function cleanDriverName(
+  first?: any,
+  middle?: any,
+  last?: any,
+  fallbackName?: any
+): string | null {
+  const isInvalid = (val: any) => {
+    if (!val) return true;
+    const s = String(val).trim().toLowerCase();
+    return !s || s === "--" || s === "null" || s === "na" || s === "n/a" || s === "-" || s === "none" || s === "undefined";
+  };
+
+  const parts = [first, middle, last]
+    .filter((p) => !isInvalid(p))
+    .map((p) => String(p).trim());
+
+  if (parts.length > 0) {
+    return parts.join(" ");
+  }
+
+  if (!isInvalid(fallbackName)) {
+    return String(fallbackName).trim();
+  }
+
+  return null;
+}
+
 export function generateVehicleCode(category: "Vehicle" | "Trailer" | string = "Vehicle", seed?: string, index?: number): string {
   const isTrailer = String(category).toLowerCase().includes("trailer");
   const prefix = isTrailer ? "TRL" : "TRK";
@@ -199,7 +230,6 @@ export function parseMachine(raw: any, index?: number): FleetVehicle {
         if (telematics_battery_volt == null && t.battery_volt != null) telematics_battery_volt = Number(t.battery_volt);
         if (telematics_battery_pct == null && t.battery_percentage != null) telematics_battery_pct = Number(t.battery_percentage);
         if (telematics_location == null && t.location != null) telematics_location = String(t.location);
-        if (telematics_driver_name == null && t.driver_name != null) telematics_driver_name = String(t.driver_name);
         if (telematics_heading == null && t.heading != null) telematics_heading = Number(t.heading);
         if (telematics_device_model == null && t.device_model != null) telematics_device_model = String(t.device_model);
         if (telematics_latitude == null && t.latitude != null) telematics_latitude = Number(t.latitude);
@@ -207,12 +237,19 @@ export function parseMachine(raw: any, index?: number): FleetVehicle {
         if (telematics_last_at == null && t.last_at != null) telematics_last_at = String(t.last_at);
         if (telematics_raw == null && t.raw != null) telematics_raw = t.raw;
 
+        // Clean driver name from telematics or raw GPS data
+        const extractedDriver = cleanDriverName(
+          t.raw?.Driver_First_Name,
+          t.raw?.Driver_Middle_Name,
+          t.raw?.Driver_Last_Name,
+          t.driver_name || t.raw?.Driver_Name || t.raw?.driver || parsed.driver_name
+        );
+        if (extractedDriver) {
+          telematics_driver_name = extractedDriver;
+        }
+
         // Fallback directly to t.raw fields if not yet populated
         if (!telematics_location && t.raw?.Location && t.raw.Location !== "--") telematics_location = String(t.raw.Location);
-        if (!telematics_driver_name && t.raw?.Driver_First_Name) {
-          const dn = [t.raw.Driver_First_Name, t.raw.Driver_Middle_Name, t.raw.Driver_Last_Name].filter((n: any) => n && n !== "--").join(" ");
-          if (dn) telematics_driver_name = dn;
-        }
         if (telematics_battery_pct == null && t.raw?.battery_percentage != null && t.raw.battery_percentage !== "--") {
           telematics_battery_pct = Number(t.raw.battery_percentage);
         }
@@ -420,7 +457,8 @@ export interface FleetDriver {
   next_of_kin_relation: string | null;
   next_of_kin_phone: string | null;
   next_of_kin_nida: string | null;
-  next_of_kin_photo_url: string | null;
+  assigned_vehicle?: string | null;
+  source?: string | null;
   user_notes: string | null;
 }
 
@@ -440,6 +478,8 @@ export function parseDriver(raw: any, index?: number): FleetDriver {
   let next_of_kin_phone: string | null = raw.next_of_kin_phone ?? null;
   let next_of_kin_nida: string | null = raw.next_of_kin_nida ?? null;
   let next_of_kin_photo_url: string | null = raw.next_of_kin_photo_url ?? null;
+  let assigned_vehicle: string | null = raw.assigned_vehicle ?? null;
+  let source: string | null = raw.source ?? null;
   let user_notes: string | null = null;
 
   if (raw.notes && typeof raw.notes === "string" && raw.notes.startsWith("{") && raw.notes.endsWith("}")) {
@@ -460,6 +500,8 @@ export function parseDriver(raw: any, index?: number): FleetDriver {
       if (parsed.next_of_kin_phone) next_of_kin_phone = parsed.next_of_kin_phone;
       if (parsed.next_of_kin_nida) next_of_kin_nida = parsed.next_of_kin_nida;
       if (parsed.next_of_kin_photo_url) next_of_kin_photo_url = parsed.next_of_kin_photo_url;
+      if (parsed.assigned_vehicle) assigned_vehicle = parsed.assigned_vehicle;
+      if (parsed.source) source = parsed.source;
       user_notes = parsed.text ?? null;
     } catch {}
   } else if (raw.notes && typeof raw.notes === "string" && !raw.notes.startsWith("{")) {
@@ -488,6 +530,8 @@ export function parseDriver(raw: any, index?: number): FleetDriver {
     next_of_kin_phone,
     next_of_kin_nida,
     next_of_kin_photo_url,
+    assigned_vehicle,
+    source,
     user_notes,
   };
 }

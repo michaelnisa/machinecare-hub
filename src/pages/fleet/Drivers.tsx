@@ -34,6 +34,7 @@ import {
   Users,
   LayoutGrid,
   List,
+  Truck,
 } from "lucide-react";
 import { toast } from "sonner";
 import { formatDate } from "@/lib/format";
@@ -41,7 +42,9 @@ import { scheduleStatus } from "@/lib/machine-constants";
 import { useI18n } from "@/i18n/I18nProvider";
 import {
   SAFE_DRIVER_COLUMNS,
+  SAFE_MACHINE_COLUMNS,
   parseDriver,
+  parseMachine,
   serializeDriverPayload,
   generateDriverCode,
   type FleetDriver,
@@ -120,7 +123,7 @@ export default function Drivers() {
     if (!res.success) {
       toast.error(res.error || "Failed to sync drivers from Trakzee");
     } else if (res.drivers_imported === 0) {
-      toast.info(`Found ${res.drivers_found} driver(s) in Trakzee. All are already registered.`);
+      toast.info(`Found ${res.drivers_found} driver(s) in Trakzee. All are registered.`);
       load();
     } else {
       toast.success(`Successfully imported ${res.drivers_imported} new driver(s) from Trakzee telematics!`);
@@ -131,16 +134,88 @@ export default function Drivers() {
   const load = async () => {
     if (!profile) return;
     setLoading(true);
-    const { data, error } = await supabase
-      .from("drivers")
-      .select(SAFE_DRIVER_COLUMNS)
-      .order("full_name");
-    if (error) toast.error(error.message);
-    setDrivers((data ?? []).map((raw, idx) => parseDriver(raw, idx)));
-    setLoading(false);
+
+    try {
+      const [{ data: driverData, error: dErr }, { data: machineData, error: mErr }] = await Promise.all([
+        supabase.from("drivers").select(SAFE_DRIVER_COLUMNS).order("full_name"),
+        supabase.from("machines").select(SAFE_MACHINE_COLUMNS).in("category", ["Vehicle", "Trailer"]).order("name"),
+      ]);
+
+      if (dErr) toast.error(dErr.message);
+
+      const registeredDrivers = (driverData ?? []).map((raw, idx) => parseDriver(raw, idx));
+      const registeredNames = new Set(registeredDrivers.map((d) => d.full_name.trim().toLowerCase()));
+
+      // Extract telematics drivers from machines
+      const telematicsDrivers: Driver[] = [];
+      const missingToInsert: Array<{ full_name: string; assigned_vehicle: string }> = [];
+
+      for (const rawMachine of machineData || []) {
+        const m = parseMachine(rawMachine);
+        if (m.telematics_driver_name) {
+          const cleanName = m.telematics_driver_name.trim();
+          const normKey = cleanName.toLowerCase();
+          if (!registeredNames.has(normKey)) {
+            registeredNames.add(normKey);
+            const vehiclePlate = m.plate_number || m.name;
+            const optimisticDriver = parseDriver({
+              id: `telematics-${cleanName.replace(/\s+/g, "-").toLowerCase()}`,
+              full_name: cleanName,
+              phone: null,
+              status: "active",
+              notes: JSON.stringify({
+                driver_code: generateDriverCode(cleanName),
+                text: `[Live from Trakzee telematics assigned to ${vehiclePlate}]`,
+                source: "trakzee_telematics",
+                assigned_vehicle: vehiclePlate,
+              }),
+            });
+            telematicsDrivers.push(optimisticDriver);
+            missingToInsert.push({ full_name: cleanName, assigned_vehicle: vehiclePlate });
+          }
+        }
+      }
+
+      setDrivers([...registeredDrivers, ...telematicsDrivers]);
+
+      // Automatically persist missing live drivers in the background
+      if (missingToInsert.length > 0 && profile.organisation_id) {
+        (async () => {
+          for (const item of missingToInsert) {
+            try {
+              await supabase.from("drivers").insert({
+                organisation_id: profile.organisation_id,
+                full_name: item.full_name,
+                status: "active",
+                notes: JSON.stringify({
+                  driver_code: generateDriverCode(item.full_name),
+                  text: `[Imported live from Trakzee telematics assigned to ${item.assigned_vehicle}]`,
+                  source: "trakzee_telematics",
+                  assigned_vehicle: item.assigned_vehicle,
+                }),
+              });
+            } catch (_) {}
+          }
+        })();
+      }
+    } catch (err: any) {
+      toast.error(err.message || "Failed to load drivers");
+    } finally {
+      setLoading(false);
+    }
   };
 
-  useEffect(() => { load(); }, [profile]);
+  useEffect(() => {
+    load();
+    // Auto-sync live drivers from Trakzee telematics on page mount
+    if (profile?.organisation_id) {
+      syncTrakzeeDrivers(profile.organisation_id).then((res) => {
+        if (res.success && res.drivers_imported > 0) {
+          load();
+        }
+      }).catch(() => {});
+    }
+  }, [profile]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -330,9 +405,16 @@ export default function Drivers() {
                     >
                       {d.full_name}
                     </button>
-                    <div className="inline-flex items-center gap-1 mt-1 px-2 py-0.5 rounded text-[11px] font-mono font-bold bg-muted/80 text-foreground border border-border/80">
-                      <span className="text-[9px] uppercase font-sans text-muted-foreground">ID</span>
-                      <span>{d.driver_code}</span>
+                    <div className="flex items-center gap-1.5 flex-wrap mt-1">
+                      <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-mono font-bold bg-muted/80 text-foreground border border-border/80">
+                        <span className="text-[9px] uppercase font-sans text-muted-foreground">ID</span>
+                        <span>{d.driver_code}</span>
+                      </div>
+                      {d.assigned_vehicle && (
+                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-primary/10 text-primary border border-primary/20">
+                          <Truck className="h-3 w-3" /> {d.assigned_vehicle}
+                        </span>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -458,6 +540,11 @@ export default function Drivers() {
                                 <span className="text-[9px] uppercase font-sans text-muted-foreground">ID</span>
                                 <span>{d.driver_code}</span>
                               </span>
+                              {d.assigned_vehicle && (
+                                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold bg-primary/10 text-primary border border-primary/20">
+                                  <Truck className="h-3 w-3" /> {d.assigned_vehicle}
+                                </span>
+                              )}
                             </div>
                           </button>
                           {d.user_notes ? (
@@ -706,7 +793,8 @@ function DriverDialog({ open, onOpenChange, driver, onSaved, existingCount }: {
         user_notes: form.notes.trim() || null,
       });
 
-      const { error } = driver
+      const isTemporary = !driver?.id || String(driver.id).startsWith("telematics-");
+      const { error } = !isTemporary
         ? await supabase.from("drivers").update(safePayload).eq("id", driver.id)
         : await supabase.from("drivers").insert({
             ...safePayload,
