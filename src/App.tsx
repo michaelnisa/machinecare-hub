@@ -157,7 +157,30 @@ const BlogList = lazy(() => import("./pages/blog/BlogList"));
 const BlogPostDetail = lazy(() => import("./pages/blog/BlogPostDetail"));
 const BlogManage = lazy(() => import("./pages/blog/BlogManage"));
 
-const queryClient = new QueryClient();
+import { isNetworkError } from "@/lib/offlineQueue";
+
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      retry: (failureCount, error) => {
+        if (isNetworkError(error) || (typeof navigator !== "undefined" && !navigator.onLine)) {
+          return false;
+        }
+        return failureCount < 2;
+      },
+      refetchOnWindowFocus: true,
+      refetchOnReconnect: true,
+    },
+    mutations: {
+      retry: (failureCount, error) => {
+        if (isNetworkError(error) || (typeof navigator !== "undefined" && !navigator.onLine)) {
+          return false;
+        }
+        return failureCount < 1;
+      },
+    },
+  },
+});
 
 const App = () => (
   <ErrorBoundary>

@@ -16,6 +16,15 @@ describe("formatAppError", () => {
     expect(formatAppError("TypeError: Failed to fetch")).toBe(
       "Network connection issue. Please check your internet connection.",
     );
+    expect(formatAppError(new TypeError("Failed to fetch"))).toBe(
+      "Network connection issue. Please check your internet connection.",
+    );
+    expect(formatAppError({ message: "net::ERR_INTERNET_DISCONNECTED" })).toBe(
+      "Network connection issue. Please check your internet connection.",
+    );
+    expect(formatAppError({ message: "TypeError: Load failed" })).toBe(
+      "Network connection issue. Please check your internet connection.",
+    );
   });
 
   it("translates common Postgres error codes", () => {

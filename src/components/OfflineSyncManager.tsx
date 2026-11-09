@@ -1,5 +1,8 @@
+import { useState } from "react";
+import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useOfflineQueue, type FlushHandlers } from "@/lib/offlineQueue";
+import { OfflineBanner } from "./OfflineBanner";
 
 interface PreStartInspectionPayload {
   executionPayload: Record<string, unknown>;
@@ -131,11 +134,29 @@ const handlers: FlushHandlers = {
 };
 
 /**
- * Invisible, always-mounted: replays queued offline writes (pre-start
- * inspections, checklist edits) whenever the app regains connectivity,
- * regardless of which page the technician is currently on.
+ * Always-mounted manager: displays offline network status banners, and replays
+ * queued offline writes (pre-start inspections, fault reports, checklist edits)
+ * whenever the app regains connectivity.
  */
 export function OfflineSyncManager() {
-  useOfflineQueue(handlers);
-  return null;
+  const [isSyncing, setIsSyncing] = useState(false);
+  const { pendingCount, flushNow } = useOfflineQueue(handlers);
+
+  const handleManualSync = async () => {
+    setIsSyncing(true);
+    try {
+      const res = await flushNow();
+      if (res && res.succeeded.length > 0) {
+        toast.success(
+          `Synced ${res.succeeded.length} offline record${res.succeeded.length > 1 ? "s" : ""} to server`,
+        );
+      }
+    } catch {
+      // Ignored: queue retains failed ops
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
+  return <OfflineBanner pendingCount={pendingCount} isSyncing={isSyncing} onSyncNow={handleManualSync} />;
 }

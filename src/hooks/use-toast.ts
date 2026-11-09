@@ -134,7 +134,36 @@ function dispatch(action: Action) {
 
 type Toast = Omit<ToasterToast, "id">;
 
+let lastHookNetworkToastTime = 0;
+const HOOK_NETWORK_THROTTLE_MS = 6000;
+
+function isStringOrNodeNetworkError(val: React.ReactNode): boolean {
+  if (typeof val === "string") {
+    return /fetch|network|offline|load failed|internet|err_internet_disconnected/i.test(val);
+  }
+  return false;
+}
+
 function toast({ ...props }: Toast) {
+  const isNet =
+    props.variant === "destructive" &&
+    (isStringOrNodeNetworkError(props.title) ||
+      isStringOrNodeNetworkError(props.description) ||
+      (typeof navigator !== "undefined" && !navigator.onLine));
+
+  if (isNet) {
+    const now = Date.now();
+    if (now - lastHookNetworkToastTime < HOOK_NETWORK_THROTTLE_MS) {
+      return { id: "", dismiss: () => {}, update: () => {} };
+    }
+    lastHookNetworkToastTime = now;
+    props = {
+      ...props,
+      title: "Network Connection Issue",
+      description: "Please check your internet connection. Actions are saved locally where supported.",
+    };
+  }
+
   const id = genId();
 
   const update = (props: ToasterToast) =>

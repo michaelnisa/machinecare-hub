@@ -33,6 +33,9 @@ export async function enqueue<TPayload>(kind: QueuedOpKind, payload: TPayload): 
     attempts: 0,
   };
   await set(op.id, op, getStore());
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent("mc-offline-queue-changed"));
+  }
   return op.id;
 }
 
@@ -49,6 +52,9 @@ export async function listPending(): Promise<QueuedOp[]> {
 
 export async function removeOp(id: string): Promise<void> {
   await del(id, getStore());
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent("mc-offline-queue-changed"));
+  }
 }
 
 /**
@@ -75,23 +81,30 @@ async function markFailed(op: QueuedOp, err: unknown): Promise<void> {
   await set(op.id, updated, getStore());
 }
 
+const NETWORK_ERROR_REGEX =
+  /fetch|network|offline|load failed|internet|err_internet_disconnected|err_name_not_resolved|err_connection_refused|err_connection_reset|err_connection_timed_out|err_network_changed|err_address_unreachable|failed to fetch dynamically imported module|aborted|pgrst301/i;
+
 /**
- * Whether a failure looks network-related (vs. a real validation/permission
- * error). We deliberately err toward "queue it" — losing a filled-out
- * inspection is worse than an unnecessary local save that syncs immediately.
+ * Checks whether an error or system state indicates network disconnection or fetch failure.
  */
-export function looksOffline(err: unknown): boolean {
-  if (!navigator.onLine) return true;
-  if (err instanceof TypeError) return true; // "Failed to fetch" etc.
-  return /fetch|network|offline/i.test(errorMessage(err, ""));
+export function isNetworkError(err: unknown): boolean {
+  if (typeof navigator !== "undefined" && !navigator.onLine) return true;
+  if (err instanceof TypeError) return true;
+  const msg = errorMessage(err, "");
+  return NETWORK_ERROR_REGEX.test(msg);
 }
+
+/**
+ * Backward-compatible alias for isNetworkError.
+ */
+export const looksOffline = isNetworkError;
 
 export type FlushHandlers = Partial<Record<QueuedOpKind, (payload: any) => Promise<void>>>;
 
 export async function flushAll(handlers: FlushHandlers): Promise<{ succeeded: string[]; failed: string[] }> {
   const succeeded: string[] = [];
   const failed: string[] = [];
-  if (!navigator.onLine) return { succeeded, failed };
+  if (typeof navigator !== "undefined" && !navigator.onLine) return { succeeded, failed };
 
   const ops = await listPending();
   for (const op of ops) {
@@ -106,7 +119,40 @@ export async function flushAll(handlers: FlushHandlers): Promise<{ succeeded: st
       failed.push(op.id);
     }
   }
+  if (succeeded.length > 0 && typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent("mc-offline-queue-changed"));
+  }
   return { succeeded, failed };
+}
+
+/**
+ * Reactive hook providing real-time device connection state.
+ */
+export function useNetworkStatus() {
+  const [isOnline, setIsOnline] = useState<boolean>(() =>
+    typeof navigator !== "undefined" ? navigator.onLine : true
+  );
+  const [wasOffline, setWasOffline] = useState(false);
+
+  useEffect(() => {
+    const handleOnline = () => {
+      setIsOnline(true);
+    };
+    const handleOffline = () => {
+      setIsOnline(false);
+      setWasOffline(true);
+    };
+
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
+
+    return () => {
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
+    };
+  }, []);
+
+  return { isOnline, wasOffline, setWasOffline };
 }
 
 /** Tracks queue size and auto-flushes on reconnect / a periodic interval while items are pending. */
@@ -119,8 +165,9 @@ export function useOfflineQueue(handlers: FlushHandlers) {
   }, []);
 
   const flushNow = useCallback(async () => {
-    await flushAll(handlers);
+    const res = await flushAll(handlers);
     await refreshCount();
+    return res;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [refreshCount]);
 
@@ -129,14 +176,18 @@ export function useOfflineQueue(handlers: FlushHandlers) {
     flushNow();
 
     const onOnline = () => flushNow();
+    const onQueueChange = () => refreshCount();
+
     window.addEventListener("online", onOnline);
+    window.addEventListener("mc-offline-queue-changed", onQueueChange);
 
     const interval = setInterval(() => {
-      if (navigator.onLine) flushNow();
+      if (typeof navigator !== "undefined" && navigator.onLine) flushNow();
     }, 20000);
 
     return () => {
       window.removeEventListener("online", onOnline);
+      window.removeEventListener("mc-offline-queue-changed", onQueueChange);
       clearInterval(interval);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps

@@ -1,4 +1,5 @@
 import { captureReactError } from "./sentry";
+import { isNetworkError } from "./offlineQueue";
 
 interface PostgrestLikeError {
   message?: string;
@@ -6,6 +7,8 @@ interface PostgrestLikeError {
   hint?: string | null;
   code?: string | null;
 }
+
+export const OFFLINE_NETWORK_MESSAGE = "Network connection issue. Please check your internet connection.";
 
 /**
  * Sanitizes and translates backend/database error objects into safe,
@@ -15,11 +18,13 @@ interface PostgrestLikeError {
 export function formatAppError(err: unknown, fallback = "An unexpected error occurred. Please try again."): string {
   if (!err) return fallback;
 
+  // Network / fetch checks first (do not report to Sentry)
+  if (isNetworkError(err)) {
+    return OFFLINE_NETWORK_MESSAGE;
+  }
+
   // String error
   if (typeof err === "string") {
-    if (err.includes("Failed to fetch") || err.includes("NetworkError")) {
-      return "Network connection issue. Please check your internet connection.";
-    }
     return err;
   }
 
@@ -47,16 +52,11 @@ export function formatAppError(err: unknown, fallback = "An unexpected error occ
       break;
   }
 
-  // Network / fetch checks
-  if (message.toLowerCase().includes("failed to fetch") || message.toLowerCase().includes("network error")) {
-    return "Network connection issue. Please check your internet connection.";
-  }
-
   if (message.toLowerCase().includes("jwt expired") || message.toLowerCase().includes("token expired")) {
     return "Your session has expired. Please sign in again.";
   }
 
-  // Log unexpected errors to Sentry for diagnostics
+  // Log genuine unexpected errors to Sentry for diagnostics
   if (err instanceof Error) {
     captureReactError(err);
     return err.message || fallback;

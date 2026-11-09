@@ -36,11 +36,15 @@ describe("offlineQueue", () => {
     });
   });
 
-  describe("looksOffline", () => {
+  describe("looksOffline & isNetworkError", () => {
     it("identifies network and fetch errors as offline", () => {
       expect(looksOffline(new TypeError("Failed to fetch"))).toBe(true);
       expect(looksOffline({ message: "Network connection lost" })).toBe(true);
       expect(looksOffline({ message: "offline status" })).toBe(true);
+      expect(looksOffline({ message: "TypeError: Load failed" })).toBe(true);
+      expect(looksOffline({ message: "The Internet connection appears to be offline." })).toBe(true);
+      expect(looksOffline({ message: "net::ERR_INTERNET_DISCONNECTED" })).toBe(true);
+      expect(looksOffline({ message: "Failed to fetch dynamically imported module" })).toBe(true);
       expect(looksOffline({ message: "Validation error: name required" })).toBe(false);
     });
   });
