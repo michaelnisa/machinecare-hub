@@ -484,7 +484,6 @@ export async function directClientSyncTrakzeeFleet(
               status: "active",
               notes: JSON.stringify({
                 driver_code: generateDriverCode(dInfo.fullName),
-                text: `[Imported live from Trakzee telematics assigned to ${dInfo.vehiclePlate}]`,
                 source: "trakzee_telematics",
                 assigned_vehicle: dInfo.vehiclePlate,
               }),
@@ -659,7 +658,6 @@ export async function syncTrakzeeDrivers(organisationId: string): Promise<{
           status: "active",
           notes: JSON.stringify({
             driver_code: generateDriverCode(dInfo.fullName),
-            text: `[Imported live from Trakzee telematics assigned to ${dInfo.vehiclePlate}]`,
             source: "trakzee_telematics",
             assigned_vehicle: dInfo.vehiclePlate,
           }),

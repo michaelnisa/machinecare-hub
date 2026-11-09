@@ -143,11 +143,31 @@ export default function Drivers() {
 
       if (dErr) toast.error(dErr.message);
 
-      const registeredDrivers = (driverData ?? []).map((raw, idx) => parseDriver(raw, idx));
-      const registeredNames = new Set(registeredDrivers.map((d) => d.full_name.trim().toLowerCase()));
+      const rawRegisteredDrivers = (driverData ?? []).map((raw, idx) => parseDriver(raw, idx));
+      
+      // Deduplicate drivers by normalized name so no driver is ever repeated in the list
+      const uniqueDriversMap = new Map<string, Driver>();
+
+      for (const d of rawRegisteredDrivers) {
+        const normKey = d.full_name.trim().toLowerCase();
+        if (!uniqueDriversMap.has(normKey)) {
+          uniqueDriversMap.set(normKey, d);
+        } else {
+          // Merge metadata into unique driver record
+          const existing = uniqueDriversMap.get(normKey)!;
+          if (!existing.assigned_vehicle && d.assigned_vehicle) {
+            existing.assigned_vehicle = d.assigned_vehicle;
+          }
+          if (!existing.phone && d.phone) {
+            existing.phone = d.phone;
+          }
+          if (!existing.licence_number && d.licence_number) {
+            existing.licence_number = d.licence_number;
+          }
+        }
+      }
 
       // Extract telematics drivers from machines
-      const telematicsDrivers: Driver[] = [];
       const missingToInsert: Array<{ full_name: string; assigned_vehicle: string }> = [];
 
       for (const rawMachine of machineData || []) {
@@ -155,9 +175,9 @@ export default function Drivers() {
         if (m.telematics_driver_name) {
           const cleanName = m.telematics_driver_name.trim();
           const normKey = cleanName.toLowerCase();
-          if (!registeredNames.has(normKey)) {
-            registeredNames.add(normKey);
-            const vehiclePlate = m.plate_number || m.name;
+          const vehiclePlate = m.plate_number || m.name;
+
+          if (!uniqueDriversMap.has(normKey)) {
             const optimisticDriver = parseDriver({
               id: `telematics-${cleanName.replace(/\s+/g, "-").toLowerCase()}`,
               full_name: cleanName,
@@ -165,18 +185,22 @@ export default function Drivers() {
               status: "active",
               notes: JSON.stringify({
                 driver_code: generateDriverCode(cleanName),
-                text: `[Live from Trakzee telematics assigned to ${vehiclePlate}]`,
                 source: "trakzee_telematics",
                 assigned_vehicle: vehiclePlate,
               }),
             });
-            telematicsDrivers.push(optimisticDriver);
+            uniqueDriversMap.set(normKey, optimisticDriver);
             missingToInsert.push({ full_name: cleanName, assigned_vehicle: vehiclePlate });
+          } else {
+            const existing = uniqueDriversMap.get(normKey)!;
+            if (!existing.assigned_vehicle && vehiclePlate) {
+              existing.assigned_vehicle = vehiclePlate;
+            }
           }
         }
       }
 
-      setDrivers([...registeredDrivers, ...telematicsDrivers]);
+      setDrivers(Array.from(uniqueDriversMap.values()));
 
       // Automatically persist missing live drivers in the background
       if (missingToInsert.length > 0 && profile.organisation_id) {
@@ -189,7 +213,6 @@ export default function Drivers() {
                 status: "active",
                 notes: JSON.stringify({
                   driver_code: generateDriverCode(item.full_name),
-                  text: `[Imported live from Trakzee telematics assigned to ${item.assigned_vehicle}]`,
                   source: "trakzee_telematics",
                   assigned_vehicle: item.assigned_vehicle,
                 }),
@@ -547,13 +570,9 @@ export default function Drivers() {
                               )}
                             </div>
                           </button>
-                          {d.user_notes ? (
+                          {d.user_notes && !d.user_notes.toLowerCase().includes("trakzee") && (
                             <div className="text-xs text-muted-foreground line-clamp-1 italic mt-0.5">
                               {d.user_notes}
-                            </div>
-                          ) : (
-                            <div className="text-[11px] text-muted-foreground mt-0.5 flex items-center gap-1">
-                              <span className="text-primary hover:underline cursor-pointer" onClick={() => setSelectedDriver(d)}>View profile details</span>
                             </div>
                           )}
                         </div>

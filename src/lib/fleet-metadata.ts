@@ -121,6 +121,8 @@ export function normalizeTelematicsStatus(
 /**
  * Robustly cleans and formats driver names from telematics payloads.
  * Filters out placeholder strings like '--', 'null', 'NA', 'None', etc.
+ * Deduplicates repeated name parts (e.g. 'Adam Adam' -> 'Adam', 'simon simon' -> 'Simon')
+ * and normalizes to clean Title Case.
  */
 export function cleanDriverName(
   first?: any,
@@ -131,22 +133,48 @@ export function cleanDriverName(
   const isInvalid = (val: any) => {
     if (!val) return true;
     const s = String(val).trim().toLowerCase();
-    return !s || s === "--" || s === "null" || s === "na" || s === "n/a" || s === "-" || s === "none" || s === "undefined";
+    return (
+      !s ||
+      s === "--" ||
+      s === "null" ||
+      s === "na" ||
+      s === "n/a" ||
+      s === "-" ||
+      s === "none" ||
+      s === "undefined"
+    );
   };
 
-  const parts = [first, middle, last]
+  const rawParts = [first, middle, last]
     .filter((p) => !isInvalid(p))
     .map((p) => String(p).trim());
 
-  if (parts.length > 0) {
-    return parts.join(" ");
+  let rawString = "";
+  if (rawParts.length > 0) {
+    rawString = rawParts.join(" ");
+  } else if (!isInvalid(fallbackName)) {
+    rawString = String(fallbackName).trim();
   }
 
-  if (!isInvalid(fallbackName)) {
-    return String(fallbackName).trim();
+  if (!rawString) return null;
+
+  // Split into words and deduplicate repeated words (case-insensitive)
+  // e.g. "Adam Adam" -> "Adam", "simon simon" -> "Simon"
+  const words = rawString.split(/\s+/).filter(Boolean);
+  const uniqueWords: string[] = [];
+  for (const w of words) {
+    const lower = w.toLowerCase();
+    if (!uniqueWords.some((existing) => existing.toLowerCase() === lower)) {
+      uniqueWords.push(w);
+    }
   }
 
-  return null;
+  if (uniqueWords.length === 0) return null;
+
+  // Format into clean Title Case (e.g. "Majaliwa Lukama", "Saidi Kautipe")
+  return uniqueWords
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+    .join(" ");
 }
 
 export function generateVehicleCode(category: "Vehicle" | "Trailer" | string = "Vehicle", seed?: string, index?: number): string {
@@ -508,12 +536,30 @@ export function parseDriver(raw: any, index?: number): FleetDriver {
     user_notes = raw.notes;
   }
 
+  // Strip automated telematics import notes so "Imported live from Trakzee" never displays
+  if (
+    user_notes &&
+    (user_notes.toLowerCase().includes("imported live from trakzee") ||
+      user_notes.toLowerCase().includes("from trakzee telematics") ||
+      user_notes.toLowerCase().includes("trakzee telematics") ||
+      user_notes.toLowerCase().includes("telematics assigned to"))
+  ) {
+    user_notes = null;
+  }
+
+  let full_name = raw.full_name;
+  if (full_name) {
+    const cleaned = cleanDriverName(full_name);
+    if (cleaned) full_name = cleaned;
+  }
+
   if (!driver_code) {
-    driver_code = generateDriverCode(raw.id || raw.full_name, index);
+    driver_code = generateDriverCode(raw.id || full_name, index);
   }
 
   return {
     ...raw,
+    full_name: full_name || raw.full_name,
     driver_code,
     email,
     license_number,

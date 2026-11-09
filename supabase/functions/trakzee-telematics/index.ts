@@ -733,7 +733,6 @@ serve(async (req) => {
                 status: "active",
                 notes: JSON.stringify({
                   driver_code: `DRV-${String(Math.floor(100 + Math.random() * 900))}`,
-                  text: `[Imported live from Trakzee telematics assigned to ${dInfo.vehiclePlate}]`,
                   source: "trakzee_telematics",
                   assigned_vehicle: dInfo.vehiclePlate,
                 }),
