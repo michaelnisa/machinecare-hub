@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
@@ -7,12 +7,13 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { PageLoader, EmptyState } from "@/components/PageLoader";
-import { Boxes, Plus, Loader2, Pencil, ShoppingCart, Trash2, Layers, Sparkles, FileSpreadsheet, Download } from "lucide-react";
+import { Boxes, Plus, Loader2, Pencil, ShoppingCart, Trash2, Layers, Sparkles, FileSpreadsheet, Download, Camera, X } from "lucide-react";
 import { toast } from "sonner";
 import { formatMoney, formatNumber, formatDate } from "@/lib/format";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { BulkImporterModal } from "@/components/BulkImporterModal";
 import { setItemStockCount, exportInventoryToExcel } from "@/lib/stock-helpers";
+import { CoverImage } from "@/components/CoverImage";
 
 const ITEM_TYPES = ["spare_part", "consumable", "tool", "other"];
 
@@ -164,17 +165,33 @@ export default function GarageInventory() {
                     return (
                       <tr key={i.id} className="border-t border-border">
                         <td className="px-5 py-3">
-                          <div className="flex flex-wrap items-center gap-1.5">
-                            <span className="font-medium">{i.name}</span>
-                            {modelBadge && (
-                              <span className="inline-flex items-center rounded-md bg-primary/10 px-1.5 py-0.5 text-[11px] font-medium text-primary">
-                                {modelBadge}
-                              </span>
-                            )}
-                          </div>
-                          <div className="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                            {i.sku && <span>SKU: {i.sku}</span>}
-                            {i.brand && <span>· Brand: {i.brand}</span>}
+                          <div className="flex items-center gap-3">
+                            <div className="h-10 w-10 shrink-0 overflow-hidden rounded-lg border border-border bg-muted/40 flex items-center justify-center">
+                              {i.image_url ? (
+                                <CoverImage
+                                  value={i.image_url}
+                                  alt={i.name}
+                                  className="h-full w-full object-cover"
+                                  fallback={<Boxes className="h-5 w-5 text-muted-foreground/60" />}
+                                />
+                              ) : (
+                                <Boxes className="h-5 w-5 text-muted-foreground/60" />
+                              )}
+                            </div>
+                            <div>
+                              <div className="flex flex-wrap items-center gap-1.5">
+                                <span className="font-medium">{i.name}</span>
+                                {modelBadge && (
+                                  <span className="inline-flex items-center rounded-md bg-primary/10 px-1.5 py-0.5 text-[11px] font-medium text-primary">
+                                    {modelBadge}
+                                  </span>
+                                )}
+                              </div>
+                              <div className="mt-0.5 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                                {i.sku && <span>SKU: {i.sku}</span>}
+                                {i.brand && <span>· Brand: {i.brand}</span>}
+                              </div>
+                            </div>
                           </div>
                         </td>
                         <td className="px-5 py-3 text-muted-foreground">{i.category ?? "—"}</td>
@@ -284,6 +301,8 @@ export default function GarageInventory() {
 interface ModelRow {
   model: string;
   quantity: string;
+  sellingPrice?: string;
+  unitCost?: string;
 }
 
 function PartFormDialog({ open, setOpen, editing, currentStock, orgId, userId, onSaved, onDelete }: any) {
@@ -293,8 +312,14 @@ function PartFormDialog({ open, setOpen, editing, currentStock, orgId, userId, o
   const [unitCost, setUnitCost] = useState("");
   const [sellingPrice, setSellingPrice] = useState("");
   const [notes, setNotes] = useState("");
-  const [models, setModels] = useState<ModelRow[]>([{ model: "", quantity: "1" }]);
+  const [models, setModels] = useState<ModelRow[]>([{ model: "", quantity: "1", sellingPrice: "", unitCost: "" }]);
   const [quickInput, setQuickInput] = useState("");
+
+  // Photo state
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [imageUrl, setImageUrl] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   // Edit-only fields
   const [editModel, setEditModel] = useState("");
@@ -311,6 +336,9 @@ function PartFormDialog({ open, setOpen, editing, currentStock, orgId, userId, o
         setSellingPrice(editing.selling_price != null ? String(editing.selling_price) : "");
         setNotes(editing.notes ?? "");
         setEditStock(String(currentStock ?? editing.quantity ?? 1));
+        setImageUrl(editing.image_url ?? null);
+        setImagePreview(null);
+        setImageFile(null);
       } else {
         setName("");
         setBrand("");
@@ -319,13 +347,16 @@ function PartFormDialog({ open, setOpen, editing, currentStock, orgId, userId, o
         setNotes("");
         setEditModel("");
         setEditStock("1");
-        setModels([{ model: "", quantity: "1" }]);
+        setModels([{ model: "", quantity: "1", sellingPrice: "", unitCost: "" }]);
+        setImageUrl(null);
+        setImagePreview(null);
+        setImageFile(null);
       }
     }
   }, [open, editing, currentStock]);
 
   const addModelRow = () => {
-    setModels((prev) => [...prev, { model: "", quantity: "1" }]);
+    setModels((prev) => [...prev, { model: "", quantity: "1", sellingPrice: "", unitCost: "" }]);
   };
 
   const updateModel = (idx: number, patch: Partial<ModelRow>) => {
@@ -334,7 +365,7 @@ function PartFormDialog({ open, setOpen, editing, currentStock, orgId, userId, o
 
   const removeModel = (idx: number) => {
     if (models.length <= 1) {
-      setModels([{ model: "", quantity: "1" }]);
+      setModels([{ model: "", quantity: "1", sellingPrice: "", unitCost: "" }]);
       return;
     }
     setModels((prev) => prev.filter((_, i) => i !== idx));
@@ -349,7 +380,12 @@ function PartFormDialog({ open, setOpen, editing, currentStock, orgId, userId, o
 
     if (parts.length === 0) return;
 
-    const newRows: ModelRow[] = parts.map((m) => ({ model: m, quantity: "1" }));
+    const newRows: ModelRow[] = parts.map((m) => ({
+      model: m,
+      quantity: "1",
+      sellingPrice: "",
+      unitCost: "",
+    }));
     const firstIsEmpty = models.length === 1 && !models[0].model.trim();
 
     if (firstIsEmpty) {
@@ -359,6 +395,28 @@ function PartFormDialog({ open, setOpen, editing, currentStock, orgId, userId, o
     }
     setQuickInput("");
     toast.success(`Added ${newRows.length} models to list`);
+  };
+
+  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      toast.error("Please select an image file (PNG, JPG, WEBP)");
+      return;
+    }
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error("Image size must be less than 10MB");
+      return;
+    }
+    setImageFile(file);
+    setImagePreview(URL.createObjectURL(file));
+  };
+
+  const handleRemovePhoto = () => {
+    setImageFile(null);
+    setImagePreview(null);
+    setImageUrl(null);
+    if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
   const totalPcs = models.reduce((sum, r) => sum + (Number(r.quantity) || 0), 0);
@@ -371,6 +429,22 @@ function PartFormDialog({ open, setOpen, editing, currentStock, orgId, userId, o
     }
 
     setSaving(true);
+
+    // Upload photo to machine-docs storage if selected
+    let finalImageUrl = imageUrl;
+    if (imageFile) {
+      const ext = imageFile.name.split(".").pop() || "jpg";
+      const path = `${orgId || "common"}/parts/${crypto.randomUUID()}.${ext}`;
+      const { error: upErr } = await supabase.storage
+        .from("machine-docs")
+        .upload(path, imageFile, { upsert: true });
+      if (upErr) {
+        console.warn("Image upload warning:", upErr);
+        toast.error("Photo upload failed: " + upErr.message);
+      } else {
+        finalImageUrl = path;
+      }
+    }
 
     if (editing) {
       // Single edit flow
@@ -387,12 +461,13 @@ function PartFormDialog({ open, setOpen, editing, currentStock, orgId, userId, o
         quantity: newStockNum,
         unit_cost: Number(unitCost) || 0,
         selling_price: sellingPrice === "" ? null : Number(sellingPrice),
+        image_url: finalImageUrl,
         notes: notes.trim() || null,
       };
 
       let { error } = await supabase.from("inventory_items").update(payload).eq("id", editing.id);
-      if (error && (error.message?.includes("vehicle_model") || error.code === "PGRST204")) {
-        const { vehicle_model, ...fallback } = payload;
+      if (error && (error.message?.includes("vehicle_model") || error.message?.includes("image_url") || error.code === "PGRST204")) {
+        const { vehicle_model, image_url, ...fallback } = payload;
         const res = await supabase.from("inventory_items").update(fallback).eq("id", editing.id);
         error = res.error;
       }
@@ -417,15 +492,24 @@ function PartFormDialog({ open, setOpen, editing, currentStock, orgId, userId, o
       return;
     }
 
-    // Adding flow (can be 1 model or multiple models)
+    // Adding flow (can be 1 model or multiple models with individual prices)
     const validRows = models.filter((r) => r.model.trim());
     const fallbackQty = models[0]?.quantity && Number(models[0].quantity) > 0 ? models[0].quantity : "1";
-    const rowsToProcess = validRows.length > 0 ? validRows : [{ model: "", quantity: fallbackQty }];
+    const rowsToProcess = validRows.length > 0
+      ? validRows
+      : [{ model: "", quantity: fallbackQty, sellingPrice: models[0]?.sellingPrice, unitCost: models[0]?.unitCost }];
 
     const payloads = rowsToProcess.map((r) => {
       const code = r.model.trim();
       const fullName = code ? `${baseName} - ${code}` : baseName;
       const initialQty = Number(r.quantity) > 0 ? Number(r.quantity) : 1;
+      const rowSellingPrice = r.sellingPrice && r.sellingPrice.trim() !== ""
+        ? Number(r.sellingPrice)
+        : sellingPrice === "" ? null : Number(sellingPrice);
+      const rowUnitCost = r.unitCost && r.unitCost.trim() !== ""
+        ? Number(r.unitCost)
+        : (Number(unitCost) || 0);
+
       return {
         name: fullName,
         sku: code || null,
@@ -436,8 +520,9 @@ function PartFormDialog({ open, setOpen, editing, currentStock, orgId, userId, o
         item_type: "spare_part",
         unit: "pcs",
         quantity: initialQty,
-        unit_cost: Number(unitCost) || 0,
-        selling_price: sellingPrice === "" ? null : Number(sellingPrice),
+        unit_cost: rowUnitCost,
+        selling_price: rowSellingPrice,
+        image_url: finalImageUrl,
         reorder_level: 0,
         notes: notes.trim() || null,
         organisation_id: orgId,
@@ -449,8 +534,8 @@ function PartFormDialog({ open, setOpen, editing, currentStock, orgId, userId, o
       .insert(payloads)
       .select("id, name");
 
-    if (error && (error.message?.includes("vehicle_model") || error.code === "PGRST204")) {
-      const fallbackPayloads = payloads.map(({ vehicle_model, ...rest }: any) => rest);
+    if (error && (error.message?.includes("vehicle_model") || error.message?.includes("image_url") || error.code === "PGRST204")) {
+      const fallbackPayloads = payloads.map(({ vehicle_model, image_url, ...rest }: any) => rest);
       const res = await supabase
         .from("inventory_items")
         .insert(fallbackPayloads)
@@ -491,15 +576,15 @@ function PartFormDialog({ open, setOpen, editing, currentStock, orgId, userId, o
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="text-lg">
             {editing ? "Edit Spare Part (Badili Spea)" : "Add Spare Part (Weka Spea)"}
           </DialogTitle>
           <p className="text-xs text-muted-foreground">
             {editing
-              ? "Update details or price of this part."
-              : "Enter the part name, price, and all models/numbers with their pieces."}
+              ? "Update details, photo, or price of this part."
+              : "Enter the part name, default prices, photo, and model numbers with their specific prices."}
           </p>
         </DialogHeader>
 
@@ -516,10 +601,103 @@ function PartFormDialog({ open, setOpen, editing, currentStock, orgId, userId, o
             />
           </div>
 
-          {/* Pricing */}
+          {/* Photo Upload Section */}
+          <div>
+            <Label className="text-xs font-medium text-muted-foreground">
+              Part Photo (Picha ya Spea) — <span className="font-normal italic">Optional</span>
+            </Label>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              onChange={handleImageSelect}
+              className="hidden"
+            />
+            <div className="mt-1.5 flex items-center gap-3">
+              {imagePreview || imageUrl ? (
+                <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-lg border border-border bg-muted/40">
+                  {imagePreview ? (
+                    <img src={imagePreview} alt="Preview" className="h-full w-full object-cover" />
+                  ) : (
+                    <CoverImage
+                      value={imageUrl}
+                      alt="Current photo"
+                      className="h-full w-full object-cover"
+                      fallback={<Boxes className="h-6 w-6 text-muted-foreground/60 m-auto mt-5" />}
+                    />
+                  )}
+                  <button
+                    type="button"
+                    onClick={handleRemovePhoto}
+                    className="absolute top-0.5 right-0.5 rounded-full bg-black/70 p-1 text-white hover:bg-black"
+                    title="Remove photo"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </div>
+              ) : (
+                <div
+                  onClick={() => fileInputRef.current?.click()}
+                  className="flex h-16 w-16 cursor-pointer flex-col items-center justify-center rounded-lg border border-dashed border-border bg-muted/20 text-muted-foreground transition hover:border-primary hover:text-primary"
+                  title="Upload photo"
+                >
+                  <Camera className="h-5 w-5" />
+                  <span className="text-[10px] mt-0.5 font-medium">Photo</span>
+                </div>
+              )}
+
+              <div className="flex-1 text-xs">
+                {imagePreview || imageUrl ? (
+                  <div className="space-y-1">
+                    <p className="text-[11px] font-medium text-foreground">Photo selected</p>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => fileInputRef.current?.click()}
+                        className="h-7 text-xs px-2"
+                      >
+                        Change Photo
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={handleRemovePhoto}
+                        className="h-7 text-xs px-2 text-destructive hover:bg-destructive/10"
+                      >
+                        Remove
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-0.5">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => fileInputRef.current?.click()}
+                      className="h-7 text-xs gap-1.5"
+                    >
+                      <Camera className="h-3.5 w-3.5" />
+                      Upload Part Photo
+                    </Button>
+                    <p className="text-[11px] text-muted-foreground">
+                      Take or upload a picture of the spare part or packaging.
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Pricing (Base / Default) */}
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <Label className="text-xs font-medium">Buying Price (Bei ya Kununua)</Label>
+              <Label className="text-xs font-medium">
+                {editing ? "Buying Price (Bei ya Kununua)" : "Default Buying Price (Bei ya Kununua)"}
+              </Label>
               <Input
                 type="number"
                 min={0}
@@ -530,7 +708,9 @@ function PartFormDialog({ open, setOpen, editing, currentStock, orgId, userId, o
               />
             </div>
             <div>
-              <Label className="text-xs font-medium">Selling Price (Bei ya Kuuza)</Label>
+              <Label className="text-xs font-medium">
+                {editing ? "Selling Price (Bei ya Kuuza)" : "Default Selling Price (Bei ya Kuuza)"}
+              </Label>
               <Input
                 type="number"
                 min={0}
@@ -630,53 +810,110 @@ function PartFormDialog({ open, setOpen, editing, currentStock, orgId, userId, o
               </div>
             </div>
           ) : (
-            /* Adding Models and Pcs */
+            /* Adding Models and Pcs with Individual Prices */
             <div className="space-y-3 rounded-xl border border-border bg-muted/20 p-3.5">
               <div className="flex items-center justify-between">
                 <div>
                   <div className="text-xs font-semibold text-foreground">
-                    Models / Numbers &amp; Pieces (Modeli na Idadi)
+                    Models / Numbers &amp; Prices (Modeli, Bei na Idadi)
                   </div>
                   <p className="text-[11px] text-muted-foreground">
-                    Put every model number (e.g. 3455) and how many pcs you have.
+                    Add each model/part number with its specific selling price and stock.
                   </p>
                 </div>
               </div>
 
+              {/* Models List Header */}
+              <div className="hidden sm:grid grid-cols-12 gap-2 px-2 text-[11px] font-medium text-muted-foreground">
+                <div className="col-span-5">Model / Part No.</div>
+                <div className="col-span-2">Stock</div>
+                <div className="col-span-2">Cost (optional)</div>
+                <div className="col-span-3">Selling Price (optional)</div>
+              </div>
+
               {/* Models List */}
-              <div className="space-y-2 pt-1 max-h-[220px] overflow-y-auto pr-1">
+              <div className="space-y-2 pt-1 max-h-[260px] overflow-y-auto pr-1">
                 {models.map((row, idx) => (
-                  <div key={idx} className="flex items-center gap-2">
-                    <div className="flex-1">
-                      <Input
-                        placeholder={`Model ${idx + 1} (e.g. ${idx === 0 ? "3455" : idx === 1 ? "4567" : "3456"})`}
-                        value={row.model}
-                        onChange={(e) => updateModel(idx, { model: e.target.value })}
-                        className="h-9 text-xs font-medium bg-background"
-                      />
+                  <div key={idx} className="p-2.5 rounded-lg border border-border/70 bg-card space-y-2">
+                    <div className="flex items-center justify-between gap-2 sm:hidden">
+                      <span className="text-[11px] font-semibold text-muted-foreground">
+                        Model / Variant #{idx + 1}
+                      </span>
+                      {models.length > 1 && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => removeModel(idx)}
+                          className="h-6 w-6 text-muted-foreground hover:text-destructive"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      )}
                     </div>
-                    <div className="w-24 flex items-center gap-1 shrink-0">
-                      <Input
-                        type="number"
-                        min={0}
-                        placeholder="Qty"
-                        value={row.quantity}
-                        onChange={(e) => updateModel(idx, { quantity: e.target.value })}
-                        className="h-9 text-xs font-semibold text-center bg-background"
-                      />
-                      <span className="text-[11px] text-muted-foreground font-medium">pcs</span>
+                    <div className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-center">
+                      <div className="sm:col-span-5">
+                        <Label className="text-[10px] text-muted-foreground sm:hidden">Model / Part No.</Label>
+                        <Input
+                          placeholder={`Model ${idx + 1} (e.g. ${idx === 0 ? "3455" : idx === 1 ? "4567" : "3456"})`}
+                          value={row.model}
+                          onChange={(e) => updateModel(idx, { model: e.target.value })}
+                          className="h-8 text-xs font-medium bg-background"
+                        />
+                      </div>
+                      <div className="sm:col-span-2">
+                        <Label className="text-[10px] text-muted-foreground sm:hidden">Stock (pcs)</Label>
+                        <div className="flex items-center gap-1">
+                          <Input
+                            type="number"
+                            min={0}
+                            placeholder="Qty"
+                            value={row.quantity}
+                            onChange={(e) => updateModel(idx, { quantity: e.target.value })}
+                            className="h-8 text-xs font-semibold text-center bg-background"
+                          />
+                          <span className="text-[10px] text-muted-foreground font-medium">pcs</span>
+                        </div>
+                      </div>
+                      <div className="sm:col-span-2">
+                        <Label className="text-[10px] text-muted-foreground sm:hidden">Cost</Label>
+                        <Input
+                          type="number"
+                          min={0}
+                          placeholder={unitCost ? `Cost: ${unitCost}` : "Cost"}
+                          value={row.unitCost ?? ""}
+                          onChange={(e) => updateModel(idx, { unitCost: e.target.value })}
+                          className="h-8 text-xs bg-background"
+                          title="Buying cost for this model"
+                        />
+                      </div>
+                      <div className="sm:col-span-3 flex items-center gap-1">
+                        <div className="flex-1">
+                          <Label className="text-[10px] text-muted-foreground sm:hidden">Selling Price</Label>
+                          <Input
+                            type="number"
+                            min={0}
+                            placeholder={sellingPrice ? `Sell: ${sellingPrice}` : "Sell price"}
+                            value={row.sellingPrice ?? ""}
+                            onChange={(e) => updateModel(idx, { sellingPrice: e.target.value })}
+                            className="h-8 text-xs font-semibold text-primary bg-background"
+                            title="Selling price for this model"
+                          />
+                        </div>
+                        {models.length > 1 && (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => removeModel(idx)}
+                            className="hidden sm:inline-flex h-8 w-8 text-muted-foreground hover:text-destructive shrink-0"
+                            title="Remove model"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        )}
+                      </div>
                     </div>
-                    {models.length > 1 && (
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => removeModel(idx)}
-                        className="h-9 w-9 text-muted-foreground hover:text-destructive shrink-0"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    )}
                   </div>
                 ))}
               </div>
