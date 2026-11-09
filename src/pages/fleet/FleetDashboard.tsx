@@ -29,7 +29,7 @@ import { formatDistanceToNow } from "date-fns";
 import { useI18n } from "@/i18n/I18nProvider";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
-import { parseMachine, SAFE_MACHINE_COLUMNS, type FleetVehicle } from "@/lib/fleet-metadata";
+import { parseMachine, SAFE_MACHINE_COLUMNS, normalizeTelematicsStatus, type FleetVehicle } from "@/lib/fleet-metadata";
 import { syncTrakzeeFleet } from "@/services/trakzeeService";
 import { computeOdoPmStatus } from "@/services/fleetPmService";
 
@@ -198,12 +198,56 @@ export default function FleetDashboard() {
     return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth() && d.getDate() === now.getDate();
   };
 
-  const movingVehicles = useMemo(() => {
-    return machines.filter((m) => Number(m.telematics_speed || 0) > 0);
+  const runningVehicles = useMemo(() => {
+    return machines.filter((m) => {
+      const status = normalizeTelematicsStatus(
+        m.telematics_status,
+        m.telematics_speed,
+        m.telematics_ignition,
+        m.telematics_last_at,
+        m.telematics_latitude != null && m.telematics_longitude != null
+      );
+      return status === "Running";
+    });
   }, [machines]);
 
-  const idlingVehicles = useMemo(() => {
-    return machines.filter((m) => Number(m.telematics_speed || 0) === 0 && Boolean(m.telematics_ignition));
+  const idleVehicles = useMemo(() => {
+    return machines.filter((m) => {
+      const status = normalizeTelematicsStatus(
+        m.telematics_status,
+        m.telematics_speed,
+        m.telematics_ignition,
+        m.telematics_last_at,
+        m.telematics_latitude != null && m.telematics_longitude != null
+      );
+      return status === "Idle";
+    });
+  }, [machines]);
+
+  const stoppedVehicles = useMemo(() => {
+    return machines.filter((m) => {
+      const status = normalizeTelematicsStatus(
+        m.telematics_status,
+        m.telematics_speed,
+        m.telematics_ignition,
+        m.telematics_last_at,
+        m.telematics_latitude != null && m.telematics_longitude != null
+      );
+      return status === "Stopped";
+    });
+  }, [machines]);
+
+  const inactiveVehicles = useMemo(() => {
+    return machines.filter((m) => {
+      const status = normalizeTelematicsStatus(
+        m.telematics_status,
+        m.telematics_speed,
+        m.telematics_ignition,
+        m.telematics_last_at,
+        m.telematics_latitude != null && m.telematics_longitude != null
+      );
+      return status === "Inactive";
+    });
   }, [machines]);
 
   const totalOdometerKm = useMemo(() => {
@@ -364,7 +408,7 @@ export default function FleetDashboard() {
     {
       label: "Fleet Live Active",
       value: loading ? "—" : `${onRoadMachineIds.size} / ${machines.length}`,
-      sub: loading ? "" : `${movingVehicles.length} driving · ${idlingVehicles.length} idling · ${availabilityPct}% operational`,
+      sub: loading ? "" : `${runningVehicles.length} Running · ${idleVehicles.length} Idle · ${stoppedVehicles.length} Stopped · ${inactiveVehicles.length} Inactive`,
       icon: Activity,
       tone: "default",
     },
@@ -587,8 +631,14 @@ export default function FleetDashboard() {
                     const driver = currentDriverByMachine.get(m.id);
                     const nextDue = nextDueByMachine.get(m.id) ?? null;
                     const speed = Number(m.telematics_speed || 0);
-                    const isMoving = speed > 0;
-                    const isIdle = !isMoving && Boolean(m.telematics_ignition);
+                    const hasGps = m.telematics_latitude != null && m.telematics_longitude != null;
+                    const vStatus = normalizeTelematicsStatus(
+                      m.telematics_status,
+                      m.telematics_speed,
+                      m.telematics_ignition,
+                      m.telematics_last_at,
+                      hasGps
+                    );
                     return (
                       <tr key={m.id} className="border-t border-border hover:bg-muted/30 transition-colors">
                         <td className="py-2.5 pr-3">
@@ -600,20 +650,25 @@ export default function FleetDashboard() {
                           )}
                         </td>
                         <td className="py-2.5 pr-3">
-                          {isMoving ? (
+                          {vStatus === "Running" ? (
                             <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/10 px-2.5 py-0.5 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
                               <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                              {speed} km/h
+                              Running ({speed > 0 ? `${speed} km/h` : "Moving"})
                             </span>
-                          ) : isIdle ? (
+                          ) : vStatus === "Idle" ? (
                             <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-500/10 px-2.5 py-0.5 text-xs font-semibold text-amber-600 dark:text-amber-400">
                               <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
-                              Idling (Key ON)
+                              Idle (Key ON)
+                            </span>
+                          ) : vStatus === "Inactive" ? (
+                            <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-500/10 px-2.5 py-0.5 text-xs font-semibold text-slate-500 dark:text-slate-400">
+                              <span className="h-1.5 w-1.5 rounded-full bg-slate-400" />
+                              Inactive (Offline)
                             </span>
                           ) : (
-                            <span className="inline-flex items-center gap-1.5 rounded-full bg-muted px-2.5 py-0.5 text-xs font-medium text-muted-foreground">
-                              <span className="h-1.5 w-1.5 rounded-full bg-muted-foreground/40" />
-                              Parked (Off)
+                            <span className="inline-flex items-center gap-1.5 rounded-full bg-sky-500/10 px-2.5 py-0.5 text-xs font-semibold text-sky-600 dark:text-sky-400">
+                              <span className="h-1.5 w-1.5 rounded-full bg-sky-500" />
+                              Stopped (Off)
                             </span>
                           )}
                         </td>

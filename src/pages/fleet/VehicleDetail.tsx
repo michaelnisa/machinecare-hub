@@ -24,6 +24,7 @@ import {
   parseMachine,
   parseDriver,
   parseTrip,
+  normalizeTelematicsStatus,
   AXLE_CONFIG_OPTIONS,
   type FleetVehicle,
   type FleetDriver,
@@ -627,16 +628,39 @@ export default function FleetVehicleDetail() {
             <Radio className={`h-4 w-4 ${vehicle.telematics_ignition ? "text-emerald-600 animate-pulse" : "text-muted-foreground"}`} />
           </div>
           <div className="mt-2 space-y-1">
-            <div className="flex items-center gap-2">
-              <span className="font-bold text-foreground text-base">
-                {vehicle.telematics_speed != null ? `${vehicle.telematics_speed} km/h` : "0 km/h"}
-              </span>
-              <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase ${
-                vehicle.telematics_ignition ? "bg-emerald-500/10 text-emerald-600 border border-emerald-500/20" : "bg-muted text-muted-foreground"
-              }`}>
-                {vehicle.telematics_ignition ? "Ignition ON" : "Parked"}
-              </span>
-            </div>
+            {(() => {
+              const hasGps = vehicle.telematics_latitude != null && vehicle.telematics_longitude != null;
+              const vStatus = normalizeTelematicsStatus(
+                vehicle.telematics_status,
+                vehicle.telematics_speed,
+                vehicle.telematics_ignition,
+                vehicle.telematics_last_at,
+                hasGps
+              );
+              return (
+                <div className="flex items-center gap-2">
+                  <span className="font-bold text-foreground text-base">
+                    {vehicle.telematics_speed != null ? `${vehicle.telematics_speed} km/h` : "0 km/h"}
+                  </span>
+                  <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase flex items-center gap-1 ${
+                    vStatus === "Running"
+                      ? "bg-emerald-500/10 text-emerald-600 border border-emerald-500/20"
+                      : vStatus === "Idle"
+                      ? "bg-amber-500/10 text-amber-600 border border-amber-500/20"
+                      : vStatus === "Inactive"
+                      ? "bg-slate-500/10 text-slate-500 border border-slate-500/20"
+                      : "bg-sky-500/10 text-sky-600 border border-sky-500/20"
+                  }`}>
+                    <span className={`h-1.5 w-1.5 rounded-full ${
+                      vStatus === "Running" ? "bg-emerald-500 animate-pulse" :
+                      vStatus === "Idle" ? "bg-amber-500" :
+                      vStatus === "Inactive" ? "bg-slate-400" : "bg-sky-500"
+                    }`} />
+                    {vStatus === "Running" ? "Running" : vStatus === "Idle" ? "Idle (Key ON)" : vStatus === "Inactive" ? "Inactive" : "Stopped"}
+                  </span>
+                </div>
+              );
+            })()}
             <div className="text-[11px] text-muted-foreground truncate">
               {vehicle.telematics_battery_volt != null && <span>Battery: {vehicle.telematics_battery_volt}V • </span>}
               {vehicle.telematics_imei ? `IMEI: ${vehicle.telematics_imei}` : "No IMEI set"}

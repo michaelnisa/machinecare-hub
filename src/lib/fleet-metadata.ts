@@ -61,6 +61,7 @@ export interface FleetVehicle {
   telematics_latitude?: number | null;
   telematics_longitude?: number | null;
   telematics_last_at?: string | null;
+  telematics_status?: TelematicsStatus | null;
 
   // Rich metadata attributes (stored safely in notes)
   vehicle_type: string; // 'prime_mover' | 'rigid_truck' | 'tanker' | 'trailer' | 'van' | 'pickup' | 'bus' | 'other'
@@ -81,6 +82,40 @@ export interface FleetVehicle {
   has_trailer: boolean;
   trailer_plate: string | null;
   trailer_make_model: string | null;
+}
+
+export type TelematicsStatus = "Running" | "Idle" | "Inactive" | "Stopped";
+
+export function normalizeTelematicsStatus(
+  rawStatus?: string | null,
+  speed?: number | null,
+  ignition?: boolean | null,
+  lastAt?: string | null,
+  hasGps?: boolean | null
+): TelematicsStatus {
+  if (rawStatus) {
+    const s = String(rawStatus).trim().toLowerCase();
+    if (s === "running" || s === "moving") return "Running";
+    if (s === "idle" || s === "idling") return "Idle";
+    if (s === "inactive" || s === "offline" || s === "nodata" || s === "no_data") return "Inactive";
+    if (s === "stopped" || s === "parked") return "Stopped";
+  }
+
+  // Fallback calculation if raw status is not provided or unrecognized
+  if (hasGps === false && (!lastAt || isNaN(Date.parse(lastAt)))) {
+    return "Inactive";
+  }
+  if (lastAt) {
+    const timeDiff = Date.now() - new Date(lastAt).getTime();
+    // Mark Inactive if no telemetry fix received in the last 24 hours
+    if (timeDiff > 24 * 60 * 60 * 1000) {
+      return "Inactive";
+    }
+  }
+  const spd = Number(speed || 0);
+  if (spd > 0) return "Running";
+  if (ignition) return "Idle";
+  return "Stopped";
 }
 
 export function generateVehicleCode(category: "Vehicle" | "Trailer" | string = "Vehicle", seed?: string, index?: number): string {
@@ -208,6 +243,20 @@ export function parseMachine(raw: any, index?: number): FleetVehicle {
 
   const has_trailer = Boolean(is_trailer || linked_trailer_id || linked_trailer_plate);
 
+  const rawTelematicsStatus = (raw as any).telematics_status ??
+    telematics_obj?.status ??
+    telematics_raw?.Status ??
+    telematics_raw?.status ??
+    null;
+
+  const telematics_status = normalizeTelematicsStatus(
+    rawTelematicsStatus,
+    telematics_speed,
+    telematics_ignition,
+    telematics_last_at,
+    telematics_latitude != null && telematics_longitude != null
+  );
+
   return {
     ...raw,
     vehicle_code,
@@ -240,6 +289,7 @@ export function parseMachine(raw: any, index?: number): FleetVehicle {
     telematics_latitude,
     telematics_longitude,
     telematics_last_at,
+    telematics_status,
     telematics_raw,
     telematics_obj,
   };

@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { syncTrakzeeFleet } from "@/services/trakzeeService";
-import { SAFE_MACHINE_COLUMNS, parseMachine } from "@/lib/fleet-metadata";
+import { SAFE_MACHINE_COLUMNS, parseMachine, normalizeTelematicsStatus, type TelematicsStatus } from "@/lib/fleet-metadata";
 import { formatNumber } from "@/lib/format";
 import { toast } from "sonner";
 import {
@@ -44,27 +44,32 @@ interface TrackedVehicle {
   telematics_latitude: number | null;
   telematics_longitude: number | null;
   telematics_last_at: string | null;
+  telematics_status?: TelematicsStatus | string | null;
   telematics_raw?: any;
 }
 
+export type LiveMarkerStatus = "Running" | "Idle" | "Inactive" | "Stopped" | "workshop";
+
 // Marker style generator
-function createVehicleIcon(status: "moving" | "idling" | "parked" | "workshop") {
-  const bgColors = {
-    moving: "bg-emerald-500",
-    idling: "bg-amber-500",
-    parked: "bg-sky-500",
+function createVehicleIcon(status: LiveMarkerStatus) {
+  const bgColors: Record<LiveMarkerStatus, string> = {
+    Running: "bg-emerald-500",
+    Idle: "bg-amber-500",
+    Stopped: "bg-sky-500",
+    Inactive: "bg-slate-400",
     workshop: "bg-rose-500",
   };
-  const pingColor = {
-    moving: "bg-emerald-400",
-    idling: "bg-amber-400",
-    parked: "bg-sky-400",
+  const pingColor: Record<LiveMarkerStatus, string> = {
+    Running: "bg-emerald-400",
+    Idle: "bg-amber-400",
+    Stopped: "bg-sky-400",
+    Inactive: "bg-slate-300",
     workshop: "bg-rose-400",
   };
 
   const html = `
     <div class="relative flex items-center justify-center">
-      ${status === "moving" ? `<span class="absolute h-8 w-8 rounded-full ${pingColor[status]} animate-ping opacity-60"></span>` : ""}
+      ${status === "Running" ? `<span class="absolute h-8 w-8 rounded-full ${pingColor[status]} animate-ping opacity-60"></span>` : ""}
       <div class="relative flex h-7 w-7 items-center justify-center rounded-full ${bgColors[status]} text-white shadow-lg border-2 border-white">
         <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
           <path d="M14 18V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v11a1 1 0 0 0 1 1h2"/>
@@ -94,7 +99,7 @@ export default function LiveFleetMap() {
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState<"all" | "moving" | "idling" | "parked">("all");
+  const [statusFilter, setStatusFilter] = useState<"all" | "Running" | "Idle" | "Inactive" | "Stopped">("all");
   const [selectedVehicle, setSelectedVehicle] = useState<TrackedVehicle | null>(null);
 
   const mapContainerRef = useRef<HTMLDivElement>(null);
@@ -196,11 +201,17 @@ export default function LiveFleetMap() {
       const isUnderMaint = v.status === "under_maintenance";
       const speed = Number(v.telematics_speed || 0);
       const ignition = Boolean(v.telematics_ignition);
+      const hasGps = !isNaN(lat) && !isNaN(lng) && !(lat === 0 && lng === 0);
 
-      let statusType: "moving" | "idling" | "parked" | "workshop" = "parked";
-      if (isUnderMaint) statusType = "workshop";
-      else if (speed > 0) statusType = "moving";
-      else if (ignition) statusType = "idling";
+      const liveStatus = normalizeTelematicsStatus(
+        v.telematics_status ?? v.telematics_raw?.Status,
+        speed,
+        ignition,
+        v.telematics_last_at,
+        hasGps
+      );
+
+      const statusType: LiveMarkerStatus = isUnderMaint ? "workshop" : liveStatus;
 
       const icon = createVehicleIcon(statusType);
       const marker = L.marker([lat, lng], { icon }).addTo(map);
@@ -213,14 +224,16 @@ export default function LiveFleetMap() {
           <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #e5e7eb; padding-bottom: 6px; margin-bottom: 6px;">
             <strong style="font-size: 14px; color: #111827; letter-spacing: 0.5px;">${plate}</strong>
             <span style="font-size: 10px; font-weight: 700; text-transform: uppercase; padding: 2px 6px; border-radius: 9999px; background: ${
-              statusType === "moving" ? "#d1fae5; color: #065f46" :
-              statusType === "idling" ? "#fef3c7; color: #92400e" :
+              statusType === "Running" ? "#d1fae5; color: #065f46" :
+              statusType === "Idle" ? "#fef3c7; color: #92400e" :
+              statusType === "Inactive" ? "#f1f5f9; color: #475569" :
               statusType === "workshop" ? "#fee2e2; color: #991b1b" : "#e0f2fe; color: #075985"
             };">
               ${statusType}
             </span>
           </div>
           <div style="font-size: 11px; color: #4b5563; line-height: 1.5; margin-bottom: 8px;">
+            <div><strong>Status:</strong> ${statusType}</div>
             <div><strong>Speed:</strong> ${speed} km/h</div>
             <div><strong>Ignition:</strong> ${ignition ? "ON" : "OFF"}</div>
             <div><strong>Odometer:</strong> ${v.current_odometer_km != null ? formatNumber(v.current_odometer_km) + " km" : "—"}</div>
@@ -256,33 +269,48 @@ export default function LiveFleetMap() {
       const matchesSearch = plate.includes(search.toLowerCase());
       if (!matchesSearch) return false;
 
-      const speed = Number(v.telematics_speed || 0);
-      const ignition = Boolean(v.telematics_ignition);
+      if (statusFilter === "all") return true;
 
-      if (statusFilter === "moving") return speed > 0;
-      if (statusFilter === "idling") return ignition && speed === 0;
-      if (statusFilter === "parked") return !ignition;
-      return true;
+      const hasGps = v.telematics_latitude != null && v.telematics_longitude != null;
+      const vStatus = normalizeTelematicsStatus(
+        v.telematics_status ?? v.telematics_raw?.Status,
+        v.telematics_speed,
+        v.telematics_ignition,
+        v.telematics_last_at,
+        hasGps
+      );
+
+      return vStatus === statusFilter;
     });
   }, [vehicles, search, statusFilter]);
 
   // Quick stats
   const stats = useMemo(() => {
-    let moving = 0;
-    let idling = 0;
-    let parked = 0;
+    let running = 0;
+    let idle = 0;
+    let inactive = 0;
+    let stopped = 0;
     let withGps = 0;
 
     vehicles.forEach((v) => {
-      if (v.telematics_latitude != null && v.telematics_longitude != null) withGps++;
-      const speed = Number(v.telematics_speed || 0);
-      const ignition = Boolean(v.telematics_ignition);
-      if (speed > 0) moving++;
-      else if (ignition) idling++;
-      else parked++;
+      const hasGps = v.telematics_latitude != null && v.telematics_longitude != null;
+      if (hasGps) withGps++;
+
+      const vStatus = normalizeTelematicsStatus(
+        v.telematics_status ?? v.telematics_raw?.Status,
+        v.telematics_speed,
+        v.telematics_ignition,
+        v.telematics_last_at,
+        hasGps
+      );
+
+      if (vStatus === "Running") running++;
+      else if (vStatus === "Idle") idle++;
+      else if (vStatus === "Inactive") inactive++;
+      else stopped++;
     });
 
-    return { total: vehicles.length, withGps, moving, idling, parked };
+    return { total: vehicles.length, withGps, running, idle, inactive, stopped };
   }, [vehicles]);
 
   // Pan to vehicle on card click
@@ -320,13 +348,16 @@ export default function LiveFleetMap() {
               Total: <strong>{stats.total}</strong>
             </span>
             <span className="px-2 py-0.5 rounded font-medium text-emerald-600 bg-emerald-500/10">
-              Moving: <strong>{stats.moving}</strong>
+              Running: <strong>{stats.running}</strong>
             </span>
             <span className="px-2 py-0.5 rounded font-medium text-amber-600 bg-amber-500/10">
-              Idling: <strong>{stats.idling}</strong>
+              Idle: <strong>{stats.idle}</strong>
+            </span>
+            <span className="px-2 py-0.5 rounded font-medium text-slate-600 bg-slate-500/10 dark:text-slate-300">
+              Inactive: <strong>{stats.inactive}</strong>
             </span>
             <span className="px-2 py-0.5 rounded font-medium text-sky-600 bg-sky-500/10">
-              Parked: <strong>{stats.parked}</strong>
+              Stopped: <strong>{stats.stopped}</strong>
             </span>
           </div>
 
@@ -372,11 +403,12 @@ export default function LiveFleetMap() {
               />
             </div>
             <Tabs value={statusFilter} onValueChange={(v) => setStatusFilter(v as any)}>
-              <TabsList className="grid grid-cols-4 h-7 text-[10px]">
+              <TabsList className="grid grid-cols-5 h-7 text-[10px]">
                 <TabsTrigger value="all">All</TabsTrigger>
-                <TabsTrigger value="moving">Moving</TabsTrigger>
-                <TabsTrigger value="idling">Idle</TabsTrigger>
-                <TabsTrigger value="parked">Parked</TabsTrigger>
+                <TabsTrigger value="Running">Running</TabsTrigger>
+                <TabsTrigger value="Idle">Idle</TabsTrigger>
+                <TabsTrigger value="Inactive">Inactive</TabsTrigger>
+                <TabsTrigger value="Stopped">Stopped</TabsTrigger>
               </TabsList>
             </Tabs>
           </div>
@@ -388,6 +420,13 @@ export default function LiveFleetMap() {
               const ignition = Boolean(v.telematics_ignition);
               const hasGps = v.telematics_latitude != null && v.telematics_longitude != null;
               const isSelected = selectedVehicle?.id === v.id;
+              const vStatus = normalizeTelematicsStatus(
+                v.telematics_status ?? v.telematics_raw?.Status,
+                speed,
+                ignition,
+                v.telematics_last_at,
+                hasGps
+              );
 
               return (
                 <div
@@ -403,15 +442,21 @@ export default function LiveFleetMap() {
                     </span>
                     <span
                       className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full uppercase flex items-center gap-1 ${
-                        speed > 0
+                        vStatus === "Running"
                           ? "bg-emerald-500/10 text-emerald-600 border border-emerald-500/20"
-                          : ignition
+                          : vStatus === "Idle"
                           ? "bg-amber-500/10 text-amber-600 border border-amber-500/20"
+                          : vStatus === "Inactive"
+                          ? "bg-slate-500/10 text-slate-500 border border-slate-500/20"
                           : "bg-sky-500/10 text-sky-600 border border-sky-500/20"
                       }`}
                     >
-                      <span className={`h-1.5 w-1.5 rounded-full ${speed > 0 ? "bg-emerald-500 animate-pulse" : "bg-current"}`} />
-                      {speed > 0 ? `${speed} km/h` : ignition ? "Idling" : "Parked"}
+                      <span className={`h-1.5 w-1.5 rounded-full ${
+                        vStatus === "Running" ? "bg-emerald-500 animate-pulse" :
+                        vStatus === "Idle" ? "bg-amber-500" :
+                        vStatus === "Inactive" ? "bg-slate-400" : "bg-sky-500"
+                      }`} />
+                      {vStatus === "Running" ? (speed > 0 ? `${speed} km/h` : "Running") : vStatus}
                     </span>
                   </div>
 
@@ -452,15 +497,19 @@ export default function LiveFleetMap() {
             <div className="font-semibold text-foreground text-xs pb-1 border-b border-border">Map Legend</div>
             <div className="flex items-center gap-2 text-muted-foreground">
               <span className="h-2.5 w-2.5 rounded-full bg-emerald-500" />
-              <span>Moving (&gt; 0 km/h)</span>
+              <span>Running (&gt; 0 km/h)</span>
             </div>
             <div className="flex items-center gap-2 text-muted-foreground">
               <span className="h-2.5 w-2.5 rounded-full bg-amber-500" />
-              <span>Idling (Engine ON)</span>
+              <span>Idle (Engine ON, 0 km/h)</span>
             </div>
             <div className="flex items-center gap-2 text-muted-foreground">
               <span className="h-2.5 w-2.5 rounded-full bg-sky-500" />
-              <span>Parked (Engine OFF)</span>
+              <span>Stopped (Engine OFF)</span>
+            </div>
+            <div className="flex items-center gap-2 text-muted-foreground">
+              <span className="h-2.5 w-2.5 rounded-full bg-slate-400" />
+              <span>Inactive (Offline / No Fix)</span>
             </div>
           </div>
         </div>

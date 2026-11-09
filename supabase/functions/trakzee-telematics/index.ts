@@ -43,6 +43,37 @@ function normalizePlate(plate: string | null | undefined): string {
   return plate.replace(/[\s\-_]/g, "").toUpperCase();
 }
 
+// Normalize telematics status to Running | Idle | Inactive | Stopped
+function normalizeTelematicsStatus(
+  rawStatus?: string | null,
+  speed?: number | null,
+  ignition?: boolean | null,
+  lastAt?: string | null,
+  hasGps?: boolean | null
+): "Running" | "Idle" | "Inactive" | "Stopped" {
+  if (rawStatus) {
+    const s = String(rawStatus).trim().toLowerCase();
+    if (s === "running" || s === "moving") return "Running";
+    if (s === "idle" || s === "idling") return "Idle";
+    if (s === "inactive" || s === "offline" || s === "nodata" || s === "no_data") return "Inactive";
+    if (s === "stopped" || s === "parked") return "Stopped";
+  }
+
+  if (hasGps === false && (!lastAt || isNaN(Date.parse(lastAt)))) {
+    return "Inactive";
+  }
+  if (lastAt) {
+    const timeDiff = Date.now() - new Date(lastAt).getTime();
+    if (timeDiff > 24 * 60 * 60 * 1000) {
+      return "Inactive";
+    }
+  }
+  const spd = Number(speed || 0);
+  if (spd > 0) return "Running";
+  if (ignition) return "Idle";
+  return "Stopped";
+}
+
 // Convert raw odometer to km (Trakzee can report in meters or km depending on device profile)
 function parseOdometerKm(rawOdo: string | number | undefined): number | null {
   if (rawOdo === undefined || rawOdo === null || rawOdo === "--" || rawOdo === "") return null;
@@ -542,6 +573,14 @@ serve(async (req) => {
         const deviceModel = tVehicle.DeviceModel || "GPS";
         const gpsTime = tVehicle.GPSActualTime || tVehicle.Datetime || new Date().toISOString();
 
+        const tStatus = normalizeTelematicsStatus(
+          tVehicle.Status,
+          speed,
+          ign,
+          gpsTime,
+          lat != null && lng != null
+        );
+
         if (!match) {
           // Default to auto-importing any unmatched vehicles from Trakzee unless explicitly disabled
           const shouldAutoImport = body.auto_import !== false && body.auto_import !== "false";
@@ -564,6 +603,7 @@ serve(async (req) => {
                 heading,
                 device_model: deviceModel,
                 gps_time: gpsTime,
+                status: tStatus,
                 last_at: new Date().toISOString(),
                 raw: tVehicle,
               },
@@ -595,7 +635,7 @@ serve(async (req) => {
                 plate: rawPlate,
                 odometer_km: odoKm,
                 speed,
-                status: tVehicle.Status,
+                status: tStatus,
                 imported: true,
               });
             }
@@ -622,6 +662,7 @@ serve(async (req) => {
             heading: heading ?? existingNotes.telematics?.heading ?? null,
             device_model: deviceModel,
             gps_time: gpsTime,
+            status: tStatus,
             last_at: new Date().toISOString(),
             raw: tVehicle,
           },
@@ -654,7 +695,7 @@ serve(async (req) => {
             plate: match.plate_number,
             odometer_km: odoKm ?? match.current_odometer_km,
             speed,
-            status: tVehicle.Status,
+            status: tStatus,
           });
         }
       }

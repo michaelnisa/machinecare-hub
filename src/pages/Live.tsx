@@ -25,6 +25,7 @@ type FleetKpis = {
     ignition: boolean;
     batteryVolt: number | null;
     status: "on_road" | "idle" | "workshop" | "off_road";
+    telematicsStatus?: string;
   }[];
 };
 
@@ -254,6 +255,7 @@ export default function Live() {
         ignition,
         batteryVolt: m.telematics_battery_volt,
         status,
+        telematicsStatus: m.telematics_status || (speed > 0 ? "Running" : ignition ? "Idle" : "Stopped"),
       });
     }
 
@@ -449,14 +451,16 @@ export default function Live() {
                     <span className="font-mono text-base font-bold text-white tracking-wider">{v.plate}</span>
                     <span
                       className={`inline-flex items-center gap-1.5 text-xs font-semibold uppercase px-2 py-0.5 rounded-full ${
-                        v.status === "on_road" ? "bg-emerald-500/20 text-emerald-400" :
-                        v.status === "idle" ? "bg-sky-500/20 text-sky-400" :
+                        v.telematicsStatus === "Running" ? "bg-emerald-500/20 text-emerald-400" :
+                        v.telematicsStatus === "Idle" ? "bg-amber-500/20 text-amber-400" :
+                        v.telematicsStatus === "Inactive" ? "bg-slate-500/20 text-slate-300" :
+                        v.telematicsStatus === "Stopped" ? "bg-sky-500/20 text-sky-400" :
                         v.status === "workshop" ? "bg-amber-500/20 text-amber-400" : "bg-rose-500/20 text-rose-400"
                       }`}
                     >
-                      <span className={`h-1.5 w-1.5 rounded-full ${v.status === "on_road" ? "bg-emerald-400 animate-pulse" : "bg-current"}`} />
-                      {v.status === "on_road" ? (v.speed > 0 ? `${v.speed} km/h` : "Idling") :
-                       v.status === "idle" ? "Parked" :
+                      <span className={`h-1.5 w-1.5 rounded-full ${v.telematicsStatus === "Running" ? "bg-emerald-400 animate-pulse" : "bg-current"}`} />
+                      {v.telematicsStatus === "Running" ? (v.speed > 0 ? `${v.speed} km/h` : "Running") :
+                       v.telematicsStatus ? v.telematicsStatus :
                        v.status === "workshop" ? "Workshop" : "Off Road"}
                     </span>
                   </div>

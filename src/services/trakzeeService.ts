@@ -5,6 +5,7 @@
  */
 
 import { supabase } from "@/integrations/supabase/client";
+import { normalizeTelematicsStatus, type TelematicsStatus } from "@/lib/fleet-metadata";
 
 export interface TrakzeeConfig {
   trakzee_enabled: boolean;
@@ -297,6 +298,13 @@ export async function directClientSyncTrakzeeFleet(
     // 5. Match and update or auto-import
     let updatedCount = 0;
     const nowIso = new Date().toISOString();
+    const detailsList: Array<{
+      machine_id: string;
+      plate: string | null;
+      odometer_km: number | null;
+      speed: number;
+      status: string;
+    }> = [];
 
     for (const tVehicle of vehicleList) {
       const rawPlate = String(tVehicle.Vehicle_No || tVehicle.Vehicle_Name || "").trim();
@@ -315,6 +323,13 @@ export async function directClientSyncTrakzeeFleet(
       const lng = tVehicle.Longitude && tVehicle.Longitude !== "--" ? Number(tVehicle.Longitude) : null;
       const ign = tVehicle.IGN === "ON";
       const volt = tVehicle.ExternalVolt && tVehicle.ExternalVolt !== "--" ? Number(tVehicle.ExternalVolt) : null;
+      const tStatus = normalizeTelematicsStatus(
+        tVehicle.Status,
+        speed,
+        ign,
+        tVehicle.GPSActualTime || nowIso,
+        lat != null && lng != null
+      );
 
       if (!match) {
         if (autoImport) {
@@ -330,6 +345,7 @@ export async function directClientSyncTrakzeeFleet(
               battery_volt: volt,
               latitude: lat,
               longitude: lng,
+              status: tStatus,
               last_at: nowIso,
               raw: tVehicle,
             },
@@ -347,9 +363,16 @@ export async function directClientSyncTrakzeeFleet(
             notes: JSON.stringify(metaNotes),
           };
 
-          const { error: insErr } = await supabase.from("machines").insert(newMachPayload);
+          const { data: createdMach, error: insErr } = await supabase.from("machines").insert(newMachPayload).select("id").maybeSingle();
           if (!insErr) {
             updatedCount++;
+            detailsList.push({
+              machine_id: createdMach?.id || rawPlate,
+              plate: rawPlate,
+              odometer_km: odoKm,
+              speed,
+              status: tStatus,
+            });
           }
         }
         continue;
@@ -368,6 +391,7 @@ export async function directClientSyncTrakzeeFleet(
           battery_volt: volt,
           latitude: lat,
           longitude: lng,
+          status: tStatus,
           last_at: nowIso,
           raw: tVehicle,
         },
@@ -390,6 +414,13 @@ export async function directClientSyncTrakzeeFleet(
 
       if (!updErr) {
         updatedCount++;
+        detailsList.push({
+          machine_id: match.id,
+          plate: match.plate_number || rawPlate,
+          odometer_km: odoKm ?? match.current_odometer_km,
+          speed,
+          status: tStatus,
+        });
       }
     }
 
@@ -406,6 +437,7 @@ export async function directClientSyncTrakzeeFleet(
       vehicles_returned: vehicleList.length,
       vehicles_updated: updatedCount,
       last_synced_at: nowIso,
+      details: detailsList,
     };
   } catch (err: any) {
     return {
