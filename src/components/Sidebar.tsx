@@ -103,6 +103,7 @@ export function Sidebar() {
         { to: "/inventory/purchase-requests", label: "Purchase requests", icon: ShoppingCart },
         { to: "/inventory/purchase-orders", label: "Purchase orders", icon: ClipboardList },
         { to: "/inventory/suppliers", label: "Suppliers", icon: Building2 },
+        { to: "/accounting", label: "Accounting & Receipts", icon: Receipt },
         { to: "/inventory/quarantine", label: "Quarantine", icon: PackageX },
         { to: "/inventory/production-materials", label: "Production materials", icon: Factory },
         { to: "/inventory/reorder", label: "Reorder & insights", icon: TrendingUp },
@@ -393,6 +394,7 @@ export function Sidebar() {
         items: [
           { to: "/garage/estimates", label: "Estimates", icon: FileText },
           { to: "/garage/invoices", label: "Invoices", icon: Receipt },
+          { to: "/accounting", label: "Receipts & Vouchers", icon: Receipt },
           // { to: "/garage/payments", label: "Payments", icon: CreditCard },
         ],
       },

@@ -7,9 +7,9 @@ import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 
-export type Role = "owner" | "manager" | "engineer" | "technician" | "viewer";
+export type Role = "owner" | "manager" | "accountant" | "engineer" | "technician" | "viewer";
 
-const RANK: Record<Role, number> = { owner: 5, manager: 4, engineer: 3, technician: 2, viewer: 1 };
+const RANK: Record<Role, number> = { owner: 5, manager: 4, accountant: 3, engineer: 3, technician: 2, viewer: 1 };
 
 const ROLE_PERMISSIONS: Record<Role, string[]> = {
   owner: ["*:*"],
@@ -23,10 +23,21 @@ const ROLE_PERMISSIONS: Record<Role, string[]> = {
     "workshop:*",
     "connected_data:*",
     "reports:*",
+    "finance:*",
     "integrations:read",
     "integrations:test",
     "integrations:sync",
     "users:read",
+  ],
+  accountant: [
+    "finance:*",
+    "inventory:read",
+    "inventory:purchase_orders",
+    "maintenance:read",
+    "fleet:read",
+    "workshop:read",
+    "reports:*",
+    "connected_data:read",
   ],
   engineer: [
     "assets:read",
@@ -118,7 +129,7 @@ export function usePermissions() {
   };
 
   const canAuthorTemplates = role === "owner" || role === "engineer";
-  const canWrite = role === "owner" || role === "manager" || role === "technician";
+  const canWrite = role === "owner" || role === "manager" || role === "accountant" || role === "technician";
 
   return {
     role,
@@ -129,6 +140,7 @@ export function usePermissions() {
     canWrite,
     isOwner: role === "owner",
     isManager: can("manager"),
+    isAccountant: role === "accountant" || role === "owner" || role === "manager",
     isEngineer: role === "engineer",
     isTechnician: can("technician"),
   };

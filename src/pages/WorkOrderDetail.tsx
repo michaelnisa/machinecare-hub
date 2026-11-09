@@ -3,8 +3,9 @@ import { useParams, Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { PageLoader } from "@/components/PageLoader";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Printer } from "lucide-react";
+import { ArrowLeft, Printer, Receipt } from "lucide-react";
 import { toast } from "sonner";
+import { CreateReceiptModal } from "@/components/accounting/CreateReceiptModal";
 import { StatusPipelineBar, type WoStatus } from "@/components/StatusPipelineBar";
 import { WorkOrderPreview, formatWoNumber } from "@/components/WorkOrderPreview";
 import { WorkOrderJobLog } from "@/components/WorkOrderJobLog";
@@ -30,6 +31,7 @@ export default function WorkOrderDetail() {
   const [history, setHistory] = useState<any[]>([]);
   const [userMap, setUserMap] = useState<Record<string, string>>({});
   const [fromBreakdown, setFromBreakdown] = useState(false);
+  const [receiptModalOpen, setReceiptModalOpen] = useState(false);
 
   const load = async () => {
     if (!id) return;
@@ -99,6 +101,9 @@ export default function WorkOrderDetail() {
           <Button variant="outline" asChild>
             <Link to={`/work-orders/${id}/print`}><Printer className="mr-2 h-4 w-4" /> Print / Download</Link>
           </Button>
+          <Button variant="outline" onClick={() => setReceiptModalOpen(true)}>
+            <Receipt className="mr-2 h-4 w-4 text-emerald-600" /> Payment Receipt
+          </Button>
         </div>
       </div>
 
@@ -160,6 +165,16 @@ export default function WorkOrderDetail() {
           </ol>
         </div>
       </div>
+
+      {wo && (
+        <CreateReceiptModal
+          open={receiptModalOpen}
+          onOpenChange={setReceiptModalOpen}
+          defaultMachineId={wo.machine_id}
+          defaultWorkOrderId={wo.id}
+          defaultCategory="maintenance_service"
+        />
+      )}
     </div>
   );
 }

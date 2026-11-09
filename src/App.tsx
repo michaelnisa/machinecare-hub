@@ -143,6 +143,8 @@ const GarageIntakePrint = lazy(() => import("./pages/garage/IntakePrint"));
 
 const IntegrationsLayout = lazy(() => import("./pages/integrations/IntegrationsLayout"));
 const IntegrationsMarketplace = lazy(() => import("./pages/integrations/IntegrationsMarketplace"));
+const Accounting = lazy(() => import("./pages/accounting/Accounting"));
+const AccountantReceiptPrint = lazy(() => import("./pages/accounting/AccountantReceiptPrint"));
 const ConnectedSystems = lazy(() => import("./pages/integrations/ConnectedSystems"));
 const DataMappingView = lazy(() => import("./pages/integrations/DataMappingView"));
 const SyncJobsView = lazy(() => import("./pages/integrations/SyncJobsView"));
@@ -179,6 +181,7 @@ const App = () => (
                 <Route path="/work-orders/:id/print" element={<WorkOrderPrint />} />
                 <Route path="/checklist-templates/:id/print" element={<ChecklistTemplatePrint />} />
                 <Route path="/fleet/trips/:id/receipt" element={<TripReceiptPrint />} />
+                <Route path="/accounting/receipts/:id/print" element={<AccountantReceiptPrint />} />
                 <Route path="/induction/run/:recordId" element={<InductionRun />} />
                 <Route path="/induction/certificate/:recordId" element={<InductionCertificate />} />
                 <Route path="/induction/qr/:programmeId" element={<InductionPublicRun />} />
@@ -270,6 +273,7 @@ const App = () => (
 
                   <Route path="/maintenance-kpis" element={<MaintenanceKPIs />} />
                   <Route path="/utilities" element={<Utilities />} />
+                  <Route path="/accounting" element={<Accounting />} />
                   <Route path="/inventory" element={<InventoryDashboard />} />
                   <Route path="/inventory/items" element={<Inventory />} />
                   <Route path="/inventory/stock" element={<InventoryStock />} />
