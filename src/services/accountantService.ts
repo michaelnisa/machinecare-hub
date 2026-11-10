@@ -199,8 +199,13 @@ export async function getAccountantReceipts(
 
     const { data, error } = await query;
     if (error) {
-      // If table doesn't exist yet, return empty list gracefully
-      if (error.code === "42P01" || error.message?.includes("does not exist")) {
+      // If table doesn't exist yet or schema cache is updating, return empty list gracefully
+      if (
+        error.code === "42P01" ||
+        error.code === "PGRST205" ||
+        error.message?.includes("does not exist") ||
+        error.message?.includes("schema cache")
+      ) {
         return [];
       }
       throw error;

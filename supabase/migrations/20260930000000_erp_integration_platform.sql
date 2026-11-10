@@ -5,7 +5,7 @@
 
 -- 1. INTEGRATIONS (Registered ERP & Business System Connections)
 CREATE TABLE IF NOT EXISTS integrations (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     organisation_id UUID NOT NULL REFERENCES organisations(id) ON DELETE CASCADE,
     name VARCHAR(255) NOT NULL,
     connector_type VARCHAR(64) NOT NULL, -- 'odoo', 'sap_business_one', 'dynamics_365', 'tally', 'netsuite', 'custom'
@@ -28,7 +28,7 @@ CREATE TABLE IF NOT EXISTS integrations (
 
 -- 2. INTEGRATION CREDENTIALS (Secure Encrypted Vault)
 CREATE TABLE IF NOT EXISTS integration_credentials (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     organisation_id UUID NOT NULL REFERENCES organisations(id) ON DELETE CASCADE,
     integration_id UUID NOT NULL REFERENCES integrations(id) ON DELETE CASCADE,
     auth_type VARCHAR(64) NOT NULL, -- 'api_key', 'oauth2', 'basic', 'session_cookie'
@@ -45,7 +45,7 @@ CREATE TABLE IF NOT EXISTS integration_credentials (
 
 -- 3. INTEGRATION CAPABILITIES (Declared Read/Write Matrix)
 CREATE TABLE IF NOT EXISTS integration_capabilities (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     integration_id UUID NOT NULL REFERENCES integrations(id) ON DELETE CASCADE,
     organisation_id UUID NOT NULL REFERENCES organisations(id) ON DELETE CASCADE,
     supported_read TEXT[] DEFAULT ARRAY[]::TEXT[],   -- ['customers', 'suppliers', 'parts', 'inventory', 'assets', 'production_orders', 'purchase_orders']
@@ -61,7 +61,7 @@ CREATE TABLE IF NOT EXISTS integration_capabilities (
 
 -- 4. INTEGRATION MAPPINGS (Configurable Entity & Field Transformers)
 CREATE TABLE IF NOT EXISTS integration_mappings (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     organisation_id UUID NOT NULL REFERENCES organisations(id) ON DELETE CASCADE,
     integration_id UUID NOT NULL REFERENCES integrations(id) ON DELETE CASCADE,
     entity_type VARCHAR(64) NOT NULL, -- 'asset', 'part', 'inventory', 'purchase_request', 'maintenance_cost', 'production_order', 'customer', 'supplier'
@@ -76,7 +76,7 @@ CREATE TABLE IF NOT EXISTS integration_mappings (
 
 -- 5. EXTERNAL IDENTITIES (Generic Cross-System ID Mapping & Idempotency)
 CREATE TABLE IF NOT EXISTS external_identities (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     organisation_id UUID NOT NULL REFERENCES organisations(id) ON DELETE CASCADE,
     integration_id UUID NOT NULL REFERENCES integrations(id) ON DELETE CASCADE,
     source_system VARCHAR(64) NOT NULL,       -- 'odoo', 'sap_business_one', 'dynamics_365', 'machinecare'
@@ -94,7 +94,7 @@ CREATE TABLE IF NOT EXISTS external_identities (
 
 -- 6. INTEGRATION SYNC JOBS (Execution Runs & Schedules)
 CREATE TABLE IF NOT EXISTS integration_sync_jobs (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     organisation_id UUID NOT NULL REFERENCES organisations(id) ON DELETE CASCADE,
     integration_id UUID NOT NULL REFERENCES integrations(id) ON DELETE CASCADE,
     entity_type VARCHAR(64) NOT NULL,
@@ -115,7 +115,7 @@ CREATE TABLE IF NOT EXISTS integration_sync_jobs (
 
 -- 7. INTEGRATION SYNC RECORDS (Item-Level Traceability & Diffs)
 CREATE TABLE IF NOT EXISTS integration_sync_records (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     organisation_id UUID NOT NULL REFERENCES organisations(id) ON DELETE CASCADE,
     sync_job_id UUID NOT NULL REFERENCES integration_sync_jobs(id) ON DELETE CASCADE,
     integration_id UUID NOT NULL REFERENCES integrations(id) ON DELETE CASCADE,
@@ -132,7 +132,7 @@ CREATE TABLE IF NOT EXISTS integration_sync_records (
 
 -- 8. INTEGRATION ERRORS (Error Center & Dead-Letter Queue)
 CREATE TABLE IF NOT EXISTS integration_errors (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     organisation_id UUID NOT NULL REFERENCES organisations(id) ON DELETE CASCADE,
     integration_id UUID NOT NULL REFERENCES integrations(id) ON DELETE CASCADE,
     sync_job_id UUID REFERENCES integration_sync_jobs(id) ON DELETE SET NULL,
@@ -155,7 +155,7 @@ CREATE TABLE IF NOT EXISTS integration_errors (
 
 -- 9. INTEGRATION WEBHOOKS (Inbound & Outbound Webhook Subscriptions)
 CREATE TABLE IF NOT EXISTS integration_webhooks (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     organisation_id UUID NOT NULL REFERENCES organisations(id) ON DELETE CASCADE,
     integration_id UUID REFERENCES integrations(id) ON DELETE CASCADE,
     name VARCHAR(255) NOT NULL,
@@ -175,7 +175,7 @@ CREATE TABLE IF NOT EXISTS integration_webhooks (
 
 -- 10. INTEGRATION WEBHOOK DELIVERIES (Audit Trail of Webhook Executions)
 CREATE TABLE IF NOT EXISTS integration_webhook_deliveries (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     organisation_id UUID NOT NULL REFERENCES organisations(id) ON DELETE CASCADE,
     webhook_id UUID NOT NULL REFERENCES integration_webhooks(id) ON DELETE CASCADE,
     event_name VARCHAR(128) NOT NULL,
@@ -191,7 +191,7 @@ CREATE TABLE IF NOT EXISTS integration_webhook_deliveries (
 
 -- 11. INTEGRATION AUDIT LOGS (Compliance & Security Audit Trail)
 CREATE TABLE IF NOT EXISTS integration_audit_logs (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     organisation_id UUID NOT NULL REFERENCES organisations(id) ON DELETE CASCADE,
     integration_id UUID REFERENCES integrations(id) ON DELETE SET NULL,
     actor_id UUID REFERENCES auth.users(id) ON DELETE SET NULL,

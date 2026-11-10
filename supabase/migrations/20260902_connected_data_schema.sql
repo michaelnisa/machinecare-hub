@@ -2,12 +2,11 @@
 -- MACHINECARE CONNECTED DATA & ANALYTICS: DATABASE SCHEMA & RLS MIGRATION
 -- ============================================================================
 
--- Enable UUID extension if not enabled
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+-- gen_random_uuid() is native in Postgres 13+
 
 -- 1. CONNECTED CUSTOMERS (Multi-Tenant Client Organizations)
 CREATE TABLE IF NOT EXISTS connected_customers (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     organisation_id UUID NOT NULL REFERENCES organisations(id) ON DELETE CASCADE,
     name VARCHAR(255) NOT NULL,
     code VARCHAR(64) NOT NULL,
@@ -25,7 +24,7 @@ CREATE TABLE IF NOT EXISTS connected_customers (
 
 -- 2. CONNECTED SITES (Facilities, Mines, Plants)
 CREATE TABLE IF NOT EXISTS connected_sites (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     organisation_id UUID NOT NULL REFERENCES organisations(id) ON DELETE CASCADE,
     customer_id UUID NOT NULL REFERENCES connected_customers(id) ON DELETE CASCADE,
     name VARCHAR(255) NOT NULL,
@@ -41,7 +40,7 @@ CREATE TABLE IF NOT EXISTS connected_sites (
 
 -- 3. CONNECTED ASSETS (Heavy Equipment, Machinery, Solar Arrays)
 CREATE TABLE IF NOT EXISTS connected_assets (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     organisation_id UUID NOT NULL REFERENCES organisations(id) ON DELETE CASCADE,
     customer_id UUID NOT NULL REFERENCES connected_customers(id) ON DELETE CASCADE,
     site_id UUID NOT NULL REFERENCES connected_sites(id) ON DELETE CASCADE,
@@ -64,7 +63,7 @@ CREATE TABLE IF NOT EXISTS connected_assets (
 
 -- 4. CONNECTED DEVICES (IoT Gateways, Telematics, Edge Nodes)
 CREATE TABLE IF NOT EXISTS connected_devices (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     organisation_id UUID NOT NULL REFERENCES organisations(id) ON DELETE CASCADE,
     customer_id UUID REFERENCES connected_customers(id) ON DELETE SET NULL,
     device_code VARCHAR(64) NOT NULL,
@@ -86,7 +85,7 @@ CREATE TABLE IF NOT EXISTS connected_devices (
 
 -- 5. CONNECTED DATA SOURCES (Protocol Specifications)
 CREATE TABLE IF NOT EXISTS connected_data_sources (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     organisation_id UUID NOT NULL REFERENCES organisations(id) ON DELETE CASCADE,
     asset_id UUID NOT NULL REFERENCES connected_assets(id) ON DELETE CASCADE,
     device_id UUID REFERENCES connected_devices(id) ON DELETE SET NULL,
@@ -102,7 +101,7 @@ CREATE TABLE IF NOT EXISTS connected_data_sources (
 
 -- 6. MACHINE DATA DICTIONARY (Standard Key Registry)
 CREATE TABLE IF NOT EXISTS machine_data_dictionary (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     organisation_id UUID NOT NULL REFERENCES organisations(id) ON DELETE CASCADE,
     standard_key VARCHAR(128) NOT NULL UNIQUE,
     label VARCHAR(255) NOT NULL,
@@ -117,7 +116,7 @@ CREATE TABLE IF NOT EXISTS machine_data_dictionary (
 
 -- 7. TELEMETRY RECORDS (Time-Series Metrics Storage)
 CREATE TABLE IF NOT EXISTS telemetry_records (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     organisation_id UUID NOT NULL REFERENCES organisations(id) ON DELETE CASCADE,
     asset_id UUID NOT NULL REFERENCES connected_assets(id) ON DELETE CASCADE,
     device_id UUID REFERENCES connected_devices(id) ON DELETE SET NULL,
@@ -136,7 +135,7 @@ CREATE INDEX IF NOT EXISTS idx_telemetry_asset_param ON telemetry_records (asset
 
 -- 8. CONNECTED EVENTS (Threshold Breaches & Notifications Inbox)
 CREATE TABLE IF NOT EXISTS connected_events (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     organisation_id UUID NOT NULL REFERENCES organisations(id) ON DELETE CASCADE,
     asset_id UUID NOT NULL REFERENCES connected_assets(id) ON DELETE CASCADE,
     asset_name VARCHAR(255) NOT NULL,
@@ -156,7 +155,7 @@ CREATE TABLE IF NOT EXISTS connected_events (
 
 -- 9. EVENT RULES (Visual Rule Engine Definitions)
 CREATE TABLE IF NOT EXISTS event_rules (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     organisation_id UUID NOT NULL REFERENCES organisations(id) ON DELETE CASCADE,
     name VARCHAR(255) NOT NULL,
     target_asset_type VARCHAR(128),
@@ -174,7 +173,7 @@ CREATE TABLE IF NOT EXISTS event_rules (
 
 -- 10. CONNECTED API KEYS (Developer Partner Scopes)
 CREATE TABLE IF NOT EXISTS connected_api_keys (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     organisation_id UUID NOT NULL REFERENCES organisations(id) ON DELETE CASCADE,
     customer_id UUID REFERENCES connected_customers(id) ON DELETE CASCADE,
     customer_name VARCHAR(255),
@@ -190,7 +189,7 @@ CREATE TABLE IF NOT EXISTS connected_api_keys (
 
 -- 11. CONNECTED WEBHOOKS (Outgoing Event Dispatcher)
 CREATE TABLE IF NOT EXISTS connected_webhooks (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     organisation_id UUID NOT NULL REFERENCES organisations(id) ON DELETE CASCADE,
     name VARCHAR(255) NOT NULL,
     target_url VARCHAR(512) NOT NULL,
@@ -204,7 +203,7 @@ CREATE TABLE IF NOT EXISTS connected_webhooks (
 
 -- 12. DATA QUALITY RECORDS
 CREATE TABLE IF NOT EXISTS data_quality_records (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     organisation_id UUID NOT NULL REFERENCES organisations(id) ON DELETE CASCADE,
     asset_id UUID NOT NULL REFERENCES connected_assets(id) ON DELETE CASCADE,
     asset_name VARCHAR(255) NOT NULL,

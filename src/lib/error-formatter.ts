@@ -48,6 +48,8 @@ export function formatAppError(err: unknown, fallback = "An unexpected error occ
       return "Invalid data format submitted. Please check the entered values.";
     case "PGRST116": // JSON single row returned 0 rows
       return "The requested record was not found.";
+    case "PGRST205": // Table not found in schema cache
+      return "The requested table is currently syncing with the database. Please refresh in a moment.";
     default:
       break;
   }
