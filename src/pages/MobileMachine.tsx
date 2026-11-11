@@ -27,6 +27,7 @@ import { useI18n } from "@/i18n/I18nProvider";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { enqueue, looksOffline } from "@/lib/offlineQueue";
+import { parseCargoMeta } from "@/lib/fleet-metadata";
 
 const STATUS_COLORS: Record<string, string> = {
   active: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400",
@@ -260,13 +261,11 @@ export default function MobileMachine() {
           .eq("trip_id", tripData.id);
 
         let expList = expData || [];
-        if (expList.length === 0 && tripData.cargo_description && typeof tripData.cargo_description === "string" && tripData.cargo_description.startsWith("{")) {
-          try {
-            const parsed = JSON.parse(tripData.cargo_description);
-            if (Array.isArray(parsed.expenses)) {
-              expList = parsed.expenses;
-            }
-          } catch {}
+        if (expList.length === 0 && tripData.cargo_description) {
+          const parsed = parseCargoMeta(tripData.cargo_description);
+          if (parsed && Array.isArray(parsed.expenses)) {
+            expList = parsed.expenses;
+          }
         }
         const totalExpenses = expList.reduce((sum: number, e: any) => sum + (Number(e.amount) || 0), 0);
         const totalFines = expList.filter((e: any) => e.expense_type === "fine").reduce((sum: number, e: any) => sum + (Number(e.amount) || 0), 0);

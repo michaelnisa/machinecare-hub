@@ -20,6 +20,7 @@ import { Badge } from "@/components/ui/badge";
 import { formatDate, formatMoney } from "@/lib/format";
 import { DEFAULT_USD_TO_TZS_RATE } from "@/services/crossBorderCorridors";
 import { DEFAULT_PAYMENT_ACCOUNTS, type PaymentAccountSettings } from "@/components/TripReceiptDialog";
+import { parseCargoMeta, extractCleanCargo } from "@/lib/fleet-metadata";
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
 import { toast } from "sonner";
@@ -79,23 +80,8 @@ export default function TripReceiptPrint() {
         return;
       }
 
-      let parsedMeta: any = {};
-      let cleanCargo: string | null = null;
-      if (tripData.cargo_description && typeof tripData.cargo_description === "string" && tripData.cargo_description.startsWith("{")) {
-        try {
-          parsedMeta = JSON.parse(tripData.cargo_description);
-          if (parsedMeta.cargo && typeof parsedMeta.cargo === "string" && !parsedMeta.cargo.startsWith("{")) {
-            cleanCargo = parsedMeta.cargo;
-          }
-        } catch (_err) {
-          // Fallback if metadata parse fails
-        }
-      } else {
-        cleanCargo = tripData.cargo_description;
-      }
-      if (typeof cleanCargo === "string" && cleanCargo.startsWith("{")) {
-        cleanCargo = null;
-      }
+      const parsedMeta = parseCargoMeta(tripData.cargo_description) || {};
+      const cleanCargo = extractCleanCargo(tripData.cargo_description, tripData.purpose);
 
       const mergedTrip = {
         ...tripData,

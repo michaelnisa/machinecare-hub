@@ -802,7 +802,7 @@ export default function FinanceInvoices() {
                   )}
                   {printInvoice.trip && (
                     <p className="text-xs text-gray-600">
-                      Route: {printInvoice.trip.origin} → {printInvoice.trip.destination}
+                      Route: {printInvoice.trip.origin || "Origin"} → {printInvoice.trip.destination || "Destination"}
                     </p>
                   )}
                 </div>

@@ -156,19 +156,23 @@ export default function FinanceExpenses() {
       });
 
       (tripExps || []).forEach((t: any) => {
+        const tripObj = Array.isArray(t.trips) ? t.trips[0] : t.trips;
+        const origin = tripObj?.origin || "Origin";
+        const dest = tripObj?.destination || "Destination";
+        const machObj = Array.isArray(t.machines) ? t.machines[0] : t.machines;
         unified.push({
           id: `trip-${t.id}`,
           rawId: t.id,
           voucherNumber: `TRIP-EXP-${t.id.slice(0, 6).toUpperCase()}`,
           title: `Trip Expense: ${t.expense_type?.toUpperCase() || "General"}`,
           category: "trip_expense",
-          payee: t.trips ? `${t.trips.origin} → ${t.trips.destination}` : "Driver / En-Route",
+          payee: tripObj ? `${origin} → ${dest}` : "Driver / En-Route",
           amount: Number(t.amount || 0),
           currency: t.currency || "TZS",
           paymentMethod: "cash",
           date: t.occurred_at || new Date().toISOString(),
           machineId: t.machine_id,
-          machineName: t.machines?.plate_number || t.machines?.name || "Trip Asset",
+          machineName: machObj?.plate_number || machObj?.name || "Trip Asset",
           source: "trip_expenses",
           status: "paid",
         });

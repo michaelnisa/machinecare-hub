@@ -25,6 +25,7 @@ import {
   Car,
 } from "lucide-react";
 import { toast } from "sonner";
+import { parseCargoMeta } from "@/lib/fleet-metadata";
 
 export const EXPENSE_CATEGORIES = [
   { id: "fine", label: "Traffic Fine / Penalty", icon: AlertOctagon, color: "text-rose-600 bg-rose-50 border-rose-200" },
@@ -230,12 +231,9 @@ export function TripExpenseDialog({
 
             let cargoMeta: Record<string, any> = {};
             if (tripData?.cargo_description) {
-              if (typeof tripData.cargo_description === "string" && tripData.cargo_description.startsWith("{")) {
-                try {
-                  cargoMeta = JSON.parse(tripData.cargo_description);
-                } catch {
-                  cargoMeta = { cargo: tripData.cargo_description };
-                }
+              const meta = parseCargoMeta(tripData.cargo_description);
+              if (meta) {
+                cargoMeta = meta as any;
               } else {
                 cargoMeta = { cargo: tripData.cargo_description };
               }

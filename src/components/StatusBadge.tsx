@@ -18,7 +18,8 @@ const MAP: Record<string, string> = {
 };
 
 export function StatusBadge({ status, className }: Props) {
-  const cls = MAP[status] ?? "status-inactive";
-  const label = STATUS_LABELS[status] ?? status;
+  const safeStatus = typeof status === "string" ? status : "";
+  const cls = MAP[safeStatus] ?? "status-inactive";
+  const label = STATUS_LABELS[safeStatus] ?? (safeStatus ? safeStatus.replace(/_/g, " ") : "—");
   return <span className={cn("status-pill", cls, className)}>{label}</span>;
 }

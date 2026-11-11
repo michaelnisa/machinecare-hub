@@ -22,6 +22,7 @@ import {
   Calendar,
 } from "lucide-react";
 import { formatMoney, formatDate } from "@/lib/format";
+import { parseCargoMeta } from "@/lib/fleet-metadata";
 import { TripExpenseDialog, EXPENSE_CATEGORIES } from "./TripExpenseDialog";
 import { toast } from "sonner";
 
@@ -84,16 +85,11 @@ export function TripExpensesListDialog({
             .maybeSingle();
 
           if (tripData?.cargo_description) {
-            try {
-              const parsed =
-                typeof tripData.cargo_description === "string" && tripData.cargo_description.startsWith("{")
-                  ? JSON.parse(tripData.cargo_description)
-                  : null;
-              if (parsed && Array.isArray(parsed.expenses)) {
-                setExpenses(parsed.expenses);
-                return;
-              }
-            } catch {}
+            const parsed = parseCargoMeta(tripData.cargo_description);
+            if (parsed && Array.isArray(parsed.expenses)) {
+              setExpenses(parsed.expenses);
+              return;
+            }
           }
           setExpenses(data ?? []);
         }
@@ -163,13 +159,7 @@ export function TripExpensesListDialog({
           .maybeSingle();
 
         if (tripData?.cargo_description) {
-          let cargoMeta: Record<string, any> = {};
-          try {
-            cargoMeta =
-              typeof tripData.cargo_description === "string" && tripData.cargo_description.startsWith("{")
-                ? JSON.parse(tripData.cargo_description)
-                : {};
-          } catch {}
+          const cargoMeta: Record<string, any> = (parseCargoMeta(tripData.cargo_description) as any) || {};
 
           const currentExpenses: any[] = Array.isArray(cargoMeta.expenses) ? cargoMeta.expenses : [];
           const target = currentExpenses.find((e) => e.id === id);

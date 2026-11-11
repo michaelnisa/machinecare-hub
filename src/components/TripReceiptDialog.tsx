@@ -32,6 +32,7 @@ import {
 } from "lucide-react";
 import { formatDate, formatMoney } from "@/lib/format";
 import { DEFAULT_USD_TO_TZS_RATE, formatTripCurrency } from "@/services/crossBorderCorridors";
+import { parseCargoMeta, extractCleanCargo } from "@/lib/fleet-metadata";
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
 import { toast } from "sonner";
@@ -129,12 +130,7 @@ export function TripReceiptDialog({
   useEffect(() => {
     if (!open || !trip) return;
 
-    let parsedMeta: any = {};
-    if (trip.cargo_description && typeof trip.cargo_description === "string" && trip.cargo_description.startsWith("{")) {
-      try {
-        parsedMeta = JSON.parse(trip.cargo_description);
-      } catch {}
-    }
+    const parsedMeta = parseCargoMeta(trip.cargo_description) || {};
 
     const price = parsedMeta.client_billing_amount ?? trip.client_billing_amount ?? parsedMeta.client_price ?? "";
     setClientPrice(price ? String(price) : "");
@@ -185,36 +181,14 @@ export function TripReceiptDialog({
   }, [clientPrice, billingCurrency, taxPercent, exchangeRate]);
 
   const cleanCargo = useMemo(() => {
-    const raw = trip?.cargo_description;
-    if (!raw) return trip?.purpose || "Commercial Freight / General Cargo";
-    if (typeof raw === "string") {
-      if (raw.startsWith("{") || raw.endsWith("}")) {
-        try {
-          const parsed = JSON.parse(raw);
-          if (parsed.cargo && typeof parsed.cargo === "string" && !parsed.cargo.startsWith("{")) {
-            return parsed.cargo;
-          }
-          if (parsed.purpose && typeof parsed.purpose === "string") {
-            return parsed.purpose;
-          }
-        } catch {}
-        return trip?.purpose || "Commercial Freight / General Cargo";
-      }
-      return raw;
-    }
-    return trip?.purpose || "Commercial Freight / General Cargo";
+    return extractCleanCargo(trip?.cargo_description, trip?.purpose);
   }, [trip]);
 
   // Save updated pricing back to trip's cargo_description
   const handleSavePricingToTrip = async () => {
     if (!trip?.id) return;
     try {
-      let cargoMeta: any = {};
-      if (trip.cargo_description && typeof trip.cargo_description === "string" && trip.cargo_description.startsWith("{")) {
-        try {
-          cargoMeta = JSON.parse(trip.cargo_description);
-        } catch {}
-      }
+      const cargoMeta: any = parseCargoMeta(trip.cargo_description) || {};
 
       cargoMeta.client_billing_amount = Number(clientPrice) || 0;
       cargoMeta.billing_currency = billingCurrency;
