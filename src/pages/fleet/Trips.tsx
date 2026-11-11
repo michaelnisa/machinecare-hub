@@ -59,6 +59,7 @@ import {
   SAFE_DRIVER_COLUMNS,
   parseMachine,
   parseDriver,
+  parseCargoMeta,
   type FleetVehicle,
   type FleetDriver,
 } from "@/lib/fleet-metadata";
@@ -146,15 +147,15 @@ function parseTripRecord(raw: any): Trip {
   let include_statutory_tolls = raw.include_statutory_tolls ?? null;
   let custom_logo_url = raw.custom_logo_url ?? null;
 
-  if (raw.cargo_description && typeof raw.cargo_description === "string" && raw.cargo_description.startsWith("{") && raw.cargo_description.endsWith("}")) {
-    try {
-      const parsed = JSON.parse(raw.cargo_description);
+  if (raw.cargo_description && typeof raw.cargo_description === "string" && raw.cargo_description.trim().startsWith("{")) {
+    const parsed = parseCargoMeta(raw.cargo_description);
+    if (parsed) {
       if (parsed.client) client_name = parsed.client;
       if (parsed.order_no) client_order_no = parsed.order_no;
       if (parsed.est_hours != null) roundtrip_hours_est = Number(parsed.est_hours);
       if (parsed.is_round_trip != null) is_round_trip = Boolean(parsed.is_round_trip);
       if (parsed.purpose) purpose = parsed.purpose;
-      if (parsed.cargo && typeof parsed.cargo === "string" && !parsed.cargo.startsWith("{")) {
+      if (parsed.cargo && typeof parsed.cargo === "string" && !parsed.cargo.trim().startsWith("{")) {
         cargo_description = parsed.cargo;
       } else {
         cargo_description = null;
@@ -165,21 +166,20 @@ function parseTripRecord(raw: any): Trip {
       if (parsed.corridor_name) corridor_name = parsed.corridor_name;
       if (parsed.border_post) border_post = parsed.border_post;
       if (parsed.currency) currency = parsed.currency;
-      if (parsed.exchange_rate) exchange_rate = parsed.exchange_rate;
+      if (parsed.exchange_rate != null) exchange_rate = Number(parsed.exchange_rate);
       if (parsed.expenses) expenses = parsed.expenses;
       if (parsed.client_billing_amount != null) client_billing_amount = Number(parsed.client_billing_amount);
-      else if (parsed.client_price != null) client_billing_amount = Number(parsed.client_price);
       if (parsed.billing_currency) billing_currency = parsed.billing_currency;
       if (parsed.payment_terms) payment_terms = parsed.payment_terms;
       if (parsed.tax_percent != null) tax_percent = Number(parsed.tax_percent);
       if (parsed.include_statutory_tolls != null) include_statutory_tolls = Boolean(parsed.include_statutory_tolls);
       if (parsed.custom_logo_url) custom_logo_url = parsed.custom_logo_url;
-    } catch {
+    } else {
       cargo_description = null;
     }
   }
 
-  if (typeof cargo_description === "string" && cargo_description.startsWith("{")) {
+  if (typeof cargo_description === "string" && cargo_description.trim().startsWith("{")) {
     cargo_description = null;
   }
 
@@ -336,10 +336,10 @@ export default function Trips() {
 
     // Also parse expenses from cargo_description JSON metadata if trip_expenses table was not present
     (t ?? []).forEach((tripRaw: any) => {
-      if (tripRaw.cargo_description && typeof tripRaw.cargo_description === "string" && tripRaw.cargo_description.startsWith("{")) {
+      if (tripRaw.cargo_description && typeof tripRaw.cargo_description === "string" && tripRaw.cargo_description.trim().startsWith("{")) {
         try {
-          const parsed = JSON.parse(tripRaw.cargo_description);
-          if (Array.isArray(parsed.expenses) && parsed.expenses.length > 0) {
+          const parsed = parseCargoMeta(tripRaw.cargo_description);
+          if (parsed && Array.isArray(parsed.expenses) && parsed.expenses.length > 0) {
             const current = expMap.get(tripRaw.id) || { total: 0, fines: 0, receipts: 0, count: 0 };
             if (current.count === 0) {
               const tripRate = Number(parsed.exchange_rate) || 2600;
@@ -576,7 +576,7 @@ export default function Trips() {
                                 Order: {t.client_order_no}
                               </div>
                             )}
-                            {t.cargo_description && (
+                            {t.cargo_description && !t.cargo_description.trim().startsWith("{") && (
                               <div className="text-[11px] text-muted-foreground line-clamp-1 italic">
                                 {t.cargo_description}
                               </div>
@@ -1947,7 +1947,7 @@ function TripDetailDialog({
                 <span className="text-xs text-muted-foreground block">Order / DO Reference:</span>
                 <span className="font-mono font-semibold text-foreground">{trip.client_order_no || "—"}</span>
               </div>
-              {trip.cargo_description && (
+              {trip.cargo_description && !trip.cargo_description.trim().startsWith("{") && (
                 <div className="sm:col-span-2">
                   <span className="text-xs text-muted-foreground block">Cargo Description:</span>
                   <span className="text-foreground">{trip.cargo_description}</span>

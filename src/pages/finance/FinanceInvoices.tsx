@@ -364,7 +364,7 @@ export default function FinanceInvoices() {
       {/* Invoices Table */}
       {filteredInvoices.length === 0 ? (
         <EmptyState
-          icon={FileText}
+          icon={<FileText className="h-6 w-6 text-muted-foreground" />}
           title="No customer invoices found"
           description={
             search || statusFilter !== "all"

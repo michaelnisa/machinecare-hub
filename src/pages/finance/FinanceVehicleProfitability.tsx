@@ -248,7 +248,7 @@ export default function FinanceVehicleProfitability() {
       {/* Vehicle Profitability Table */}
       {filtered.length === 0 ? (
         <EmptyState
-          icon={Truck}
+          icon={<Truck className="h-6 w-6 text-muted-foreground" />}
           title="No vehicles found"
           description="Register vehicles in your fleet and log trips or fuel to calculate per-vehicle profit."
           action={

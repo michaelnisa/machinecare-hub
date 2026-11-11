@@ -24,6 +24,7 @@ import {
   parseMachine,
   parseDriver,
   parseTrip,
+  extractCleanCargo,
   normalizeTelematicsStatus,
   AXLE_CONFIG_OPTIONS,
   type FleetVehicle,
@@ -1007,7 +1008,7 @@ export default function FleetVehicleDetail() {
                             {tr.client_name ? (
                               <span className="font-semibold text-foreground block">{tr.client_name}</span>
                             ) : null}
-                            <span>{tr.raw_cargo || (tr as any).purpose || "General freight"}</span>
+                            <span>{extractCleanCargo(tr.raw_cargo, (tr as any).purpose)}</span>
                           </td>
                           <td className="px-4 py-3 text-foreground font-medium">
                             {driver ? driver.full_name : "Unassigned"}

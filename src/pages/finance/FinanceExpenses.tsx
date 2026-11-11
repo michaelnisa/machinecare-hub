@@ -487,7 +487,7 @@ export default function FinanceExpenses() {
       {/* Expenses Table */}
       {filteredExpenses.length === 0 ? (
         <EmptyState
-          icon={Receipt}
+          icon={<Receipt className="h-6 w-6 text-muted-foreground" />}
           title="No expenses found"
           description={
             search || categoryFilter !== "all" || machineFilter !== "all"

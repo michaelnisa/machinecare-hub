@@ -654,20 +654,129 @@ export interface FleetTrip {
   raw_cargo: string | null;
 }
 
+export interface TripCargoMetadata {
+  client?: string | null;
+  order_no?: string | null;
+  cargo?: string | null;
+  purpose?: string | null;
+  route_notes?: string | null;
+  corridor_id?: string | null;
+  corridor_name?: string | null;
+  border_post?: string | null;
+  currency?: string | null;
+  exchange_rate?: number | null;
+  client_billing_amount?: number | null;
+  billing_currency?: string | null;
+  payment_terms?: string | null;
+  tax_percent?: number | null;
+  include_statutory_tolls?: boolean | null;
+  est_hours?: number | null;
+  is_round_trip?: boolean | null;
+  estimated_return_at?: string | null;
+  custom_logo_url?: string | null;
+  expenses?: any[] | null;
+}
+
+/**
+ * Resilient JSON parser for trip cargo metadata.
+ * Successfully parses intact JSON or gracefully extracts key values even if the payload
+ * was truncated or cut off in storage.
+ */
+export function parseCargoMeta(raw: any): TripCargoMetadata | null {
+  if (!raw || typeof raw !== "string") return null;
+  const trimmed = raw.trim();
+  if (!trimmed.startsWith("{")) return null;
+
+  try {
+    return JSON.parse(trimmed);
+  } catch {
+    // Regex extraction fallback for truncated JSON strings
+    const extract = (key: string): any => {
+      const match = trimmed.match(new RegExp(`"${key}"\\s*:\\s*("(?:\\\\.|[^"\\\\])*"|\\d+(?:\\.\\d+)?|true|false|null)`));
+      if (!match) return null;
+      try {
+        return JSON.parse(match[1]);
+      } catch {
+        return null;
+      }
+    };
+
+    return {
+      client: extract("client"),
+      order_no: extract("order_no"),
+      cargo: extract("cargo"),
+      purpose: extract("purpose"),
+      route_notes: extract("route_notes"),
+      corridor_id: extract("corridor_id"),
+      corridor_name: extract("corridor_name"),
+      border_post: extract("border_post"),
+      currency: extract("currency"),
+      exchange_rate: extract("exchange_rate") != null ? Number(extract("exchange_rate")) : null,
+      client_billing_amount: extract("client_billing_amount") != null ? Number(extract("client_billing_amount")) : null,
+      billing_currency: extract("billing_currency"),
+      payment_terms: extract("payment_terms"),
+      tax_percent: extract("tax_percent") != null ? Number(extract("tax_percent")) : null,
+      include_statutory_tolls: extract("include_statutory_tolls"),
+      est_hours: extract("est_hours") != null ? Number(extract("est_hours")) : null,
+      is_round_trip: extract("is_round_trip"),
+      estimated_return_at: extract("estimated_return_at"),
+      custom_logo_url: extract("custom_logo_url"),
+    };
+  }
+}
+
+/**
+ * Extracts a human-readable cargo name and guarantees raw JSON never spills into the UI.
+ */
+export function extractCleanCargo(rawCargo: any, fallbackPurpose?: string | null): string {
+  if (!rawCargo && !fallbackPurpose) return "Commercial Freight";
+  if (typeof rawCargo === "string") {
+    const trimmed = rawCargo.trim();
+    if (trimmed.startsWith("{")) {
+      const meta = parseCargoMeta(trimmed);
+      if (meta?.cargo && typeof meta.cargo === "string" && !meta.cargo.trim().startsWith("{")) {
+        return meta.cargo.trim();
+      }
+      if (meta?.purpose && typeof meta.purpose === "string") {
+        return meta.purpose.trim();
+      }
+      if (fallbackPurpose && typeof fallbackPurpose === "string" && !fallbackPurpose.trim().startsWith("{")) {
+        return fallbackPurpose.trim();
+      }
+      return "Commercial Freight";
+    }
+    return trimmed;
+  }
+  return (fallbackPurpose && !fallbackPurpose.trim().startsWith("{")) ? fallbackPurpose.trim() : "Commercial Freight";
+}
+
 export function parseTrip(raw: any): FleetTrip {
-  let client_name: string | null = null;
-  let client_order_number: string | null = null;
-  let estimated_hours: number | null = null;
+  let client_name: string | null = raw.client_name ?? null;
+  let client_order_number: string | null = raw.client_order_no ?? raw.client_order_number ?? null;
+  let estimated_hours: number | null = raw.roundtrip_hours_est ?? raw.estimated_hours ?? null;
   let raw_cargo: string | null = raw.cargo_description ?? null;
 
-  if (raw.cargo_description && typeof raw.cargo_description === "string" && raw.cargo_description.startsWith("{") && raw.cargo_description.endsWith("}")) {
-    try {
-      const parsed = JSON.parse(raw.cargo_description);
-      client_name = parsed.client ?? null;
-      client_order_number = parsed.order_no ?? null;
-      estimated_hours = parsed.est_hours != null ? Number(parsed.est_hours) : null;
-      raw_cargo = parsed.cargo ?? null;
-    } catch {}
+  if (raw.cargo_description && typeof raw.cargo_description === "string" && raw.cargo_description.trim().startsWith("{")) {
+    const meta = parseCargoMeta(raw.cargo_description);
+    if (meta) {
+      if (meta.client) client_name = meta.client;
+      if (meta.order_no) client_order_number = meta.order_no;
+      if (meta.est_hours != null) estimated_hours = Number(meta.est_hours);
+      if (meta.cargo && typeof meta.cargo === "string" && !meta.cargo.trim().startsWith("{")) {
+        raw_cargo = meta.cargo;
+      } else if (meta.purpose && typeof meta.purpose === "string") {
+        raw_cargo = meta.purpose;
+      } else {
+        raw_cargo = null;
+      }
+    } else {
+      raw_cargo = null;
+    }
+  }
+
+  // Double defense: raw_cargo must NEVER be a raw JSON string
+  if (typeof raw_cargo === "string" && raw_cargo.trim().startsWith("{")) {
+    raw_cargo = null;
   }
 
   return {
@@ -678,6 +787,7 @@ export function parseTrip(raw: any): FleetTrip {
     raw_cargo,
   };
 }
+
 
 export function serializeTripPayload(data: {
   machine_id: string;

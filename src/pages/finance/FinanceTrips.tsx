@@ -13,6 +13,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { formatMoney, formatDate, formatNumber } from "@/lib/format";
+import { parseCargoMeta, extractCleanCargo } from "@/lib/fleet-metadata";
 import { FinanceNavHeader } from "./FinanceNavHeader";
 import {
   Route,
@@ -67,6 +68,7 @@ export default function FinanceTrips() {
             id,
             origin,
             destination,
+            purpose,
             cargo_description,
             start_at,
             status,
@@ -113,8 +115,19 @@ export default function FinanceTrips() {
         const subExpenses = expenseMap.get(t.id) || 0;
         const totalExpenses = directCost + subExpenses;
 
-        // Revenue: from linked customer invoice or freight contract value
-        const revenue = invoiceRevMap.get(t.id) || (directCost > 0 ? Math.round(directCost * 1.35) : 0);
+        const meta = parseCargoMeta(t.cargo_description);
+        const cargoText = extractCleanCargo(t.cargo_description, t.purpose || meta?.purpose);
+
+        // Revenue: from linked customer invoice, or contracted corridor price, or fallback multiplier
+        let revenue = invoiceRevMap.get(t.id) || 0;
+        if (!revenue && meta?.client_billing_amount) {
+          const rate = Number(meta.exchange_rate) || 2600;
+          const isUsd = (meta.billing_currency || meta.currency || "").toUpperCase() === "USD";
+          revenue = isUsd ? Math.round(Number(meta.client_billing_amount) * rate) : Number(meta.client_billing_amount);
+        }
+        if (!revenue && directCost > 0) {
+          revenue = Math.round(directCost * 1.35);
+        }
 
         const km = (t.end_odo && t.start_odo && t.end_odo > t.start_odo) ? (t.end_odo - t.start_odo) : 0;
         const fuelL = Number(t.fuel_used_l || 0);
@@ -128,7 +141,7 @@ export default function FinanceTrips() {
           id: t.id,
           origin: t.origin || "Origin",
           destination: t.destination || "Destination",
-          cargo: t.cargo_description || "Freight Cargo",
+          cargo: cargoText,
           startDate: t.start_at || new Date().toISOString(),
           vehiclePlate: t.machines?.plate_number || t.machines?.name || "Fleet Vehicle",
           vehicleName: t.machines?.name || "Vehicle",
@@ -329,7 +342,7 @@ export default function FinanceTrips() {
       {/* Trips Profitability Table */}
       {filtered.length === 0 ? (
         <EmptyState
-          icon={Route}
+          icon={<Route className="h-6 w-6 text-muted-foreground" />}
           title="No trip records found"
           description={
             search || statusFilter !== "all"

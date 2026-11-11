@@ -388,7 +388,7 @@ export default function FinanceSuppliers() {
       {/* Bills Table */}
       {filteredBills.length === 0 ? (
         <EmptyState
-          icon={Building2}
+          icon={<Building2 className="h-6 w-6 text-muted-foreground" />}
           title="No supplier bills found"
           description={
             search || categoryFilter !== "all" || statusFilter !== "all"

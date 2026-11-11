@@ -360,7 +360,7 @@ export default function FinanceCashFlow() {
 
         {movements.length === 0 ? (
           <EmptyState
-            icon={Wallet}
+            icon={<Wallet className="h-6 w-6 text-muted-foreground" />}
             title="No cash movements recorded"
             description="Collect customer invoices or record operational expense vouchers to build your real-time cash flow."
           />
