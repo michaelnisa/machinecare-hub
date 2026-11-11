@@ -1,22 +1,20 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Navigate } from "react-router-dom";
+import { Link, Navigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useIndustry } from "@/hooks/useIndustry";
 import { PageLoader } from "@/components/PageLoader";
 import { Button } from "@/components/ui/button";
 import { estimateUsageRate, predictScheduleDue } from "@/lib/pm-prediction";
-import { SAFE_MACHINE_COLUMNS, parseMachine } from "@/lib/fleet-metadata";
+import { SAFE_MACHINE_COLUMNS, parseMachine, normalizeTelematicsStatus, type TelematicsStatus } from "@/lib/fleet-metadata";
 import { Activity, Gauge, ShieldCheck, AlertTriangle, Wrench, ClipboardList, Maximize2, Truck, ParkingCircle, CalendarClock } from "lucide-react";
 
 type FleetKpis = {
-  onRoad: number;
+  running: number;
   idle: number;
-  workshop: number;
-  offRoad: number;
+  inactive: number;
+  stopped: number;
   total: number;
-  availabilityPct: number;
-  utilizationPct: number;
   vehicles: {
     id: string;
     label: string;
@@ -25,18 +23,16 @@ type FleetKpis = {
     ignition: boolean;
     batteryVolt: number | null;
     status: "on_road" | "idle" | "workshop" | "off_road";
-    telematicsStatus?: string;
+    telematicsStatus: TelematicsStatus;
   }[];
 };
 
 const emptyFleet: FleetKpis = {
-  onRoad: 0,
+  running: 0,
   idle: 0,
-  workshop: 0,
-  offRoad: 0,
+  inactive: 0,
+  stopped: 0,
   total: 0,
-  availabilityPct: 100,
-  utilizationPct: 0,
   vehicles: [],
 };
 
@@ -46,7 +42,7 @@ type GarageKpis = {
   awaitingApproval: number;
   readyForPickup: number;
   completedToday: number;
-  jobs: { label: string; vehicle: string; customer: string; status: string }[];
+  jobs: { id: string; vehicleId?: string; label: string; vehicle: string; customer: string; status: string }[];
 };
 
 const emptyGarage: GarageKpis = {
@@ -217,7 +213,7 @@ export default function Live() {
     const activeTripIds = new Set((trips ?? []).map((t) => t.machine_id));
     const maintenanceIds = new Set((openWos ?? []).map((w: any) => w.machine_id));
 
-    let onRoad = 0, idle = 0, workshop = 0, offRoad = 0;
+    let running = 0, idle = 0, inactive = 0, stopped = 0;
     const vehicles: FleetKpis["vehicles"] = [];
 
     for (const raw of (rawMachines ?? []) as any[]) {
@@ -227,24 +223,25 @@ export default function Live() {
       const speed = Number(m.telematics_speed || 0);
       const ignition = Boolean(m.telematics_ignition);
       const isUnderMaint = m.status === "under_maintenance" || maintenanceIds.has(m.id);
-      const isRetired = m.status === "retired";
+      const hasGps = m.telematics_latitude != null && m.telematics_longitude != null;
 
-      let status: "on_road" | "idle" | "workshop" | "off_road" = "idle";
+      // Accurately determine the 4 core telematics motion states: Running, Idle, Inactive, Stopped
+      const telematicsStatus: TelematicsStatus = normalizeTelematicsStatus(
+        m.telematics_status,
+        speed,
+        ignition,
+        m.telematics_last_at,
+        hasGps
+      );
 
-      if (isRetired) {
-        offRoad++;
-        status = "off_road";
-      } else if (isUnderMaint) {
-        workshop++;
-        status = "workshop";
-      } else if (speed > 0 || ignition || activeTripIds.has(m.id)) {
-        // Smart Telematics: Actively moving or engine running or active trip
-        onRoad++;
-        status = "on_road";
-      } else {
-        // Parked at depot / yard with engine off
+      if (telematicsStatus === "Running") {
+        running++;
+      } else if (telematicsStatus === "Idle") {
         idle++;
-        status = "idle";
+      } else if (telematicsStatus === "Inactive") {
+        inactive++;
+      } else {
+        stopped++;
       }
 
       vehicles.push({
@@ -253,26 +250,18 @@ export default function Live() {
         plate,
         speed,
         ignition,
-        batteryVolt: m.telematics_battery_volt,
-        status,
-        telematicsStatus: m.telematics_status || (speed > 0 ? "Running" : ignition ? "Idle" : "Stopped"),
+        batteryVolt: m.telematics_battery_volt ?? null,
+        status: isUnderMaint ? "workshop" : telematicsStatus === "Running" ? "on_road" : telematicsStatus === "Idle" ? "idle" : "off_road",
+        telematicsStatus,
       });
     }
 
-    const total = (rawMachines ?? []).length;
-    const availableCount = onRoad + idle;
-    const activeFleet = total - offRoad;
-    const availabilityPct = activeFleet > 0 ? Math.round((availableCount / activeFleet) * 100) : 100;
-    const utilizationPct = activeFleet > 0 ? Math.round((onRoad / activeFleet) * 100) : 0;
-
     setFleetKpis({
-      onRoad,
+      running,
       idle,
-      workshop,
-      offRoad,
-      total,
-      availabilityPct,
-      utilizationPct,
+      inactive,
+      stopped,
+      total: (rawMachines ?? []).length,
       vehicles,
     });
     setLastUpdated(new Date());
@@ -284,7 +273,7 @@ export default function Live() {
     const today = new Date().toISOString().slice(0, 10);
     const { data: jobs } = await (supabase as any)
       .from("garage_jobs")
-      .select("id, job_number, job_year, status, created_at, garage_customers(name), garage_vehicles(make, model, registration_number)")
+      .select("id, job_number, job_year, vehicle_id, status, created_at, garage_customers(name), garage_vehicles(id, make, model, registration_number)")
       .eq("organisation_id", orgId)
       .order("created_at", { ascending: false })
       .limit(50);
@@ -306,6 +295,8 @@ export default function Live() {
         const v = j.garage_vehicles;
         const vStr = v ? `${v.registration_number || ""}${v.make ? ` (${v.make})` : ""}` : "Vehicle";
         recentJobs.push({
+          id: j.id,
+          vehicleId: j.vehicle_id || v?.id,
           label: `JOB-${j.job_year || new Date().getFullYear()}-${String(j.job_number || 1).padStart(4, "0")}`,
           vehicle: vStr,
           customer: j.garage_customers?.name || "Walk-in Client",
@@ -406,36 +397,36 @@ export default function Live() {
 
         {isFleet ? (
           <>
-            {/* FLEET AVAILABILITY */}
-            <SectionTitle icon={<Truck className="h-5 w-5" />} title="Fleet Availability & Telematics" />
+            {/* FLEET LIVE MOTION STATUS */}
+            <SectionTitle icon={<Truck className="h-5 w-5" />} title="Fleet Live Status" />
             <div className="grid grid-cols-2 gap-5 md:grid-cols-4">
               <Tile
-                icon={<Gauge className="h-6 w-6" />}
-                label="Instant Availability"
-                value={`${fleetKpis.availabilityPct}%`}
-                sub={`${fleetKpis.onRoad + fleetKpis.idle}/${Math.max(fleetKpis.total - fleetKpis.offRoad, 0)} operational`}
-                accent={fleetKpis.availabilityPct >= 85 ? "text-emerald-400" : fleetKpis.availabilityPct >= 70 ? "text-amber-400" : "text-rose-400"}
-              />
-              <Tile
-                icon={<Truck className="h-6 w-6" />}
-                label="On Road (Live)"
-                value={String(fleetKpis.onRoad)}
-                sub="Actively moving / Ignition ON"
+                icon={<Activity className="h-6 w-6" />}
+                label="Running"
+                value={String(fleetKpis.running)}
+                sub="In motion / Driving"
                 accent="text-emerald-400"
               />
               <Tile
-                icon={<ParkingCircle className="h-6 w-6" />}
-                label="Depot / Idle"
+                icon={<Gauge className="h-6 w-6" />}
+                label="Idle"
                 value={String(fleetKpis.idle)}
-                sub="Parked at yard (Ignition OFF)"
-                accent="text-sky-400"
+                sub="Engine running / Stationed"
+                accent="text-amber-400"
               />
               <Tile
-                icon={<Wrench className="h-6 w-6" />}
-                label="In Workshop"
-                value={String(fleetKpis.workshop)}
-                sub="Service or repair"
-                accent="text-amber-400"
+                icon={<AlertTriangle className="h-6 w-6" />}
+                label="Inactive"
+                value={String(fleetKpis.inactive)}
+                sub="Offline / No GPS fix"
+                accent="text-slate-400"
+              />
+              <Tile
+                icon={<ParkingCircle className="h-6 w-6" />}
+                label="Stopped"
+                value={String(fleetKpis.stopped)}
+                sub="Parked / Ignition off"
+                accent="text-sky-400"
               />
             </div>
 
@@ -443,12 +434,15 @@ export default function Live() {
             <SectionTitle icon={<Activity className="h-5 w-5" />} title="Live Fleet Telemetry Board" />
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
               {fleetKpis.vehicles.map((v) => (
-                <div
+                <Link
                   key={v.id || v.label}
-                  className="flex flex-col justify-between rounded-xl border border-white/10 bg-white/5 p-3.5 hover:bg-white/[0.08] transition-colors"
+                  to={`/fleet/vehicles/${v.id}`}
+                  className="group flex flex-col justify-between rounded-xl border border-white/10 bg-white/5 p-3.5 hover:bg-white/[0.12] hover:border-emerald-500/50 transition-all cursor-pointer block"
                 >
                   <div className="flex items-center justify-between">
-                    <span className="font-mono text-base font-bold text-white tracking-wider">{v.plate}</span>
+                    <span className="font-mono text-base font-bold text-white tracking-wider group-hover:text-emerald-400 transition-colors">
+                      {v.plate}
+                    </span>
                     <span
                       className={`inline-flex items-center gap-1.5 text-xs font-semibold uppercase px-2 py-0.5 rounded-full ${
                         v.telematicsStatus === "Running" ? "bg-emerald-500/20 text-emerald-400" :
@@ -468,7 +462,7 @@ export default function Live() {
                     <span>{v.ignition ? "Engine ON" : "Engine OFF"}</span>
                     {v.batteryVolt != null && <span>{v.batteryVolt}V</span>}
                   </div>
-                </div>
+                </Link>
               ))}
               {fleetKpis.vehicles.length === 0 && (
                 <div className="col-span-full rounded-xl border border-white/10 bg-white/5 p-8 text-center text-white/50">
@@ -492,12 +486,13 @@ export default function Live() {
             <SectionTitle icon={<Activity className="h-5 w-5" />} title="Live Service Bay Board" />
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-4">
               {garageKpis.jobs.map((j) => (
-                <div
+                <Link
                   key={j.label}
-                  className="flex flex-col justify-between rounded-xl border border-white/10 bg-white/5 p-4"
+                  to={j.vehicleId ? `/garage/vehicles/${j.vehicleId}` : `/garage/jobs/${j.id}`}
+                  className="group flex flex-col justify-between rounded-xl border border-white/10 bg-white/5 p-4 hover:bg-white/[0.12] hover:border-sky-500/50 transition-all cursor-pointer block"
                 >
                   <div className="flex items-center justify-between">
-                    <span className="font-mono text-base font-bold text-white/90">{j.label}</span>
+                    <span className="font-mono text-base font-bold text-white/90 group-hover:text-sky-400 transition-colors">{j.label}</span>
                     <span
                       className={
                         j.status === "in_progress" ? "text-amber-400 font-semibold text-xs uppercase" :
@@ -509,9 +504,9 @@ export default function Live() {
                       ● {j.status.replace("_", " ")}
                     </span>
                   </div>
-                  <div className="mt-2 text-sm font-medium text-white/80 truncate">{j.vehicle}</div>
+                  <div className="mt-2 text-sm font-medium text-white/80 truncate group-hover:text-white transition-colors">{j.vehicle}</div>
                   <div className="text-xs text-white/50 truncate">{j.customer}</div>
-                </div>
+                </Link>
               ))}
               {garageKpis.jobs.length === 0 && (
                 <div className="col-span-full rounded-xl border border-white/10 bg-white/5 p-8 text-center text-white/50">

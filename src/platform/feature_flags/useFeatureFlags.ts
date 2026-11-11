@@ -9,15 +9,22 @@ export type { IndustryProfile };
 
 export function useFeatureFlags() {
   const { organisation } = useAuth();
-  const isLogisticsOrg = Boolean(
-    organisation?.name?.toLowerCase().includes("logistix") ||
-    organisation?.name?.toLowerCase().includes("transport") ||
-    organisation?.name?.toLowerCase().includes("fleet") ||
-    organisation?.industry?.toLowerCase().includes("logistics") ||
-    organisation?.industry?.toLowerCase().includes("transport")
-  );
+  const isExplicitMixed =
+    organisation?.industry_profile === "mixed" ||
+    organisation?.industry?.toLowerCase().includes("mixed");
 
-  const profile: IndustryProfile = organisation?.industry_profile ?? (isLogisticsOrg ? "fleet_logistics" : "manufacturing");
+  const isLogisticsOrg =
+    !isExplicitMixed &&
+    Boolean(
+      organisation?.name?.toLowerCase().includes("logistix") ||
+      organisation?.name?.toLowerCase().includes("transport") ||
+      organisation?.name?.toLowerCase().includes("fleet") ||
+      organisation?.industry?.toLowerCase().includes("logistics") ||
+      organisation?.industry?.toLowerCase().includes("transport")
+    );
+
+  const profile: IndustryProfile =
+    organisation?.industry_profile ?? (isExplicitMixed ? "mixed" : isLogisticsOrg ? "fleet_logistics" : "manufacturing");
 
   const isFeatureEnabled = (featureKey: string): boolean => {
     // If organisation explicitly defines enabled_modules, respect it:
@@ -42,7 +49,7 @@ export function useFeatureFlags() {
 
   return {
     profile,
-    isFleet: profile === "fleet_logistics" || isLogisticsOrg,
+    isFleet: (profile === "fleet_logistics" || isLogisticsOrg) && profile !== "mixed",
     isManufacturing: profile === "manufacturing" && !isLogisticsOrg,
     isGarage: profile === "garage",
     isMixed: profile === "mixed",
@@ -50,3 +57,4 @@ export function useFeatureFlags() {
     isFeatureEnabled,
   };
 }
+

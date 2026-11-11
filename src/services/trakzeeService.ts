@@ -216,25 +216,51 @@ export async function directClientSyncTrakzeeFleet(
   autoImport: boolean = true
 ): Promise<TrakzeeSyncResult> {
   try {
-    // 1. Fetch organisation settings safely or fallback to defaults
+    // 1. Fetch organisation settings safely and verify Trakzee entitlement
     let targetOrgId = organisationId;
+    let orgData: any = null;
     try {
-      const { data: orgData } = await supabase
+      const { data } = await (supabase as any)
         .from("organisations")
-        .select("id, name")
+        .select("id, name, trakzee_enabled, trakzee_server_url, trakzee_username, trakzee_password, trakzee_company_name, trakzee_project_id")
         .eq("id", organisationId)
         .maybeSingle();
 
+      orgData = data;
       if (orgData?.id) {
         targetOrgId = orgData.id;
       }
     } catch (_) {}
 
-    const serverUrl = DEFAULT_TRAKZEE_CONFIG.trakzee_server_url;
-    const username = "mdhfrancis@gmail.com";
-    const password = "Mdh@2023";
-    const companyName = DEFAULT_TRAKZEE_CONFIG.trakzee_company_name;
-    const projectId = DEFAULT_TRAKZEE_CONFIG.trakzee_project_id;
+    const isLogistixwareOrg =
+      targetOrgId === "df6b0c4b-e56b-4694-838a-0381eb480043" ||
+      Boolean(orgData?.name?.toLowerCase().includes("logistix"));
+
+    const isEnabled = Boolean(orgData?.trakzee_enabled) || isLogistixwareOrg;
+
+    if (!isEnabled) {
+      return {
+        success: false,
+        error: "Live GPS & Telematics (Trakzee) is not enabled for this account.",
+        vehicles_returned: 0,
+        vehicles_updated: 0,
+      };
+    }
+
+    const serverUrl = (orgData?.trakzee_server_url || DEFAULT_TRAKZEE_CONFIG.trakzee_server_url).replace(/\/+$/, "");
+    const username = orgData?.trakzee_username || (isLogistixwareOrg ? "mdhfrancis@gmail.com" : "");
+    const password = orgData?.trakzee_password || (isLogistixwareOrg ? "Mdh@2023" : "");
+    const companyName = orgData?.trakzee_company_name || (isLogistixwareOrg ? "LOGISTIXWARE" : DEFAULT_TRAKZEE_CONFIG.trakzee_company_name);
+    const projectId = orgData?.trakzee_project_id || DEFAULT_TRAKZEE_CONFIG.trakzee_project_id;
+
+    if (!username || !password) {
+      return {
+        success: false,
+        error: "Trakzee credentials (username/password) are missing for this organisation.",
+        vehicles_returned: 0,
+        vehicles_updated: 0,
+      };
+    }
 
     // 2. Authenticate directly with Trakzee
     const loginRes = await fetch(`${serverUrl}?token=generateAccessToken`, {
@@ -537,15 +563,31 @@ export async function syncTrakzeeDrivers(organisationId: string): Promise<{
 }> {
   try {
     let targetOrgId = organisationId;
+    let orgData: any = null;
     try {
-      const { data: orgData } = await supabase
+      const { data } = await (supabase as any)
         .from("organisations")
-        .select("id, name")
+        .select("id, name, trakzee_enabled")
         .eq("id", organisationId)
         .maybeSingle();
 
+      orgData = data;
       if (orgData?.id) targetOrgId = orgData.id;
     } catch (_) {}
+
+    const isLogistixwareOrg =
+      targetOrgId === "df6b0c4b-e56b-4694-838a-0381eb480043" ||
+      Boolean(orgData?.name?.toLowerCase().includes("logistix"));
+
+    if (orgData && !orgData.trakzee_enabled && !isLogistixwareOrg) {
+      return {
+        success: false,
+        drivers_imported: 0,
+        drivers_found: 0,
+        drivers: [],
+        error: "Live GPS & Telematics (Trakzee) is not enabled for this account.",
+      };
+    }
 
     // 1. First trigger fleet sync to ensure vehicles and telematics notes are up to date
     try {
@@ -733,6 +775,26 @@ export async function syncTrakzeeFleet(
 ): Promise<TrakzeeSyncResult> {
   const shouldAutoImport = typeof autoImport === "boolean" ? autoImport : true;
   try {
+    // Check organisation eligibility first to protect tenant privacy and prevent cross-tenant data leaks
+    const { data: orgData } = await (supabase as any)
+      .from("organisations")
+      .select("id, name, trakzee_enabled")
+      .eq("id", organisationId)
+      .maybeSingle();
+
+    const isLogistixwareOrg =
+      organisationId === "df6b0c4b-e56b-4694-838a-0381eb480043" ||
+      Boolean(orgData?.name?.toLowerCase().includes("logistix"));
+
+    if (orgData && !orgData.trakzee_enabled && !isLogistixwareOrg) {
+      return {
+        success: false,
+        error: "Live GPS & Telematics (Trakzee) is not enabled for this account.",
+        vehicles_returned: 0,
+        vehicles_updated: 0,
+      };
+    }
+
     const { data, error } = await supabase.functions.invoke("trakzee-telematics", {
       body: {
         action: "sync_fleet",

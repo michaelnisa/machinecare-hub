@@ -19,12 +19,19 @@ export default function DashboardRouter() {
     return <Safety />;
   }
 
-  // 2. Direct Industry Profile resolution (Fleet & Logistics defaults immediately to FleetDashboard)
+  // 2. Mixed Operations profile routes directly to Master Dashboard
+  if (industry === "mixed" || !industry || (industry !== "fleet_logistics" && industry !== "garage" && !isFleet && !isGarage)) {
+    if (industry === "mixed") {
+      return <Dashboard />;
+    }
+  }
+
+  // 3. Direct Industry Profile resolution (Fleet & Logistics defaults immediately to FleetDashboard)
   if (industry === "fleet_logistics" || isFleet) {
     return <FleetDashboard />;
   }
 
-  // 3. Garage & Workshop profile resolution
+  // 4. Garage & Workshop profile resolution
   if (industry === "garage" || isGarage) {
     return <GarageDashboard />;
   }

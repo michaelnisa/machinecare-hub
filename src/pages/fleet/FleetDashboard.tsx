@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import {
   Truck,
   Route,
@@ -59,6 +59,7 @@ type TyreAlertRow = { key: string; label: string; status: "due_soon" | "overdue"
 type OpenWoGroup = { machineId: string; label: string; count: number; highestPriority: string };
 
 export default function FleetDashboard() {
+  const navigate = useNavigate();
   const { user, profile, organisation } = useAuth();
   const { t } = useI18n();
 
@@ -771,9 +772,17 @@ export default function FleetDashboard() {
                       hasGps
                     );
                     return (
-                      <tr key={m.id} className="border-t border-border hover:bg-muted/30 transition-colors">
+                      <tr
+                        key={m.id}
+                        onClick={() => navigate(`/fleet/vehicles/${m.id}`)}
+                        className="border-t border-border hover:bg-muted/50 transition-colors cursor-pointer"
+                      >
                         <td className="py-2.5 pr-3">
-                          <Link to={`/fleet/vehicles/${m.id}`} className="font-semibold text-foreground hover:underline">
+                          <Link
+                            to={`/fleet/vehicles/${m.id}`}
+                            onClick={(e) => e.stopPropagation()}
+                            className="font-semibold text-foreground hover:underline"
+                          >
                             {m.plate_number || m.name}
                           </Link>
                           {m.plate_number && (

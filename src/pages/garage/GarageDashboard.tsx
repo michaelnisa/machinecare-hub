@@ -235,9 +235,24 @@ export default function GarageDashboard() {
                 onClick={() => navigate(`/garage/jobs/${j.id}`)}
               >
                 <div>
-                  <span className="font-medium">{[j.garage_vehicles?.make, j.garage_vehicles?.model].filter(Boolean).join(" ") || "Vehicle"}</span>
-                  {j.garage_vehicles?.registration_number && (
-                    <span className="ml-2 text-xs text-muted-foreground">{j.garage_vehicles.registration_number}</span>
+                  {j.vehicle_id ? (
+                    <Link
+                      to={`/garage/vehicles/${j.vehicle_id}`}
+                      onClick={(e) => e.stopPropagation()}
+                      className="font-medium text-foreground hover:text-primary hover:underline"
+                    >
+                      {[j.garage_vehicles?.make, j.garage_vehicles?.model].filter(Boolean).join(" ") || "Vehicle"}
+                      {j.garage_vehicles?.registration_number && (
+                        <span className="ml-2 text-xs text-muted-foreground font-mono">({j.garage_vehicles.registration_number})</span>
+                      )}
+                    </Link>
+                  ) : (
+                    <>
+                      <span className="font-medium">{[j.garage_vehicles?.make, j.garage_vehicles?.model].filter(Boolean).join(" ") || "Vehicle"}</span>
+                      {j.garage_vehicles?.registration_number && (
+                        <span className="ml-2 text-xs text-muted-foreground">{j.garage_vehicles.registration_number}</span>
+                      )}
+                    </>
                   )}
                   <div className="text-xs text-muted-foreground mt-0.5">
                     {j.garage_customers?.name ?? "—"} · {formatJobNumber(j)}

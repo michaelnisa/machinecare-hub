@@ -437,9 +437,19 @@ export default function LiveFleetMap() {
                   }`}
                 >
                   <div className="flex items-center justify-between">
-                    <span className="font-mono font-bold text-sm text-foreground tracking-wide">
-                      {v.plate_number || v.name}
-                    </span>
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <span className="font-mono font-bold text-sm text-foreground tracking-wide truncate">
+                        {v.plate_number || v.name}
+                      </span>
+                      <Link
+                        to={`/fleet/vehicles/${v.id}`}
+                        onClick={(e) => e.stopPropagation()}
+                        className="text-xs text-muted-foreground hover:text-primary transition-colors p-0.5 shrink-0"
+                        title="Open Vehicle Profile"
+                      >
+                        <ExternalLink className="h-3 w-3" />
+                      </Link>
+                    </div>
                     <span
                       className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full uppercase flex items-center gap-1 ${
                         vStatus === "Running"
