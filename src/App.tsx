@@ -157,6 +157,17 @@ const BlogList = lazy(() => import("./pages/blog/BlogList"));
 const BlogPostDetail = lazy(() => import("./pages/blog/BlogPostDetail"));
 const BlogManage = lazy(() => import("./pages/blog/BlogManage"));
 
+const FinanceOverview = lazy(() => import("./pages/finance/FinanceOverview"));
+const FinanceExpenses = lazy(() => import("./pages/finance/FinanceExpenses"));
+const FinanceFuel = lazy(() => import("./pages/finance/FinanceFuel"));
+const FinanceTrips = lazy(() => import("./pages/finance/FinanceTrips"));
+const FinanceInvoices = lazy(() => import("./pages/finance/FinanceInvoices"));
+const FinanceSuppliers = lazy(() => import("./pages/finance/FinanceSuppliers"));
+const FinanceApAr = lazy(() => import("./pages/finance/FinanceApAr"));
+const FinanceCashFlow = lazy(() => import("./pages/finance/FinanceCashFlow"));
+const FinanceVehicleProfitability = lazy(() => import("./pages/finance/FinanceVehicleProfitability"));
+const FinanceReports = lazy(() => import("./pages/finance/FinanceReports"));
+
 import { isNetworkError } from "@/lib/offlineQueue";
 
 const queryClient = new QueryClient({
@@ -314,6 +325,17 @@ const App = () => (
                   <Route path="/inventory/history" element={<InventoryHistory />} />
                   <Route path="/inventory/reports" element={<InventoryReports />} />
                   <Route path="/inventory/reorder" element={<InventoryReorder />} />
+                  {/* Finance & Commercial Operations */}
+                  <Route path="/finance" element={<FinanceOverview />} />
+                  <Route path="/finance/expenses" element={<FinanceExpenses />} />
+                  <Route path="/finance/fuel" element={<FinanceFuel />} />
+                  <Route path="/finance/trips" element={<FinanceTrips />} />
+                  <Route path="/finance/invoices" element={<FinanceInvoices />} />
+                  <Route path="/finance/suppliers" element={<FinanceSuppliers />} />
+                  <Route path="/finance/ap-ar" element={<FinanceApAr />} />
+                  <Route path="/finance/cash-flow" element={<FinanceCashFlow />} />
+                  <Route path="/finance/vehicle-profitability" element={<FinanceVehicleProfitability />} />
+                  <Route path="/finance/reports" element={<FinanceReports />} />
                   <Route path="/fuel" element={<FuelLogs />} />
                   <Route path="/documents" element={<Documents />} />
                   <Route path="/maintenance/schedules" element={<PMSchedules />} />

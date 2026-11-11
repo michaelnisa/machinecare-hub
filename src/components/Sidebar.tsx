@@ -58,6 +58,8 @@ import {
   Cpu,
   Sliders,
   BookOpen,
+  Wallet,
+  BarChart3,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { initials } from "@/lib/format";
@@ -113,6 +115,26 @@ export function Sidebar() {
       ],
     }),
     [t],
+  );
+
+  const financeNavGroup: NavGroup = useMemo(
+    () => ({
+      id: "finance",
+      label: "Finance",
+      items: [
+        { to: "/finance", label: "Financial Overview", icon: LayoutDashboard },
+        { to: "/finance/expenses", label: "Expenses", icon: Receipt },
+        { to: "/finance/fuel", label: "Fuel Finance", icon: Fuel },
+        { to: "/finance/trips", label: "Trip Revenue & Costs", icon: Route },
+        { to: "/finance/invoices", label: "Customers & Invoicing", icon: FileText },
+        { to: "/finance/suppliers", label: "Supplier Payments", icon: Building2 },
+        { to: "/finance/ap-ar", label: "AP & AR Aging", icon: Calendar },
+        { to: "/finance/cash-flow", label: "Cash Flow", icon: Wallet },
+        { to: "/finance/vehicle-profitability", label: "Vehicle Profitability", icon: TrendingUp },
+        { to: "/finance/reports", label: "Financial Reports", icon: BarChart3 },
+      ],
+    }),
+    [],
   );
 
   const manufacturingGroups: NavGroup[] = useMemo(
@@ -235,6 +257,7 @@ export function Sidebar() {
           ]
         : []),
       inventoryNavGroup,
+      financeNavGroup,
       ...(!isLite
         ? [
             {
@@ -273,7 +296,7 @@ export function Sidebar() {
         ],
       },
     ],
-    [t, isLite, profile?.department, isManager, isAdmin, inventoryNavGroup],
+    [t, isLite, profile?.department, isManager, isAdmin, inventoryNavGroup, financeNavGroup],
   );
 
   // Fleet & Logistics nav — pages not yet built (Phases 2-6) route to a
@@ -324,6 +347,7 @@ export function Sidebar() {
         ],
       },
       inventoryNavGroup,
+      financeNavGroup,
       {
         id: "fleet-insights",
         label: "Insights",
@@ -359,7 +383,7 @@ export function Sidebar() {
         ],
       },
     ],
-    [t, isAdmin, inventoryNavGroup],
+    [t, isAdmin, inventoryNavGroup, financeNavGroup],
   );
 
   // Workshop/Garage nav — a fully separate product experience from
