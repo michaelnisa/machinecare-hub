@@ -132,10 +132,20 @@ export default function LiveFleetMap() {
     loadVehicles();
   }, [organisation?.id, profile?.organisation_id]);
 
+  const isTelematicsEnabled = Boolean(
+    organisation?.trakzee_enabled ||
+    organisation?.id === "df6b0c4b-e56b-4694-838a-0381eb480043" ||
+    organisation?.name?.toLowerCase().includes("logistix")
+  );
+
   // Sync with Trakzee live API
   const handleSync = async (autoImport: boolean | unknown = true) => {
     const orgId = organisation?.id || profile?.organisation_id;
     if (!orgId) return;
+    if (!isTelematicsEnabled) {
+      toast.info("Live GPS & Telematics (Trakzee) is not enabled for this organisation.");
+      return;
+    }
     const shouldImport = typeof autoImport === "boolean" ? autoImport : true;
     setSyncing(true);
     try {
@@ -337,7 +347,7 @@ export default function LiveFleetMap() {
             </span>
           </div>
           <p className="text-xs text-muted-foreground mt-0.5">
-            Real-time GPS tracking across Tanzania & transit corridors for LOGISTIXWARE.
+            Real-time GPS tracking across Tanzania & transit corridors for {organisation?.name || "Fleet"}.
           </p>
         </div>
 
@@ -361,29 +371,33 @@ export default function LiveFleetMap() {
             </span>
           </div>
 
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => handleSync(true)}
-            disabled={syncing}
-            className="gap-1.5 text-xs border-primary/30 text-primary hover:bg-primary/5"
-          >
-            <RefreshCw className={`h-3.5 w-3.5 ${syncing ? "animate-spin" : ""}`} />
-            {syncing ? "Syncing GPS..." : "Refresh GPS"}
-          </Button>
+          {isTelematicsEnabled && (
+            <>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => handleSync(true)}
+                disabled={syncing}
+                className="gap-1.5 text-xs border-primary/30 text-primary hover:bg-primary/5"
+              >
+                <RefreshCw className={`h-3.5 w-3.5 ${syncing ? "animate-spin" : ""}`} />
+                {syncing ? "Syncing GPS..." : "Refresh GPS"}
+              </Button>
 
-          {canWrite && (
-            <Button
-              variant="default"
-              size="sm"
-              onClick={() => handleSync(true)}
-              disabled={syncing}
-              className="gap-1.5 text-xs"
-              title="Pull and register all 56 vehicles from Trakzee"
-            >
-              <Truck className="h-3.5 w-3.5" />
-              Auto-Import Trakzee Fleet
-            </Button>
+              {canWrite && (
+                <Button
+                  variant="default"
+                  size="sm"
+                  onClick={() => handleSync(true)}
+                  disabled={syncing}
+                  className="gap-1.5 text-xs"
+                  title="Pull and register live vehicles from Trakzee"
+                >
+                  <Truck className="h-3.5 w-3.5" />
+                  Auto-Import Trakzee Fleet
+                </Button>
+              )}
+            </>
           )}
         </div>
       </div>

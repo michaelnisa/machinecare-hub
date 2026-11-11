@@ -87,9 +87,19 @@ export default function FleetDashboard() {
   const [statusBoardSearch, setStatusBoardSearch] = useState("");
   const [statusBoardStatusFilter, setStatusBoardStatusFilter] = useState<"all" | TelematicsStatus>("all");
 
+  const isTelematicsEnabled = Boolean(
+    organisation?.trakzee_enabled ||
+    organisation?.id === "df6b0c4b-e56b-4694-838a-0381eb480043" ||
+    organisation?.name?.toLowerCase().includes("logistix")
+  );
+
   const handleQuickSync = async () => {
     const orgId = organisation?.id || profile?.organisation_id;
     if (!orgId) return;
+    if (!isTelematicsEnabled) {
+      toast.info("Trakzee live telematics is not enabled for this organisation.");
+      return;
+    }
     setSyncingGps(true);
     const res = await syncTrakzeeFleet(orgId, true);
     setSyncingGps(false);
@@ -523,16 +533,18 @@ export default function FleetDashboard() {
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleQuickSync}
-            disabled={syncingGps}
-            className="gap-2"
-          >
-            <RefreshCw className={`h-4 w-4 ${syncingGps ? "animate-spin text-primary" : ""}`} />
-            {syncingGps ? "Syncing GPS..." : "Sync GPS"}
-          </Button>
+          {isTelematicsEnabled && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleQuickSync}
+              disabled={syncingGps}
+              className="gap-2"
+            >
+              <RefreshCw className={`h-4 w-4 ${syncingGps ? "animate-spin text-primary" : ""}`} />
+              {syncingGps ? "Syncing GPS..." : "Sync GPS"}
+            </Button>
+          )}
           <Button variant="outline" size="sm" asChild className="gap-2">
             <Link to="/fleet/live-map">
               <Navigation className="h-4 w-4 text-emerald-500" />

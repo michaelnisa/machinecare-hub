@@ -144,10 +144,20 @@ export default function Vehicles() {
   const [importOpen, setImportOpen] = useState(false);
   const [syncingTrakzee, setSyncingTrakzee] = useState(false);
 
+  const isTelematicsEnabled = Boolean(
+    organisation?.trakzee_enabled ||
+    organisation?.id === "df6b0c4b-e56b-4694-838a-0381eb480043" ||
+    organisation?.name?.toLowerCase().includes("logistix")
+  );
+
   const handleSyncTrakzee = async (autoImport: boolean | unknown = true) => {
     const orgId = organisation?.id || profile?.organisation_id;
     if (!orgId) {
       toast.error("Organisation not loaded yet. Please wait a moment.");
+      return;
+    }
+    if (!isTelematicsEnabled) {
+      toast.info("Trakzee GPS telematics is not enabled for this organisation.");
       return;
     }
     const shouldImport = typeof autoImport === "boolean" ? autoImport : true;
@@ -307,16 +317,18 @@ export default function Vehicles() {
         </div>
         {canWrite && (
           <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              onClick={() => handleSyncTrakzee(true)}
-              disabled={syncingTrakzee}
-              className="gap-1.5 text-xs text-primary border-primary/30 hover:bg-primary/5"
-              title="Sync live odometer, speed, and GPS location from Trakzee"
-            >
-              <Radio className={`h-3.5 w-3.5 ${syncingTrakzee ? "animate-pulse text-amber-500" : "text-emerald-500"}`} />
-              {syncingTrakzee ? "Syncing GPS..." : "Sync GPS"}
-            </Button>
+            {isTelematicsEnabled && (
+              <Button
+                variant="outline"
+                onClick={() => handleSyncTrakzee(true)}
+                disabled={syncingTrakzee}
+                className="gap-1.5 text-xs text-primary border-primary/30 hover:bg-primary/5"
+                title="Sync live odometer, speed, and GPS location from Trakzee"
+              >
+                <Radio className={`h-3.5 w-3.5 ${syncingTrakzee ? "animate-pulse text-amber-500" : "text-emerald-500"}`} />
+                {syncingTrakzee ? "Syncing GPS..." : "Sync GPS"}
+              </Button>
+            )}
             <Button variant="outline" onClick={() => setImportOpen(true)}>
               <FileSpreadsheet className="mr-2 h-4 w-4" /> Import Excel / CSV
             </Button>

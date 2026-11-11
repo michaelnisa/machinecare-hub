@@ -56,8 +56,8 @@ export const DEFAULT_TRAKZEE_CONFIG: TrakzeeConfig = {
   trakzee_username: "",
   trakzee_password: "",
   has_password: false,
-  trakzee_company_name: "LOGISTIXWARE",
-  trakzee_project_id: "37",
+  trakzee_company_name: "",
+  trakzee_project_id: "",
   trakzee_last_synced_at: null,
 };
 
@@ -171,8 +171,12 @@ function parseOdometerKm(rawOdo: string | number | undefined): number | null {
 export async function directClientTestConnection(cfg: Partial<TrakzeeConfig>): Promise<TrakzeeTestResult> {
   try {
     const serverUrl = (cfg.trakzee_server_url || DEFAULT_TRAKZEE_CONFIG.trakzee_server_url).replace(/\/+$/, "");
-    const username = cfg.trakzee_username || "mdhfrancis@gmail.com";
-    const password = cfg.trakzee_password || "Mdh@2023";
+    const username = cfg.trakzee_username?.trim();
+    const password = cfg.trakzee_password?.trim();
+
+    if (!username || !password) {
+      return { success: false, error: "Please enter a valid Trakzee username and password." };
+    }
 
     const res = await fetch(`${serverUrl}?token=generateAccessToken`, {
       method: "POST",
@@ -619,13 +623,23 @@ export async function syncTrakzeeDrivers(organisationId: string): Promise<{
       console.warn("[Trakzee] Error reading machines for driver extraction:", mErr);
     }
 
-    // 3. Fallback / Direct API check if possible
+    // 3. Fallback / Direct API check if telematics is actively enabled with credentials
     try {
-      const serverUrl = DEFAULT_TRAKZEE_CONFIG.trakzee_server_url;
-      const username = "mdhfrancis@gmail.com";
-      const password = "Mdh@2023";
-      const companyName = DEFAULT_TRAKZEE_CONFIG.trakzee_company_name;
-      const projectId = DEFAULT_TRAKZEE_CONFIG.trakzee_project_id;
+      const serverUrl = (orgData?.trakzee_server_url || DEFAULT_TRAKZEE_CONFIG.trakzee_server_url).replace(/\/+$/, "");
+      const username = orgData?.trakzee_username || (isLogistixwareOrg ? "mdhfrancis@gmail.com" : "");
+      const password = orgData?.trakzee_password || (isLogistixwareOrg ? "Mdh@2023" : "");
+      const companyName = orgData?.trakzee_company_name || (isLogistixwareOrg ? "LOGISTIXWARE" : "");
+      const projectId = orgData?.trakzee_project_id || (isLogistixwareOrg ? "37" : "");
+
+      if (!username || !password || !companyName) {
+        // No direct credentials configured, finish with existing machine drivers
+        return {
+          success: true,
+          drivers_imported: 0,
+          drivers_found: driversMap.size,
+          drivers: Array.from(driversMap.values()).map(d => d.fullName),
+        };
+      }
 
       const loginRes = await fetch(`${serverUrl}?token=generateAccessToken`, {
         method: "POST",
