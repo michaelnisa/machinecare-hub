@@ -176,8 +176,28 @@ export default function FleetVehicleDetail() {
     setLoading(true);
 
     try {
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+      let vehRecord: any = null;
+      let targetMachineId = id;
+
+      if (!isUuid) {
+        const { data: vByPlate, error: eVByPlate } = await supabase
+          .from("machines")
+          .select(SAFE_MACHINE_COLUMNS)
+          .or(`plate_number.eq.${id},name.eq.${id}`)
+          .maybeSingle();
+        if (eVByPlate) throw eVByPlate;
+        if (!vByPlate) {
+          setVehicle(null);
+          setLoading(false);
+          return;
+        }
+        vehRecord = vByPlate;
+        targetMachineId = vByPlate.id;
+      }
+
       const [
-        { data: rawVeh, error: eVeh },
+        vehRes,
         { data: rawTrips, error: eTrips },
         { data: rawTyres, error: eTyres },
         { data: rawSched, error: eSched },
@@ -186,21 +206,30 @@ export default function FleetVehicleDetail() {
         { data: rawDrivers, error: eDrivers },
         { data: rawAllVeh, error: eAllVeh },
       ] = await Promise.all([
-        supabase.from("machines").select(SAFE_MACHINE_COLUMNS).eq("id", id).maybeSingle(),
-        supabase.from("trips").select(SAFE_TRIP_COLUMNS).eq("machine_id", id).order("start_at", { ascending: false }).limit(20),
-        supabase.from("machine_tyres").select(SAFE_TYRE_COLUMNS).eq("machine_id", id).is("removed_at", null).order("position"),
-        supabase.from("service_schedules").select("*").eq("machine_id", id).order("next_due_date"),
-        supabase.from("service_logs").select("*").eq("machine_id", id).order("service_date", { ascending: false }).limit(20),
-        supabase.from("vehicle_documents").select("*").eq("machine_id", id).order("expires_on"),
+        vehRecord
+          ? Promise.resolve({ data: vehRecord, error: null })
+          : supabase.from("machines").select(SAFE_MACHINE_COLUMNS).eq("id", targetMachineId).maybeSingle(),
+        supabase.from("trips").select(SAFE_TRIP_COLUMNS).eq("machine_id", targetMachineId).order("start_at", { ascending: false }).limit(20),
+        supabase.from("tyres").select(SAFE_TYRE_COLUMNS).eq("machine_id", targetMachineId).is("removed_at", null).order("position"),
+        supabase.from("service_schedules").select("*").eq("machine_id", targetMachineId).order("next_due_date"),
+        supabase.from("service_logs").select("*").eq("machine_id", targetMachineId).order("performed_at", { ascending: false }).limit(20),
+        supabase.from("vehicle_documents").select("*").eq("machine_id", targetMachineId).order("expires_on"),
         supabase.from("drivers").select(SAFE_DRIVER_COLUMNS),
         supabase.from("machines").select(SAFE_MACHINE_COLUMNS).in("category", ["Vehicle", "Trailer"]),
       ]);
 
-      if (eVeh) throw eVeh;
+      const rawVeh = vehRes.data;
+      if (vehRes.error) throw vehRes.error;
       if (!rawVeh) {
         setVehicle(null);
         setLoading(false);
         return;
+      }
+
+      if (eTrips || eTyres || eSched || eLogs || eDocs || eDrivers || eAllVeh) {
+        console.warn("Ancillary vehicle details encountered query warning:", {
+          eTrips, eTyres, eSched, eLogs, eDocs, eDrivers, eAllVeh
+        });
       }
 
       const parsedVehicle = parseMachine(rawVeh);
@@ -1164,11 +1193,11 @@ export default function FleetVehicleDetail() {
                       </div>
                       <div className="text-right">
                         <div className="text-xs font-semibold text-foreground">
-                          {formatDate(log.service_date)}
+                          {formatDate(log.service_date || (log as any).performed_at || (log as any).created_at)}
                         </div>
-                        {log.cost_total != null && (
+                        {(log.cost_total != null ? log.cost_total : (log as any).cost) != null && (
                           <div className="text-xs text-muted-foreground font-mono mt-0.5">
-                            {formatMoney(log.cost_total)}
+                            {formatMoney(log.cost_total != null ? log.cost_total : (log as any).cost)}
                           </div>
                         )}
                       </div>

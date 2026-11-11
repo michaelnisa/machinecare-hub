@@ -131,6 +131,8 @@ export default function Vehicles() {
   const [docs, setDocs] = useState<VehicleDoc[]>([]);
   const [drivers, setDrivers] = useState<Driver[]>([]);
   const [search, setSearch] = useState("");
+  const [assetTab, setAssetTab] = useState<"all" | "vehicles" | "trailers">("all");
+  const [status, setStatus] = useState<string>("all");
   const [searchParams, setSearchParams] = useSearchParams();
   const initialView = searchParams.get("view") === "live" ? "live" : searchParams.get("view") === "table" ? "table" : "cards";
   const [viewMode, setViewMode] = useState<"table" | "cards" | "live">(initialView);
@@ -183,8 +185,11 @@ export default function Vehicles() {
       supabase.from("drivers").select("id, full_name"),
     ]);
 
-    const err = e1 || e2 || e3 || e4 || e5;
-    if (err) toast.error(err.message);
+    if (e1) {
+      toast.error(e1.message || "Failed to load vehicles");
+    } else if (e2 || e3 || e4 || e5) {
+      console.warn("Some ancillary fleet data could not be fetched:", { e2, e3, e4, e5 });
+    }
 
     const parsedMachines = (m ?? []).map((raw, idx) => parseMachine(raw, idx));
     setMachines(parsedMachines);
@@ -265,7 +270,13 @@ export default function Vehicles() {
     return machines.filter((m) => {
       if (assetTab === "vehicles" && (m.is_trailer || m.category === "Trailer")) return false;
       if (assetTab === "trailers" && !m.is_trailer && m.category !== "Trailer") return false;
-      if (status !== "all" && m.status !== status) return false;
+      if (status !== "all") {
+        if (status === "active") {
+          if (m.status !== "active" && m.status !== "operational") return false;
+        } else if (m.status !== status) {
+          return false;
+        }
+      }
       if (search) {
         const q = search.toLowerCase();
         if (
@@ -368,7 +379,7 @@ export default function Vehicles() {
             <span className="h-2 w-2 rounded-full bg-emerald-500 inline-block animate-pulse" />
           </div>
           <div className="mt-2 text-2xl font-bold tracking-tight text-foreground">
-            {machines.filter((m) => m.status === "active").length}
+            {machines.filter((m) => m.status === "active" || m.status === "operational").length}
           </div>
           <p className="text-[11px] text-muted-foreground mt-0.5">Operational units ready for service</p>
         </div>

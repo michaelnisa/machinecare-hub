@@ -358,7 +358,9 @@ export default function Trips() {
               expMap.set(tripRaw.id, current);
             }
           }
-        } catch {}
+        } catch (_err) {
+          // Ignore parse errors on corrupt notes
+        }
       }
     });
 

@@ -58,7 +58,9 @@ export default function TripReceiptPrint() {
     try {
       const saved = localStorage.getItem("trip_receipt_payment_settings");
       if (saved) return JSON.parse(saved);
-    } catch {}
+    } catch (_err) {
+      // Use defaults if storage read fails
+    }
     return DEFAULT_PAYMENT_ACCOUNTS;
   });
 
@@ -85,7 +87,9 @@ export default function TripReceiptPrint() {
           if (parsedMeta.cargo && typeof parsedMeta.cargo === "string" && !parsedMeta.cargo.startsWith("{")) {
             cleanCargo = parsedMeta.cargo;
           }
-        } catch {}
+        } catch (_err) {
+          // Fallback if metadata parse fails
+        }
       } else {
         cleanCargo = tripData.cargo_description;
       }

@@ -217,7 +217,9 @@ export default function Drivers() {
                   assigned_vehicle: item.assigned_vehicle,
                 }),
               });
-            } catch (_) {}
+            } catch (_err) {
+              // Ignore background driver sync insert error
+            }
           }
         })();
       }
