@@ -4,6 +4,8 @@ export interface CorridorExpenseItem {
   category: "toll" | "receipt" | "parking" | "fine" | "fuel" | "repair" | "other";
   defaultAmountUsd: number;
   defaultAmountTzs: number;
+  localCurrency?: string;      // e.g. "ZMW", "BWP", "ZAR", "USD", "KES"
+  defaultAmountLocal?: number;  // Amount in country's native currency
   isRequired: boolean;
   notes?: string;
 }
@@ -22,7 +24,30 @@ export interface CrossBorderCorridor {
   expenses: CorridorExpenseItem[];
 }
 
+export interface RegionalCurrencyInfo {
+  code: string;
+  name: string;
+  symbol: string;
+  country: string;
+  defaultRateToUsd: number; // Units per 1 USD
+}
+
+export const REGIONAL_CURRENCIES: Record<string, RegionalCurrencyInfo> = {
+  USD: { code: "USD", name: "US Dollar", symbol: "$", country: "United States / Regional Transit", defaultRateToUsd: 1 },
+  TZS: { code: "TZS", name: "Tanzanian Shilling", symbol: "TSh", country: "Tanzania", defaultRateToUsd: 2600 },
+  ZMW: { code: "ZMW", name: "Zambian Kwacha", symbol: "K", country: "Zambia", defaultRateToUsd: 27.5 },
+  BWP: { code: "BWP", name: "Botswana Pula", symbol: "P", country: "Botswana", defaultRateToUsd: 13.8 },
+  ZAR: { code: "ZAR", name: "South African Rand", symbol: "R", country: "South Africa", defaultRateToUsd: 18.5 },
+  KES: { code: "KES", name: "Kenyan Shilling", symbol: "KSh", country: "Kenya", defaultRateToUsd: 130 },
+  UGX: { code: "UGX", name: "Ugandan Shilling", symbol: "USh", country: "Uganda", defaultRateToUsd: 3750 },
+  RWF: { code: "RWF", name: "Rwandan Franc", symbol: "FRw", country: "Rwanda", defaultRateToUsd: 1350 },
+  CDF: { code: "CDF", name: "Congolese Franc", symbol: "FC", country: "DRC", defaultRateToUsd: 2850 },
+};
+
 export const DEFAULT_USD_TO_TZS_RATE = 2600;
+export const DEFAULT_USD_TO_ZMW_RATE = 27.5;
+export const DEFAULT_USD_TO_BWP_RATE = 13.8;
+export const DEFAULT_USD_TO_ZAR_RATE = 18.5;
 
 export function convertUsdToTzs(usd: number, rate = DEFAULT_USD_TO_TZS_RATE): number {
   return Math.round(usd * rate);
@@ -30,6 +55,35 @@ export function convertUsdToTzs(usd: number, rate = DEFAULT_USD_TO_TZS_RATE): nu
 
 export function convertTzsToUsd(tzs: number, rate = DEFAULT_USD_TO_TZS_RATE): number {
   return Number((tzs / rate).toFixed(2));
+}
+
+export function convertUsdToLocal(
+  usd: number,
+  currencyCode: string,
+  customRates?: Record<string, number>
+): number {
+  const code = (currencyCode || "USD").toUpperCase();
+  if (code === "USD") return usd;
+  const rate = customRates?.[code] || REGIONAL_CURRENCIES[code]?.defaultRateToUsd || 1;
+  const converted = usd * rate;
+  return ["TZS", "UGX", "RWF", "CDF"].includes(code)
+    ? Math.round(converted)
+    : Number(converted.toFixed(2));
+}
+
+export function formatCorridorAmount(
+  amount: number,
+  currencyCode: string = "USD"
+): string {
+  const code = (currencyCode || "USD").toUpperCase();
+  const cfg = REGIONAL_CURRENCIES[code];
+  const symbol = cfg?.symbol || code;
+  const isZeroDecimals = ["TZS", "UGX", "RWF", "CDF"].includes(code);
+
+  return `${symbol} ${amount.toLocaleString(undefined, {
+    minimumFractionDigits: isZeroDecimals ? 0 : 2,
+    maximumFractionDigits: isZeroDecimals ? 0 : 2,
+  })}`;
 }
 
 export function formatDualCurrency(
@@ -68,7 +122,500 @@ export function formatTripCurrency(
 }
 
 export const CROSS_BORDER_CORRIDORS: CrossBorderCorridor[] = [
-  // 1. ZAMBIA CORRIDOR (Tunduma / Nakonde Border)
+  // 1. GREAT NORTH-SOUTH CORRIDOR: TANZANIA -> ZAMBIA -> ZIMBABWE -> SOUTH AFRICA
+  {
+    id: "north_south_zambia_zim_sa",
+    name: "Great North-South Corridor – Zambia, Zimbabwe & South Africa",
+    country: "Southern Africa (ZM-ZW-ZA)",
+    countryCode: "ZM-ZW-ZA",
+    flag: "🇿🇲🇿🇼🇿🇦",
+    borderPost: "Tunduma/Nakonde ➔ Chirundu ➔ Beitbridge OSBP",
+    defaultOrigin: "Dar es Salaam Depot / Kurasini",
+    defaultDestination: "Johannesburg / Durban (ZA) via Chirundu & Beitbridge",
+    estimatedRoundtripHours: 216,
+    description: "Premier cross-continental freight corridor connecting Port of Dar es Salaam through Zambia (Nakonde), crossing into Zimbabwe via Chirundu Zambezi Bridge, transiting the Harare-Masvingo highway, and entering South Africa via the modernised Beitbridge OSBP into Musina, Gauteng, and Durban.",
+    expenses: [
+      {
+        id: "gns_zm_rda_toll",
+        title: "Zambia Road Toll (RDA User Charges)",
+        category: "toll",
+        defaultAmountUsd: 100,
+        defaultAmountTzs: 260000,
+        localCurrency: "ZMW",
+        defaultAmountLocal: 2750,
+        isRequired: true,
+        notes: "Road Development Agency (RDA) heavy commercial vehicle international transit toll at Nakonde.",
+      },
+      {
+        id: "gns_zm_carbon_tax",
+        title: "Zambia RTSA Carbon Emission Levy",
+        category: "receipt",
+        defaultAmountUsd: 25,
+        defaultAmountTzs: 65000,
+        localCurrency: "ZMW",
+        defaultAmountLocal: 690,
+        isRequired: true,
+        notes: "Road Transport and Safety Agency compulsory environmental certificate.",
+      },
+      {
+        id: "gns_zm_nrfa_tolls",
+        title: "Zambia Inland Highway Tolls (NRFA Plazas)",
+        category: "toll",
+        defaultAmountUsd: 60,
+        defaultAmountTzs: 156000,
+        localCurrency: "ZMW",
+        defaultAmountLocal: 1650,
+        isRequired: true,
+        notes: "Manyumbi, Kafulafuta, and Shimabala highway toll plazas.",
+      },
+      {
+        id: "gns_zm_council_fee",
+        title: "Nakonde District Council Entry Levy",
+        category: "toll",
+        defaultAmountUsd: 20,
+        defaultAmountTzs: 52000,
+        localCurrency: "ZMW",
+        defaultAmountLocal: 550,
+        isRequired: true,
+        notes: "Nakonde Town Council transit municipal road sanitation fee.",
+      },
+      {
+        id: "gns_zw_chirundu_bridge",
+        title: "Chirundu OSBP & Zambezi River Bridge Toll",
+        category: "toll",
+        defaultAmountUsd: 35,
+        defaultAmountTzs: 91000,
+        localCurrency: "USD",
+        defaultAmountLocal: 35,
+        isRequired: true,
+        notes: "Zambia-Zimbabwe Chirundu joint bridge crossing fee.",
+      },
+      {
+        id: "gns_zw_zimra_road_access",
+        title: "ZIMRA Foreign Heavy Vehicle Road Access Fee",
+        category: "toll",
+        defaultAmountUsd: 100,
+        defaultAmountTzs: 260000,
+        localCurrency: "USD",
+        defaultAmountLocal: 100,
+        isRequired: true,
+        notes: "Zimbabwe Revenue Authority (ZIMRA) international transit road access fee.",
+      },
+      {
+        id: "gns_zw_zimra_carbon",
+        title: "ZIMRA Heavy Truck Carbon Tax & Clearance",
+        category: "receipt",
+        defaultAmountUsd: 30,
+        defaultAmountTzs: 78000,
+        localCurrency: "USD",
+        defaultAmountLocal: 30,
+        isRequired: true,
+        notes: "Statutory transit vehicle carbon tax certificate.",
+      },
+      {
+        id: "gns_zw_zinara_tolls",
+        title: "ZINARA National Highway Toll Gates (Harare-Beitbridge)",
+        category: "toll",
+        defaultAmountUsd: 70,
+        defaultAmountTzs: 182000,
+        localCurrency: "USD",
+        defaultAmountLocal: 70,
+        isRequired: true,
+        notes: "Norton, Kadoma, Kwekwe, Mvuma, Mushagashe, and Lutumba toll plazas.",
+      },
+      {
+        id: "gns_zw_comesa_zic",
+        title: "Zimbabwe Transit Insurance & Third-Party Endorsement",
+        category: "receipt",
+        defaultAmountUsd: 45,
+        defaultAmountTzs: 117000,
+        localCurrency: "USD",
+        defaultAmountLocal: 45,
+        isRequired: true,
+        notes: "COMESA Yellow Card validation and Zimbabwe Insurance Council seal.",
+      },
+      {
+        id: "gns_zw_ema_transit",
+        title: "EMA Environmental & Hazardous Transit Authorization",
+        category: "receipt",
+        defaultAmountUsd: 35,
+        defaultAmountTzs: 91000,
+        localCurrency: "USD",
+        defaultAmountLocal: 35,
+        isRequired: true,
+        notes: "Environmental Management Agency (EMA) cargo movement voucher.",
+      },
+      {
+        id: "gns_zw_beitbridge_toll",
+        title: "Beitbridge Modernised OSBP Toll (Zimborders Heavy Class)",
+        category: "toll",
+        defaultAmountUsd: 185,
+        defaultAmountTzs: 481000,
+        localCurrency: "USD",
+        defaultAmountLocal: 185,
+        isRequired: true,
+        notes: "Zimborders concession modernized border access toll for commercial trucks.",
+      },
+      {
+        id: "gns_zw_beitbridge_council",
+        title: "Beitbridge Town Council Parking & Sanitation Levy",
+        category: "toll",
+        defaultAmountUsd: 25,
+        defaultAmountTzs: 65000,
+        localCurrency: "USD",
+        defaultAmountLocal: 25,
+        isRequired: true,
+        notes: "Commercial truck staging yard and town council sanitation fee.",
+      },
+      {
+        id: "gns_sa_musina_sars",
+        title: "SA SARS Customs EDI Transit Clearance & Musina Brokerage",
+        category: "receipt",
+        defaultAmountUsd: 95,
+        defaultAmountTzs: 247000,
+        localCurrency: "ZAR",
+        defaultAmountLocal: 1750,
+        isRequired: true,
+        notes: "South African Revenue Service electronic manifest clearance at Musina border.",
+      },
+      {
+        id: "gns_sa_cbrta_permit",
+        title: "South Africa CBRTA Cross-Border Freight Permit (Heavy Class)",
+        category: "receipt",
+        defaultAmountUsd: 110,
+        defaultAmountTzs: 286000,
+        localCurrency: "ZAR",
+        defaultAmountLocal: 2035,
+        isRequired: true,
+        notes: "SA Cross-Border Road Transport Agency temporary single-journey freight permit.",
+      },
+      {
+        id: "gns_sa_sanral_tolls",
+        title: "SA SANRAL Class 4 Heavy Vehicle Tolls (N1 Highway)",
+        category: "toll",
+        defaultAmountUsd: 220,
+        defaultAmountTzs: 572000,
+        localCurrency: "ZAR",
+        defaultAmountLocal: 4070,
+        isRequired: true,
+        notes: "N1 main toll network: Baobab, Capricorn, Kranskop, Carousel, and Pumulani plazas to Gauteng.",
+      },
+      {
+        id: "gns_sa_git_insurance",
+        title: "South Africa Goods In Transit (GIT) Statutory Policy",
+        category: "receipt",
+        defaultAmountUsd: 85,
+        defaultAmountTzs: 221000,
+        localCurrency: "ZAR",
+        defaultAmountLocal: 1570,
+        isRequired: true,
+        notes: "Compulsory high-value goods transit insurance coverage in South Africa.",
+      },
+      {
+        id: "gns_driver_longhaul_allowance",
+        title: "Southern Cross-Border Long-Haul Driver Allowance",
+        category: "other",
+        defaultAmountUsd: 280,
+        defaultAmountTzs: 728000,
+        localCurrency: "USD",
+        defaultAmountLocal: 280,
+        isRequired: true,
+        notes: "Multi-country border crossing per diem, meals, lodging, and return mileage.",
+      },
+    ],
+  },
+
+  // 2. ZIMBABWE CENTRAL CORRIDOR: TANZANIA -> ZAMBIA -> HARARE / BULAWAYO
+  {
+    id: "zimbabwe_direct_chirundu",
+    name: "Zimbabwe Central Corridor – Harare & Bulawayo via Chirundu",
+    country: "Zimbabwe via Zambia",
+    countryCode: "ZW",
+    flag: "🇿🇼",
+    borderPost: "Tunduma/Nakonde ➔ Chirundu OSBP",
+    defaultOrigin: "Dar es Salaam Depot / Kurasini",
+    defaultDestination: "Harare / Bulawayo Industrial Depots",
+    estimatedRoundtripHours: 144,
+    description: "Direct commercial heavy freight route connecting Dar es Salaam port to Zimbabwe commercial and mining centers (Harare, Kwekwe, Gweru, Bulawayo) via Zambia transit.",
+    expenses: [
+      {
+        id: "zw_dir_zm_rda",
+        title: "Zambia RDA Heavy Vehicle Transit Toll",
+        category: "toll",
+        defaultAmountUsd: 100,
+        defaultAmountTzs: 260000,
+        localCurrency: "ZMW",
+        defaultAmountLocal: 2750,
+        isRequired: true,
+        notes: "Road Development Agency heavy commercial entry charge.",
+      },
+      {
+        id: "zw_dir_zm_rtsa",
+        title: "Zambia RTSA Carbon Tax & Transit Authorization",
+        category: "receipt",
+        defaultAmountUsd: 60,
+        defaultAmountTzs: 156000,
+        localCurrency: "ZMW",
+        defaultAmountLocal: 1650,
+        isRequired: true,
+        notes: "RTSA cross-border carbon certificate and transit permit.",
+      },
+      {
+        id: "zw_dir_chirundu_toll",
+        title: "Chirundu Bridge & Border Terminal Toll",
+        category: "toll",
+        defaultAmountUsd: 35,
+        defaultAmountTzs: 91000,
+        localCurrency: "USD",
+        defaultAmountLocal: 35,
+        isRequired: true,
+        notes: "Zambezi river crossing and Chirundu OSBP border access fee.",
+      },
+      {
+        id: "zw_dir_zimra_access",
+        title: "ZIMRA Foreign Heavy Vehicle Road Access Fee",
+        category: "toll",
+        defaultAmountUsd: 100,
+        defaultAmountTzs: 260000,
+        localCurrency: "USD",
+        defaultAmountLocal: 100,
+        isRequired: true,
+        notes: "ZIMRA commercial entry road access fee.",
+      },
+      {
+        id: "zw_dir_zimra_carbon",
+        title: "ZIMRA Carbon Tax Voucher",
+        category: "receipt",
+        defaultAmountUsd: 30,
+        defaultAmountTzs: 78000,
+        localCurrency: "USD",
+        defaultAmountLocal: 30,
+        isRequired: true,
+        notes: "ZIMRA vehicle emission certificate.",
+      },
+      {
+        id: "zw_dir_zinara_inland",
+        title: "ZINARA Inland Highway Toll Plazas (Chirundu-Harare)",
+        category: "toll",
+        defaultAmountUsd: 40,
+        defaultAmountTzs: 104000,
+        localCurrency: "USD",
+        defaultAmountLocal: 40,
+        isRequired: true,
+        notes: "Chinhoyi and Norton toll gates.",
+      },
+      {
+        id: "zw_dir_insurance",
+        title: "Zimbabwe Transit Motor Insurance & Yellow Card",
+        category: "receipt",
+        defaultAmountUsd: 45,
+        defaultAmountTzs: 117000,
+        localCurrency: "USD",
+        defaultAmountLocal: 45,
+        isRequired: true,
+        notes: "COMESA third-party insurance with Zimbabwe endorsement.",
+      },
+      {
+        id: "zw_dir_driver_allowance",
+        title: "Driver Zimbabwe Transit Allowance & Mileage",
+        category: "other",
+        defaultAmountUsd: 180,
+        defaultAmountTzs: 468000,
+        localCurrency: "USD",
+        defaultAmountLocal: 180,
+        isRequired: true,
+        notes: "Driver per diem, border facilitation, meals, and lodging.",
+      },
+    ],
+  },
+
+  // 3. BOTSWANA & SOUTHERN QUADRIPOINT CORRIDOR VIA KAZUNGULA BRIDGE
+  {
+    id: "botswana_kazungula_groblersbrug",
+    name: "Botswana & Southern Quadripoint – Kazungula Bridge & Groblersbrug",
+    country: "Botswana & South Africa (BW, ZA)",
+    countryCode: "BW-ZA",
+    flag: "🇧🇼🇿🇦",
+    borderPost: "Kazungula Bridge OSBP / Groblersbrug OSBP",
+    defaultOrigin: "Dar es Salaam Depot / Kurasini",
+    defaultDestination: "Gaborone / Johannesburg via Kazungula",
+    estimatedRoundtripHours: 180,
+    description: "Southern bypass routing freight through Zambia, crossing the Zambezi over the iconic Kazungula One-Stop Bridge into Botswana (Kasane), transiting the A33/A1 highway, and entering South Africa via Groblersbrug.",
+    expenses: [
+      {
+        id: "bw_kazungula_bridge",
+        title: "Kazungula Bridge Heavy Vehicle Toll",
+        category: "toll",
+        defaultAmountUsd: 150,
+        defaultAmountTzs: 390000,
+        localCurrency: "BWP",
+        defaultAmountLocal: 2070,
+        isRequired: true,
+        notes: "Zambia-Botswana Joint Authority heavy freight bridge crossing toll.",
+      },
+      {
+        id: "bw_cbrta_permit",
+        title: "Botswana Cross-Border Road Transport (CBRTA) Permit",
+        category: "receipt",
+        defaultAmountUsd: 70,
+        defaultAmountTzs: 182000,
+        localCurrency: "BWP",
+        defaultAmountLocal: 965,
+        isRequired: true,
+        notes: "Department of Transport commercial transit authorization.",
+      },
+      {
+        id: "bw_mva_insurance",
+        title: "Botswana MVA Road Safety & Third-Party Fund",
+        category: "receipt",
+        defaultAmountUsd: 45,
+        defaultAmountTzs: 117000,
+        localCurrency: "BWP",
+        defaultAmountLocal: 620,
+        isRequired: true,
+        notes: "Motor Vehicle Accident Fund compulsory freight liability coverage.",
+      },
+      {
+        id: "bw_pula_road_toll",
+        title: "Botswana National Road Transit (Pula Toll Levy)",
+        category: "toll",
+        defaultAmountUsd: 55,
+        defaultAmountTzs: 143000,
+        localCurrency: "BWP",
+        defaultAmountLocal: 760,
+        isRequired: true,
+        notes: "BURS inland highway infrastructure maintenance fee.",
+      },
+      {
+        id: "bw_groblersbrug_entry",
+        title: "Groblersbrug / Kopfontein Border Entry & Agent Brokerage",
+        category: "receipt",
+        defaultAmountUsd: 90,
+        defaultAmountTzs: 234000,
+        localCurrency: "ZAR",
+        defaultAmountLocal: 1665,
+        isRequired: true,
+        notes: "Botswana/SA border customs clearance and clearing agent stamp.",
+      },
+      {
+        id: "bw_sa_cbrta_permit",
+        title: "South Africa CBRTA Freight Permit (Heavy Vehicle)",
+        category: "receipt",
+        defaultAmountUsd: 110,
+        defaultAmountTzs: 286000,
+        localCurrency: "ZAR",
+        defaultAmountLocal: 2035,
+        isRequired: true,
+        notes: "SA Cross-Border Road Transport Agency transit authorization.",
+      },
+      {
+        id: "bw_sa_sanral_tolls",
+        title: "SA SANRAL Class 4 Heavy Highway Tolls (N1/N4)",
+        category: "toll",
+        defaultAmountUsd: 220,
+        defaultAmountTzs: 572000,
+        localCurrency: "ZAR",
+        defaultAmountLocal: 4070,
+        isRequired: true,
+        notes: "SANRAL highway toll gates connecting Limpopo to Gauteng.",
+      },
+      {
+        id: "bw_driver_allowance",
+        title: "Driver Botswana / SA Transit Allowance & Mileage",
+        category: "other",
+        defaultAmountUsd: 240,
+        defaultAmountTzs: 624000,
+        localCurrency: "USD",
+        defaultAmountLocal: 240,
+        isRequired: true,
+        notes: "Driver per diem, border staging, lodging, and return allowance.",
+      },
+    ],
+  },
+
+  // 4. MALAWI & MOZAMBIQUE CORRIDOR VIA SONGWE OSBP
+  {
+    id: "malawi_mozambique_songwe",
+    name: "Malawi & Mozambique Corridor – Songwe OSBP to Blantyre & Beira",
+    country: "Malawi & Mozambique (MW, MZ)",
+    countryCode: "MW-MZ",
+    flag: "🇲🇼🇲🇿",
+    borderPost: "Songwe OSBP / Mwanza / Zobue",
+    defaultOrigin: "Dar es Salaam Depot / Kurasini",
+    defaultDestination: "Blantyre / Lilongwe / Beira Port",
+    estimatedRoundtripHours: 120,
+    description: "Southeastern transit route from Dar es Salaam through Mbeya, crossing into Malawi at Songwe OSBP, connecting Lilongwe/Blantyre and onward to Mozambique via Mwanza/Zobue border.",
+    expenses: [
+      {
+        id: "mw_songwe_road_access",
+        title: "Malawi Foreign Truck Road Access Fee (RFA)",
+        category: "toll",
+        defaultAmountUsd: 80,
+        defaultAmountTzs: 208000,
+        localCurrency: "USD",
+        defaultAmountLocal: 80,
+        isRequired: true,
+        notes: "Roads Fund Administration (RFA) international commercial truck entry toll.",
+      },
+      {
+        id: "mw_mra_carbon_levy",
+        title: "Malawi MRA Carbon Emission Levy",
+        category: "receipt",
+        defaultAmountUsd: 25,
+        defaultAmountTzs: 65000,
+        localCurrency: "USD",
+        defaultAmountLocal: 25,
+        isRequired: true,
+        notes: "Malawi Revenue Authority vehicle emission validation.",
+      },
+      {
+        id: "mw_transit_permit",
+        title: "Malawi Cross-Border Transit Permit & Inspection",
+        category: "receipt",
+        defaultAmountUsd: 35,
+        defaultAmountTzs: 91000,
+        localCurrency: "USD",
+        defaultAmountLocal: 35,
+        isRequired: true,
+        notes: "Directorate of Road Traffic and Safety Services (DRTSS) permit.",
+      },
+      {
+        id: "mw_rfa_toll_gates",
+        title: "RFA National Toll Plazas (Chingeni / Kalinyeke)",
+        category: "toll",
+        defaultAmountUsd: 40,
+        defaultAmountTzs: 104000,
+        localCurrency: "USD",
+        defaultAmountLocal: 40,
+        isRequired: true,
+        notes: "Malawi inland toll plazas along the M1 highway.",
+      },
+      {
+        id: "mz_zobue_entry",
+        title: "Mozambique Zobue / Cuchamano Transit Clearance",
+        category: "receipt",
+        defaultAmountUsd: 90,
+        defaultAmountTzs: 234000,
+        localCurrency: "USD",
+        defaultAmountLocal: 90,
+        isRequired: true,
+        notes: "Alfandegas de Moçambique transit customs stamp and broker fee.",
+      },
+      {
+        id: "mw_driver_allowance",
+        title: "Driver Songwe / Blantyre Long-Haul Allowance",
+        category: "other",
+        defaultAmountUsd: 150,
+        defaultAmountTzs: 390000,
+        localCurrency: "USD",
+        defaultAmountLocal: 150,
+        isRequired: true,
+        notes: "Driver per diem, border parking, meals, and return mileage.",
+      },
+    ],
+  },
+
+  // 5. ZAMBIA CORRIDOR (Tunduma / Nakonde Border)
   {
     id: "zambia_tunduma_nakonde",
     name: "Zambia Corridor – Tunduma / Nakonde Border",

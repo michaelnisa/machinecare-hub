@@ -559,7 +559,7 @@ export function TripReceiptDialog({
 
                 <div className="text-right flex flex-col items-end space-y-1">
                   <div className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-slate-900 text-white text-[9px] font-bold uppercase tracking-wider">
-                    <span>Commercial Freight Waybill</span>
+                    <span>Commercial Tax Invoice & Freight Waybill</span>
                     <span className="text-emerald-400">· ORIGINAL</span>
                   </div>
 

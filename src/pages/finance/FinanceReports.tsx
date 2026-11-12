@@ -143,19 +143,29 @@ export default function FinanceReports() {
       <div className="rounded-xl border border-border bg-card p-6 md:p-8 shadow-sm space-y-8 max-w-4xl mx-auto print:border-none print:shadow-none print:p-0">
         {/* Statement Header */}
         <div className="border-b border-border pb-6 flex flex-wrap justify-between items-start gap-4">
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="h-3 w-3 rounded-full bg-primary" />
+          <div className="flex items-center gap-3.5">
+            {organisation?.logo_url ? (
+              <img
+                src={organisation.logo_url}
+                alt={organisation?.name || "Company Logo"}
+                className="h-14 w-auto max-w-[160px] object-contain rounded"
+              />
+            ) : (
+              <div className="h-12 w-12 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center text-primary font-bold text-xl">
+                {(organisation?.name || "MC").substring(0, 2).toUpperCase()}
+              </div>
+            )}
+            <div>
               <h2 className="text-2xl font-bold tracking-tight text-foreground">
                 {organisation?.name || "MachineCare Hub"}
               </h2>
+              <p className="text-xs uppercase tracking-widest text-muted-foreground mt-0.5 font-semibold">
+                Fleet Commercial & Financial Statement
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Period: {period === "all_time" ? "Cumulative YTD / Live Operating Record" : "Selected Fiscal Window"}
+              </p>
             </div>
-            <p className="text-xs uppercase tracking-widest text-muted-foreground mt-1 font-semibold">
-              Fleet Commercial & Financial Statement
-            </p>
-            <p className="text-xs text-muted-foreground">
-              Period: {period === "all_time" ? "Cumulative YTD / Live Operating Record" : "Selected Fiscal Window"}
-            </p>
           </div>
 
           <div className="text-right">

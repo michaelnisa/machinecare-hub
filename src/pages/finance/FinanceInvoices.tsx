@@ -23,6 +23,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { formatMoney, formatDate } from "@/lib/format";
+import { parseCargoMeta, extractCleanCargo } from "@/lib/fleet-metadata";
+import { Badge } from "@/components/ui/badge";
 import { FinanceNavHeader } from "./FinanceNavHeader";
 import {
   getFinanceInvoices,
@@ -45,6 +47,11 @@ import {
   AlertCircle,
   Truck,
   Building2,
+  Check,
+  Landmark,
+  Smartphone,
+  Sparkles,
+  Layers,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -53,6 +60,9 @@ export default function FinanceInvoices() {
   const [loading, setLoading] = useState(true);
   const [invoices, setInvoices] = useState<FinanceInvoice[]>([]);
   const [machines, setMachines] = useState<{ id: string; name: string; plate_number: string | null }[]>([]);
+  const [availableTrips, setAvailableTrips] = useState<any[]>([]);
+  const [selectedTripIds, setSelectedTripIds] = useState<string[]>([]);
+  const [bankSettings, setBankSettings] = useState<any>(null);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
 
@@ -88,16 +98,38 @@ export default function FinanceInvoices() {
     if (!organisation?.id) return;
     setLoading(true);
     try {
-      const [invs, { data: machs }] = await Promise.all([
+      const [invs, { data: machs }, { data: trps }] = await Promise.all([
         getFinanceInvoices(organisation.id),
         (supabase as any)
           .from("machines")
           .select("id, name, plate_number")
           .eq("organisation_id", organisation.id)
           .order("name"),
+        (supabase as any)
+          .from("trips")
+          .select(`
+            id,
+            origin,
+            destination,
+            cargo_description,
+            start_at,
+            status,
+            client_name,
+            machine_id,
+            cost,
+            machines:machines(id, name, plate_number)
+          `)
+          .eq("organisation_id", organisation.id)
+          .order("start_at", { ascending: false }),
       ]);
       setInvoices(invs);
       setMachines(machs || []);
+      setAvailableTrips(trps || []);
+
+      try {
+        const saved = localStorage.getItem("fleet_corridor_bank_settings");
+        if (saved) setBankSettings(JSON.parse(saved));
+      } catch (e) {}
     } catch (err) {
       console.error("Failed to load invoices:", err);
       toast.error("Failed to load invoices");
@@ -161,6 +193,70 @@ export default function FinanceInvoices() {
       return true;
     });
   }, [invoices, statusFilter, search]);
+
+  // Matching trips for the entered client
+  const matchingCustomerTrips = useMemo(() => {
+    if (!clientName.trim()) return [];
+    const q = clientName.trim().toLowerCase();
+    return availableTrips.filter((t) => {
+      const meta = parseCargoMeta(t.cargo_description);
+      const cName = (meta?.client || t.client_name || "").toLowerCase();
+      return cName.includes(q);
+    });
+  }, [availableTrips, clientName]);
+
+  // Unique client names from available trips for quick selection
+  const uniqueClientsFromTrips = useMemo(() => {
+    const set = new Set<string>();
+    availableTrips.forEach((t) => {
+      const meta = parseCargoMeta(t.cargo_description);
+      const c = (meta?.client || t.client_name || "").trim();
+      if (c) set.add(c);
+    });
+    return Array.from(set);
+  }, [availableTrips]);
+
+  const toggleSelectTrip = (tripId: string) => {
+    setSelectedTripIds((prev) =>
+      prev.includes(tripId) ? prev.filter((id) => id !== tripId) : [...prev, tripId]
+    );
+  };
+
+  const selectAllCustomerTrips = () => {
+    if (selectedTripIds.length === matchingCustomerTrips.length) {
+      setSelectedTripIds([]);
+    } else {
+      setSelectedTripIds(matchingCustomerTrips.map((t) => t.id));
+    }
+  };
+
+  const handleApplyConsolidatedTrips = () => {
+    if (selectedTripIds.length === 0) {
+      toast.error("Please check at least one trip to consolidate");
+      return;
+    }
+
+    const chosen = matchingCustomerTrips.filter((t) => selectedTripIds.includes(t.id));
+    const newItems = chosen.map((t) => {
+      const meta = parseCargoMeta(t.cargo_description);
+      const rate = Number(meta?.exchange_rate) || 2600;
+      const isUsd = (meta?.billing_currency || meta?.currency || "USD").toUpperCase() === "USD";
+      const rawAmt = Number(meta?.client_billing_amount) || Number(t.cost) * 1.35 || 1500000;
+      const tzsAmt = isUsd ? Math.round(rawAmt * rate) : Math.round(rawAmt);
+      const cargo = extractCleanCargo(t.cargo_description, t.purpose || meta?.purpose);
+      const vehicleRef = t.machines?.plate_number || t.machines?.name || "Heavy Fleet Truck";
+      const orderRef = meta?.order_no ? ` · DO #${meta.order_no}` : "";
+
+      return {
+        description: `Commercial Freight Haulage: ${t.origin || "Origin"} ➔ ${t.destination || "Destination"} [${vehicleRef}${orderRef}] - ${cargo || "General Freight"}`,
+        quantity: 1,
+        unit_price: tzsAmt > 0 ? tzsAmt : 1500000,
+      };
+    });
+
+    setLineItems(newItems);
+    toast.success(`Consolidated ${newItems.length} trips into invoice line items!`);
+  };
 
   const handleAddItem = () => {
     setLineItems([...lineItems, { description: "", quantity: 1, unit_price: 0 }]);
@@ -518,6 +614,21 @@ export default function FinanceInvoices() {
                   value={clientName}
                   onChange={(e) => setClientName(e.target.value)}
                 />
+                {uniqueClientsFromTrips.length > 0 && !clientName && (
+                  <div className="flex flex-wrap items-center gap-1.5 pt-1.5">
+                    <span className="text-[11px] text-muted-foreground">Recent Fleet Clients:</span>
+                    {uniqueClientsFromTrips.slice(0, 5).map((c) => (
+                      <Badge
+                        key={c}
+                        variant="outline"
+                        className="cursor-pointer hover:bg-primary/10 text-[11px] py-0 px-2 font-normal transition-colors"
+                        onClick={() => setClientName(c)}
+                      >
+                        {c}
+                      </Badge>
+                    ))}
+                  </div>
+                )}
               </div>
 
               <div>
@@ -537,6 +648,88 @@ export default function FinanceInvoices() {
                 </Select>
               </div>
             </div>
+
+            {/* Multi-Trip Consolidation Card */}
+            {matchingCustomerTrips.length > 0 && (
+              <div className="rounded-lg border border-primary/25 bg-primary/5 p-3 space-y-2.5">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <Layers className="h-4 w-4 text-primary shrink-0" />
+                    <div>
+                      <span className="text-xs font-semibold text-primary block">
+                        Consolidate Multiple Trips for "{clientName}"
+                      </span>
+                      <span className="text-[11px] text-muted-foreground">
+                        Found {matchingCustomerTrips.length} commercial trip{matchingCustomerTrips.length > 1 ? "s" : ""} for this customer
+                      </span>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 text-xs px-2"
+                      onClick={selectAllCustomerTrips}
+                    >
+                      {selectedTripIds.length === matchingCustomerTrips.length ? "Deselect All" : "Select All"}
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      className="h-7 text-xs px-2.5 gap-1.5 bg-primary text-primary-foreground hover:bg-primary/90"
+                      onClick={handleApplyConsolidatedTrips}
+                      disabled={selectedTripIds.length === 0}
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                      Add {selectedTripIds.length} {selectedTripIds.length === 1 ? "Trip" : "Trips"} to Invoice
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="max-h-40 overflow-y-auto space-y-1.5 pr-1 divide-y divide-border/40">
+                  {matchingCustomerTrips.map((t) => {
+                    const meta = parseCargoMeta(t.cargo_description);
+                    const cargo = extractCleanCargo(t.cargo_description, t.purpose || meta?.purpose);
+                    const rate = Number(meta?.exchange_rate) || 2600;
+                    const isUsd = (meta?.billing_currency || meta?.currency || "USD").toUpperCase() === "USD";
+                    const rawAmt = Number(meta?.client_billing_amount) || Number(t.cost) * 1.35 || 1500000;
+                    const tzsAmt = isUsd ? Math.round(rawAmt * rate) : Math.round(rawAmt);
+                    const isChecked = selectedTripIds.includes(t.id);
+
+                    return (
+                      <div
+                        key={t.id}
+                        onClick={() => toggleSelectTrip(t.id)}
+                        className={`flex items-center justify-between p-2 rounded text-xs cursor-pointer border transition-colors ${
+                          isChecked ? "bg-primary/10 border-primary/40 font-medium" : "bg-card border-border hover:bg-accent/40"
+                        }`}
+                      >
+                        <div className="flex items-center gap-2 min-w-0 flex-1">
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            onChange={() => {}}
+                            className="rounded border-gray-300 text-primary focus:ring-primary h-3.5 w-3.5"
+                          />
+                          <div className="truncate">
+                            <span className="font-semibold text-foreground">
+                              {t.origin || "Origin"} ➔ {t.destination || "Destination"}
+                            </span>
+                            <span className="text-muted-foreground ml-1.5 text-[11px]">
+                              ({t.machines?.plate_number || "Truck"} · {cargo || "Cargo"})
+                            </span>
+                          </div>
+                        </div>
+                        <div className="text-right shrink-0 ml-2 font-mono text-xs">
+                          {formatMoney(tzsAmt)}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div>
@@ -768,11 +961,25 @@ export default function FinanceInvoices() {
             <div id="printable-invoice" className="p-4 space-y-6 bg-white text-black rounded-lg">
               {/* Header */}
               <div className="flex justify-between items-start border-b pb-4">
-                <div>
-                  <h2 className="text-2xl font-bold tracking-tight text-gray-900">
-                    {organisation?.name || "MachineCare Fleet Hub"}
-                  </h2>
-                  <p className="text-xs text-gray-500">Commercial Freight & Fleet Operations</p>
+                <div className="flex items-center gap-3">
+                  {organisation?.logo_url ? (
+                    <img
+                      src={organisation.logo_url}
+                      alt={organisation?.name || "Company Logo"}
+                      className="h-14 w-auto max-w-[170px] object-contain rounded"
+                    />
+                  ) : (
+                    <div className="h-12 w-12 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center text-primary font-bold text-xl">
+                      {(organisation?.name || "MC").substring(0, 2).toUpperCase()}
+                    </div>
+                  )}
+                  <div>
+                    <h2 className="text-2xl font-bold tracking-tight text-gray-900">
+                      {organisation?.name || "MachineCare Fleet Hub"}
+                    </h2>
+                    <p className="text-xs text-gray-500">Commercial Freight & Heavy Haulage Fleet</p>
+                    {organisation?.email && <p className="text-[11px] text-gray-400">{organisation.email}</p>}
+                  </div>
                 </div>
                 <div className="text-right">
                   <span className="text-xl font-bold font-mono text-primary">
@@ -868,6 +1075,40 @@ export default function FinanceInvoices() {
                       )}
                     </span>
                   </div>
+                </div>
+              </div>
+
+              {/* Official Settlement & Bank Wire Details */}
+              <div className="border-t pt-3 grid grid-cols-1 md:grid-cols-2 gap-3 text-xs bg-gray-50 p-3 rounded-lg border border-gray-200">
+                <div>
+                  <span className="font-bold uppercase tracking-wider text-gray-700 block mb-1">
+                    Official Settlement & Commercial Wire Accounts
+                  </span>
+                  <p className="text-gray-600">
+                    <span className="font-semibold text-gray-900">Beneficiary:</span> {bankSettings?.accountName || organisation?.name || "MachineCare Hub Ltd"}
+                  </p>
+                  <p className="text-gray-600">
+                    <span className="font-semibold text-gray-900">Primary Bank:</span> {bankSettings?.bankName || "CRDB Bank / Standard Chartered"}
+                  </p>
+                  <p className="text-gray-600">
+                    <span className="font-semibold text-gray-900">Branch:</span> {bankSettings?.branch || "Corporate Branch"} {bankSettings?.swiftCode ? ` · SWIFT: ${bankSettings.swiftCode}` : ""}
+                  </p>
+                </div>
+                <div>
+                  <span className="font-bold uppercase tracking-wider text-gray-700 block mb-1">
+                    Direct Account Numbers
+                  </span>
+                  <p className="text-gray-600">
+                    <span className="font-semibold text-gray-900">TZS Account:</span> <span className="font-mono">{bankSettings?.accountNumberTzs || "0150248839200"}</span>
+                  </p>
+                  <p className="text-gray-600">
+                    <span className="font-semibold text-gray-900">USD Account:</span> <span className="font-mono">{bankSettings?.accountNumberUsd || "0250248839201"}</span>
+                  </p>
+                  {bankSettings?.lipaNumber && (
+                    <p className="text-gray-600">
+                      <span className="font-semibold text-gray-900">Merchant / Lipa Namba:</span> <span className="font-mono">{bankSettings.lipaNumber}</span>
+                    </p>
+                  )}
                 </div>
               </div>
 

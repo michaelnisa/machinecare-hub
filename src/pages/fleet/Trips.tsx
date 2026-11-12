@@ -260,7 +260,7 @@ function calculateRoundtripDisplay(t: Trip) {
 }
 
 export default function Trips() {
-  const { profile } = useAuth();
+  const { profile, organisation } = useAuth();
   const { canWrite } = useUserRole();
   const { t: i18n } = useI18n();
   const [loading, setLoading] = useState(true);
@@ -803,7 +803,7 @@ export default function Trips() {
         trip={receiptTrip}
         machine={receiptTrip ? machineMap.get(receiptTrip.machine_id) : undefined}
         driver={receiptTrip?.driver_id ? driverMap.get(receiptTrip.driver_id) : undefined}
-        org={(profile as any)?.organisation}
+        org={organisation || (profile as any)?.organisation}
         onPriceUpdated={load}
       />
 

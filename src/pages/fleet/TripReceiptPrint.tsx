@@ -21,6 +21,7 @@ import { formatDate, formatMoney } from "@/lib/format";
 import { DEFAULT_USD_TO_TZS_RATE } from "@/services/crossBorderCorridors";
 import { DEFAULT_PAYMENT_ACCOUNTS, type PaymentAccountSettings } from "@/components/TripReceiptDialog";
 import { parseCargoMeta, extractCleanCargo } from "@/lib/fleet-metadata";
+import { useAuth } from "@/contexts/AuthContext";
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
 import { toast } from "sonner";
@@ -47,6 +48,7 @@ function BarcodeGraphic({ code }: { code: string }) {
 
 export default function TripReceiptPrint() {
   const { id } = useParams<{ id: string }>();
+  const { organisation: authOrg } = useAuth();
   const [trip, setTrip] = useState<any>(null);
   const [machine, setMachine] = useState<any>(null);
   const [driver, setDriver] = useState<any>(null);
@@ -59,6 +61,20 @@ export default function TripReceiptPrint() {
     try {
       const saved = localStorage.getItem("trip_receipt_payment_settings");
       if (saved) return JSON.parse(saved);
+      const fleetBank = localStorage.getItem("fleet_corridor_bank_settings");
+      if (fleetBank) {
+        const b = JSON.parse(fleetBank);
+        return {
+          ...DEFAULT_PAYMENT_ACCOUNTS,
+          bankName: b.bankName || DEFAULT_PAYMENT_ACCOUNTS.bankName,
+          accountName: b.accountName || DEFAULT_PAYMENT_ACCOUNTS.accountName,
+          accountNumberTzs: b.accountNumberTzs || DEFAULT_PAYMENT_ACCOUNTS.accountNumberTzs,
+          accountNumberUsd: b.accountNumberUsd || DEFAULT_PAYMENT_ACCOUNTS.accountNumberUsd,
+          swiftCode: b.swiftCode || DEFAULT_PAYMENT_ACCOUNTS.swiftCode,
+          branch: b.branch || DEFAULT_PAYMENT_ACCOUNTS.branch,
+          mobileMoneyNumber: b.lipaNumber || DEFAULT_PAYMENT_ACCOUNTS.mobileMoneyNumber,
+        };
+      }
     } catch (_err) {
       // Use defaults if storage read fails
     }
@@ -114,7 +130,7 @@ export default function TripReceiptPrint() {
 
       setMachine(machineRes.data);
       setDriver(driverRes.data);
-      setOrg(orgRes.data);
+      setOrg(orgRes.data || authOrg);
       setLoading(false);
     })();
   }, [id]);
@@ -231,10 +247,10 @@ export default function TripReceiptPrint() {
   }
 
   const receiptRef = trip.client_order_no ? `RCP-${trip.client_order_no}` : `RCP-${trip.id.slice(0, 8).toUpperCase()}`;
-  const companyName = org?.name || "LOGISTIXWARE LOGISTICS LIMITED";
-  const companyPhone = org?.phone || "+255 754 123 456 / +255 22 286 1900";
-  const companyAddress = org?.address || "Kurasini Depot, Nelson Mandela Road, Dar es Salaam, Tanzania";
-  const companyLogo = trip?.custom_logo_url || org?.logo_url;
+  const companyName = org?.name || authOrg?.name || "LOGISTIXWARE LOGISTICS LIMITED";
+  const companyPhone = org?.phone || authOrg?.phone || "+255 754 123 456 / +255 22 286 1900";
+  const companyAddress = org?.address || authOrg?.address || "Kurasini Depot, Nelson Mandela Road, Dar es Salaam, Tanzania";
+  const companyLogo = trip?.custom_logo_url || org?.logo_url || authOrg?.logo_url;
 
   return (
     <div className="min-h-screen bg-muted/40 print:bg-white text-slate-900">
@@ -311,7 +327,7 @@ export default function TripReceiptPrint() {
 
               <div className="text-right flex flex-col items-end space-y-1">
                 <div className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-slate-900 text-white text-[9px] font-bold uppercase tracking-wider">
-                  <span>Commercial Freight Waybill</span>
+                  <span>Commercial Tax Invoice & Freight Waybill</span>
                   <span className="text-emerald-400">· ORIGINAL</span>
                 </div>
 
