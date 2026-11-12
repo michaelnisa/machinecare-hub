@@ -35,10 +35,12 @@ import {
   Check,
   SlidersHorizontal,
   Info,
+  Fuel,
 } from "lucide-react";
 import { TripExpensesListDialog } from "@/components/TripExpensesListDialog";
 import { CorridorExpenseCatalogDialog } from "@/components/CorridorExpenseCatalogDialog";
 import { TripReceiptDialog } from "@/components/TripReceiptDialog";
+import { QuickFuelDialog } from "@/components/QuickFuelDialog";
 import { SearchableVehicleSelect } from "@/components/fleet/SearchableVehicleSelect";
 import { SearchableDriverSelect } from "@/components/fleet/SearchableDriverSelect";
 import { PaymentTermsInput } from "@/components/fleet/PaymentTermsInput";
@@ -49,6 +51,9 @@ import {
   convertTzsToUsd,
   formatDualCurrency,
   formatTripCurrency,
+  hoursToDaysAndHours,
+  formatTurnaroundDuration,
+  daysAndHoursToHours,
   type CrossBorderCorridor,
   type CorridorExpenseItem,
 } from "@/services/crossBorderCorridors";
@@ -238,16 +243,17 @@ function calculateRoundtripDisplay(t: Trip) {
       const elapsed = `${days > 0 ? `${days}d ` : ""}${hours}h elapsed`;
       return {
         label: elapsed,
-        sub: t.roundtrip_hours_est ? `Est. RT: ${t.roundtrip_hours_est}h` : "In transit",
+        sub: t.roundtrip_hours_est ? `Est. RT: ${formatTurnaroundDuration(t.roundtrip_hours_est)}` : "In transit",
         isDone: false,
       };
     }
   }
 
   if (t.roundtrip_hours_est) {
+    const dur = hoursToDaysAndHours(t.roundtrip_hours_est);
     return {
-      label: `${t.roundtrip_hours_est} hrs`,
-      sub: t.is_round_trip !== false ? "Estimated roundtrip" : "Est. one-way",
+      label: dur.formatted,
+      sub: t.is_round_trip !== false ? `Est. roundtrip (${t.roundtrip_hours_est}h)` : `Est. one-way (${t.roundtrip_hours_est}h)`,
       isDone: false,
     };
   }
@@ -279,6 +285,7 @@ export default function Trips() {
   const [expensesTrip, setExpensesTrip] = useState<Trip | null>(null);
   const [detailTrip, setDetailTrip] = useState<Trip | null>(null);
   const [receiptTrip, setReceiptTrip] = useState<Trip | null>(null);
+  const [fuelTrip, setFuelTrip] = useState<Trip | null>(null);
 
   const openReceiptById = async (tripId: string) => {
     const existing = trips.find((t) => t.id === tripId);
@@ -671,6 +678,17 @@ export default function Trips() {
                           </Button>
 
                           <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-7 px-2 text-xs gap-1 border-emerald-500/30 text-emerald-600 hover:bg-emerald-500/10 font-semibold"
+                            title="Add Fuel Fill-Up for this Trip"
+                            onClick={() => setFuelTrip(t)}
+                          >
+                            <Fuel className="h-3.5 w-3.5 text-emerald-600" />
+                            <span>Add Fuel</span>
+                          </Button>
+
+                          <Button
                             variant="ghost"
                             size="icon"
                             title="Trip Expenses & Fines"
@@ -806,6 +824,15 @@ export default function Trips() {
         org={organisation || (profile as any)?.organisation}
         onPriceUpdated={load}
       />
+
+      {fuelTrip && (
+        <QuickFuelDialog
+          open={!!fuelTrip}
+          onOpenChange={(v) => !v && setFuelTrip(null)}
+          machineId={fuelTrip.machine_id}
+          onSaved={load}
+        />
+      )}
 
       <ConfirmDialog
         open={!!confirmCancel}
@@ -1253,7 +1280,7 @@ function NewTripDialog({
                 <div className="text-[11px] text-muted-foreground flex items-center gap-2 pt-0.5">
                   <span>Border Post: <strong className="text-foreground">{selectedCorridor.borderPost}</strong></span>
                   <span>·</span>
-                  <span>Est. Turnaround: <strong className="text-foreground">{selectedCorridor.estimatedRoundtripHours} Hours</strong></span>
+                  <span>Est. Turnaround: <strong className="text-foreground">{formatTurnaroundDuration(selectedCorridor.estimatedRoundtripHours)}</strong></span>
                 </div>
               )}
             </div>
@@ -1574,17 +1601,81 @@ function NewTripDialog({
               </div>
             </div>
 
-            {/* Roundtrip Time & Odometer */}
-            <div className="space-y-1.5">
-              <Label>Estimated Roundtrip Time (Hours)</Label>
-              <Input
-                type="number"
-                min={1}
-                value={form.roundtrip_hours_est}
-                onChange={(e) => setForm({ ...form, roundtrip_hours_est: e.target.value })}
-                placeholder="e.g. 96 hours"
-              />
-              <span className="text-[10px] text-muted-foreground">Expected total return turnaround</span>
+            {/* Roundtrip Time in Days & Hours */}
+            <div className="space-y-1.5 sm:col-span-1">
+              <div className="flex items-center justify-between">
+                <Label className="text-xs font-semibold">Estimated Turnaround Duration</Label>
+                <Badge variant="outline" className="text-[10px] font-mono text-primary bg-primary/5 py-0 px-1.5">
+                  {formatTurnaroundDuration(Number(form.roundtrip_hours_est) || 0)}
+                </Badge>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <div className="relative">
+                    <Input
+                      type="number"
+                      min={0}
+                      value={hoursToDaysAndHours(Number(form.roundtrip_hours_est) || 0).days}
+                      onChange={(e) => {
+                        const newDays = Math.max(0, parseInt(e.target.value) || 0);
+                        const currentHours = hoursToDaysAndHours(Number(form.roundtrip_hours_est) || 0).hours;
+                        setForm({ ...form, roundtrip_hours_est: String(newDays * 24 + currentHours) });
+                      }}
+                      className="pr-12 text-center"
+                      placeholder="0"
+                    />
+                    <span className="absolute right-2.5 top-2.5 text-xs text-muted-foreground font-medium pointer-events-none">
+                      Days
+                    </span>
+                  </div>
+                </div>
+
+                <div>
+                  <div className="relative">
+                    <Input
+                      type="number"
+                      min={0}
+                      max={23}
+                      value={hoursToDaysAndHours(Number(form.roundtrip_hours_est) || 0).hours}
+                      onChange={(e) => {
+                        const newHours = Math.max(0, parseInt(e.target.value) || 0);
+                        const currentDays = hoursToDaysAndHours(Number(form.roundtrip_hours_est) || 0).days;
+                        setForm({ ...form, roundtrip_hours_est: String(currentDays * 24 + newHours) });
+                      }}
+                      className="pr-12 text-center"
+                      placeholder="0"
+                    />
+                    <span className="absolute right-2.5 top-2.5 text-xs text-muted-foreground font-medium pointer-events-none">
+                      Hours
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-1 pt-0.5">
+                {[
+                  { label: "1 Day", hours: 24 },
+                  { label: "2 Days", hours: 48 },
+                  { label: "4 Days", hours: 96 },
+                  { label: "6 Days", hours: 144 },
+                  { label: "9 Days", hours: 216 },
+                ].map((p) => (
+                  <button
+                    key={p.hours}
+                    type="button"
+                    onClick={() => setForm({ ...form, roundtrip_hours_est: String(p.hours) })}
+                    className={cn(
+                      "text-[10px] px-1.5 py-0.5 rounded border transition-colors",
+                      Number(form.roundtrip_hours_est) === p.hours
+                        ? "bg-primary/10 border-primary text-primary font-bold"
+                        : "bg-muted/40 border-border/70 text-muted-foreground hover:bg-muted hover:text-foreground"
+                    )}
+                  >
+                    {p.label}
+                  </button>
+                ))}
+              </div>
             </div>
 
             <div className="space-y-1.5">

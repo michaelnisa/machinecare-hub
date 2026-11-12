@@ -138,3 +138,58 @@ describe("Multi-Trip Customer Invoicing Logic", () => {
     expect(invoiceItems[1].unit_price).toBe(4500000 * 1.35);
   });
 });
+
+describe("Trip Route Turnaround Duration Helpers (Days and Hours)", () => {
+  it("converts total raw hours into days and hours correctly", async () => {
+    const { hoursToDaysAndHours, daysAndHoursToHours, formatTurnaroundDuration } = await import(
+      "../services/crossBorderCorridors"
+    );
+
+    // 216 hours = 9 days 0 hours
+    const res216 = hoursToDaysAndHours(216);
+    expect(res216.days).toBe(9);
+    expect(res216.hours).toBe(0);
+    expect(res216.formatted).toBe("9 Days");
+
+    // 108 hours = 4 days 12 hours
+    const res108 = hoursToDaysAndHours(108);
+    expect(res108.days).toBe(4);
+    expect(res108.hours).toBe(12);
+    expect(res108.formatted).toBe("4d 12h");
+
+    // 14 hours = 0 days 14 hours
+    const res14 = hoursToDaysAndHours(14);
+    expect(res14.days).toBe(0);
+    expect(res14.hours).toBe(14);
+    expect(res14.formatted).toBe("14 Hours");
+
+    // Edge cases: null, undefined, 0
+    expect(hoursToDaysAndHours(0).formatted).toBe("0 hrs");
+    expect(hoursToDaysAndHours(null).formatted).toBe("0 hrs");
+
+    // Reverse conversion: days and hours to total hours
+    expect(daysAndHoursToHours(4, 12)).toBe(108);
+    expect(daysAndHoursToHours(9, 0)).toBe(216);
+    expect(daysAndHoursToHours(0, 18)).toBe(18);
+
+    // Formatted duration badge
+    expect(formatTurnaroundDuration(216)).toBe("9 Days (216h)");
+    expect(formatTurnaroundDuration(108)).toBe("4 Days 12 Hrs (108h)");
+    expect(formatTurnaroundDuration(14)).toBe("14 Hours");
+    expect(formatTurnaroundDuration(0)).toBe("—");
+  });
+});
+
+describe("Standard Payment Term Presets", () => {
+  it("includes all requested standard payment term presets", async () => {
+    const { DEFAULT_PAYMENT_TERM_PRESETS } = await import(
+      "../components/fleet/PaymentTermsDesignerDialog"
+    );
+
+    expect(DEFAULT_PAYMENT_TERM_PRESETS).toContain("100% Full Payment");
+    expect(DEFAULT_PAYMENT_TERM_PRESETS).toContain("Advance 70% and 30% after 30 days");
+    expect(DEFAULT_PAYMENT_TERM_PRESETS).toContain("30 days after delivery Invoicing");
+    expect(DEFAULT_PAYMENT_TERM_PRESETS).toContain("50% advance 50% after delivery");
+  });
+});
+

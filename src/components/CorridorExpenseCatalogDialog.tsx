@@ -19,6 +19,7 @@ import {
   REGIONAL_CURRENCIES,
   convertUsdToLocal,
   formatCorridorAmount,
+  formatTurnaroundDuration,
   type CrossBorderCorridor,
 } from "@/services/crossBorderCorridors";
 import {
@@ -279,7 +280,7 @@ export function CorridorExpenseCatalogDialog({
                     </span>
                     <span className="flex items-center gap-1">
                       <Clock className="h-3.5 w-3.5 text-primary" />
-                      Est. RT Turnaround: <strong className="text-foreground">{currentCorridor.estimatedRoundtripHours} Hours</strong>
+                      Est. RT Turnaround: <strong className="text-foreground">{formatTurnaroundDuration(currentCorridor.estimatedRoundtripHours)}</strong>
                     </span>
                   </div>
                   <p className="text-xs text-muted-foreground line-clamp-2">{currentCorridor.description}</p>

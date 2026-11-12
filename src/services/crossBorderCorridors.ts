@@ -121,6 +121,49 @@ export function formatTripCurrency(
   }
 }
 
+export function hoursToDaysAndHours(totalHours: number | null | undefined): {
+  days: number;
+  hours: number;
+  totalHours: number;
+  formatted: string;
+} {
+  if (!totalHours || totalHours <= 0) {
+    return { days: 0, hours: 0, totalHours: 0, formatted: "0 hrs" };
+  }
+  const h = Math.round(totalHours);
+  const days = Math.floor(h / 24);
+  const remainingHours = h % 24;
+
+  let formatted = "";
+  if (days > 0 && remainingHours > 0) {
+    formatted = `${days}d ${remainingHours}h`;
+  } else if (days > 0) {
+    formatted = `${days} Day${days > 1 ? "s" : ""}`;
+  } else {
+    formatted = `${remainingHours} Hour${remainingHours !== 1 ? "s" : ""}`;
+  }
+
+  return { days, hours: remainingHours, totalHours: h, formatted };
+}
+
+export function formatTurnaroundDuration(totalHours: number | null | undefined): string {
+  if (!totalHours || totalHours <= 0) return "—";
+  const { days, hours, totalHours: h } = hoursToDaysAndHours(totalHours);
+  if (days > 0 && hours > 0) {
+    return `${days} Day${days > 1 ? "s" : ""} ${hours} Hr${hours !== 1 ? "s" : ""} (${h}h)`;
+  }
+  if (days > 0) {
+    return `${days} Day${days > 1 ? "s" : ""} (${h}h)`;
+  }
+  return `${hours} Hour${hours !== 1 ? "s" : ""}`;
+}
+
+export function daysAndHoursToHours(days: number | string, hours: number | string): number {
+  const d = Math.max(0, Number(days) || 0);
+  const h = Math.max(0, Number(hours) || 0);
+  return d * 24 + h;
+}
+
 export const CROSS_BORDER_CORRIDORS: CrossBorderCorridor[] = [
   // 1. GREAT NORTH-SOUTH CORRIDOR: TANZANIA -> ZAMBIA -> ZIMBABWE -> SOUTH AFRICA
   {

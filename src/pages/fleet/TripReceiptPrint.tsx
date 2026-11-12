@@ -350,235 +350,193 @@ export default function TripReceiptPrint() {
               </div>
             </div>
 
-            {/* 3-COLUMN LOGISTICS DOSSIER: CARRIER, CLIENT, ROUTE & ASSET */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5 text-xs">
-              {/* 01. Carrier / Shipper */}
-              <div className="rounded-lg border border-slate-200 bg-slate-50/70 p-2.5 space-y-1">
-                <div className="text-[9px] font-black uppercase tracking-wider text-slate-500 flex items-center gap-1">
-                  <Building2 className="h-3 w-3 text-primary" /> 01. Carrier / Shipper
-                </div>
-                <div className="font-bold text-slate-900 text-xs truncate">{companyName}</div>
-                <div className="text-[10px] text-slate-600">Operations Dispatch Center</div>
-                <div className="text-[10px] text-slate-500 truncate">Kurasini Freight Depot · DSM</div>
-                <div className="text-[9px] font-mono text-slate-500">Carrier Reg: EAC-TZ-LOG-04</div>
-              </div>
-
-              {/* 02. Consignee / Client */}
-              <div className="rounded-lg border border-slate-200 bg-slate-50/70 p-2.5 space-y-1">
-                <div className="text-[9px] font-black uppercase tracking-wider text-slate-500 flex items-center gap-1">
-                  <Truck className="h-3 w-3 text-primary" /> 02. Consignee / Client
-                </div>
-                <div className="font-bold text-slate-900 text-xs truncate">
-                  {trip.client_name || "Commercial Cargo Consignee"}
-                </div>
-                <div className="text-[10px] text-slate-700">
-                  Order / DO: <strong className="font-mono text-slate-900">{trip.client_order_no || "N/A"}</strong>
-                </div>
-                <div className="text-[10px] text-slate-600 truncate">
-                  Cargo: <span className="font-medium text-slate-800">{trip.cargo_description || "Commercial Cargo / General Freight"}</span>
-                </div>
-                <div className="text-[9px] text-primary font-semibold truncate">
-                  Terms: {trip.payment_terms}
-                </div>
-              </div>
-
-              {/* 03. Transport Asset & Route */}
-              <div className="rounded-lg border border-slate-200 bg-slate-50/70 p-2.5 space-y-1">
-                <div className="text-[9px] font-black uppercase tracking-wider text-slate-500 flex items-center gap-1">
-                  <MapPin className="h-3 w-3 text-primary" /> 03. Transit Asset & Route
-                </div>
-                <div className="flex items-center gap-1 font-bold text-slate-900 text-[11px] truncate">
-                  <MapPin className="h-3 w-3 text-rose-500 shrink-0" />
-                  <span className="truncate">{trip.origin || "Origin"}</span>
-                  <span>→</span>
-                  <span className="text-primary truncate">{trip.destination || "Destination"}</span>
-                </div>
-                {trip.corridor_name && (
-                  <div className="text-[9px] text-slate-600 flex items-center gap-1 truncate">
-                    <Globe2 className="h-2.5 w-2.5 text-primary shrink-0" />
-                    <span className="font-medium truncate">{trip.corridor_name}</span>
-                  </div>
+            {/* Bill To & Operational Reference (Aligned with Finance Invoice) */}
+            <div className="grid grid-cols-2 gap-4 text-xs border border-gray-200 rounded-lg p-3 bg-gray-50/70">
+              <div className="space-y-1">
+                <span className="font-bold uppercase tracking-wider text-gray-500 text-[10px] block">
+                  Billed To / Consignee:
+                </span>
+                <p className="text-sm font-bold text-gray-900">{trip.client_name || "Commercial Cargo Client"}</p>
+                {trip.client_order_no && (
+                  <p className="text-gray-600">
+                    Order / Delivery Note: <strong className="font-mono text-gray-900">{trip.client_order_no}</strong>
+                  </p>
                 )}
-                <div className="pt-0.5 text-[10px] text-slate-700 space-y-0.5 leading-tight">
-                  <div className="truncate">
-                    Head: <strong className="text-slate-900">{machine?.plate_number ? `${machine.name} (${machine.plate_number})` : machine?.name || "Vehicle"}</strong>
-                  </div>
-                  <div className="truncate">
-                    Trailer: <strong className="text-primary">{machine?.trailer_plate ? machine.trailer_plate : "Standard Trailer Unit"}</strong>
-                  </div>
-                  <div className="truncate">
-                    Driver: <strong className="text-slate-900">{driver?.full_name || "Fleet Driver"}</strong> {driver?.phone ? `(${driver.phone})` : ""}
-                  </div>
-                </div>
+                <p className="text-gray-600 truncate">
+                  Consignment Cargo: <span className="font-medium text-gray-900">{trip.cargo_description || "Commercial Cargo / General Freight"}</span>
+                </p>
+                <p className="text-primary font-semibold text-[11px]">
+                  Agreed Payment Terms: {trip.payment_terms}
+                </p>
+              </div>
+
+              <div className="text-right space-y-1">
+                <span className="font-bold uppercase tracking-wider text-gray-500 text-[10px] block">
+                  Operational & Transit Reference:
+                </span>
+                <p className="text-sm font-semibold text-gray-900">
+                  Vehicle: {machine?.plate_number ? `${machine.name} (${machine.plate_number})` : machine?.name || "Heavy Freight Truck"}
+                  {machine?.trailer_plate && <span className="text-primary ml-1 font-mono">[{machine.trailer_plate}]</span>}
+                </p>
+                <p className="text-xs text-gray-700">
+                  Route: <strong className="text-gray-900">{trip.origin || "Origin"}</strong> ➔ <strong className="text-primary">{trip.destination || "Destination"}</strong>
+                </p>
+                {trip.corridor_name && (
+                  <p className="text-[11px] text-gray-600">
+                    Corridor: {trip.corridor_name} {trip.border_post ? `(${trip.border_post})` : ""}
+                  </p>
+                )}
+                <p className="text-[11px] text-gray-600">
+                  Driver: <span className="font-medium text-gray-900">{driver?.full_name || "Assigned Driver"}</span> {driver?.phone ? `· ${driver.phone}` : ""}
+                </p>
               </div>
             </div>
 
-            {/* ITEMISED COMMERCIAL FREIGHT SERVICE TABLE */}
-            <div className="overflow-hidden rounded-lg border border-slate-200 shadow-2xs">
-              <table className="w-full text-xs">
-                <thead>
-                  <tr className="bg-slate-900 text-white text-left text-[9px] uppercase tracking-wider">
-                    <th className="py-2.5 px-3 font-bold w-8 text-center">#</th>
-                    <th className="py-2.5 px-3 font-bold">Description of Commercial Haulage Service</th>
-                    <th className="py-2.5 px-3 font-bold text-center">Assigned Asset & Crew</th>
-                    <th className="py-2.5 px-3 font-bold text-right">Agreed Rate</th>
-                    <th className="py-2.5 px-3 font-bold text-right">Amount Payable</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-200 bg-white">
-                  {/* Main Haulage row */}
-                  <tr>
-                    <td className="py-2.5 px-3 text-center font-mono font-bold text-slate-400">01</td>
-                    <td className="py-2.5 px-3 space-y-0.5">
-                      <div className="font-bold text-xs text-slate-900 leading-snug">
-                        Cross-Border Commercial Freight Haulage & Consignment Delivery
-                      </div>
-                      <div className="text-[11px] text-slate-600">
-                        Route Transit: <strong className="text-slate-800">{trip.origin || "Origin Depot"}</strong> ➔ <strong className="text-primary">{trip.destination || "Destination"}</strong>
-                        {trip.corridor_name ? ` via ${trip.corridor_name}` : ""}
-                      </div>
-                      <div className="text-[10px] text-slate-500">
-                        Consignment Cargo: <span className="font-medium text-slate-800">{trip.cargo_description || "Commercial Cargo / General Freight"}</span>
-                      </div>
+            {/* Items Table (Exact match with FinanceInvoices) */}
+            <table className="w-full text-left text-xs border border-gray-200 rounded-lg overflow-hidden">
+              <thead className="bg-gray-100 uppercase tracking-wider text-gray-600">
+                <tr>
+                  <th className="p-2.5">Description</th>
+                  <th className="p-2.5 text-center">Qty / Route</th>
+                  <th className="p-2.5 text-right">Agreed Rate</th>
+                  <th className="p-2.5 text-right">Total</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-200">
+                <tr>
+                  <td className="p-2.5 space-y-0.5">
+                    <p className="font-bold text-gray-900 text-xs">
+                      Commercial Freight Haulage & Consignment Delivery
+                    </p>
+                    <p className="text-[11px] text-gray-600">
+                      Route Transit: {trip.origin || "Origin Depot"} ➔ {trip.destination || "Destination"}
+                      {trip.corridor_name ? ` via ${trip.corridor_name}` : ""}
+                    </p>
+                    <p className="text-[10px] text-gray-500">
+                      Cargo: {trip.cargo_description || "Commercial Cargo"} · Asset: {machine?.plate_number || "Truck"} · Driver: {driver?.full_name || "Fleet Driver"}
+                    </p>
+                  </td>
+                  <td className="p-2.5 text-center font-mono align-middle">1 Run</td>
+                  <td className="p-2.5 text-right font-mono align-middle">
+                    {isUsd
+                      ? `$${pricingCalculations.baseFreight.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                      : `${Math.round(pricingCalculations.baseFreight).toLocaleString()} TZS`}
+                  </td>
+                  <td className="p-2.5 text-right font-semibold font-mono align-middle">
+                    {isUsd
+                      ? `$${pricingCalculations.baseFreight.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                      : `${Math.round(pricingCalculations.baseFreight).toLocaleString()} TZS`}
+                  </td>
+                </tr>
+
+                {pricingCalculations.taxPercent > 0 && (
+                  <tr className="bg-gray-50/50">
+                    <td className="p-2.5 font-medium text-gray-700">
+                      Value Added Tax (VAT {pricingCalculations.taxPercent}%)
                     </td>
-                    <td className="py-2.5 px-3 text-center align-middle">
-                      <div className="inline-block text-left bg-slate-50 border border-slate-200 rounded p-1.5 text-[10px]">
-                        <div className="font-bold text-slate-900">
-                          {machine?.plate_number ? `${machine.name} (${machine.plate_number})` : machine?.name || "Vehicle"}
-                        </div>
-                        <div className="text-primary font-medium">
-                          {machine?.trailer_plate ? `Trailer: ${machine.trailer_plate}` : "Standard Trailer Unit"}
-                        </div>
-                        <div className="text-slate-600 mt-0.5">
-                          Driver: <strong className="text-slate-800">{driver?.full_name || "Fleet Driver"}</strong>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="py-2.5 px-3 text-right font-mono font-bold text-slate-900 text-xs align-middle">
+                    <td className="p-2.5 text-center font-mono">1</td>
+                    <td className="p-2.5 text-right font-mono">{pricingCalculations.taxPercent}%</td>
+                    <td className="p-2.5 text-right font-semibold font-mono">
                       {isUsd
-                        ? `$${pricingCalculations.baseFreight.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-                        : `${Math.round(pricingCalculations.baseFreight).toLocaleString()} TZS`}
-                    </td>
-                    <td className="py-2.5 px-3 text-right font-mono font-black text-slate-900 text-xs align-middle">
-                      {isUsd
-                        ? `$${pricingCalculations.baseFreight.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD`
-                        : `${Math.round(pricingCalculations.baseFreight).toLocaleString()} TZS`}
-                      <div className="text-[9px] text-slate-500 font-normal">
-                        {isUsd
-                          ? `≈ ${Math.round(pricingCalculations.baseFreight * exchangeRate).toLocaleString()} TZS`
-                          : `≈ $${(pricingCalculations.baseFreight / exchangeRate).toFixed(2)} USD`}
-                      </div>
+                        ? `$${pricingCalculations.taxAmountUsd.toFixed(2)}`
+                        : `${Math.round(pricingCalculations.taxAmountTzs).toLocaleString()} TZS`}
                     </td>
                   </tr>
+                )}
+              </tbody>
+            </table>
 
-                  {/* VAT row if applicable */}
-                  {pricingCalculations.taxPercent > 0 && (
-                    <tr className="bg-slate-50/50">
-                      <td className="py-2 px-3 text-center font-mono text-slate-400">02</td>
-                      <td className="py-2 px-3" colSpan={2}>
-                        <span className="font-semibold text-slate-800">Value Added Tax (VAT {pricingCalculations.taxPercent}%)</span>
-                      </td>
-                      <td className="py-2 px-3 text-right font-mono text-slate-600">
-                        {pricingCalculations.taxPercent}%
-                      </td>
-                      <td className="py-2 px-3 text-right font-mono font-bold text-slate-900">
-                        {isUsd
-                          ? `$${pricingCalculations.taxAmountUsd.toFixed(2)} USD`
-                          : `${Math.round(pricingCalculations.taxAmountTzs).toLocaleString()} TZS`}
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-
-            {/* SETTLEMENT CARD & PAYMENT ACCOUNTS */}
-            <div className="grid grid-cols-1 md:grid-cols-5 gap-3 pt-1">
-              {/* Left: Official Wire & Lipa Namba Accounts (3 cols) */}
-              <div className="md:col-span-3 rounded-lg border border-slate-300 bg-slate-50/90 p-3 space-y-2">
-                <div className="text-[9px] font-black uppercase tracking-wider text-slate-700 flex items-center justify-between border-b border-slate-200 pb-1">
-                  <span className="flex items-center gap-1.5 text-slate-900">
-                    <Landmark className="h-3.5 w-3.5 text-blue-700" /> Official Settlement & Wire Details
+            {/* Totals Section */}
+            <div className="flex justify-end text-xs">
+              <div className="w-72 space-y-1.5 text-right">
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Subtotal Freight:</span>
+                  <span className="font-semibold font-mono">
+                    {isUsd
+                      ? `$${pricingCalculations.baseFreight.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                      : `${Math.round(pricingCalculations.baseFreight).toLocaleString()} TZS`}
                   </span>
-                  <span className="text-[8px] font-semibold text-slate-500 uppercase">Direct Deposit · Lipa Namba</span>
                 </div>
 
-                <div className="grid grid-cols-2 gap-2 text-[11px]">
-                  <div className="space-y-0.5">
-                    <div className="font-bold text-slate-900">{paymentAccounts.bankName}</div>
-                    <div className="text-slate-600 text-[10px]">Beneficiary: <strong className="text-slate-800">{paymentAccounts.accountName}</strong></div>
-                    <div className="text-slate-600 text-[10px]">
-                      USD Account: <strong className="font-mono text-blue-700 font-bold">{paymentAccounts.accountNumberUsd}</strong>
-                    </div>
-                    {paymentAccounts.accountNumberTzs && (
-                      <div className="text-slate-600 text-[10px]">
-                        TZS Account: <strong className="font-mono text-slate-800">{paymentAccounts.accountNumberTzs}</strong>
-                      </div>
-                    )}
-                    <div className="text-[9px] font-mono text-slate-500">
-                      SWIFT: {paymentAccounts.swiftCode} · {paymentAccounts.branch}
-                    </div>
-                  </div>
-
-                  <div className="border-l border-slate-200 pl-2.5 space-y-0.5">
-                    <div className="font-bold text-slate-900 flex items-center gap-1 text-[11px]">
-                      <Smartphone className="h-3.5 w-3.5 text-emerald-600" /> {paymentAccounts.mobileMoneyName}
-                    </div>
-                    <div className="text-[10px] text-slate-500">Lipa Namba Reference:</div>
-                    <div className="text-xs font-black font-mono text-emerald-800 bg-emerald-100/80 px-2 py-0.5 rounded border border-emerald-300 w-fit">
-                      {paymentAccounts.mobileMoneyNumber}
-                    </div>
-                    <div className="text-[9px] text-slate-500 leading-tight pt-0.5">
-                      {paymentAccounts.paymentInstructions}
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Right: Total Price to Pay Card (2 cols) */}
-              <div className="md:col-span-2 rounded-lg border-2 border-slate-900 bg-gradient-to-br from-slate-900 to-slate-800 text-white p-3 flex flex-col justify-between shadow-sm">
-                <div className="space-y-1">
-                  <div className="flex justify-between text-[11px] text-slate-300">
-                    <span>Agreed Freight Price:</span>
-                    <span className="font-mono font-bold text-white">
+                {pricingCalculations.taxPercent > 0 && (
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">VAT ({pricingCalculations.taxPercent}%):</span>
+                    <span className="font-semibold font-mono">
                       {isUsd
-                        ? `$${pricingCalculations.baseFreight.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD`
-                        : `${Math.round(pricingCalculations.baseFreight).toLocaleString()} TZS`}
+                        ? `$${pricingCalculations.taxAmountUsd.toFixed(2)}`
+                        : `${Math.round(pricingCalculations.taxAmountTzs).toLocaleString()} TZS`}
                     </span>
                   </div>
+                )}
 
-                  {pricingCalculations.taxPercent > 0 && (
-                    <div className="flex justify-between text-[11px] text-slate-300">
-                      <span>VAT / Tax ({pricingCalculations.taxPercent}%):</span>
-                      <span className="font-mono font-semibold text-white">
-                        {isUsd
-                          ? `$${pricingCalculations.taxAmountUsd.toFixed(2)} USD`
-                          : `${Math.round(pricingCalculations.taxAmountTzs).toLocaleString()} TZS`}
-                      </span>
-                    </div>
-                  )}
-                </div>
-
-                <div className="border-t border-slate-700 pt-1.5 mt-1.5">
-                  <div className="text-[9px] font-black uppercase tracking-wider text-emerald-400">
-                    Total Freight Price to Pay:
-                  </div>
-                  <div className="text-lg font-black text-white font-mono tracking-tight mt-0.5">
+                <div className="flex justify-between text-sm font-bold border-t pt-2 text-gray-900">
+                  <span>Total Amount:</span>
+                  <span className="font-mono text-primary">
                     {isUsd
                       ? `$${pricingCalculations.totalPayableUsd.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD`
                       : `${Math.round(pricingCalculations.totalPayableTzs).toLocaleString()} TZS`}
-                  </div>
-                  <div className="text-[10px] font-bold text-slate-300 font-mono">
+                  </span>
+                </div>
+
+                <div className="flex justify-between text-[11px] text-gray-500 font-mono">
+                  <span>Equivalent (FX {exchangeRate}):</span>
+                  <span>
                     {isUsd
                       ? `≈ ${Math.round(pricingCalculations.totalPayableTzs).toLocaleString()} TZS`
                       : `≈ $${pricingCalculations.totalPayableUsd.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD`}
-                  </div>
-                  <div className="text-[8px] text-slate-400 mt-0.5 font-mono">
-                    FX Rate: 1 USD = {exchangeRate} TZS
-                  </div>
+                  </span>
+                </div>
+
+                <div className="flex justify-between font-bold text-amber-600 border-t pt-1">
+                  <span>Balance Due:</span>
+                  <span className="font-mono">
+                    {isUsd
+                      ? `$${pricingCalculations.totalPayableUsd.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD`
+                      : `${Math.round(pricingCalculations.totalPayableTzs).toLocaleString()} TZS`}
+                  </span>
                 </div>
               </div>
             </div>
+
+            {/* Official Settlement & Commercial Wire Accounts (2 cols matching FinanceInvoices) */}
+            <div className="border-t pt-3 grid grid-cols-1 md:grid-cols-2 gap-3 text-xs bg-gray-50 p-3 rounded-lg border border-gray-200">
+              <div>
+                <span className="font-bold uppercase tracking-wider text-gray-700 block mb-1">
+                  Official Settlement & Commercial Wire Accounts
+                </span>
+                <p className="text-gray-600">
+                  <span className="font-semibold text-gray-900">Beneficiary:</span> {paymentAccounts.accountName || companyName}
+                </p>
+                <p className="text-gray-600">
+                  <span className="font-semibold text-gray-900">Primary Bank:</span> {paymentAccounts.bankName || "CRDB Bank / Standard Chartered"}
+                </p>
+                <p className="text-gray-600">
+                  <span className="font-semibold text-gray-900">Branch:</span> {paymentAccounts.branch || "Corporate Branch"} {paymentAccounts.swiftCode ? ` · SWIFT: ${paymentAccounts.swiftCode}` : ""}
+                </p>
+              </div>
+              <div>
+                <span className="font-bold uppercase tracking-wider text-gray-700 block mb-1">
+                  Direct Account Numbers
+                </span>
+                <p className="text-gray-600">
+                  <span className="font-semibold text-gray-900">TZS Account:</span> <span className="font-mono font-semibold">{paymentAccounts.accountNumberTzs || "0150248839200"}</span>
+                </p>
+                <p className="text-gray-600">
+                  <span className="font-semibold text-gray-900">USD Account:</span> <span className="font-mono font-semibold">{paymentAccounts.accountNumberUsd || "0250248839201"}</span>
+                </p>
+                {paymentAccounts.mobileMoneyNumber && (
+                  <p className="text-gray-600">
+                    <span className="font-semibold text-gray-900">Merchant / Lipa Namba:</span> <span className="font-mono font-semibold text-emerald-700">{paymentAccounts.mobileMoneyNumber}</span>
+                  </p>
+                )}
+              </div>
+            </div>
+
+            {paymentAccounts.paymentInstructions && (
+              <div className="text-[11px] text-gray-500 border-t pt-2">
+                <span className="font-bold text-gray-700">Payment Instructions:</span> {paymentAccounts.paymentInstructions}
+              </div>
+            )}
 
             {/* CARRIER DISPATCH & CONSIGNEE RECEIVING POD STAMPS */}
             <div className="grid grid-cols-2 gap-6 pt-1 text-xs">
