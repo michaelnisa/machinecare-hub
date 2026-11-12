@@ -73,8 +73,14 @@ export class AlertEvaluator {
       });
     }
 
-    // 2. External Power Loss
-    if (!pos.externalPower || (pos.batteryVoltage && pos.batteryVoltage < 9.0)) {
+    // 2. External Power Loss & Tampering
+    const isPowerCut =
+      !pos.externalPower ||
+      pos.rawAttributes?.alarm === "powerCut" ||
+      pos.rawAttributes?.alarm === "tamper" ||
+      pos.rawAttributes?.power === 0;
+
+    if (isPowerCut) {
       alertsToInsert.push({
         organisation_id: pos.organisationId,
         vehicle_id: pos.vehicleId,
@@ -82,14 +88,48 @@ export class AlertEvaluator {
         alert_type: "power_cut",
         severity: "critical",
         title: "Tracker Power Disconnected / Tamper Alert",
-        message: "External 12V/24V power supply removed. Device running on internal backup battery.",
+        message: "External 12V/24V power supply removed or cut. Tracker running on internal backup battery.",
+        latitude: pos.latitude,
+        longitude: pos.longitude,
+        event_time: pos.recordedAt,
+      });
+
+      eventsToInsert.push({
+        organisation_id: pos.organisationId,
+        vehicle_id: pos.vehicleId,
+        device_id: pos.deviceId,
+        event_type: "power_cut",
+        title: "External Power Disconnected",
+        description: "Main 12V/24V supply dropped to zero or alarm received.",
         latitude: pos.latitude,
         longitude: pos.longitude,
         event_time: pos.recordedAt,
       });
     }
 
-    // 3. Geofence Evaluation
+    // 3. Internal Backup Battery Critical Alert
+    const backupVolts = pos.batteryVoltage;
+    const backupLevel = pos.rawAttributes?.batteryLevel;
+    const isLowBackup =
+      (backupVolts != null && backupVolts > 0 && backupVolts < 3.65) ||
+      (backupLevel != null && backupLevel > 0 && backupLevel <= 15);
+
+    if (isLowBackup) {
+      alertsToInsert.push({
+        organisation_id: pos.organisationId,
+        vehicle_id: pos.vehicleId,
+        device_id: pos.deviceId,
+        alert_type: "low_battery",
+        severity: "warning",
+        title: "Tracker Backup Battery Critical",
+        message: `Device internal reserve battery low (${backupVolts ? `${backupVolts.toFixed(2)}V` : `${backupLevel}%`}). Reconnect external vehicle power.`,
+        latitude: pos.latitude,
+        longitude: pos.longitude,
+        event_time: pos.recordedAt,
+      });
+    }
+
+    // 4. Geofence Evaluation
     let zones = this.geofencesCache.get(pos.organisationId);
     if (!zones) {
       zones = await this.loadGeofences(pos.organisationId);

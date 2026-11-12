@@ -3,6 +3,7 @@ import { config } from "../config";
 import { TraccarPosition, TraccarDevice } from "./client";
 
 export type PositionCallback = (position: TraccarPosition) => void;
+export type PositionBatchCallback = (positions: TraccarPosition[]) => void;
 export type DeviceCallback = (device: TraccarDevice) => void;
 export type EventCallback = (event: any) => void;
 
@@ -10,14 +11,22 @@ export class TraccarWebSocketListener {
   private ws: WebSocket | null = null;
   private isRunning: boolean = false;
   private onPositionListeners: PositionCallback[] = [];
+  private onPositionBatchListeners: PositionBatchCallback[] = [];
   private onDeviceListeners: DeviceCallback[] = [];
   private onEventListeners: EventCallback[] = [];
   private heartbeatTimer: NodeJS.Timeout | null = null;
+  private reconnectAttempts: number = 0;
+  private readonly baseDelayMs: number = 1000;
+  private readonly maxDelayMs: number = 60000;
 
   constructor() {}
 
   public onPosition(callback: PositionCallback) {
     this.onPositionListeners.push(callback);
+  }
+
+  public onPositionBatch(callback: PositionBatchCallback) {
+    this.onPositionBatchListeners.push(callback);
   }
 
   public onDevice(callback: DeviceCallback) {
@@ -30,6 +39,7 @@ export class TraccarWebSocketListener {
 
   public start() {
     this.isRunning = true;
+    this.reconnectAttempts = 0;
     this.connect();
   }
 
@@ -48,7 +58,7 @@ export class TraccarWebSocketListener {
     const creds = `${config.traccar.user}:${config.traccar.password}`;
     const authHeader = `Basic ${Buffer.from(creds).toString("base64")}`;
 
-    console.log(`[TraccarWS] Connecting to ${config.traccar.wsUrl}...`);
+    console.log(`[TraccarWS] Connecting to ${config.traccar.wsUrl} (attempt #${this.reconnectAttempts + 1})...`);
 
     this.ws = new WebSocket(config.traccar.wsUrl, {
       headers: {
@@ -58,6 +68,7 @@ export class TraccarWebSocketListener {
 
     this.ws.on("open", () => {
       console.log("[TraccarWS] Connection established successfully.");
+      this.reconnectAttempts = 0; // Reset backoff on success
       this.setupHeartbeat();
     });
 
@@ -75,11 +86,22 @@ export class TraccarWebSocketListener {
     });
 
     this.ws.on("close", (code, reason) => {
-      console.warn(`[TraccarWS] Socket closed (${code}): ${reason || "No reason"}. Reconnecting in ${config.traccar.reconnectIntervalMs}ms...`);
       if (this.heartbeatTimer) clearInterval(this.heartbeatTimer);
-      if (this.isRunning) {
-        setTimeout(() => this.connect(), config.traccar.reconnectIntervalMs);
-      }
+      if (!this.isRunning) return;
+
+      // Exponential backoff with jitter: delay = min(base * 1.8^attempts + jitter, max)
+      const jitter = Math.floor(Math.random() * 500);
+      const delay = Math.min(
+        Math.floor(this.baseDelayMs * Math.pow(1.8, this.reconnectAttempts)) + jitter,
+        this.maxDelayMs
+      );
+      this.reconnectAttempts++;
+
+      console.warn(
+        `[TraccarWS] Socket closed (${code}): ${reason || "No reason"}. Reconnecting in ${delay}ms (attempt #${this.reconnectAttempts})...`
+      );
+
+      setTimeout(() => this.connect(), delay);
     });
   }
 
@@ -93,7 +115,11 @@ export class TraccarWebSocketListener {
   }
 
   private handleMessage(payload: any) {
-    if (payload.positions && Array.isArray(payload.positions)) {
+    if (payload.positions && Array.isArray(payload.positions) && payload.positions.length > 0) {
+      // 1. Dispatch full batch for chronological burst processing
+      this.onPositionBatchListeners.forEach((cb) => cb(payload.positions));
+
+      // 2. Dispatch individual positions
       for (const pos of payload.positions) {
         this.onPositionListeners.forEach((cb) => cb(pos));
       }

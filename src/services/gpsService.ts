@@ -26,6 +26,14 @@ export interface GpsDevice {
   status: "active" | "unassigned" | "suspended" | "offline" | "decommissioned";
   last_communication_at?: string | null;
   created_at: string;
+  telematics_health?: {
+    external_power?: boolean;
+    battery_voltage?: number | null;
+    satellite_count?: number;
+    motion_status?: string;
+    speed_kmh?: number;
+    hours_since_ping?: number;
+  };
   active_assignment?: {
     id: string;
     vehicle_id: string;
@@ -33,7 +41,23 @@ export interface GpsDevice {
     vehicle_plate?: string;
     installed_at: string;
     technician_name?: string;
+    installation_location?: string | null;
   } | null;
+}
+
+export interface DeviceAssignmentHistoryItem {
+  id: string;
+  device_id: string;
+  vehicle_id: string;
+  vehicle_name?: string;
+  vehicle_plate?: string;
+  installed_at: string;
+  removed_at?: string | null;
+  technician_name?: string;
+  technician_phone?: string | null;
+  installation_location?: string | null;
+  installation_notes?: string | null;
+  status: "active" | "historical" | "decommissioned";
 }
 
 export interface LiveTrackedVehicle {
@@ -453,7 +477,7 @@ export async function acknowledgeGpsAlert(alertId: string, notes?: string): Prom
  */
 export async function getGpsDevices(organisationId: string): Promise<GpsDevice[]> {
   try {
-    const [{ data: devices }, { data: assignments }] = await Promise.all([
+    const [{ data: devices }, { data: assignments }, { data: positions }] = await Promise.all([
       (supabase as any)
         .from("gps_devices")
         .select("*")
@@ -467,10 +491,15 @@ export async function getGpsDevices(organisationId: string): Promise<GpsDevice[]
           vehicle_id,
           installed_at,
           technician_name,
+          installation_location,
           vehicle:machines(id, name, plate_number)
         `)
         .eq("organisation_id", organisationId)
         .eq("status", "active"),
+      (supabase as any)
+        .from("latest_vehicle_positions")
+        .select("device_id, vehicle_id, battery_voltage, external_power_connected, satellite_count, motion_status, speed_kmh, recorded_at")
+        .eq("organisation_id", organisationId),
     ]);
 
     const assignMap = new Map<string, any>();
@@ -482,13 +511,45 @@ export async function getGpsDevices(organisationId: string): Promise<GpsDevice[]
         vehicle_plate: a.vehicle?.plate_number,
         installed_at: a.installed_at,
         technician_name: a.technician_name,
+        installation_location: a.installation_location,
       });
     });
 
-    return (devices || []).map((d: any) => ({
-      ...d,
-      active_assignment: assignMap.get(d.id) || null,
-    }));
+    const posMap = new Map<string, any>();
+    (positions || []).forEach((p: any) => {
+      if (p.device_id) posMap.set(p.device_id, p);
+      if (p.vehicle_id) posMap.set(p.vehicle_id, p);
+    });
+
+    const now = Date.now();
+
+    return (devices || []).map((d: any) => {
+      const activeAssign = assignMap.get(d.id) || null;
+      const pos = posMap.get(d.id) || (activeAssign ? posMap.get(activeAssign.vehicle_id) : null);
+      
+      let hoursSincePing: number | undefined;
+      const lastPing = pos?.recorded_at || d.last_communication_at;
+      if (lastPing) {
+        hoursSincePing = Math.max(0, Math.round(((now - new Date(lastPing).getTime()) / (1000 * 3600)) * 10) / 10);
+      }
+
+      const isOfflineOver24h = hoursSincePing != null && hoursSincePing >= 24;
+      const effectiveStatus = (d.status === "active" && isOfflineOver24h) ? "offline" : d.status;
+
+      return {
+        ...d,
+        status: effectiveStatus,
+        active_assignment: activeAssign,
+        telematics_health: pos ? {
+          external_power: pos.external_power_connected !== false,
+          battery_voltage: pos.battery_voltage != null ? Number(pos.battery_voltage) : null,
+          satellite_count: pos.satellite_count != null ? Number(pos.satellite_count) : 0,
+          motion_status: pos.motion_status || "stopped",
+          speed_kmh: pos.speed_kmh != null ? Number(pos.speed_kmh) : 0,
+          hours_since_ping: hoursSincePing,
+        } : (lastPing ? { hours_since_ping: hoursSincePing } : undefined),
+      };
+    });
   } catch (err) {
     console.error("Failed to load GPS devices:", err);
     return [];
@@ -646,4 +707,211 @@ export function isPointInPolygonGeofence(
   }
   return inside;
 }
+
+/**
+ * Validates device IMEI using standard Luhn Algorithm (Mod 10 checksum)
+ * An IMEI is 15 decimal digits where the 15th digit is the Luhn checksum.
+ */
+export function validateImei(imei: string): { valid: boolean; reason?: string } {
+  if (!imei) {
+    return { valid: false, reason: "IMEI is required" };
+  }
+  const cleaned = imei.trim().replace(/[\s-]/g, "");
+  if (!/^\d{15}$/.test(cleaned)) {
+    return {
+      valid: false,
+      reason: `IMEI must be exactly 15 numeric digits (currently ${cleaned.length} chars)`,
+    };
+  }
+
+  let sum = 0;
+  for (let i = 0; i < 15; i++) {
+    let digit = parseInt(cleaned.charAt(i), 10);
+    // Double every second digit from the left (index 1, 3, 5, 7, 9, 11, 13)
+    if (i % 2 === 1) {
+      digit *= 2;
+      if (digit > 9) digit -= 9;
+    }
+    sum += digit;
+  }
+
+  if (sum % 10 !== 0) {
+    return {
+      valid: false,
+      reason: "Invalid IMEI checksum (failed Luhn algorithm check)",
+    };
+  }
+
+  return { valid: true };
+}
+
+/**
+ * Loads full installation and assignment audit history for a specific GPS device
+ */
+export async function getDeviceAssignmentHistory(
+  deviceId: string
+): Promise<DeviceAssignmentHistoryItem[]> {
+  try {
+    const { data, error } = await (supabase as any)
+      .from("vehicle_gps_assignments")
+      .select(`
+        id,
+        device_id,
+        vehicle_id,
+        installed_at,
+        removed_at,
+        technician_name,
+        technician_phone,
+        installation_location,
+        installation_notes,
+        status,
+        vehicle:machines(id, name, plate_number)
+      `)
+      .eq("device_id", deviceId)
+      .order("installed_at", { ascending: false });
+
+    if (error) throw error;
+
+    return (data || []).map((row: any) => ({
+      id: row.id,
+      device_id: row.device_id,
+      vehicle_id: row.vehicle_id,
+      vehicle_name: row.vehicle?.name,
+      vehicle_plate: row.vehicle?.plate_number,
+      installed_at: row.installed_at,
+      removed_at: row.removed_at,
+      technician_name: row.technician_name,
+      technician_phone: row.technician_phone,
+      installation_location: row.installation_location,
+      installation_notes: row.installation_notes,
+      status: row.status,
+    }));
+  } catch (err) {
+    console.error("Failed to load device assignment history:", err);
+    return [];
+  }
+}
+
+/**
+ * Atomic workflow to swap an old/faulty GPS tracker on a vehicle with a new one
+ */
+export async function replaceDeviceOnVehicle(
+  organisationId: string,
+  currentDeviceId: string,
+  newDeviceId: string,
+  vehicleId: string,
+  technicianName: string,
+  replacementReason: string,
+  notes?: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const now = new Date().toISOString();
+
+    // 1. Mark existing assignment as historical with removal timestamp
+    await (supabase as any)
+      .from("vehicle_gps_assignments")
+      .update({
+        status: "historical",
+        removed_at: now,
+        installation_notes: notes ? `Replaced: ${replacementReason}. ${notes}` : `Replaced: ${replacementReason}`,
+      })
+      .eq("device_id", currentDeviceId)
+      .eq("status", "active");
+
+    // 2. Mark old device as unassigned (or suspended if defective)
+    const oldDeviceStatus = replacementReason.toLowerCase().includes("defect") || replacementReason.toLowerCase().includes("fault")
+      ? "suspended"
+      : "unassigned";
+
+    await (supabase as any)
+      .from("gps_devices")
+      .update({ status: oldDeviceStatus })
+      .eq("id", currentDeviceId);
+
+    // 3. Create active assignment for new device
+    const { error: newAssignErr } = await (supabase as any)
+      .from("vehicle_gps_assignments")
+      .insert({
+        organisation_id: organisationId,
+        device_id: newDeviceId,
+        vehicle_id: vehicleId,
+        technician_name: technicianName.trim(),
+        installation_notes: `Replaced previous tracker (${currentDeviceId.slice(0, 8)}). Reason: ${replacementReason}. ${notes || ""}`.trim(),
+        status: "active",
+        installed_at: now,
+      });
+
+    if (newAssignErr) throw newAssignErr;
+
+    // 4. Mark new device as active
+    await (supabase as any)
+      .from("gps_devices")
+      .update({ status: "active" })
+      .eq("id", newDeviceId);
+
+    return { success: true };
+  } catch (err: any) {
+    return { success: false, error: err.message };
+  }
+}
+
+/**
+ * Calculates high-level telemetry and hardware health diagnostic KPIs
+ */
+export interface DeviceHealthSummary {
+  total: number;
+  active: number;
+  unassigned: number;
+  offlineOver24h: number;
+  powerCutTamper: number;
+  lowBackupBattery: number;
+  healthy: number;
+}
+
+export function computeDeviceHealthSummary(devices: GpsDevice[]): DeviceHealthSummary {
+  let active = 0;
+  let unassigned = 0;
+  let offlineOver24h = 0;
+  let powerCutTamper = 0;
+  let lowBackupBattery = 0;
+  let healthy = 0;
+
+  devices.forEach((d) => {
+    if (d.active_assignment) {
+      active++;
+    } else {
+      unassigned++;
+    }
+
+    const health = d.telematics_health;
+    const isOffline = d.status === "offline" || (health?.hours_since_ping != null && health.hours_since_ping >= 24);
+
+    if (isOffline) {
+      offlineOver24h++;
+    }
+
+    if (health?.external_power === false) {
+      powerCutTamper++;
+    }
+
+    if (health?.battery_voltage != null && health.battery_voltage < 3.65) {
+      lowBackupBattery++;
+    }
+
+    if (d.active_assignment && !isOffline && health?.external_power !== false && (health?.battery_voltage == null || health.battery_voltage >= 3.65)) {
+      healthy++;
+    }
+  });
+
+  return {
+    total: devices.length,
+    active,
+    unassigned,
+    offlineOver24h,
+    powerCutTamper,
+    lowBackupBattery,
+    healthy,
+  };
+}
+
 

@@ -40,8 +40,9 @@ async function main() {
 
     const wsListener = new TraccarWebSocketListener();
 
-    wsListener.onPosition((pos) => {
-      syncEngine.processPosition(pos);
+    // Use onPositionBatch to ensure burst positions from cell re-connections are processed chronologically
+    wsListener.onPositionBatch((positions) => {
+      syncEngine.processPositionsBatch(positions);
     });
 
     wsListener.onEvent((ev) => {

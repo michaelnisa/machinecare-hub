@@ -19,7 +19,19 @@ export class GpsSyncEngine {
   private traccarIdMap: Map<number, DeviceMapping> = new Map(); // traccarDeviceId -> mapping
   private latestPositionsCache: Map<string, NormalizedPosition> = new Map(); // vehicleId -> last pos
   private positionBatch: any[] = [];
+  private retryQueue: any[] = []; // In-memory resilient buffer for Supabase write failures
+  private readonly maxRetryBufferSize: number = 5000;
+  private retryDelayMs: number = 1000;
+  private isFlushing: boolean = false;
   private flushTimer: NodeJS.Timeout | null = null;
+  private offlineCheckTimer: NodeJS.Timeout | null = null;
+
+  // Deduplication suppression set: "vehicleId:recordedAt"
+  private recentPingsCache: Set<string> = new Set();
+  private readonly maxCacheEntries: number = 10000;
+
+  // Rate limiter for unmapped device logging
+  private unmappedImeiLogTime: Map<string, number> = new Map();
 
   constructor() {
     this.supabase = createClient(config.supabase.url, config.supabase.serviceRoleKey, {
@@ -36,6 +48,16 @@ export class GpsSyncEngine {
     this.flushTimer = setInterval(() => {
       this.flushPositionsBatch();
     }, config.telematics.batchFlushIntervalMs);
+
+    // Periodic check for devices offline > 24 hours (runs every 15 minutes)
+    this.offlineCheckTimer = setInterval(() => {
+      this.checkOfflineDevices();
+    }, 15 * 60 * 1000);
+
+    // Run first offline check shortly after startup
+    setTimeout(() => {
+      this.checkOfflineDevices();
+    }, 10000);
   }
 
   public async refreshDeviceMappings() {
@@ -85,6 +107,25 @@ export class GpsSyncEngine {
   }
 
   /**
+   * Process a burst batch of positions (e.g. after GSM network reconnection)
+   * Sorted strictly by recorded_at ascending so chronological transitions are preserved.
+   */
+  public async processPositionsBatch(positions: TraccarPosition[], explicitImei?: string) {
+    if (!positions || positions.length === 0) return;
+
+    // Chronological sort: earlier satellite timestamp first
+    const sorted = [...positions].sort((a, b) => {
+      const tA = new Date(a.deviceTime || a.fixTime).getTime();
+      const tB = new Date(b.deviceTime || b.fixTime).getTime();
+      return tA - tB;
+    });
+
+    for (const pos of sorted) {
+      await this.processPosition(pos, explicitImei);
+    }
+  }
+
+  /**
    * Process a single incoming position from Traccar WebSocket or REST
    */
   public async processPosition(pos: TraccarPosition, explicitImei?: string) {
@@ -97,8 +138,30 @@ export class GpsSyncEngine {
     }
 
     if (!mapping) {
-      // Unmapped device pinging Traccar - ignore or log diagnostic
+      // Diagnostic logging for unmapped device (rate-limited to once every 10 mins)
+      const imeiKey = explicitImei || `traccarId:${pos.deviceId}`;
+      const lastLogged = this.unmappedImeiLogTime.get(imeiKey) || 0;
+      if (Date.now() - lastLogged > 10 * 60 * 1000) {
+        console.warn(`[SyncEngine] Position received from unmapped device (${imeiKey}). Device not assigned to any vehicle.`);
+        this.unmappedImeiLogTime.set(imeiKey, Date.now());
+      }
       return;
+    }
+
+    // Duplicate Ping Suppression: discard duplicate packets retransmitted by hardware
+    const recordedTimestamp = pos.deviceTime || pos.fixTime;
+    const dedupeKey = `${mapping.vehicleId}:${recordedTimestamp}`;
+    if (this.recentPingsCache.has(dedupeKey)) {
+      return; // Duplicate ping ignored
+    }
+    this.recentPingsCache.add(dedupeKey);
+    if (this.recentPingsCache.size > this.maxCacheEntries) {
+      // Clean oldest 2,000 entries
+      const iter = this.recentPingsCache.values();
+      for (let i = 0; i < 2000; i++) {
+        const next = iter.next();
+        if (!next.done) this.recentPingsCache.delete(next.value);
+      }
     }
 
     const prevPos = this.latestPositionsCache.get(mapping.vehicleId);
@@ -132,8 +195,8 @@ export class GpsSyncEngine {
       battery_voltage: normalized.batteryVoltage,
       satellite_count: normalized.satelliteCount,
       accuracy_m: normalized.accuracyM,
-      recorded_at: normalized.recordedAt,
-      received_at: normalized.receivedAt,
+      recorded_at: normalized.recordedAt, // Preserved satellite fix timestamp
+      received_at: normalized.receivedAt, // Ingestion timestamp
       raw_attributes: normalized.rawAttributes,
     });
 
@@ -141,7 +204,7 @@ export class GpsSyncEngine {
       this.flushPositionsBatch();
     }
 
-    // 3. Evaluate alerts (overspeed, geofences, power cut)
+    // 3. Evaluate alerts (overspeed, geofences, power cut, low battery)
     this.alertEvaluator.evaluate(normalized).catch((err) => {
       console.error("[SyncEngine] Alert evaluation error:", err.message);
     });
@@ -210,23 +273,117 @@ export class GpsSyncEngine {
       .eq("id", pos.deviceId);
   }
 
+  /**
+   * Resilient batch flush with in-memory retry buffer
+   * Prevents silent telemetry loss during Supabase maintenance or network glitches.
+   */
   private async flushPositionsBatch() {
-    if (this.positionBatch.length === 0) return;
-    const batch = [...this.positionBatch];
-    this.positionBatch = [];
+    if (this.isFlushing) return;
+    if (this.positionBatch.length === 0 && this.retryQueue.length === 0) return;
+
+    this.isFlushing = true;
+
+    // Build batch prioritizing retryQueue items first
+    const batch: any[] = [];
+    while (this.retryQueue.length > 0 && batch.length < config.telematics.maxBatchSize) {
+      batch.push(this.retryQueue.shift());
+    }
+
+    while (this.positionBatch.length > 0 && batch.length < config.telematics.maxBatchSize) {
+      batch.push(this.positionBatch.shift());
+    }
+
+    if (batch.length === 0) {
+      this.isFlushing = false;
+      return;
+    }
 
     try {
       const { error } = await this.supabase.from("vehicle_positions").insert(batch);
       if (error) {
-        console.error("[SyncEngine] Error flushing vehicle_positions batch:", error.message);
+        throw error;
+      }
+      // Success: reset retry backoff
+      this.retryDelayMs = 1000;
+    } catch (err: any) {
+      console.error(
+        `[SyncEngine] Supabase write failed (${err.message}). Buffering ${batch.length} positions in retry queue.`
+      );
+
+      // Re-queue items back to retry buffer (capping at max buffer size)
+      this.retryQueue.unshift(...batch);
+      if (this.retryQueue.length > this.maxRetryBufferSize) {
+        console.warn(`[SyncEngine] Retry buffer full (${this.retryQueue.length}). Dropping oldest records.`);
+        this.retryQueue.splice(0, this.retryQueue.length - this.maxRetryBufferSize);
+      }
+
+      // Exponential backoff up to 30s
+      this.retryDelayMs = Math.min(this.retryDelayMs * 2, 30000);
+    } finally {
+      this.isFlushing = false;
+    }
+  }
+
+  /**
+   * Detects devices that have not communicated for > 24 hours and creates alerts
+   */
+  public async checkOfflineDevices(thresholdHours: number = 24) {
+    try {
+      const cutoff = new Date(Date.now() - thresholdHours * 60 * 60 * 1000).toISOString();
+
+      const { data: offlineDevices, error } = await this.supabase
+        .from("gps_devices")
+        .select(`
+          id,
+          imei,
+          name,
+          organisation_id,
+          last_communication_at,
+          vehicle_gps_assignments!inner(
+            vehicle_id,
+            status,
+            vehicle:machines(id, name, plate_number)
+          )
+        `)
+        .eq("vehicle_gps_assignments.status", "active")
+        .or(`last_communication_at.lt.${cutoff},last_communication_at.is.null`)
+        .neq("status", "offline");
+
+      if (error) {
+        console.error("[SyncEngine] Error querying offline devices:", error.message);
+        return;
+      }
+
+      for (const dev of offlineDevices || []) {
+        // Mark device as offline
+        await this.supabase.from("gps_devices").update({ status: "offline" }).eq("id", dev.id);
+
+        const assignment = (dev as any).vehicle_gps_assignments?.[0];
+        const vehicle = assignment?.vehicle;
+        const vehicleLabel = vehicle ? `${vehicle.name} (${vehicle.plate_number || "No Plate"})` : "Vehicle";
+
+        // Insert warning alert
+        await this.supabase.from("gps_alerts").insert({
+          organisation_id: dev.organisation_id,
+          vehicle_id: assignment?.vehicle_id,
+          device_id: dev.id,
+          alert_type: "device_offline",
+          severity: "warning",
+          title: `GPS Tracker Offline > ${thresholdHours} Hours`,
+          message: `Tracker ${dev.imei} on ${vehicleLabel} has not transmitted a telematics ping in over ${thresholdHours} hours. Verify power and SIM network.`,
+          event_time: new Date().toISOString(),
+        });
+
+        console.log(`[SyncEngine] Device ${dev.imei} flagged as offline (>24h). Alert generated.`);
       }
     } catch (err: any) {
-      console.error("[SyncEngine] Failed to write positions batch:", err.message);
+      console.error("[SyncEngine] checkOfflineDevices error:", err.message);
     }
   }
 
   public stop() {
     if (this.flushTimer) clearInterval(this.flushTimer);
+    if (this.offlineCheckTimer) clearInterval(this.offlineCheckTimer);
     this.flushPositionsBatch();
   }
 }
