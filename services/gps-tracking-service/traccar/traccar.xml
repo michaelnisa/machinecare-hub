@@ -1,0 +1,70 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<!DOCTYPE properties SYSTEM 'http://java.sun.com/dtd/properties.dtd'>
+<properties>
+    <entry key='config.default'>./conf/default.xml</entry>
+
+    <!-- =================================================================== -->
+    <!-- DATABASE CONFIGURATION                                              -->
+    <!-- Default H2 embedded database (for quick setup) or PostgreSQL        -->
+    <!-- To switch to PostgreSQL: uncomment PostgreSQL lines and comment H2  -->
+    <!-- =================================================================== -->
+    <entry key='database.driver'>org.h2.Driver</entry>
+    <entry key='database.url'>jdbc:h2:./data/database</entry>
+    <entry key='database.user'>sa</entry>
+    <entry key='database.password'></entry>
+
+    <!-- PostgreSQL Configuration (Production) -->
+    <!--
+    <entry key='database.driver'>org.postgresql.Driver</entry>
+    <entry key='database.url'>jdbc:postgresql://localhost:5432/traccar</entry>
+    <entry key='database.user'>traccar</entry>
+    <entry key='database.password'>TraccarSecurePassword2026!</entry>
+    -->
+
+    <!-- =================================================================== -->
+    <!-- WEB & REST API INTERFACE                                            -->
+    <!-- Internal binding: 127.0.0.1:8082 (Reverse proxied by Nginx)          -->
+    <!-- =================================================================== -->
+    <entry key='web.port'>8082</entry>
+    <entry key='web.address'>0.0.0.0</entry>
+    <entry key='web.timeout'>120000</entry>
+
+    <!-- =================================================================== -->
+    <!-- SUPPORTED GPS HARDWARE DEVICE PROTOCOLS                            -->
+    <!-- Teltonika FMC920 / FMB920 (Port 5027 TCP/UDP)                       -->
+    <!-- Concox / Jimi IoT GT06 / JM-VL03 (Port 5023 TCP)                    -->
+    <!-- Coban / TK103 (Port 5005 TCP)                                       -->
+    <!-- Suntech (Port 5011 TCP)                                             -->
+    <!-- Queclink (Port 5004 TCP)                                            -->
+    <!-- =================================================================== -->
+    <entry key='teltonika.port'>5027</entry>
+    <entry key='gt06.port'>5023</entry>
+    <entry key='coban.port'>5005</entry>
+    <entry key='suntech.port'>5011</entry>
+    <entry key='queclink.port'>5004</entry>
+
+    <!-- Connection Timeout: 5 minutes idle threshold -->
+    <entry key='server.timeout'>300</entry>
+
+    <!-- =================================================================== -->
+    <!-- TELEMETRY FILTERING & ACCURACY SAFEGUARDS                           -->
+    <!-- Drops multipath jitter, 0,0 lat/lon, and duplicate parked pings     -->
+    <!-- =================================================================== -->
+    <entry key='filter.enable'>true</entry>
+    <entry key='filter.invalid'>true</entry>
+    <entry key='filter.zero'>true</entry>
+    <entry key='filter.duplicate'>true</entry>
+    <entry key='filter.distance'>15</entry>
+    <entry key='filter.maxSpeed'>180</entry>
+
+    <!-- Geocoder disabled locally to conserve VPS memory & network overhead -->
+    <entry key='geocoder.enable'>false</entry>
+
+    <!-- Logging configuration -->
+    <entry key='logger.level'>info</entry>
+    <entry key='logger.file'>./logs/tracker-server.log</entry>
+    <entry key='logger.rotate'>true</entry>
+
+    <!-- Notification dispatch -->
+    <entry key='notificator.types'>web,mail</entry>
+</properties>

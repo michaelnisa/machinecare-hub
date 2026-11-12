@@ -49,11 +49,12 @@ export function useFeatureFlags() {
 
   return {
     profile,
-    isFleet: (profile === "fleet_logistics" || isLogisticsOrg) && profile !== "mixed",
+    isFleet: (profile === "fleet_logistics" || isLogisticsOrg) && profile !== "mixed" && profile !== "gps_tracking",
     isManufacturing: profile === "manufacturing" && !isLogisticsOrg,
     isGarage: profile === "garage",
     isMixed: profile === "mixed",
     isIoT: isFeatureEnabled("connected_data"),
+    isGpsTracking: profile === "gps_tracking" || Boolean(organisation?.enabled_modules?.includes("gps_tracking") && !organisation?.enabled_modules?.includes("fleet")),
     isFeatureEnabled,
   };
 }

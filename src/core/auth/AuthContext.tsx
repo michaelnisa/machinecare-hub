@@ -18,7 +18,7 @@ export interface Profile {
 }
 
 export type IndustryProfile =
-  "manufacturing" | "fleet_logistics" | "garage" | "mixed";
+  "manufacturing" | "fleet_logistics" | "garage" | "mixed" | "gps_tracking";
 
 export interface BusinessHoursDay {
   open: string;

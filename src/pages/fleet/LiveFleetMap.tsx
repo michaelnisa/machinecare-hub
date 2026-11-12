@@ -284,12 +284,10 @@ export default function LiveFleetMap() {
             ${v.telematics_battery_volt ? `<div><strong>Battery:</strong> ${v.telematics_battery_volt}V</div>` : ""}
             <div style="color: #9ca3af; font-size: 10px; margin-top: 4px;">Last fix: ${lastSeen}</div>
           </div>
-          <div style="display: flex; align-items: center; justify-content: space-between; gap: 6px; border-top: 1px solid #f3f4f6; padding-top: 6px;">
-            <a href="/fleet/gps/replay?vehicleId=${v.id}" style="font-size: 11px; color: #16a34a; text-decoration: none; font-weight: 600;">Replay Route ↺</a>
+          <div style="display: flex; gap: 6px; border-top: 1px solid #f3f4f6; padding-top: 6px;">
+            <a href="/fleet/vehicles/${v.id}" style="font-size: 11px; color: #2563eb; text-decoration: none; font-weight: 600;">Vehicle Profile →</a>
             <span style="color: #d1d5db;">•</span>
-            <a href="/fleet/vehicles/${v.id}" style="font-size: 11px; color: #2563eb; text-decoration: none; font-weight: 600;">Profile →</a>
-            <span style="color: #d1d5db;">•</span>
-            <a href="https://maps.google.com/?q=${lat},${lng}" target="_blank" rel="noreferrer" style="font-size: 11px; color: #4b5563; text-decoration: none;">Maps ↗</a>
+            <a href="https://maps.google.com/?q=${lat},${lng}" target="_blank" rel="noreferrer" style="font-size: 11px; color: #4b5563; text-decoration: none;">Google Maps ↗</a>
           </div>
         </div>
       `;
@@ -438,40 +436,6 @@ export default function LiveFleetMap() {
         </div>
       </div>
 
-      {/* Telematics Suite Navigation Bar */}
-      <div className="flex items-center gap-1.5 border-b border-border pb-2 shrink-0 overflow-x-auto text-xs">
-        <Link
-          to="/fleet/live-map"
-          className="px-3 py-1.5 rounded-lg font-semibold bg-primary text-primary-foreground flex items-center gap-1.5 shadow-sm"
-        >
-          <Navigation className="h-3.5 w-3.5" /> Live Map
-        </Link>
-        <Link
-          to="/fleet/gps/replay"
-          className="px-3 py-1.5 rounded-lg font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors flex items-center gap-1.5"
-        >
-          <History className="h-3.5 w-3.5" /> Route Replay
-        </Link>
-        <Link
-          to="/fleet/gps/geofences"
-          className="px-3 py-1.5 rounded-lg font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors flex items-center gap-1.5"
-        >
-          <ShieldCheck className="h-3.5 w-3.5" /> Geofences
-        </Link>
-        <Link
-          to="/fleet/gps/alerts"
-          className="px-3 py-1.5 rounded-lg font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors flex items-center gap-1.5"
-        >
-          <ShieldAlert className="h-3.5 w-3.5" /> Alerts Center
-        </Link>
-        <Link
-          to="/fleet/gps/devices"
-          className="px-3 py-1.5 rounded-lg font-medium text-muted-foreground hover:text-foreground hover:bg-muted transition-colors flex items-center gap-1.5"
-        >
-          <Cpu className="h-3.5 w-3.5" /> Hardware Trackers
-        </Link>
-      </div>
-
       {/* Main Map + Sidebar Container */}
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-3 flex-1 min-h-0 rounded-2xl border border-border overflow-hidden bg-card shadow-sm">
         {/* Left Sidebar List */}
@@ -525,14 +489,6 @@ export default function LiveFleetMap() {
                       <span className="font-mono font-bold text-sm text-foreground tracking-wide truncate">
                         {v.plate_number || v.name}
                       </span>
-                      <Link
-                        to={`/fleet/gps/replay?vehicleId=${v.id}`}
-                        onClick={(e) => e.stopPropagation()}
-                        className="text-xs text-muted-foreground hover:text-emerald-600 transition-colors p-0.5 shrink-0"
-                        title="Replay Route History"
-                      >
-                        <History className="h-3 w-3" />
-                      </Link>
                       <Link
                         to={`/fleet/vehicles/${v.id}`}
                         onClick={(e) => e.stopPropagation()}

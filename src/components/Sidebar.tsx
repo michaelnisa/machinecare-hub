@@ -318,16 +318,11 @@ export function Sidebar() {
       },
       {
         id: "fleet",
-        label: "Fleet & Tracking",
+        label: "Fleet Operations",
         items: [
-          { to: "/fleet/live-map", label: "Live GPS Map", icon: MapPin },
-          { to: "/fleet/gps/replay", label: "Route Replay", icon: History },
           { to: "/fleet/vehicles", label: "Vehicles", icon: Truck },
           { to: "/fleet/drivers", label: "Drivers", icon: Contact },
           { to: "/fleet/trips", label: "Trips", icon: Route },
-          { to: "/fleet/gps/geofences", label: "Geofences", icon: Target },
-          { to: "/fleet/gps/alerts", label: "GPS Alerts", icon: AlertTriangle },
-          { to: "/fleet/gps/devices", label: "GPS Hardware", icon: Cpu },
           { to: "/fleet/documents", label: "Documents", icon: FileText },
           { to: "/fleet/tyres", label: "Tyres", icon: CircleDot },
           { to: "/fuel", label: t.nav.fuel, icon: Fuel },
@@ -573,21 +568,21 @@ export function Sidebar() {
       },
       {
         id: "gps-telematics",
-        label: "GPS & Telematics",
+        label: "MachineCare GPS Tracking",
         items: [
-          { to: "/fleet/live-map", label: "Live GPS Map", icon: MapPin },
-          { to: "/fleet/gps/replay", label: "Route History & Replay", icon: History },
-          { to: "/fleet/gps/geofences", label: "Geofences", icon: Target },
-          { to: "/fleet/gps/alerts", label: "Telematics Alerts", icon: AlertTriangle },
-          { to: "/fleet/vehicles", label: "Tracked Vehicles", icon: Truck },
-          { to: "/fleet/gps/devices", label: "GPS Hardware Trackers", icon: Cpu },
+          { to: "/gps/live-map", label: "Live Tracking Map", icon: MapPin },
+          { to: "/gps/replay", label: "Route History & Replay", icon: History },
+          { to: "/gps/geofences", label: "Geofence Zones", icon: Target },
+          { to: "/gps/alerts", label: "Telematics Alerts", icon: AlertTriangle },
+          { to: "/gps/devices", label: "GPS Hardware Trackers", icon: Cpu },
+          { to: "/gps/vehicles", label: "Tracked Vehicles", icon: Truck },
         ],
       },
       {
         id: "gps-insights",
         label: "Insights",
         items: [
-          { to: "/fleet/insights", label: "Fleet KPIs & Analytics", icon: Gauge },
+          { to: "/gps/insights", label: "GPS Telematics KPIs", icon: Gauge },
           { to: "/reports", label: t.nav.reports, icon: FileBarChart },
         ],
       },
@@ -610,7 +605,10 @@ export function Sidebar() {
   const groups = useMemo(() => {
     if (isSafetyDept) return safetyDeptGroups;
 
-    // Direct Industry Profile matching (Ensures Fleet & Logistics accounts default strictly to Fleet navigation)
+    // Direct Industry Profile matching
+    if (organisation?.industry_profile === "gps_tracking") {
+      return gpsTrackingGroups;
+    }
     if (organisation?.industry_profile === "fleet_logistics" || isFleet) {
       return fleetGroups;
     }

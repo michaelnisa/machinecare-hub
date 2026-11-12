@@ -114,10 +114,11 @@ const Unsubscribe = lazy(() => import("./pages/Unsubscribe"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 const Vehicles = lazy(() => import("./pages/fleet/Vehicles"));
 const LiveFleetMap = lazy(() => import("./pages/fleet/LiveFleetMap"));
-const GpsTripHistory = lazy(() => import("./pages/fleet/GpsTripHistory"));
-const GpsGeofences = lazy(() => import("./pages/fleet/GpsGeofences"));
-const GpsAlerts = lazy(() => import("./pages/fleet/GpsAlerts"));
-const GpsDevices = lazy(() => import("./pages/fleet/GpsDevices"));
+const GpsLiveMap = lazy(() => import("./pages/gps/GpsLiveMap"));
+const GpsTripHistory = lazy(() => import("./pages/gps/GpsTripHistory"));
+const GpsGeofences = lazy(() => import("./pages/gps/GpsGeofences"));
+const GpsAlerts = lazy(() => import("./pages/gps/GpsAlerts"));
+const GpsDevices = lazy(() => import("./pages/gps/GpsDevices"));
 const FleetVehicleDetail = lazy(() => import("./pages/fleet/VehicleDetail"));
 const Drivers = lazy(() => import("./pages/fleet/Drivers"));
 const FleetDocuments = lazy(() => import("./pages/fleet/FleetDocuments"));
@@ -237,12 +238,18 @@ const App = () => (
                 <Route path="/unsubscribe" element={<Unsubscribe />} />
                 <Route element={<AppLayout />}>
                   <Route path="/dashboard" element={<DashboardRouter />} />
+                  {/* MachineCare GPS Tracking (Standalone Suite) */}
+                  <Route path="/gps" element={<GpsLiveMap />} />
+                  <Route path="/gps/live-map" element={<GpsLiveMap />} />
+                  <Route path="/gps/replay" element={<GpsTripHistory />} />
+                  <Route path="/gps/geofences" element={<GpsGeofences />} />
+                  <Route path="/gps/alerts" element={<GpsAlerts />} />
+                  <Route path="/gps/devices" element={<GpsDevices />} />
+                  <Route path="/gps/vehicles" element={<Vehicles />} />
+                  <Route path="/gps/insights" element={<FleetInsights />} />
+
+                  {/* Fleet & Logistics Operations */}
                   <Route path="/fleet/live-map" element={<LiveFleetMap />} />
-                  <Route path="/fleet/map" element={<LiveFleetMap />} />
-                  <Route path="/fleet/gps/replay" element={<GpsTripHistory />} />
-                  <Route path="/fleet/gps/geofences" element={<GpsGeofences />} />
-                  <Route path="/fleet/gps/alerts" element={<GpsAlerts />} />
-                  <Route path="/fleet/gps/devices" element={<GpsDevices />} />
                   <Route path="/fleet/vehicles" element={<Vehicles />} />
                   <Route path="/fleet/vehicles/:id" element={<FleetVehicleDetail />} />
                   <Route path="/fleet/drivers" element={<Drivers />} />

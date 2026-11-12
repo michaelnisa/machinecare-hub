@@ -277,7 +277,7 @@ export default function GpsTripHistory() {
         <div>
           <div className="flex items-center gap-2">
             <Link
-              to="/fleet/live-map"
+              to="/gps/live-map"
               className="p-1 rounded-md text-muted-foreground hover:bg-muted transition-colors"
             >
               <ArrowLeft className="h-5 w-5" />
