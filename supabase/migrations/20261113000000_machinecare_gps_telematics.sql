@@ -106,6 +106,7 @@ CREATE TABLE IF NOT EXISTS public.vehicle_positions (
 
 CREATE INDEX IF NOT EXISTS idx_positions_vehicle_time ON public.vehicle_positions(vehicle_id, recorded_at DESC);
 CREATE INDEX IF NOT EXISTS idx_positions_org_time ON public.vehicle_positions(organisation_id, recorded_at DESC);
+CREATE INDEX IF NOT EXISTS idx_positions_org_veh_time ON public.vehicle_positions(organisation_id, vehicle_id, recorded_at DESC);
 
 -- 5. Geofences
 CREATE TABLE IF NOT EXISTS public.geofences (
@@ -176,6 +177,7 @@ CREATE TABLE IF NOT EXISTS public.gps_alerts (
 
 CREATE INDEX IF NOT EXISTS idx_gps_alerts_org ON public.gps_alerts(organisation_id, event_time DESC);
 CREATE INDEX IF NOT EXISTS idx_gps_alerts_unack ON public.gps_alerts(organisation_id) WHERE is_acknowledged = false;
+CREATE INDEX IF NOT EXISTS idx_gps_alerts_org_unack_time ON public.gps_alerts(organisation_id, is_acknowledged, event_time DESC);
 
 -- 8. GPS Installation Signoffs
 CREATE TABLE IF NOT EXISTS public.gps_installations (

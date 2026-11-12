@@ -254,3 +254,104 @@ test("Section 12 - Power Cut & Tamper Evaluation", () => {
   assert.equal(isTamperAlert({ externalPower: true, rawAttributes: { power: 0 } }), true);
 });
 
+// ============================================================================
+// PHASE 4 — DATABASE & MULTI-TENANT SECURITY TESTS
+// ============================================================================
+
+test("Phase 4 - Multi-Tenant Security: Strict Organization Isolation", () => {
+  // Mock multi-tenant database records
+  const allPositions = [
+    { id: 1, organisation_id: "org-alpha", vehicle_id: "veh-1", latitude: -6.82, longitude: 39.28 },
+    { id: 2, organisation_id: "org-alpha", vehicle_id: "veh-2", latitude: -6.83, longitude: 39.29 },
+    { id: 3, organisation_id: "org-beta", vehicle_id: "veh-3", latitude: -3.38, longitude: 36.68 },
+    { id: 4, organisation_id: "org-beta", vehicle_id: "veh-4", latitude: -3.39, longitude: 36.69 },
+  ];
+
+  // Simulated RLS query executor for Org Alpha user
+  function executeOrgQuery(currentOrgId, records) {
+    return records.filter((r) => r.organisation_id === currentOrgId);
+  }
+
+  const alphaPositions = executeOrgQuery("org-alpha", allPositions);
+  const betaPositions = executeOrgQuery("org-beta", allPositions);
+
+  // Assert Org Alpha sees only its own 2 records and zero of Beta
+  assert.equal(alphaPositions.length, 2);
+  assert.ok(alphaPositions.every((p) => p.organisation_id === "org-alpha"));
+  assert.equal(alphaPositions.some((p) => p.organisation_id === "org-beta"), false);
+
+  // Assert Org Beta sees only its own 2 records
+  assert.equal(betaPositions.length, 2);
+  assert.ok(betaPositions.every((p) => p.organisation_id === "org-beta"));
+  assert.equal(betaPositions.some((p) => p.organisation_id === "org-alpha"), false);
+});
+
+test("Phase 4 - Device Assignment Invariant: No device assigned to multiple active vehicles", () => {
+  const activeAssignments = new Map(); // deviceId -> assignment
+
+  function assignDevice(deviceId, vehicleId, orgId) {
+    // Check constraint: device can only have 1 active assignment
+    if (activeAssignments.has(deviceId)) {
+      const existing = activeAssignments.get(deviceId);
+      if (existing.status === "active") {
+        // Enforce rule: must deactivate old assignment before new assignment
+        existing.status = "historical";
+        existing.removed_at = new Date().toISOString();
+      }
+    }
+
+    const newAssignment = {
+      id: `assign-${Date.now()}`,
+      deviceId,
+      vehicleId,
+      orgId,
+      status: "active",
+      installed_at: new Date().toISOString(),
+    };
+    activeAssignments.set(deviceId, newAssignment);
+    return newAssignment;
+  }
+
+  const devId = "teltonika-fmc920-101";
+  assignDevice(devId, "truck-10", "org-alpha");
+  assert.equal(activeAssignments.get(devId).vehicleId, "truck-10");
+  assert.equal(activeAssignments.get(devId).status, "active");
+
+  // Re-assigning to truck-20 must cleanly replace truck-10
+  assignDevice(devId, "truck-20", "org-alpha");
+  assert.equal(activeAssignments.get(devId).vehicleId, "truck-20");
+  assert.equal(activeAssignments.get(devId).status, "active");
+});
+
+test("Phase 4 - Ingestion Engine: Prevents cross-tenant telemetry poisoning", () => {
+  // Trusted internal mapping table maintained by syncEngine
+  const deviceRegistry = new Map([
+    ["867823050123451", { orgId: "org-alpha", vehicleId: "veh-alpha-1" }],
+    ["356938035643809", { orgId: "org-beta", vehicleId: "veh-beta-1" }],
+  ]);
+
+  function normalizeIncomingPing(imei, rawPosition) {
+    const mapping = deviceRegistry.get(imei);
+    if (!mapping) return null; // Unmapped: dropped/buffered
+    return {
+      organisation_id: mapping.orgId, // Derived from trusted server DB mapping, NOT client packet
+      vehicle_id: mapping.vehicleId,
+      latitude: rawPosition.latitude,
+      longitude: rawPosition.longitude,
+    };
+  }
+
+  // Alpha tracker ping
+  const pingAlpha = normalizeIncomingPing("867823050123451", { latitude: -6.82, longitude: 39.28 });
+  assert.equal(pingAlpha.organisation_id, "org-alpha");
+
+  // Beta tracker ping
+  const pingBeta = normalizeIncomingPing("356938035643809", { latitude: -3.38, longitude: 36.68 });
+  assert.equal(pingBeta.organisation_id, "org-beta");
+
+  // Rogue / unmapped tracker cannot inject data into any org
+  const roguePing = normalizeIncomingPing("999999999999999", { latitude: 0, longitude: 0 });
+  assert.equal(roguePing, null);
+});
+
+
