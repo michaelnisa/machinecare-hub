@@ -44,6 +44,21 @@ export default function FinanceCashFlow() {
     if (!organisation?.id) return;
     setLoading(true);
     try {
+      // Query organization machines first to scope fuel_logs (fuel_logs links via machine_id)
+      const { data: orgMachines } = await (supabase as any)
+        .from("machines")
+        .select("id")
+        .eq("organisation_id", organisation.id);
+      const machineIds = (orgMachines || []).map((m: any) => m.id);
+
+      const fuelPromise = machineIds.length === 0
+        ? Promise.resolve({ data: [] })
+        : (supabase as any)
+            .from("fuel_logs")
+            .select("id, fuel_cost, station, recorded_at, machine_id")
+            .in("machine_id", machineIds)
+            .gt("fuel_cost", 0);
+
       const [
         { data: invoices },
         { data: receipts },
@@ -62,11 +77,7 @@ export default function FinanceCashFlow() {
           .select("id, receipt_number, title, category, payee_name, amount, payment_method, payment_date")
           .eq("organisation_id", organisation.id),
 
-        (supabase as any)
-          .from("fuel_logs")
-          .select("id, fuel_cost, station, recorded_at")
-          .eq("organisation_id", organisation.id)
-          .gt("fuel_cost", 0),
+        fuelPromise,
 
         (supabase as any)
           .from("trip_expenses")

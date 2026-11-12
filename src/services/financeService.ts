@@ -6,6 +6,7 @@
 */
 
 import { supabase } from "@/integrations/supabase/client";
+import { parseCargoMeta } from "@/lib/fleet-metadata";
 
 export type InvoiceStatus = "draft" | "sent" | "partially_paid" | "paid" | "overdue" | "cancelled";
 export type BillStatus = "pending" | "approved" | "paid" | "partially_paid" | "overdue" | "rejected";
@@ -84,6 +85,8 @@ export interface FinancialOverviewMetrics {
   fuelTotalCost: number;
   maintenanceTotalCost: number;
   tripExpensesTotal: number;
+  uninvoicedTripsCount?: number;
+  uninvoicedFreightAmount?: number;
   monthlyTrend: {
     month: string;
     revenue: number;
@@ -174,6 +177,21 @@ export async function getNextFinanceInvoiceNumber(organisationId: string): Promi
  * - Expenses from fuel_logs, accountant_receipts, trip_expenses, finance_supplier_bills
  */
 export async function getFinancialOverview(organisationId: string): Promise<FinancialOverviewMetrics> {
+  // Query organisation machines first to accurately scope fuel logs (since fuel_logs links by machine_id)
+  const { data: orgMachines } = await (supabase as any)
+    .from("machines")
+    .select("id")
+    .eq("organisation_id", organisationId);
+  const machineIds = (orgMachines || []).map((m: any) => m.id);
+
+  let fuelPromise: Promise<any> = Promise.resolve({ data: [] });
+  if (machineIds.length > 0) {
+    fuelPromise = (supabase as any)
+      .from("fuel_logs")
+      .select("fuel_cost, fuel_litres, recorded_at, machine_id")
+      .in("machine_id", machineIds);
+  }
+
   const [
     { data: invoices },
     { data: bills },
@@ -184,18 +202,20 @@ export async function getFinancialOverview(organisationId: string): Promise<Fina
   ] = await Promise.all([
     (supabase as any).from("finance_invoices").select("*").eq("organisation_id", organisationId),
     (supabase as any).from("finance_supplier_bills").select("*").eq("organisation_id", organisationId),
-    (supabase as any).from("fuel_logs").select("fuel_cost, fuel_litres, recorded_at").eq("organisation_id", organisationId),
+    fuelPromise,
     (supabase as any).from("accountant_receipts").select("amount, category, receipt_type, payment_date").eq("organisation_id", organisationId),
     (supabase as any).from("trip_expenses").select("amount, expense_type, occurred_at").eq("organisation_id", organisationId),
-    (supabase as any).from("trips").select("cost, fuel_used_l, start_at").eq("organisation_id", organisationId),
+    (supabase as any).from("trips").select("id, cost, cargo_description, start_at, status").eq("organisation_id", organisationId),
   ]);
 
-  // 1. Revenue
+  // 1. Revenue: Collected Invoices + Accrued Uninvoiced Freight
   const allInvoices: FinanceInvoice[] = invoices || [];
   let invoiceRevenue = 0;
   let arOutstanding = 0;
+  const invoicedTripIds = new Set<string>();
 
   for (const inv of allInvoices) {
+    if (inv.trip_id) invoicedTripIds.add(inv.trip_id);
     if (inv.status === "paid") {
       invoiceRevenue += Number(inv.total_amount || 0);
     } else if (inv.status !== "cancelled") {
@@ -203,6 +223,27 @@ export async function getFinancialOverview(organisationId: string): Promise<Fina
       arOutstanding += Math.max(Number(inv.total_amount || 0) - Number(inv.paid_amount || 0), 0);
     }
   }
+
+  // Calculate uninvoiced trips ready for commercial billing
+  let uninvoicedTripsCount = 0;
+  let uninvoicedFreightAmount = 0;
+
+  (trips || []).forEach((t: any) => {
+    if (!invoicedTripIds.has(t.id)) {
+      uninvoicedTripsCount++;
+      const meta = parseCargoMeta(t.cargo_description);
+      let freight = Number(meta?.client_billing_amount || 0);
+      if (freight > 0) {
+        const isUsd = (meta?.billing_currency || meta?.currency || "").toUpperCase() === "USD";
+        if (isUsd) freight = freight * (Number(meta?.exchange_rate) || 2600);
+      } else if (Number(t.cost) > 0) {
+        freight = Number(t.cost) * 1.35;
+      }
+      uninvoicedFreightAmount += freight;
+    }
+  });
+
+  const totalRevenue = invoiceRevenue > 0 ? invoiceRevenue : Math.round(uninvoicedFreightAmount);
 
   // 2. Expenses by category
   let fuelTotalCost = 0;
@@ -232,7 +273,6 @@ export async function getFinancialOverview(organisationId: string): Promise<Fina
     }
   }
 
-  const totalRevenue = invoiceRevenue;
   const totalExpenses = fuelTotalCost + maintenanceTotalCost + tripExpensesTotal + supplierBillsPaid;
   const netProfit = totalRevenue - totalExpenses;
   const operatingMarginPct = totalRevenue > 0 ? Math.round((netProfit / totalRevenue) * 100) : 0;
@@ -537,17 +577,30 @@ export async function createSupplierBill(
  * Computes individual vehicle profitability and unit economics (Cost Per Kilometer).
  */
 export async function getVehicleProfitability(organisationId: string): Promise<VehicleProfitability[]> {
+  const { data: machines } = await (supabase as any)
+    .from("machines")
+    .select("id, name, plate_number, current_odometer_km")
+    .eq("organisation_id", organisationId);
+
+  const machineIds = (machines || []).map((m: any) => m.id);
+
+  let fuelPromise: Promise<any> = Promise.resolve({ data: [] });
+  if (machineIds.length > 0) {
+    fuelPromise = (supabase as any)
+      .from("fuel_logs")
+      .select("machine_id, fuel_cost, fuel_litres")
+      .in("machine_id", machineIds);
+  }
+
   const [
-    { data: machines },
     { data: invoices },
     { data: fuelLogs },
     { data: receipts },
     { data: tripExps },
     { data: trips },
   ] = await Promise.all([
-    (supabase as any).from("machines").select("id, name, plate_number, current_odometer_km").eq("organisation_id", organisationId),
     (supabase as any).from("finance_invoices").select("machine_id, total_amount, paid_amount").eq("organisation_id", organisationId),
-    (supabase as any).from("fuel_logs").select("machine_id, fuel_cost, fuel_litres").eq("organisation_id", organisationId),
+    fuelPromise,
     (supabase as any).from("accountant_receipts").select("machine_id, amount").eq("organisation_id", organisationId),
     (supabase as any).from("trip_expenses").select("machine_id, amount").eq("organisation_id", organisationId),
     (supabase as any).from("trips").select("machine_id, start_odo, end_odo, cost").eq("organisation_id", organisationId),
@@ -663,13 +716,21 @@ export async function getApArAging(organisationId: string): Promise<ApArAging> {
  * Fuel finance, efficiency, and vendor station analysis.
  */
 export async function getFuelFinanceStats(organisationId: string): Promise<FuelFinanceStats> {
-  const [
-    { data: fuelLogs },
-    { data: machines },
-  ] = await Promise.all([
-    (supabase as any).from("fuel_logs").select("machine_id, fuel_cost, fuel_litres, station, odometer").eq("organisation_id", organisationId),
-    (supabase as any).from("machines").select("id, name, plate_number, current_odometer_km").eq("organisation_id", organisationId),
-  ]);
+  const { data: machines } = await (supabase as any)
+    .from("machines")
+    .select("id, name, plate_number, current_odometer_km")
+    .eq("organisation_id", organisationId);
+
+  const machineIds = (machines || []).map((m: any) => m.id);
+
+  let fuelLogs: any[] = [];
+  if (machineIds.length > 0) {
+    const { data } = await (supabase as any)
+      .from("fuel_logs")
+      .select("machine_id, fuel_cost, fuel_litres, station, odometer")
+      .in("machine_id", machineIds);
+    fuelLogs = data || [];
+  }
 
   let totalSpend = 0;
   let totalLitres = 0;

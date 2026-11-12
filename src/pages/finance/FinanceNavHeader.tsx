@@ -38,17 +38,16 @@ export function FinanceNavHeader({ title, subtitle, actions }: FinanceNavHeaderP
   return (
     <div className="space-y-4">
       {/* Top Header Bar */}
-      <div className="flex flex-wrap items-center justify-between gap-4">
+      <div className="flex flex-wrap items-center justify-between gap-4 border-b border-border pb-4">
         <div>
-          <div className="flex items-center gap-2">
-            <h1 className="text-2xl font-bold tracking-tight">{title}</h1>
-            <span className="flex items-center gap-1 text-xs px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 font-semibold border border-emerald-500/20">
-              <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-              Live Commercials
+          <div className="flex items-center gap-2.5">
+            <h1 className="text-2xl font-black tracking-tight text-foreground">{title}</h1>
+            <span className="flex items-center gap-1.5 text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900 shadow-2xs">
+              Commercial ERP
             </span>
           </div>
           {subtitle && (
-            <p className="text-sm text-muted-foreground mt-0.5">{subtitle}</p>
+            <p className="text-xs sm:text-sm text-muted-foreground mt-1 max-w-3xl leading-relaxed">{subtitle}</p>
           )}
         </div>
 
@@ -56,8 +55,8 @@ export function FinanceNavHeader({ title, subtitle, actions }: FinanceNavHeaderP
       </div>
 
       {/* Navigation Tabs Strip */}
-      <div className="border-b border-border">
-        <nav className="flex space-x-1 overflow-x-auto pb-2 scrollbar-none" aria-label="Finance Navigation">
+      <div className="border-b border-border bg-card/40 rounded-xl p-1.5 shadow-2xs">
+        <nav className="flex space-x-1.5 overflow-x-auto pb-1 scrollbar-none" aria-label="Finance Navigation">
           {FINANCE_NAV_ITEMS.map((item) => {
             const Icon = item.icon;
             const isActive =
@@ -70,13 +69,13 @@ export function FinanceNavHeader({ title, subtitle, actions }: FinanceNavHeaderP
                 key={item.to}
                 to={item.to}
                 className={cn(
-                  "flex items-center gap-2 px-3 py-2 text-xs md:text-sm font-medium rounded-lg whitespace-nowrap transition-colors",
+                  "flex items-center gap-2 px-3.5 py-2 text-xs font-semibold rounded-lg whitespace-nowrap transition-all",
                   isActive
-                    ? "bg-primary text-primary-foreground shadow-sm"
-                    : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
+                    ? "bg-primary text-primary-foreground shadow-xs font-bold"
+                    : "text-muted-foreground hover:text-foreground hover:bg-muted/70"
                 )}
               >
-                <Icon className="h-4 w-4 shrink-0" />
+                <Icon className={cn("h-4 w-4 shrink-0", isActive ? "text-primary-foreground" : "text-muted-foreground")} />
                 <span>{item.label}</span>
               </Link>
             );

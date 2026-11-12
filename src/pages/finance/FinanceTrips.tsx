@@ -25,6 +25,9 @@ import {
   Truck,
   ArrowUpRight,
   FileSpreadsheet,
+  CheckCircle2,
+  Clock,
+  FileText,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -44,6 +47,7 @@ interface TripFinancialRecord {
   netMargin: number;
   marginPct: number;
   kmDriven: number;
+  isInvoiced: boolean;
 }
 
 export default function FinanceTrips() {
@@ -104,8 +108,10 @@ export default function FinanceTrips() {
 
       // Map invoice revenues linked to trips
       const invoiceRevMap = new Map<string, number>();
+      const invoicedTripSet = new Set<string>();
       (invoices || []).forEach((inv: any) => {
         if (inv.trip_id) {
+          invoicedTripSet.add(inv.trip_id);
           invoiceRevMap.set(inv.trip_id, (invoiceRevMap.get(inv.trip_id) || 0) + Number(inv.total_amount || 0));
         }
       });
@@ -153,6 +159,7 @@ export default function FinanceTrips() {
           netMargin,
           marginPct,
           kmDriven: km,
+          isInvoiced: invoicedTripSet.has(t.id),
         };
       });
 
@@ -173,21 +180,32 @@ export default function FinanceTrips() {
     let totalRevenue = 0;
     let totalCost = 0;
     let netProfit = 0;
+    let unbilledCount = 0;
 
     records.forEach((r) => {
       totalRevenue += r.revenue;
       totalCost += r.totalCost;
       netProfit += r.netMargin;
+      if (!r.isInvoiced) unbilledCount++;
     });
 
     const avgMarginPct = totalRevenue > 0 ? Math.round((netProfit / totalRevenue) * 100) : 0;
 
-    return { totalRevenue, totalCost, netProfit, avgMarginPct, count: records.length };
+    return { totalRevenue, totalCost, netProfit, avgMarginPct, count: records.length, unbilledCount };
   }, [records]);
 
   const filtered = useMemo(() => {
     return records.filter((r) => {
-      if (statusFilter !== "all" && r.status !== statusFilter) return false;
+      if (statusFilter === "unbilled" && r.isInvoiced) return false;
+      if (statusFilter === "invoiced" && !r.isInvoiced) return false;
+      if (
+        statusFilter !== "all" &&
+        statusFilter !== "unbilled" &&
+        statusFilter !== "invoiced" &&
+        r.status !== statusFilter
+      ) {
+        return false;
+      }
       if (search.trim()) {
         const q = search.toLowerCase();
         const matchRoute = `${r.origin} ${r.destination}`.toLowerCase().includes(q);
@@ -302,7 +320,13 @@ export default function FinanceTrips() {
             {metrics.avgMarginPct}%
           </p>
           <p className="text-xs text-muted-foreground mt-1">
-            Profit margin across completed trips
+            {metrics.unbilledCount > 0 ? (
+              <span className="text-amber-600 dark:text-amber-400 font-medium">
+                {metrics.unbilledCount} pending commercial invoice
+              </span>
+            ) : (
+              "All trips invoiced & accounted"
+            )}
           </p>
         </div>
       </div>
@@ -321,15 +345,17 @@ export default function FinanceTrips() {
           </div>
 
           <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className="w-[180px]">
+            <SelectTrigger className="w-[200px]">
               <Filter className="h-4 w-4 mr-2 text-muted-foreground" />
               <SelectValue placeholder="Trip Status" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All Statuses</SelectItem>
-              <SelectItem value="completed">Completed</SelectItem>
-              <SelectItem value="in_transit">In Transit</SelectItem>
-              <SelectItem value="planned">Planned</SelectItem>
+              <SelectItem value="all">All Trips</SelectItem>
+              <SelectItem value="unbilled">Pending Invoice (Unbilled)</SelectItem>
+              <SelectItem value="invoiced">Invoiced Trips</SelectItem>
+              <SelectItem value="completed">Status: Completed</SelectItem>
+              <SelectItem value="in_transit">Status: In Transit</SelectItem>
+              <SelectItem value="planned">Status: Planned</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -372,7 +398,9 @@ export default function FinanceTrips() {
                   <th className="py-3 px-4 font-semibold text-right">Disbursements</th>
                   <th className="py-3 px-4 font-semibold text-right">Net Margin</th>
                   <th className="py-3 px-4 font-semibold text-right">Margin %</th>
+                  <th className="py-3 px-4 font-semibold text-center">Billing</th>
                   <th className="py-3 px-4 font-semibold text-center">Status</th>
+                  <th className="py-3 px-4 font-semibold text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
@@ -425,9 +453,62 @@ export default function FinanceTrips() {
                         </span>
                       </td>
                       <td className="py-3.5 px-4 text-center whitespace-nowrap">
+                        {r.isInvoiced ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-500/10 text-emerald-600 border border-emerald-500/20">
+                            <CheckCircle2 className="h-3 w-3" />
+                            Invoiced
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-amber-500/10 text-amber-600 border border-amber-500/20">
+                            <Clock className="h-3 w-3" />
+                            Unbilled
+                          </span>
+                        )}
+                      </td>
+                      <td className="py-3.5 px-4 text-center whitespace-nowrap">
                         <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-muted text-muted-foreground border border-border">
                           {r.status.toUpperCase()}
                         </span>
+                      </td>
+                      <td className="py-3.5 px-4 text-right whitespace-nowrap">
+                        <div className="flex items-center justify-end gap-1.5">
+                          {!r.isInvoiced ? (
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-7 text-xs px-2 gap-1 font-medium border-primary/30 text-primary hover:bg-primary/10"
+                              asChild
+                            >
+                              <Link to={`/finance/invoices?tripId=${r.id}`}>
+                                <FileText className="h-3 w-3" />
+                                Bill Trip
+                              </Link>
+                            </Button>
+                          ) : (
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-7 text-xs px-2 gap-1 text-muted-foreground hover:text-foreground"
+                              asChild
+                            >
+                              <Link to="/finance/invoices">
+                                <FileText className="h-3 w-3" />
+                                View Invoice
+                              </Link>
+                            </Button>
+                          )}
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-7 text-xs px-2 gap-1 text-muted-foreground hover:text-foreground"
+                            asChild
+                          >
+                            <Link to="/fleet/trips">
+                              <Route className="h-3 w-3" />
+                              Waybill
+                            </Link>
+                          </Button>
+                        </div>
                       </td>
                     </tr>
                   );

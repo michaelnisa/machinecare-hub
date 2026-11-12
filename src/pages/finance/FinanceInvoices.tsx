@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { PageLoader, EmptyState } from "@/components/PageLoader";
@@ -56,11 +56,13 @@ import { toast } from "sonner";
 
 export default function FinanceInvoices() {
   const { organisation } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [loading, setLoading] = useState(true);
   const [invoices, setInvoices] = useState<FinanceInvoice[]>([]);
   const [machines, setMachines] = useState<{ id: string; name: string; plate_number: string | null }[]>([]);
   const [availableTrips, setAvailableTrips] = useState<any[]>([]);
   const [selectedTripIds, setSelectedTripIds] = useState<string[]>([]);
+  const [selectedTripForInvoice, setSelectedTripForInvoice] = useState<string | null>(null);
   const [bankSettings, setBankSettings] = useState<any>(null);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -215,6 +217,67 @@ export default function FinanceInvoices() {
     return Array.from(set);
   }, [availableTrips]);
 
+  // Trips not yet linked to an invoice
+  const uninvoicedTrips = useMemo(() => {
+    const invoicedTripSet = new Set<string>();
+    invoices.forEach((inv) => {
+      if (inv.trip_id) invoicedTripSet.add(inv.trip_id);
+    });
+    return availableTrips.filter((t) => !invoicedTripSet.has(t.id));
+  }, [availableTrips, invoices]);
+
+  const uninvoicedSummary = useMemo(() => {
+    let count = uninvoicedTrips.length;
+    let estimatedValue = 0;
+    uninvoicedTrips.forEach((t) => {
+      const meta = parseCargoMeta(t.cargo_description);
+      const rate = Number(meta?.exchange_rate) || 2600;
+      const isUsd = (meta?.billing_currency || meta?.currency || "USD").toUpperCase() === "USD";
+      const rawAmt = Number(meta?.client_billing_amount) || Number(t.cost) * 1.35 || 1500000;
+      const tzsAmt = isUsd ? Math.round(rawAmt * rate) : Math.round(rawAmt);
+      estimatedValue += tzsAmt;
+    });
+    return { count, estimatedValue };
+  }, [uninvoicedTrips]);
+
+  const startInvoiceForTrip = (trip: any) => {
+    const meta = parseCargoMeta(trip.cargo_description);
+    const rate = Number(meta?.exchange_rate) || 2600;
+    const isUsd = (meta?.billing_currency || meta?.currency || "USD").toUpperCase() === "USD";
+    const rawAmt = Number(meta?.client_billing_amount) || Number(trip.cost) * 1.35 || 1500000;
+    const tzsAmt = isUsd ? Math.round(rawAmt * rate) : Math.round(rawAmt);
+    const cargo = extractCleanCargo(trip.cargo_description, trip.purpose || meta?.purpose);
+    const vehicleRef = trip.machines?.plate_number || trip.machines?.name || "Heavy Fleet Truck";
+    const client = (meta?.client || trip.client_name || "").trim() || "Commercial Client";
+    const orderRef = meta?.order_no ? ` · DO #${meta.order_no}` : "";
+
+    setClientName(client);
+    setSelectedMachine(trip.machine_id || "none");
+    setSelectedTripForInvoice(trip.id);
+    setSelectedTripIds([trip.id]);
+    setLineItems([
+      {
+        description: `Commercial Freight Haulage: ${trip.origin || "Origin"} to ${trip.destination || "Destination"} [${vehicleRef}${orderRef}] - ${cargo || "General Freight"}`,
+        quantity: 1,
+        unit_price: tzsAmt > 0 ? tzsAmt : 1500000,
+      },
+    ]);
+    setCreateModalOpen(true);
+  };
+
+  useEffect(() => {
+    const targetTripId = searchParams.get("tripId");
+    if (targetTripId && availableTrips.length > 0) {
+      const match = availableTrips.find((t) => t.id === targetTripId);
+      if (match) {
+        startInvoiceForTrip(match);
+        const newParams = new URLSearchParams(searchParams);
+        newParams.delete("tripId");
+        setSearchParams(newParams, { replace: true });
+      }
+    }
+  }, [availableTrips, searchParams]);
+
   const toggleSelectTrip = (tripId: string) => {
     setSelectedTripIds((prev) =>
       prev.includes(tripId) ? prev.filter((id) => id !== tripId) : [...prev, tripId]
@@ -282,10 +345,12 @@ export default function FinanceInvoices() {
 
     setSubmittingInvoice(true);
     try {
+      const tripIdToLink = selectedTripForInvoice || (selectedTripIds.length === 1 ? selectedTripIds[0] : undefined);
       const res = await createFinanceInvoice(organisation.id, {
         client_name: clientName,
         client_email: clientEmail,
         client_phone: clientPhone,
+        trip_id: tripIdToLink,
         machine_id: selectedMachine !== "none" ? selectedMachine : undefined,
         due_date: dueDate,
         tax_rate_percent: Number(taxRate || 0),
@@ -300,6 +365,8 @@ export default function FinanceInvoices() {
 
       toast.success("Invoice generated successfully!");
       setCreateModalOpen(false);
+      setSelectedTripForInvoice(null);
+      setSelectedTripIds([]);
       setClientName("");
       setClientEmail("");
       setClientPhone("");
@@ -422,6 +489,82 @@ export default function FinanceInvoices() {
           </p>
         </div>
       </div>
+
+      {/* Uninvoiced Fleet Trips Queue */}
+      {uninvoicedTrips.length > 0 && (
+        <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-4 shadow-sm">
+          <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
+            <div className="flex items-center gap-2.5">
+              <div className="p-2 rounded-lg bg-amber-500/10 text-amber-600 dark:text-amber-400">
+                <Truck className="h-4 w-4" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="font-semibold text-foreground text-sm">
+                    Fleet Trips Pending Commercial Invoicing
+                  </h3>
+                  <Badge variant="outline" className="text-amber-600 dark:text-amber-400 border-amber-500/30 bg-amber-500/10 text-xs">
+                    {uninvoicedSummary.count} Unbilled {uninvoicedSummary.count === 1 ? "Trip" : "Trips"}
+                  </Badge>
+                </div>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Accrued freight value: <span className="font-semibold text-foreground">{formatMoney(uninvoicedSummary.estimatedValue)}</span>. Create commercial invoice with 1 click.
+                </p>
+              </div>
+            </div>
+            <Button
+              size="sm"
+              variant="outline"
+              className="text-xs border-amber-500/30 hover:bg-amber-500/10 text-foreground"
+              onClick={() => {
+                if (uninvoicedTrips.length > 0) {
+                  startInvoiceForTrip(uninvoicedTrips[0]);
+                }
+              }}
+            >
+              <Plus className="h-3.5 w-3.5 mr-1.5" />
+              Bill Next Trip
+            </Button>
+          </div>
+
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 max-h-60 overflow-y-auto pr-1">
+            {uninvoicedTrips.slice(0, 6).map((trip) => {
+              const meta = parseCargoMeta(trip.cargo_description);
+              const rate = Number(meta?.exchange_rate) || 2600;
+              const isUsd = (meta?.billing_currency || meta?.currency || "USD").toUpperCase() === "USD";
+              const rawAmt = Number(meta?.client_billing_amount) || Number(trip.cost) * 1.35 || 1500000;
+              const tzsAmt = isUsd ? Math.round(rawAmt * rate) : Math.round(rawAmt);
+              const client = meta?.client || trip.client_name || "Commercial Client";
+              const plate = trip.machines?.plate_number || trip.machines?.name || "Truck";
+
+              return (
+                <div
+                  key={trip.id}
+                  className="flex items-center justify-between p-2.5 rounded-lg border border-border/80 bg-background/90 hover:bg-background transition-colors text-xs"
+                >
+                  <div className="min-w-0 pr-2">
+                    <div className="font-semibold text-foreground truncate">{client}</div>
+                    <div className="text-muted-foreground truncate">
+                      {trip.origin} → {trip.destination} · <span className="font-mono">{plate}</span>
+                    </div>
+                    <div className="font-medium text-emerald-600 mt-0.5">
+                      {formatMoney(tzsAmt)}
+                    </div>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    className="h-7 text-xs px-2.5 shrink-0"
+                    onClick={() => startInvoiceForTrip(trip)}
+                  >
+                    Bill Trip
+                  </Button>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Filter Bar */}
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-card p-4 shadow-sm">

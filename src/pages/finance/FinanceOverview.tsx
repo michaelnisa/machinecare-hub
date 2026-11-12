@@ -110,6 +110,36 @@ export default function FinanceOverview() {
         }
       />
 
+      {/* Unbilled Freight Alert Banner */}
+      {m.uninvoicedTripsCount && m.uninvoicedTripsCount > 0 ? (
+        <div className="flex flex-wrap items-center justify-between gap-3 p-4 rounded-xl border border-amber-500/30 bg-amber-500/5 shadow-sm">
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-lg bg-amber-500/10 text-amber-600 dark:text-amber-400">
+              <Truck className="h-5 w-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="font-semibold text-sm text-foreground">
+                  {m.uninvoicedTripsCount} Completed Fleet {m.uninvoicedTripsCount === 1 ? "Trip" : "Trips"} Ready for Billing
+                </span>
+                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-500/10 text-amber-600 border border-amber-500/20">
+                  Accrued Revenue: {formatMoney(m.uninvoicedFreightAmount || 0)}
+                </span>
+              </div>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Generate formal commercial customer invoices to claim freight payment and reflect in Accounts Receivable.
+              </p>
+            </div>
+          </div>
+          <Button size="sm" asChild className="gap-1.5 shrink-0 bg-primary text-primary-foreground">
+            <Link to="/finance/invoices">
+              <Plus className="h-4 w-4" />
+              Bill Pending Trips
+            </Link>
+          </Button>
+        </div>
+      ) : null}
+
       {/* Primary KPI Grid */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
         {/* Total Revenue */}
