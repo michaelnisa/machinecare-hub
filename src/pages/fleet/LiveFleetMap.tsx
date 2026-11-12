@@ -9,7 +9,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { syncTrakzeeFleet } from "@/services/trakzeeService";
-import { getLiveGpsFleet, type LiveTrackedVehicle } from "@/services/gpsService";
 import { SAFE_MACHINE_COLUMNS, parseMachine, normalizeTelematicsStatus, type TelematicsStatus } from "@/lib/fleet-metadata";
 import { formatNumber } from "@/lib/format";
 import { toast } from "sonner";
@@ -29,9 +28,6 @@ import {
   ChevronRight,
   ShieldCheck,
   AlertTriangle,
-  History,
-  ShieldAlert,
-  Cpu,
 } from "lucide-react";
 
 interface TrackedVehicle {
@@ -115,36 +111,6 @@ export default function LiveFleetMap() {
     const orgId = organisation?.id || profile?.organisation_id;
     if (!orgId) return;
     try {
-      // First attempt to load real-time GPS fleet positions
-      const liveFleet = await getLiveGpsFleet(orgId);
-      if (liveFleet && liveFleet.length > 0) {
-        const mapped: TrackedVehicle[] = liveFleet.map((lf) => ({
-          id: lf.vehicleId,
-          name: lf.name,
-          plate_number: lf.plateNumber,
-          make: lf.make,
-          model: lf.model,
-          status: lf.status,
-          current_odometer_km: lf.currentOdometerKm,
-          telematics_speed: lf.speedKmh,
-          telematics_ignition: lf.ignition,
-          telematics_battery_volt: lf.batteryVoltage ?? null,
-          telematics_latitude: lf.latitude,
-          telematics_longitude: lf.longitude,
-          telematics_last_at: lf.recordedAt,
-          telematics_status:
-            lf.motionStatus === "moving"
-              ? "Running"
-              : lf.motionStatus === "idling"
-              ? "Idle"
-              : lf.motionStatus === "stopped"
-              ? "Stopped"
-              : "Inactive",
-        }));
-        setVehicles(mapped);
-        return;
-      }
-
       const { data, error } = await supabase
         .from("machines")
         .select(SAFE_MACHINE_COLUMNS)

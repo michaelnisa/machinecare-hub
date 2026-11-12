@@ -5,7 +5,7 @@ import FleetDashboard from "@/pages/fleet/FleetDashboard";
 import GarageDashboard from "@/pages/garage/GarageDashboard";
 import Safety from "@/pages/Safety";
 import ProductionOverview from "@/pages/production/Overview";
-import LiveFleetMap from "@/pages/fleet/LiveFleetMap";
+import GpsLiveMap from "@/pages/gps/GpsLiveMap";
 
 export default function DashboardRouter() {
   const { organisation, profile } = useAuth();
@@ -39,7 +39,7 @@ export default function DashboardRouter() {
 
   // 4.5. MachineCare GPS Tracking independent profile resolution
   if (industry === "gps_tracking" || (enabledMods?.includes("gps_tracking") && !enabledMods?.includes("fleet"))) {
-    return <LiveFleetMap />;
+    return <GpsLiveMap />;
   }
 
   // 4. Specific module-based routing for modular configurations
