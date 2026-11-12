@@ -1,0 +1,32 @@
+version: "3.8"
+
+services:
+  traccar:
+    image: traccar/traccar:latest
+    container_name: machinecare-traccar
+    restart: always
+    ports:
+      - "8082:8082" # Web & REST API
+      - "5027:5027" # Teltonika FMC920 protocol
+      - "5023:5023" # GT06 / Jimi IoT / Concox protocol
+      - "5005:5005" # Coban / TK103
+    volumes:
+      - ./traccar/traccar.xml:/opt/traccar/conf/traccar.xml:ro
+      - ./traccar/logs:/opt/traccar/logs
+      - ./traccar/data:/opt/traccar/data
+
+  gps-bridge:
+    build: .
+    container_name: machinecare-gps-bridge
+    restart: always
+    environment:
+      - TRACCAR_API_URL=http://traccar:8082/api
+      - TRACCAR_WS_URL=ws://traccar:8082/api/socket
+      - TRACCAR_ADMIN_USER=admin
+      - TRACCAR_ADMIN_PASSWORD=${TRACCAR_ADMIN_PASSWORD}
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_SERVICE_ROLE_KEY=${SUPABASE_SERVICE_ROLE_KEY}
+      - OVERSPEED_THRESHOLD_KMH=90
+      - BATCH_FLUSH_INTERVAL_MS=3000
+    depends_on:
+      - traccar

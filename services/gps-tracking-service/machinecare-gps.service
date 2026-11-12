@@ -1,0 +1,20 @@
+[Unit]
+Description=MachineCare GPS Tracking & Telematics Ingestion Service
+After=network.target traccar.service
+
+[Service]
+Type=simple
+User=machinecare
+WorkingDirectory=/opt/machinecare-gps-service
+ExecStart=/usr/bin/node /opt/machinecare-gps-service/dist/index.js
+Restart=always
+RestartSec=5
+EnvironmentFile=/opt/machinecare-gps-service/.env
+
+# Security sandbox
+ProtectSystem=full
+ProtectHome=true
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

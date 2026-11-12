@@ -14,6 +14,7 @@ import {
   Cpu,
   Layers,
   CheckCircle2,
+  Radio,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -58,8 +59,17 @@ export const SOLUTION_SUITES: SolutionSuite[] = [
     name: "Fleet & Logistics",
     description: "Vehicles, drivers, trips, fuel efficiency, tyres, and pre-start checklists.",
     icon: Truck,
-    modules: ["fleet", "maintenance", "inventory"],
+    modules: ["fleet", "maintenance", "inventory", "gps_tracking"],
     recommendedIndustry: "fleet_logistics",
+  },
+  {
+    id: "gps_telematics",
+    name: "GPS Tracking & Telematics Suite",
+    description: "Live vehicle tracking, historical journey replay, geofence perimeters, speed alerts, and driver telematics.",
+    icon: Radio,
+    modules: ["gps_tracking", "fleet"],
+    recommendedIndustry: "fleet_logistics",
+    badge: "Independent",
   },
   {
     id: "garage",

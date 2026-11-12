@@ -318,12 +318,16 @@ export function Sidebar() {
       },
       {
         id: "fleet",
-        label: "Fleet",
+        label: "Fleet & Tracking",
         items: [
           { to: "/fleet/live-map", label: "Live GPS Map", icon: MapPin },
+          { to: "/fleet/gps/replay", label: "Route Replay", icon: History },
           { to: "/fleet/vehicles", label: "Vehicles", icon: Truck },
           { to: "/fleet/drivers", label: "Drivers", icon: Contact },
           { to: "/fleet/trips", label: "Trips", icon: Route },
+          { to: "/fleet/gps/geofences", label: "Geofences", icon: Target },
+          { to: "/fleet/gps/alerts", label: "GPS Alerts", icon: AlertTriangle },
+          { to: "/fleet/gps/devices", label: "GPS Hardware", icon: Cpu },
           { to: "/fleet/documents", label: "Documents", icon: FileText },
           { to: "/fleet/tyres", label: "Tyres", icon: CircleDot },
           { to: "/fuel", label: t.nav.fuel, icon: Fuel },
@@ -556,6 +560,51 @@ export function Sidebar() {
     [t, isAdmin],
   );
 
+  const gpsTrackingGroups: NavGroup[] = useMemo(
+    () => [
+      {
+        id: "gps-overview",
+        label: "Overview",
+        items: [
+          { to: "/dashboard", label: "Tracking Dashboard", icon: LayoutDashboard },
+          { to: "/live", label: "Live Telematics TV", icon: Tv },
+          { to: "/notifications", label: t.nav.notifications, icon: Bell },
+        ],
+      },
+      {
+        id: "gps-telematics",
+        label: "GPS & Telematics",
+        items: [
+          { to: "/fleet/live-map", label: "Live GPS Map", icon: MapPin },
+          { to: "/fleet/gps/replay", label: "Route History & Replay", icon: History },
+          { to: "/fleet/gps/geofences", label: "Geofences", icon: Target },
+          { to: "/fleet/gps/alerts", label: "Telematics Alerts", icon: AlertTriangle },
+          { to: "/fleet/vehicles", label: "Tracked Vehicles", icon: Truck },
+          { to: "/fleet/gps/devices", label: "GPS Hardware Trackers", icon: Cpu },
+        ],
+      },
+      {
+        id: "gps-insights",
+        label: "Insights",
+        items: [
+          { to: "/fleet/insights", label: "Fleet KPIs & Analytics", icon: Gauge },
+          { to: "/reports", label: t.nav.reports, icon: FileBarChart },
+        ],
+      },
+      {
+        id: "system",
+        label: "System",
+        items: [
+          { to: "/team", label: t.nav.team, icon: Users },
+          { to: "/integrations", label: "Integrations Catalog", icon: Layers },
+          { to: "/settings", label: t.nav.settings, icon: Settings },
+          ...(isAdmin ? [{ to: "/admin", label: "Admin Portal", icon: ShieldAlert }] : []),
+        ],
+      },
+    ],
+    [t, isAdmin],
+  );
+
   // When a user belongs to the Safety Department, isolate their view to Safety & People only.
   // Otherwise, respect organisation.enabled_modules or fallback to legacy industry profiles.
   const groups = useMemo(() => {
@@ -595,6 +644,17 @@ export function Sidebar() {
         !enabledMods.includes("maintenance")
       ) {
         return fleetGroups;
+      }
+
+      // 3.5 Standalone GPS Tracking & Telematics Suite
+      if (
+        enabledMods.includes("gps_tracking") &&
+        !enabledMods.includes("fleet") &&
+        !enabledMods.includes("workshop") &&
+        !enabledMods.includes("production") &&
+        !enabledMods.includes("maintenance")
+      ) {
+        return gpsTrackingGroups;
       }
 
       // 4. Standalone Workshop & Garage
@@ -697,6 +757,9 @@ export function Sidebar() {
         if (fGroup) dynamicGroups.push(fGroup);
         const fiGroup = fleetGroups.find((g) => g.id === "fleet-insights");
         if (fiGroup) dynamicGroups.push(fiGroup);
+      } else if (enabledMods.includes("gps_tracking")) {
+        const gGroup = gpsTrackingGroups.find((g) => g.id === "gps-telematics");
+        if (gGroup) dynamicGroups.push(gGroup);
       }
 
       // Workshop & Garage
