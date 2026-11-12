@@ -37,6 +37,7 @@ import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { PaymentTermsInput } from "@/components/fleet/PaymentTermsInput";
 
 export interface PaymentAccountSettings {
   bankName: string;
@@ -383,12 +384,11 @@ export function TripReceiptDialog({
 
               {/* Payment Terms */}
               <div className="space-y-1">
-                <Label className="text-[11px] font-semibold">Payment Terms / Conditions</Label>
-                <Input
+                <PaymentTermsInput
+                  label="Payment Terms / Conditions"
                   value={paymentTerms}
-                  onChange={(e) => setPaymentTerms(e.target.value)}
-                  placeholder="e.g. Upon Delivery & Offloading / Net 30 Days"
-                  className="h-8 text-xs"
+                  onChange={setPaymentTerms}
+                  inputClassName="h-8 text-xs"
                 />
               </div>
 

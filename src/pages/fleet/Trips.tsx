@@ -39,6 +39,9 @@ import {
 import { TripExpensesListDialog } from "@/components/TripExpensesListDialog";
 import { CorridorExpenseCatalogDialog } from "@/components/CorridorExpenseCatalogDialog";
 import { TripReceiptDialog } from "@/components/TripReceiptDialog";
+import { SearchableVehicleSelect } from "@/components/fleet/SearchableVehicleSelect";
+import { SearchableDriverSelect } from "@/components/fleet/SearchableDriverSelect";
+import { PaymentTermsInput } from "@/components/fleet/PaymentTermsInput";
 import {
   CROSS_BORDER_CORRIDORS,
   DEFAULT_USD_TO_TZS_RATE,
@@ -1186,20 +1189,12 @@ function NewTripDialog({
             {/* Vehicle & Equipment */}
             <div className="space-y-1.5 sm:col-span-2">
               <Label>Vehicle & Equipment *</Label>
-              <Select value={form.machine_id ?? ""} onValueChange={onMachineChange}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select vehicle for trip" />
-                </SelectTrigger>
-                <SelectContent>
-                  {machines.map((m) => (
-                    <SelectItem key={m.id} value={m.id}>
-                      {m.plate_number ? `${m.name} (${m.plate_number})` : m.name}
-                      {m.has_trailer && m.trailer_plate ? ` + Trailer [${m.trailer_plate}]` : ""}
-                      {m.total_tank_capacity_l ? ` · Tank: ${m.total_tank_capacity_l}L` : ""}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <SearchableVehicleSelect
+                vehicles={machines}
+                value={form.machine_id ?? ""}
+                onChange={onMachineChange}
+                placeholder="Search plate number, vehicle name, trailer, or model..."
+              />
               {selectedMachine && selectedMachine.has_trailer && (
                 <p className="text-[11px] text-primary font-medium">
                   ✓ Attached Trailer: {selectedMachine.trailer_plate || "Hitched"}
@@ -1213,22 +1208,12 @@ function NewTripDialog({
             {/* Assigned Driver */}
             <div className="space-y-1.5 sm:col-span-2">
               <Label>Assigned Driver</Label>
-              <Select
+              <SearchableDriverSelect
+                drivers={drivers}
                 value={form.driver_id ?? ""}
-                onValueChange={(v) => setForm({ ...form, driver_id: v })}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Pick an active licensed driver" />
-                </SelectTrigger>
-                <SelectContent>
-                  {drivers.map((d) => (
-                    <SelectItem key={d.id} value={d.id}>
-                      {d.driver_code ? `[${d.driver_code}] ` : ""}
-                      {d.full_name} {d.phone ? `(${d.phone})` : ""}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                onChange={(v) => setForm({ ...form, driver_id: v })}
+                placeholder="Search driver name, DRV code, or phone number..."
+              />
             </div>
 
             {/* Cross-Border Transit Route & Corridor Presets */}
@@ -1511,13 +1496,10 @@ function NewTripDialog({
                   </div>
                 </div>
 
-                <div className="space-y-1.5">
-                  <Label className="text-xs">Payment Terms</Label>
-                  <Input
+                <div className="space-y-1.5 sm:col-span-2">
+                  <PaymentTermsInput
                     value={form.payment_terms}
-                    onChange={(e) => setForm({ ...form, payment_terms: e.target.value })}
-                    placeholder="e.g. Upon Delivery & Offloading / 50% Advance"
-                    className="h-9 text-sm"
+                    onChange={(val) => setForm({ ...form, payment_terms: val })}
                   />
                 </div>
 

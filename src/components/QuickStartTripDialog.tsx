@@ -5,6 +5,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Button } from "@/components/ui/button";
 import { useI18n } from "@/i18n/I18nProvider";
 import { toast } from "sonner";
+import { SearchableDriverSelect } from "@/components/fleet/SearchableDriverSelect";
 
 interface Props {
   open: boolean;
@@ -92,14 +93,12 @@ export function QuickStartTripDialog({ open, onOpenChange, machineId, onSaved }:
             {drivers.length === 0 ? (
               <p className="text-xs text-muted-foreground">{t.noDrivers}</p>
             ) : (
-              <select
+              <SearchableDriverSelect
+                drivers={drivers}
                 value={form.driver_id ?? ""}
-                onChange={(e) => setForm({ ...form, driver_id: e.target.value })}
-                className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
-              >
-                <option value="">—</option>
-                {drivers.map((d) => <option key={d.id} value={d.id}>{d.full_name}</option>)}
-              </select>
+                onChange={(driverId) => setForm({ ...form, driver_id: driverId })}
+                placeholder="Search or pick an active driver..."
+              />
             )}
           </Field>
           <Field label={t.destination}>
