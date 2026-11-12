@@ -123,17 +123,17 @@ describe("Multi-Trip Customer Invoicing Logic", () => {
       const cargo = extractCleanCargo(t.cargo_description, "General Freight");
       const vehicleRef = t.machines?.plate_number || t.machines?.name;
       return {
-        description: `Commercial Freight Haulage: ${t.origin} ➔ ${t.destination} [${vehicleRef}] - ${cargo}`,
+        description: `Commercial Freight Haulage: ${t.origin} to ${t.destination} [${vehicleRef}] - ${cargo}`,
         quantity: 1,
         unit_price: rawAmt,
       };
     });
 
     expect(invoiceItems).toHaveLength(2);
-    expect(invoiceItems[0].description).toContain("Dar es Salaam ➔ Lusaka [T 101 ABC]");
+    expect(invoiceItems[0].description).toContain("Dar es Salaam to Lusaka [T 101 ABC]");
     expect(invoiceItems[0].description).not.toContain("fuel");
     expect(invoiceItems[0].description).not.toContain("toll");
-    expect(invoiceItems[1].description).toContain("Mtwara ➔ Harare [T 202 DEF]");
+    expect(invoiceItems[1].description).toContain("Mtwara to Harare [T 202 DEF]");
     expect(invoiceItems[0].unit_price).toBe(3000000 * 1.35);
     expect(invoiceItems[1].unit_price).toBe(4500000 * 1.35);
   });

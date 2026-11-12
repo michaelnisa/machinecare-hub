@@ -29,6 +29,7 @@ import {
   ShieldCheck,
   Landmark,
   Smartphone,
+  AlertCircle,
 } from "lucide-react";
 import { formatDate, formatMoney } from "@/lib/format";
 import { DEFAULT_USD_TO_TZS_RATE, formatTripCurrency } from "@/services/crossBorderCorridors";
@@ -463,7 +464,8 @@ export function TripReceiptDialog({
         {!editingSettings && pricingCalculations.baseFreight === 0 && (
           <div className="px-6 py-2.5 bg-amber-500/10 border-b border-amber-500/20 flex flex-wrap items-center justify-between gap-3 text-xs text-amber-900 dark:text-amber-200 print:hidden">
             <div className="flex items-center gap-2">
-              <span className="font-bold">⚠️ Customer Agreed Freight Price is not set ($0.00).</span>
+              <AlertCircle className="h-4 w-4 text-amber-600 shrink-0" />
+              <span className="font-semibold">Customer agreed freight price is not set ($0.00).</span>
               <span className="text-amber-800/90 dark:text-amber-300/90">
                 Enter the amount the client agreed to pay for this shipment:
               </span>
@@ -512,8 +514,8 @@ export function TripReceiptDialog({
             style={{ boxSizing: "border-box" }}
           >
             <div className="space-y-4">
-              {/* Top Accent Gradient Line */}
-              <div className="h-1.5 w-full bg-gradient-to-r from-blue-700 via-indigo-600 to-emerald-500 rounded-full" />
+              {/* Top Solid Accent Line */}
+              <div className="h-1 w-full bg-slate-900 rounded-xs" />
 
               {/* HEADER SECTION: LOGO + COMPANY DETAILS + WAYBILL REF & BARCODE */}
               <div className="flex items-start justify-between border-b-2 border-slate-900 pb-3.5 gap-4">
@@ -611,7 +613,7 @@ export function TripReceiptDialog({
                     {machine?.trailer_plate && <span className="text-primary ml-1 font-mono">[{machine.trailer_plate}]</span>}
                   </p>
                   <p className="text-xs text-gray-700">
-                    Route: <strong className="text-gray-900">{trip.origin || "Origin"}</strong> ➔ <strong className="text-primary">{trip.destination || "Destination"}</strong>
+                    Route: <strong className="text-gray-900">{trip.origin || "Origin"}</strong> to <strong className="text-primary">{trip.destination || "Destination"}</strong>
                   </p>
                   {trip.corridor_name && (
                     <p className="text-[11px] text-gray-600">
@@ -641,7 +643,7 @@ export function TripReceiptDialog({
                         Commercial Freight Haulage & Consignment Delivery
                       </p>
                       <p className="text-[11px] text-gray-600">
-                        Route Transit: {trip.origin || "Origin Depot"} ➔ {trip.destination || "Destination"}
+                        Route Transit: {trip.origin || "Origin Depot"} to {trip.destination || "Destination"}
                         {trip.corridor_name ? ` via ${trip.corridor_name}` : ""}
                       </p>
                       <p className="text-[10px] text-gray-500">

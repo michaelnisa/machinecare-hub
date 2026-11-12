@@ -12,7 +12,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { SlidersHorizontal, Sparkles, Check, Edit3 } from "lucide-react";
+import { SlidersHorizontal, Tag, Check, Edit3 } from "lucide-react";
 import {
   PaymentTermsDesignerDialog,
   DEFAULT_PAYMENT_TERM_PRESETS,
@@ -165,7 +165,7 @@ export function PaymentTermsInput({
       {showPresets && (
         <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
           <span className="text-[10px] text-muted-foreground font-medium flex items-center gap-1 shrink-0">
-            <Sparkles className="h-3 w-3 text-amber-500" /> Presets:
+            <Tag className="h-3 w-3 text-muted-foreground" /> Presets:
           </span>
           {DEFAULT_PAYMENT_TERM_PRESETS.map((preset) => {
             const isActive = value.trim().toLowerCase() === preset.toLowerCase();

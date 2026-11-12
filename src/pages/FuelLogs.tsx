@@ -324,7 +324,7 @@ function FuelDialog({ open, onOpenChange, machines, trips = [], userId, onSaved 
     if (selectedTripId !== "none") {
       const chosen = trips.find((t: any) => t.id === selectedTripId);
       if (chosen) {
-        const tripHeader = `[Trip: ${chosen.origin || "Origin"} ➔ ${chosen.destination || "Destination"} #${chosen.id.slice(0, 8)}]`;
+        const tripHeader = `[Trip: ${chosen.origin || "Origin"} to ${chosen.destination || "Destination"} #${chosen.id.slice(0, 8)}]`;
         notesText = `${tripHeader} ${notesText}`.trim();
       }
     }
@@ -408,14 +408,14 @@ function FuelDialog({ open, onOpenChange, machines, trips = [], userId, onSaved 
               <option value="none">— General Refuel / No Specific Trip —</option>
               {availableTripsForMachine.map((t: any) => (
                 <option key={t.id} value={t.id}>
-                  {t.origin || "Origin"} ➔ {t.destination || "Destination"} ({t.client_name || "General Freight"} · {t.status === "in_progress" ? "In Transit" : t.status})
+                  {t.origin || "Origin"} to {t.destination || "Destination"} ({t.client_name || "General Freight"} · {t.status === "in_progress" ? "In Transit" : t.status})
                 </option>
               ))}
             </select>
 
             {selectedTripId !== "none" && (
               <p className="text-[11px] text-primary/80 pt-0.5">
-                ✓ Fuel cost will be tagged to this trip route. You can add fuel two times or more for the same trip as the vehicle progresses.
+                Fuel cost will be tagged to this trip route. Multiple fuel top-ups can be logged for the same trip as the vehicle progresses.
               </p>
             )}
           </div>

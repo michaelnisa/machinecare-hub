@@ -50,7 +50,6 @@ import {
   Check,
   Landmark,
   Smartphone,
-  Sparkles,
   Layers,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -248,7 +247,7 @@ export default function FinanceInvoices() {
       const orderRef = meta?.order_no ? ` · DO #${meta.order_no}` : "";
 
       return {
-        description: `Commercial Freight Haulage: ${t.origin || "Origin"} ➔ ${t.destination || "Destination"} [${vehicleRef}${orderRef}] - ${cargo || "General Freight"}`,
+        description: `Commercial Freight Haulage: ${t.origin || "Origin"} to ${t.destination || "Destination"} [${vehicleRef}${orderRef}] - ${cargo || "General Freight"}`,
         quantity: 1,
         unit_price: tzsAmt > 0 ? tzsAmt : 1500000,
       };
@@ -714,7 +713,7 @@ export default function FinanceInvoices() {
                           />
                           <div className="truncate">
                             <span className="font-semibold text-foreground">
-                              {t.origin || "Origin"} ➔ {t.destination || "Destination"}
+                              {t.origin || "Origin"} to {t.destination || "Destination"}
                             </span>
                             <span className="text-muted-foreground ml-1.5 text-[11px]">
                               ({t.machines?.plate_number || "Truck"} · {cargo || "Cargo"})

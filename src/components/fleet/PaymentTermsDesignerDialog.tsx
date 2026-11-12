@@ -13,7 +13,6 @@ import { Badge } from "@/components/ui/badge";
 import { Slider } from "@/components/ui/slider";
 import {
   SlidersHorizontal,
-  Sparkles,
   Check,
   Bookmark,
   Trash2,
@@ -183,7 +182,7 @@ export function PaymentTermsDesignerDialog({
           <div className="space-y-2 rounded-xl border border-border/70 bg-muted/20 p-3">
             <div className="flex items-center justify-between">
               <span className="text-xs font-bold text-foreground flex items-center gap-1.5">
-                <Sparkles className="h-3.5 w-3.5 text-amber-500" /> Standard Fleet Payment Presets
+                <CreditCard className="h-3.5 w-3.5 text-primary" /> Standard Commercial Terms
               </span>
               <span className="text-[10px] text-muted-foreground">Click to load</span>
             </div>

@@ -248,7 +248,7 @@ export function CorridorExpenseCatalogDialog({
                         : "bg-card text-muted-foreground hover:bg-muted/60 border-border"
                     )}
                   >
-                    <span className="text-sm leading-none">{c.flag}</span>
+                    <Globe2 className="h-3 w-3 shrink-0" />
                     <span>{c.name.split("–")[0].trim()}</span>
                     <Badge variant="outline" className={cn("text-[9px] px-1 py-0", active ? "bg-white/20 text-white border-white/30" : "bg-muted")}>
                       {c.expenses.length}
@@ -268,7 +268,7 @@ export function CorridorExpenseCatalogDialog({
               <div className="flex flex-wrap items-center justify-between gap-4">
                 <div className="space-y-1 max-w-2xl">
                   <div className="flex items-center gap-2">
-                    <span className="text-2xl">{currentCorridor.flag}</span>
+                    <Globe2 className="h-5 w-5 text-primary shrink-0" />
                     <h3 className="text-base font-bold text-foreground">
                       {currentCorridor.name}
                     </h3>
@@ -532,17 +532,17 @@ export function CorridorExpenseCatalogDialog({
 
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               {[
-                { curr: "TZS", name: "Tanzanian Shilling", flag: "🇹🇿" },
-                { curr: "ZMW", name: "Zambian Kwacha", flag: "🇿🇲" },
-                { curr: "BWP", name: "Botswana Pula", flag: "🇧🇼" },
-                { curr: "ZAR", name: "South African Rand", flag: "🇿🇦" },
-              ].map(({ curr, name, flag }) => (
+                { curr: "TZS", name: "Tanzanian Shilling" },
+                { curr: "ZMW", name: "Zambian Kwacha" },
+                { curr: "BWP", name: "Botswana Pula" },
+                { curr: "ZAR", name: "South African Rand" },
+              ].map(({ curr, name }) => (
                 <div key={curr} className="rounded-xl border border-border bg-card p-3.5 space-y-2">
                   <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-foreground flex items-center gap-1.5">
-                      <span className="text-base">{flag}</span> {curr}
+                    <span className="text-xs font-bold text-foreground">
+                      {curr}
                     </span>
-                    <Badge variant="outline" className="text-[10px]">
+                    <Badge variant="outline" className="text-[10px] font-mono">
                       {REGIONAL_CURRENCIES[curr]?.symbol}
                     </Badge>
                   </div>

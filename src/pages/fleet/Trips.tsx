@@ -1223,11 +1223,14 @@ function NewTripDialog({
                 placeholder="Search plate number, vehicle name, trailer, or model..."
               />
               {selectedMachine && selectedMachine.has_trailer && (
-                <p className="text-[11px] text-primary font-medium">
-                  ✓ Attached Trailer: {selectedMachine.trailer_plate || "Hitched"}
-                  {selectedMachine.total_tank_capacity_l
-                    ? ` (Total Tank: ${selectedMachine.total_tank_capacity_l} L)`
-                    : ""}
+                <p className="text-[11px] text-primary font-medium flex items-center gap-1">
+                  <Check className="h-3 w-3 text-emerald-600 shrink-0" />
+                  <span>
+                    Attached Trailer: {selectedMachine.trailer_plate || "Hitched"}
+                    {selectedMachine.total_tank_capacity_l
+                      ? ` (Total Tank: ${selectedMachine.total_tank_capacity_l} L)`
+                      : ""}
+                  </span>
                 </p>
               )}
             </div>
@@ -1256,20 +1259,20 @@ function NewTripDialog({
                     onClick={onOpenCatalog}
                     className="text-[11px] text-primary hover:underline font-semibold flex items-center gap-1"
                   >
-                    Browse Complete Corridor Catalog →
+                    Browse Complete Corridor Catalog
+                    <ArrowRight className="h-3 w-3" />
                   </button>
                 )}
               </div>
 
               <Select value={corridorId} onValueChange={handleCorridorChange}>
                 <SelectTrigger className="bg-background">
-                  <SelectValue placeholder="Select corridor to auto-populate route, tolls, & expenses" />
+                  <SelectValue placeholder="Select corridor to populate route, tolls, & expenses" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="custom">Custom / Domestic Route (No template)</SelectItem>
                   {CROSS_BORDER_CORRIDORS.map((c) => (
                     <SelectItem key={c.id} value={c.id}>
-                      <span className="mr-2 text-base">{c.flag}</span>
                       {c.name} ({c.expenses.length} statutory fees)
                     </SelectItem>
                   ))}
@@ -1285,19 +1288,20 @@ function NewTripDialog({
               )}
             </div>
 
-            {/* AUTOMATED CORRIDOR EXPENSES PANEL */}
+            {/* CORRIDOR STATUTORY EXPENSES PANEL */}
             {selectedCorridor && expenseItems.length > 0 && (
               <div className="sm:col-span-2 rounded-2xl border border-primary/30 bg-card p-4 space-y-3 shadow-xs">
                 <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border pb-2.5">
                   <div>
                     <h4 className="text-xs font-bold uppercase tracking-wider text-primary flex items-center gap-1.5">
-                      <span>⚡ Automated Corridor Expenses</span>
-                      <Badge variant="outline" className="text-[10px] bg-primary/10 text-primary border-primary/20">
-                        {selectedCorridor.flag} {selectedCorridor.country}
+                      <FileText className="h-3.5 w-3.5 text-primary" />
+                      <span>Corridor Statutory & Transit Expenses</span>
+                      <Badge variant="outline" className="text-[10px] bg-primary/10 text-primary border-primary/20 font-medium">
+                        {selectedCorridor.country}
                       </Badge>
                     </h4>
                     <span className="text-[11px] text-muted-foreground">
-                      Pre-loaded statutory road tolls, permits, scanners, and driver allowances. Toggle items or adjust fees.
+                      Statutory road tolls, transit permits, border clearance, and driver allowances. Toggle items or adjust fees.
                     </span>
                   </div>
 
@@ -1558,17 +1562,18 @@ function NewTripDialog({
                 </div>
               </div>
 
-              <div className="rounded-lg bg-background/80 border border-border p-2.5 text-[11px] text-muted-foreground flex items-center justify-between">
+              <div className="rounded-lg bg-background/80 border border-border p-2.5 text-[11px] text-muted-foreground flex items-center gap-2">
+                <Building2 className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                 <span>
-                  🏢 Logo & payment accounts (CRDB, Stanbic, M-Pesa / Tigo Pesa Lipa Namba) are automatically branded on the client receipt.
+                  Company branding and payment accounts (CRDB, Stanbic, M-Pesa / Tigo Pesa Lipa Namba) are included on official receipts.
                 </span>
               </div>
             </div>
 
-            {/* Where Car Go (Route & Destination) */}
+            {/* Route & Destination */}
             <div className="sm:col-span-2 rounded-xl border border-border bg-muted/30 p-4 space-y-3">
               <h4 className="text-sm font-semibold text-foreground flex items-center gap-2">
-                <MapPin className="h-4 w-4 text-rose-500" /> Route: Where Car Go
+                <MapPin className="h-4 w-4 text-primary" /> Route Transit & Waypoints
               </h4>
               <div className="grid gap-3 sm:grid-cols-2">
                 <div className="space-y-1.5">

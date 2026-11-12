@@ -117,7 +117,7 @@ export function QuickFuelDialog({ open, onOpenChange, machineId, onSaved }: Prop
     if (selectedTripId !== "none") {
       const chosen = trips.find((tr) => tr.id === selectedTripId);
       if (chosen) {
-        const tripHeader = `[Trip: ${chosen.origin || "Origin"} ➔ ${chosen.destination || "Destination"} #${chosen.id.slice(0, 8)}]`;
+        const tripHeader = `[Trip: ${chosen.origin || "Origin"} to ${chosen.destination || "Destination"} #${chosen.id.slice(0, 8)}]`;
         notesText = `${tripHeader} ${notesText}`.trim();
       }
     }
@@ -178,7 +178,7 @@ export function QuickFuelDialog({ open, onOpenChange, machineId, onSaved }: Prop
                 <option value="none">— General / No Specific Trip —</option>
                 {trips.map((tr) => (
                   <option key={tr.id} value={tr.id}>
-                    {tr.origin} ➔ {tr.destination} ({tr.status === "in_progress" ? "In Transit" : tr.status})
+                    {tr.origin} to {tr.destination} ({tr.status === "in_progress" ? "In Transit" : tr.status})
                   </option>
                 ))}
               </select>
