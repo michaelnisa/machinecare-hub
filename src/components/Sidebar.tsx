@@ -334,6 +334,7 @@ export function Sidebar() {
         label: "Maintenance",
         items: [
           { to: "/work-orders", label: t.nav.workOrders, icon: ClipboardList },
+          { to: "/fleet/technicians", label: "Technicians", icon: UserCog },
           { to: "/fault-reports", label: "Fault reports", icon: AlertTriangle },
           { to: "/maintenance/calendar", label: "Maintenance Calendar", icon: Calendar },
           { to: "/maintenance/schedules", label: "PM Schedules", icon: ClipboardCheck },

@@ -122,6 +122,7 @@ const GpsDevices = lazy(() => import("./pages/gps/GpsDevices"));
 const FleetVehicleDetail = lazy(() => import("./pages/fleet/VehicleDetail"));
 const Drivers = lazy(() => import("./pages/fleet/Drivers"));
 const FleetDocuments = lazy(() => import("./pages/fleet/FleetDocuments"));
+const FleetTechnicians = lazy(() => import("./pages/fleet/Technicians"));
 const Trips = lazy(() => import("./pages/fleet/Trips"));
 const Tyres = lazy(() => import("./pages/fleet/Tyres"));
 const FleetInspections = lazy(() => import("./pages/fleet/Inspections"));
@@ -255,6 +256,8 @@ const App = () => (
                   <Route path="/fleet/drivers" element={<Drivers />} />
                   <Route path="/fleet/trips" element={<Trips />} />
                   <Route path="/fleet/documents" element={<FleetDocuments />} />
+                  <Route path="/fleet/technicians" element={<FleetTechnicians />} />
+                  <Route path="/maintenance/technicians" element={<FleetTechnicians />} />
                   <Route path="/fleet/tyres" element={<Tyres />} />
                   <Route path="/fleet/inspections" element={<FleetInspections />} />
                   <Route path="/fleet/insights" element={<FleetInsights />} />

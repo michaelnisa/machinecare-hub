@@ -2,12 +2,13 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams, Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { useFeatureFlags } from "@/platform/feature_flags/useFeatureFlags";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PageLoader } from "@/components/PageLoader";
 import { toast } from "sonner";
-import { ArrowLeft, Loader2 } from "lucide-react";
+import { ArrowLeft, Loader2, Truck, Wrench } from "lucide-react";
 import {
   MachineSearchSelect,
   type MachineOption,
@@ -16,6 +17,8 @@ import {
   WorkOrderPreview,
   formatWoNumber,
 } from "@/components/WorkOrderPreview";
+import { FleetWorkOrderForm } from "@/components/fleet/FleetWorkOrderForm";
+import { parseMachine } from "@/lib/fleet-metadata";
 
 const WORK_TYPES = [
   { value: "breakdown", label: "Breakdown" },
@@ -41,11 +44,14 @@ function addDays(base: Date, days: number) {
 
 export default function WorkOrderNew() {
   const { profile, user, organisation } = useAuth();
+  const { isFleet, isGarage, isManufacturing, isMixed } = useFeatureFlags();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const preselectMachineId = searchParams.get("machine");
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [formMode, setFormMode] = useState<"fleet" | "manufacturing">("manufacturing");
+  const [fleetVehicles, setFleetVehicles] = useState<any[]>([]);
 
   const [machines, setMachines] = useState<MachineOption[]>([]);
   const [members, setMembers] = useState<any[]>([]);
@@ -112,7 +118,7 @@ export default function WorkOrderNew() {
         supabase
           .from("machines")
           .select(
-            "id,name,status,current_hours,category,make,model,year,registration_number,serial_number",
+            "id,name,status,current_hours,category,make,model,year,registration_number,serial_number,notes",
           )
           .order("name"),
         supabase
@@ -156,6 +162,22 @@ export default function WorkOrderNew() {
           .eq("is_active", true),
       ]);
       setMachines(m ?? []);
+      const parsedVehicles = (m ?? []).map((row: any, idx: number) => parseMachine(row, idx));
+      setFleetVehicles(parsedVehicles);
+
+      const preselectedVehicle = parsedVehicles.find((x) => x.id === preselectMachineId);
+      const isVehicle = preselectedVehicle?.category === "Vehicle" || preselectedVehicle?.category === "Trailer";
+
+      if (isFleet || isGarage) {
+        setFormMode("fleet");
+      } else if (isManufacturing) {
+        setFormMode("manufacturing");
+      } else if (isMixed) {
+        setFormMode(isVehicle ? "fleet" : "manufacturing");
+      } else {
+        setFormMode(isVehicle ? "fleet" : "manufacturing");
+      }
+
       setMembers(p ?? []);
       setVendors(v ?? []);
       setTemplates(t ?? []);
@@ -406,12 +428,58 @@ export default function WorkOrderNew() {
         </div>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-2">
-        {/* Form */}
-        <form
-          onSubmit={submit}
-          className="space-y-5 rounded-xl border border-border bg-card p-5"
-        >
+      {isMixed && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-card p-3 shadow-sm">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-semibold text-foreground uppercase tracking-wider">
+              Maintenance Form Mode:
+            </span>
+            <span className="text-xs text-muted-foreground">
+              {formMode === "fleet"
+                ? "Optimized for Commercial Fleet, Trucks & Trailers"
+                : "Industrial Plant & Machinery with Safety / LOTO"}
+            </span>
+          </div>
+          <div className="flex gap-1.5">
+            <button
+              type="button"
+              onClick={() => setFormMode("fleet")}
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                formMode === "fleet"
+                  ? "bg-primary text-primary-foreground shadow-sm"
+                  : "bg-muted text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              <Truck className="h-3.5 w-3.5" /> Fleet & Vehicle Maintenance
+            </button>
+            <button
+              type="button"
+              onClick={() => setFormMode("manufacturing")}
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                formMode === "manufacturing"
+                  ? "bg-primary text-primary-foreground shadow-sm"
+                  : "bg-muted text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              <Wrench className="h-3.5 w-3.5" /> Plant & Machinery
+            </button>
+          </div>
+        </div>
+      )}
+
+      {formMode === "fleet" ? (
+        <FleetWorkOrderForm
+          machines={fleetVehicles}
+          preselectMachineId={preselectMachineId}
+          nextNumber={nextNumber}
+        />
+      ) : (
+        <div className="grid gap-6 lg:grid-cols-2">
+          {/* Form */}
+          <form
+            onSubmit={submit}
+            className="space-y-5 rounded-xl border border-border bg-card p-5"
+          >
           <div>
             <h1 className="text-xl font-semibold tracking-tight">
               New work order
@@ -885,6 +953,7 @@ export default function WorkOrderNew() {
           </div>
         </div>
       </div>
-    </div>
-  );
+    )}
+  </div>
+);
 }

@@ -1,9 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { PageLoader } from "@/components/PageLoader";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Printer, Receipt } from "lucide-react";
+import { ArrowLeft, Printer, Receipt, Truck, Wrench, UserCog, CheckCircle2, Gauge } from "lucide-react";
 import { toast } from "sonner";
 import { CreateReceiptModal } from "@/components/accounting/CreateReceiptModal";
 import { StatusPipelineBar, type WoStatus } from "@/components/StatusPipelineBar";
@@ -83,6 +83,39 @@ export default function WorkOrderDetail() {
     await load();
   };
 
+  const isVehicleWo = useMemo(() => {
+    if (machine?.category === "Vehicle" || machine?.category === "Trailer") return true;
+    try {
+      if (wo?.remarks) {
+        const parsed = JSON.parse(wo.remarks);
+        if (parsed.created_via === "fleet_workshop_flow" || parsed.technician_name || parsed.service_odometer_km) return true;
+      }
+    } catch {}
+    return false;
+  }, [machine, wo]);
+
+  const hasPermitsOrLoto = useMemo(() => {
+    if (!wo) return false;
+    return !!(
+      wo.permit_cold_work ||
+      wo.permit_hot_work ||
+      wo.permit_isolation ||
+      wo.permit_confined_space ||
+      wo.permit_jsea
+    );
+  }, [wo]);
+
+  const parsedFleetMetadata = useMemo(() => {
+    if (!wo?.remarks) return null;
+    try {
+      const obj = JSON.parse(wo.remarks);
+      if (obj && typeof obj === "object" && (obj.created_via === "fleet_workshop_flow" || obj.technician_name)) {
+        return obj;
+      }
+    } catch {}
+    return null;
+  }, [wo]);
+
   if (loading) return <PageLoader />;
   if (!wo) return <div className="p-8 text-center"><p className="text-muted-foreground">Work order not found.</p><Link to="/work-orders" className="text-primary hover:underline">Back</Link></div>;
 
@@ -118,10 +151,81 @@ export default function WorkOrderDetail() {
 
       <StatusPipelineBar status={wo.status as WoStatus} onTransition={onTransition} />
 
-      <WorkOrderRiskAssessmentCard wo={wo} onSaved={load} />
-      <WorkOrderLotoCard wo={wo} onSaved={load} />
+      {parsedFleetMetadata && (
+        <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-primary/10 pb-2">
+            <div className="flex items-center gap-2">
+              <Truck className="h-4 w-4 text-primary" />
+              <span className="font-semibold text-sm text-foreground">
+                Fleet Workshop Service Details
+              </span>
+              {parsedFleetMetadata.service_category && (
+                <span className="text-xs rounded-full bg-primary/10 text-primary px-2.5 py-0.5 font-medium">
+                  {parsedFleetMetadata.service_category}
+                </span>
+              )}
+            </div>
+            {parsedFleetMetadata.service_odometer_km != null && (
+              <div className="flex items-center gap-1.5 text-xs text-muted-foreground font-mono">
+                <Gauge className="h-3.5 w-3.5 text-primary" />
+                <span>Service Odometer: {Number(parsedFleetMetadata.service_odometer_km).toLocaleString()} km</span>
+              </div>
+            )}
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+            {parsedFleetMetadata.technician_name && (
+              <div className="flex items-center gap-2">
+                <UserCog className="h-4 w-4 text-primary/70 shrink-0" />
+                <div>
+                  <span className="text-muted-foreground">Assigned Technician: </span>
+                  <span className="font-medium text-foreground">
+                    {parsedFleetMetadata.technician_name}
+                  </span>
+                  {parsedFleetMetadata.technician_specialization && (
+                    <span className="text-muted-foreground"> ({parsedFleetMetadata.technician_specialization})</span>
+                  )}
+                  {parsedFleetMetadata.technician_phone && (
+                    <span className="text-muted-foreground"> · {parsedFleetMetadata.technician_phone}</span>
+                  )}
+                </div>
+              </div>
+            )}
+            {parsedFleetMetadata.manager_remarks && (
+              <div>
+                <span className="text-muted-foreground">Workshop Notes: </span>
+                <span className="text-foreground">{parsedFleetMetadata.manager_remarks}</span>
+              </div>
+            )}
+          </div>
+
+          {Array.isArray(parsedFleetMetadata.pm_tasks) && parsedFleetMetadata.pm_tasks.length > 0 && (
+            <div className="pt-1">
+              <span className="text-xs font-medium text-muted-foreground block mb-1.5">
+                Service Checklist Scope ({parsedFleetMetadata.pm_tasks.length} tasks):
+              </span>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-1 text-xs">
+                {parsedFleetMetadata.pm_tasks.map((task: string, i: number) => (
+                  <div key={i} className="flex items-center gap-1.5 text-muted-foreground">
+                    <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+                    <span className="truncate">{task}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {(!isVehicleWo || hasPermitsOrLoto) && (
+        <>
+          <WorkOrderRiskAssessmentCard wo={wo} onSaved={load} />
+          <WorkOrderLotoCard wo={wo} onSaved={load} />
+          <WorkOrderPtwCard wo={wo} onSaved={load} />
+        </>
+      )}
+
       <WorkOrderMaterialRequestCard wo={wo} onSaved={load} />
-      <WorkOrderPtwCard wo={wo} onSaved={load} />
       <WorkOrderCloseApprovalCard wo={wo} onSaved={load} />
 
       <div className="grid gap-5 lg:grid-cols-3">
