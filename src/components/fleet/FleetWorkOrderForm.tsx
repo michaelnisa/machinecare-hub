@@ -27,7 +27,8 @@ import {
   Building2,
   CheckSquare,
   Sparkles,
-  Info
+  Info,
+  X,
 } from "lucide-react";
 import { toast } from "sonner";
 import { formatWoNumber } from "@/components/WorkOrderPreview";
@@ -208,6 +209,8 @@ export function FleetWorkOrderForm({
   const [priority, setPriority] = useState<"low" | "normal" | "high" | "critical">("normal");
   const [dueDate, setDueDate] = useState(addDays(new Date(), 7));
   const [selectedTechnicianId, setSelectedTechnicianId] = useState("");
+  const [pmTasksList, setPmTasksList] = useState<string[]>([...STANDARD_PM_TASKS]);
+  const [newCustomTask, setNewCustomTask] = useState("");
   const [selectedTasks, setSelectedTasks] = useState<string[]>([...STANDARD_PM_TASKS]);
   const [remarks, setRemarks] = useState("");
 
@@ -298,6 +301,23 @@ export function FleetWorkOrderForm({
     );
   };
 
+  const handleAddPmTask = () => {
+    const trimmed = newCustomTask.trim();
+    if (!trimmed) return;
+    if (!pmTasksList.includes(trimmed)) {
+      setPmTasksList((prev) => [...prev, trimmed]);
+    }
+    if (!selectedTasks.includes(trimmed)) {
+      setSelectedTasks((prev) => [...prev, trimmed]);
+    }
+    setNewCustomTask("");
+  };
+
+  const handleRemovePmTask = (taskToRemove: string) => {
+    setPmTasksList((prev) => prev.filter((t) => t !== taskToRemove));
+    setSelectedTasks((prev) => prev.filter((t) => t !== taskToRemove));
+  };
+
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!profile) return;
@@ -334,18 +354,6 @@ export function FleetWorkOrderForm({
       const matchingProfile = members.find((m) => m.id === selectedTechnicianId);
       const assigneeId = matchingProfile ? matchingProfile.id : null;
 
-      const metadataRemarks = JSON.stringify({
-        technician_id: selectedTechnician?.id || null,
-        technician_name: selectedTechnician?.name || null,
-        technician_phone: selectedTechnician?.phone || null,
-        technician_specialization: selectedTechnician?.specialization || null,
-        service_odometer_km: numOdo,
-        service_category: currentWorkTypeConfig.label,
-        pm_tasks: workType === "preventive" ? selectedTasks : [],
-        manager_remarks: remarks.trim() || null,
-        created_via: "fleet_workshop_flow",
-      });
-
       const payload: any = {
         organisation_id: profile.organisation_id,
         machine_id: selectedMachineId,
@@ -358,8 +366,8 @@ export function FleetWorkOrderForm({
         due_date: dueDate || null,
         nature_of_problem: defectReport.trim() || null,
         proposed_remedy: workType === "preventive" ? selectedTasks.join(", ") : null,
-        technician_comment: selectedTechnician ? `Assigned to: ${selectedTechnician.name}` : null,
-        remarks: metadataRemarks,
+        technician_comment: null,
+        remarks: remarks.trim() || null,
         is_outsourced: !!isOutsourced,
         vendor_id: isOutsourced && vendorId ? vendorId : null,
         promised_date: isOutsourced && promisedDate ? promisedDate : null,
@@ -674,12 +682,12 @@ export function FleetWorkOrderForm({
               <div className="flex items-center justify-between">
                 <Label className="text-xs font-semibold text-primary flex items-center gap-1.5">
                   <CheckSquare className="h-4 w-4" />
-                  Standard PM Service Tasks ({selectedTasks.length}/{STANDARD_PM_TASKS.length})
+                  Standard PM Service Tasks ({selectedTasks.length}/{pmTasksList.length})
                 </Label>
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
-                    onClick={() => setSelectedTasks([...STANDARD_PM_TASKS])}
+                    onClick={() => setSelectedTasks([...pmTasksList])}
                     className="text-[10px] text-primary hover:underline font-medium cursor-pointer"
                   >
                     Select All
@@ -696,26 +704,62 @@ export function FleetWorkOrderForm({
               </div>
 
               <div className="grid gap-2 sm:grid-cols-2 pt-1">
-                {STANDARD_PM_TASKS.map((task) => {
+                {pmTasksList.map((task) => {
                   const isChecked = selectedTasks.includes(task);
                   return (
-                    <label
+                    <div
                       key={task}
-                      className={`flex items-start gap-2 p-2 rounded-lg border text-xs cursor-pointer transition-colors ${
+                      className={`group flex items-start justify-between gap-2 p-2 rounded-lg border text-xs transition-colors ${
                         isChecked 
                           ? "bg-background border-primary/40 text-foreground font-medium" 
                           : "bg-muted/30 border-transparent text-muted-foreground hover:bg-background"
                       }`}
                     >
-                      <Checkbox
-                        checked={isChecked}
-                        onCheckedChange={() => toggleTask(task)}
-                        className="mt-0.5"
-                      />
-                      <span className="leading-tight">{task}</span>
-                    </label>
+                      <label className="flex items-start gap-2 flex-1 cursor-pointer">
+                        <Checkbox
+                          checked={isChecked}
+                          onCheckedChange={() => toggleTask(task)}
+                          className="mt-0.5"
+                        />
+                        <span className="leading-tight">{task}</span>
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => handleRemovePmTask(task)}
+                        className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive p-0.5 transition-opacity cursor-pointer"
+                        title="Remove task"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
                   );
                 })}
+              </div>
+
+              {/* Add Custom PM Task Input */}
+              <div className="flex items-center gap-2 pt-2 border-t border-primary/10">
+                <Input
+                  value={newCustomTask}
+                  onChange={(e) => setNewCustomTask(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      handleAddPmTask();
+                    }
+                  }}
+                  placeholder="Add custom PM task (e.g. Inspect Kingpins, Drain Water Separator)..."
+                  className="h-8 text-xs bg-background"
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={handleAddPmTask}
+                  disabled={!newCustomTask.trim()}
+                  className="h-8 text-xs shrink-0 cursor-pointer"
+                >
+                  <Plus className="h-3 w-3 mr-1" /> Add Task
+                </Button>
               </div>
             </div>
           )}
@@ -829,7 +873,7 @@ export function FleetWorkOrderForm({
         {/* Live Job Card Summary Preview (5 cols on desktop) */}
         <div className="lg:col-span-5 space-y-4">
           <div className="rounded-2xl border border-border bg-card p-5 shadow-xs space-y-4 sticky top-6">
-            <div className="flex items-center justify-between border-b border-border pb-3">
+            <div className="flex items-start justify-between border-b border-border pb-3 gap-2">
               <div>
                 <span className="text-[10px] font-mono text-muted-foreground uppercase font-semibold">
                   Live Job Card Summary
@@ -837,10 +881,26 @@ export function FleetWorkOrderForm({
                 <h3 className="text-base font-bold text-foreground">
                   {formatWoNumber(new Date().getFullYear(), nextNumber)}
                 </h3>
+                <div className="text-xs text-muted-foreground font-medium mt-0.5">
+                  {organisation?.name || "Company"}
+                </div>
               </div>
-              <Badge className={currentWorkTypeConfig.badgeColor}>
-                {currentWorkTypeConfig.label}
-              </Badge>
+              <div className="flex flex-col items-end gap-1.5">
+                {organisation?.logo_url ? (
+                  <img
+                    src={organisation.logo_url}
+                    alt={organisation.name || "Company Logo"}
+                    className="h-10 w-auto max-w-[130px] object-contain rounded"
+                  />
+                ) : (
+                  <div className="h-8 px-2.5 rounded bg-muted/60 border border-border flex items-center justify-center text-[10px] font-bold text-muted-foreground tracking-wider uppercase">
+                    {organisation?.name || "Logo"}
+                  </div>
+                )}
+                <Badge className={currentWorkTypeConfig.badgeColor}>
+                  {currentWorkTypeConfig.label}
+                </Badge>
+              </div>
             </div>
 
             {/* Vehicle Preview */}

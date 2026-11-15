@@ -88,6 +88,20 @@ export interface PreviewData {
   checklist?: { name?: string } | null;
 }
 
+export function getCleanRemarks(raw?: string | null): string {
+  if (!raw) return "";
+  const trimmed = raw.trim();
+  if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
+    try {
+      const parsed = JSON.parse(trimmed);
+      return parsed.manager_remarks || "";
+    } catch {
+      return "";
+    }
+  }
+  return trimmed;
+}
+
 export function WorkOrderPreview({
   data,
   compact = false,
@@ -313,39 +327,16 @@ export function WorkOrderPreview({
 
       {!compact && (
         <>
-          <section className="mt-5">
-            <SectionHeader>Actual work done</SectionHeader>
-            {data.actual_work_done ? (
-              <p className="mt-2 whitespace-pre-wrap text-sm text-slate-700">
-                {data.actual_work_done}
-              </p>
-            ) : (
-              <div className="mt-2 min-h-[28mm] rounded-md border border-dashed border-slate-300 p-3 text-xs text-slate-400">
-                Record diagnosis, work done, parts replaced, and measurements
-                here.
-              </div>
-            )}
-            {data.technician_comment && (
-              <div className="mt-2 rounded-md border border-slate-200 bg-slate-50 p-2 text-xs">
-                <div className="text-[9pt] uppercase tracking-wide text-slate-500">
-                  Technician comment
-                </div>
-                <div className="mt-0.5 whitespace-pre-wrap text-slate-700">
-                  {data.technician_comment}
+          {getCleanRemarks(data.remarks) && (
+            <section className="mt-5">
+              <SectionHeader>Manager remarks</SectionHeader>
+              <div className="mt-2 rounded-md border border-slate-200 bg-slate-50 p-2.5 text-xs">
+                <div className="whitespace-pre-wrap text-slate-700">
+                  {getCleanRemarks(data.remarks)}
                 </div>
               </div>
-            )}
-            {data.remarks && (
-              <div className="mt-2 rounded-md border border-slate-200 bg-slate-50 p-2 text-xs">
-                <div className="text-[9pt] uppercase tracking-wide text-slate-500">
-                  Manager remarks
-                </div>
-                <div className="mt-0.5 whitespace-pre-wrap text-slate-700">
-                  {data.remarks}
-                </div>
-              </div>
-            )}
-          </section>
+            </section>
+          )}
 
           <section className="mt-5">
             <SectionHeader>Parts &amp; materials</SectionHeader>

@@ -7,6 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Loader2, Play, Square } from "lucide-react";
 import { toast } from "sonner";
 import { formatDate } from "@/lib/format";
+import { getCleanRemarks } from "@/components/WorkOrderPreview";
 
 interface Props {
   wo: any;
@@ -31,9 +32,7 @@ export function WorkOrderJobLog({ wo, onSaved }: Props) {
   const [timeReceived, setTimeReceived] = useState(toLocalInput(wo.time_received));
   const [laborCost, setLaborCost] = useState<string>(wo.labor_cost?.toString() ?? "");
   const [currency, setCurrency] = useState<string>(wo.cost_currency ?? "TZS");
-  const [remarks, setRemarks] = useState<string>(wo.remarks ?? "");
-  const [techComment, setTechComment] = useState<string>(wo.technician_comment ?? "");
-  const [actualWorkDone, setActualWorkDone] = useState<string>(wo.actual_work_done ?? "");
+  const [remarks, setRemarks] = useState<string>(getCleanRemarks(wo.remarks));
   const [inspectedBy, setInspectedBy] = useState<string>(wo.inspected_by_name ?? "");
   const [inspectedAt, setInspectedAt] = useState<string>(toLocalInput(wo.inspected_at));
   const [handedBy, setHandedBy] = useState<string>(wo.handed_over_by_name ?? "");
@@ -59,9 +58,7 @@ export function WorkOrderJobLog({ wo, onSaved }: Props) {
         time_received: fromLocalInput(timeReceived),
         labor_cost: laborCost === "" ? null : Number(laborCost),
         cost_currency: laborCost === "" ? null : currency,
-        remarks: remarks || null,
-        technician_comment: techComment || null,
-        actual_work_done: actualWorkDone || null,
+        remarks: remarks.trim() || null,
         inspected_by_name: inspectedBy || null,
         inspected_at: fromLocalInput(inspectedAt),
         handed_over_by_name: handedBy || null,
@@ -90,7 +87,7 @@ export function WorkOrderJobLog({ wo, onSaved }: Props) {
       <div className="flex items-center justify-between">
         <div>
           <h3 className="text-sm font-medium">Job log</h3>
-          <p className="text-xs text-muted-foreground">Start/finish times, cost, remarks & technician comment.</p>
+          <p className="text-xs text-muted-foreground">Start/finish times, cost, manager remarks & sign-offs.</p>
         </div>
         {duration && <span className="rounded-md bg-muted px-2 py-0.5 text-xs">Duration: {duration}</span>}
       </div>
@@ -151,16 +148,6 @@ export function WorkOrderJobLog({ wo, onSaved }: Props) {
       <div className="space-y-1.5">
         <Label>Manager remarks</Label>
         <Textarea rows={2} value={remarks} onChange={(e) => setRemarks(e.target.value)} placeholder="Internal notes, instructions, observations…" maxLength={2000} />
-      </div>
-
-      <div className="space-y-1.5">
-        <Label>Actual work done</Label>
-        <Textarea rows={4} value={actualWorkDone} onChange={(e) => setActualWorkDone(e.target.value)} placeholder="Diagnosis, work performed, parts replaced, measurements…" maxLength={4000} />
-      </div>
-
-      <div className="space-y-1.5">
-        <Label>Technician comment <span className="text-xs text-muted-foreground">(after finishing)</span></Label>
-        <Textarea rows={3} value={techComment} onChange={(e) => setTechComment(e.target.value)} placeholder="Recommendations, follow-ups, parts ordered…" maxLength={2000} />
       </div>
 
       <div className="rounded-lg border border-border bg-muted/30 p-3 space-y-3">

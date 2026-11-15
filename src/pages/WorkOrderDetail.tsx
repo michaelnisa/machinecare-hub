@@ -16,10 +16,13 @@ import { WorkOrderRiskAssessmentCard } from "@/components/WorkOrderRiskAssessmen
 import { WorkOrderLotoCard } from "@/components/WorkOrderLotoCard";
 import { WorkOrderMaterialRequestCard } from "@/components/WorkOrderMaterialRequestCard";
 import { formatDate } from "@/lib/format";
+import { useAuth } from "@/contexts/AuthContext";
 import { formatDistanceToNow } from "date-fns";
+import { WorkOrderPreview, formatWoNumber, getCleanRemarks } from "@/components/WorkOrderPreview";
 
 export default function WorkOrderDetail() {
   const { id } = useParams<{ id: string }>();
+  const { organisation: authOrg } = useAuth();
   const [loading, setLoading] = useState(true);
   const [wo, setWo] = useState<any>(null);
   const [machine, setMachine] = useState<any>(null);
@@ -106,14 +109,35 @@ export default function WorkOrderDetail() {
   }, [wo]);
 
   const parsedFleetMetadata = useMemo(() => {
-    if (!wo?.remarks) return null;
-    try {
-      const obj = JSON.parse(wo.remarks);
-      if (obj && typeof obj === "object" && (obj.created_via === "fleet_workshop_flow" || obj.technician_name)) {
-        return obj;
+    let metadata: any = null;
+    if (wo?.remarks && wo.remarks.trim().startsWith("{")) {
+      try {
+        const obj = JSON.parse(wo.remarks);
+        if (obj && typeof obj === "object") {
+          metadata = { ...obj };
+        }
+      } catch {}
+    }
+
+    if (!metadata && wo?.description) {
+      const odoMatch = wo.description.match(/\[Vehicle Service Odometer\]:\s*([0-9,.]+)\s*km/);
+      const techMatch = wo.description.match(/\[Assigned Workshop Technician\]:\s*([^(]+)(?:\(([^)]+)\))?/);
+      if (odoMatch || techMatch) {
+        metadata = {
+          technician_name: techMatch ? techMatch[1].trim() : null,
+          technician_specialization: techMatch && techMatch[2] ? techMatch[2].trim() : null,
+          service_odometer_km: odoMatch ? odoMatch[1].replace(/,/g, "") : null,
+          service_category: wo.title,
+          manager_remarks: getCleanRemarks(wo.remarks) || null,
+        };
       }
-    } catch {}
-    return null;
+    }
+
+    if (metadata) {
+      metadata.manager_remarks = getCleanRemarks(metadata.manager_remarks || wo?.remarks);
+    }
+
+    return metadata;
   }, [wo]);
 
   if (loading) return <PageLoader />;
@@ -234,8 +258,8 @@ export default function WorkOrderDetail() {
             data={{
               ...wo,
               machine: machine ?? undefined,
-              org: org ?? undefined,
-              logo_url: org?.logo_url ?? undefined,
+              org: org ?? authOrg ?? undefined,
+              logo_url: org?.logo_url ?? authOrg?.logo_url ?? undefined,
               assignee: assignee ?? undefined,
               vendor: vendor ?? undefined,
               createdBy: createdBy ?? undefined,
