@@ -33,6 +33,7 @@ interface OrgItem {
   id: string;
   name: string;
   industry_profile: string | null;
+  industry?: string | null;
   logo_url: string | null;
 }
 
@@ -53,7 +54,7 @@ export function PlatformAdminOrgSwitcher({ compact = false }: { compact?: boolea
     try {
       const { data, error } = await supabase
         .from("organisations")
-        .select("id, name, industry_profile, logo_url")
+        .select("id, name, industry_profile, industry, logo_url")
         .order("name", { ascending: true });
 
       if (!error && data) {
@@ -146,7 +147,7 @@ export function PlatformAdminOrgSwitcher({ compact = false }: { compact?: boolea
   };
 
   const hasGpsOrg = orgs.some(
-    (o) => o.industry_profile === "gps_tracking" || o.name.toLowerCase().includes("gps")
+    (o) => o.industry_profile === "gps_tracking" || o.name.toLowerCase().includes("gps") || o.industry?.toLowerCase() === "gps_tracking"
   );
 
   return (
@@ -202,7 +203,10 @@ export function PlatformAdminOrgSwitcher({ compact = false }: { compact?: boolea
           <div className="space-y-0.5 py-1">
             {orgs.map((org) => {
               const isActive = org.id === organisation?.id;
-              const isGps = org.industry_profile === "gps_tracking" || org.name.toLowerCase().includes("gps");
+              const isGps =
+                org.industry_profile === "gps_tracking" ||
+                org.name.toLowerCase().includes("gps") ||
+                org.industry?.toLowerCase() === "gps_tracking";
               return (
                 <DropdownMenuItem
                   key={org.id}

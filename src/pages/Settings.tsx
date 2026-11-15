@@ -343,7 +343,7 @@ export default function Settings() {
       industry_profile: pendingProfile === "gps_tracking" ? "fleet_logistics" : pendingProfile,
     };
     if (pendingProfile === "gps_tracking") {
-      payload.enabled_modules = ["gps_tracking"];
+      payload.industry = "gps_tracking";
     }
 
     const { error } = await supabase

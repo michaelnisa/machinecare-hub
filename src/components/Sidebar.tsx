@@ -609,6 +609,7 @@ export function Sidebar() {
     // Direct Industry Profile or GPS Tracking Suite matching
     if (
       organisation?.industry_profile === "gps_tracking" ||
+      organisation?.industry?.toLowerCase() === "gps_tracking" ||
       (organisation?.enabled_modules?.includes("gps_tracking") &&
         !organisation?.enabled_modules?.includes("fleet") &&
         !organisation?.enabled_modules?.includes("production") &&
@@ -879,6 +880,7 @@ export function Sidebar() {
             {(() => {
               if (
                 organisation?.industry_profile === "gps_tracking" ||
+                organisation?.industry?.toLowerCase() === "gps_tracking" ||
                 organisation?.name?.toLowerCase().includes("gps") ||
                 (organisation?.enabled_modules?.includes("gps_tracking") && !organisation?.enabled_modules?.includes("fleet"))
               ) {

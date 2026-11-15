@@ -5,6 +5,10 @@
 -- sample tracking hardware and live telemetry.
 -- ============================================================================
 
+-- 0. Ensure schema compatibility on organisations table
+ALTER TABLE public.organisations
+  ADD COLUMN IF NOT EXISTS enabled_modules text[] DEFAULT '{}';
+
 -- 1. Security definer RPC for platform admin to switch active organisation
 CREATE OR REPLACE FUNCTION public.admin_switch_organisation(target_org_id uuid)
 RETURNS jsonb
@@ -87,7 +91,7 @@ BEGIN
   SELECT id INTO _org_id
   FROM public.organisations
   WHERE LOWER(name) LIKE '%machinecare gps%'
-     OR 'gps_tracking' = ANY(enabled_modules)
+     OR LOWER(COALESCE(industry, '')) = 'gps_tracking'
   LIMIT 1;
 
   IF _org_id IS NULL THEN
@@ -95,13 +99,13 @@ BEGIN
     INSERT INTO public.organisations (
       name,
       industry_profile,
-      plan,
-      enabled_modules
+      industry,
+      plan
     ) VALUES (
       'MachineCare GPS Tracking',
       'fleet_logistics',
-      'enterprise',
-      ARRAY['gps_tracking']
+      'gps_tracking',
+      'enterprise'
     )
     RETURNING id INTO _org_id;
 

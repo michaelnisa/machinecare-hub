@@ -280,7 +280,7 @@ export default function Admin() {
         industry_profile: newProfile === "gps_tracking" ? "fleet_logistics" : newProfile,
       };
       if (newProfile === "gps_tracking") {
-        payload.enabled_modules = ["gps_tracking"];
+        payload.industry = "gps_tracking";
       }
 
       const { error } = await supabase

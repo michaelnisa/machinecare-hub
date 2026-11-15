@@ -30,6 +30,7 @@ export default function DashboardRouter() {
   // 2. MachineCare GPS Tracking independent profile resolution
   if (
     industry === "gps_tracking" ||
+    organisation?.industry?.toLowerCase() === "gps_tracking" ||
     (enabledMods?.includes("gps_tracking") && !enabledMods?.includes("fleet")) ||
     organisation?.name?.toLowerCase().includes("gps")
   ) {

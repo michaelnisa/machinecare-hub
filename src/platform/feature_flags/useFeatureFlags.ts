@@ -49,6 +49,7 @@ export function useFeatureFlags() {
 
   const isGpsTracking =
     profile === "gps_tracking" ||
+    organisation?.industry?.toLowerCase() === "gps_tracking" ||
     Boolean(
       organisation?.enabled_modules?.includes("gps_tracking") &&
       !organisation?.enabled_modules?.includes("fleet")

@@ -30,6 +30,7 @@ export type BusinessHours = Record<"mon" | "tue" | "wed" | "thu" | "fri" | "sat"
 export interface Organisation {
   id: string;
   name: string;
+  industry?: string | null;
   industry_profile: IndustryProfile;
   logo_url: string | null;
   plan: "lite" | "standard" | "enterprise";
