@@ -120,6 +120,7 @@ const GpsGeofences = lazy(() => import("./pages/gps/GpsGeofences"));
 const GpsAlerts = lazy(() => import("./pages/gps/GpsAlerts"));
 const GpsDevices = lazy(() => import("./pages/gps/GpsDevices"));
 const GpsTelematicsKpis = lazy(() => import("./pages/gps/GpsTelematicsKpis"));
+const CustomerLiveTrack = lazy(() => import("./pages/gps/CustomerLiveTrack"));
 const FleetVehicleDetail = lazy(() => import("./pages/fleet/VehicleDetail"));
 const Drivers = lazy(() => import("./pages/fleet/Drivers"));
 const FleetDocuments = lazy(() => import("./pages/fleet/FleetDocuments"));
@@ -238,6 +239,8 @@ const App = () => (
                 <Route path="/blog" element={<BlogList />} />
                 <Route path="/blog/:slug" element={<BlogPostDetail />} />
                 <Route path="/unsubscribe" element={<Unsubscribe />} />
+                <Route path="/track/:vehicleId" element={<CustomerLiveTrack />} />
+                <Route path="/t/:vehicleId" element={<CustomerLiveTrack />} />
                 <Route element={<AppLayout />}>
                   <Route path="/dashboard" element={<DashboardRouter />} />
                   {/* MachineCare GPS Tracking (Standalone Suite) */}

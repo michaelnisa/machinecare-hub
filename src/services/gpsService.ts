@@ -1250,5 +1250,109 @@ export async function getGpsTelematicsKpis(
   };
 }
 
+/**
+ * Loads recent breadcrumb trail (coordinates) for a vehicle to draw on the live map
+ */
+export async function getRecentVehicleTrail(
+  vehicleId: string,
+  limit: number = 60
+): Promise<[number, number][]> {
+  try {
+    const { data } = await (supabase as any)
+      .from("vehicle_positions")
+      .select("latitude, longitude, speed_kmh, recorded_at")
+      .eq("vehicle_id", vehicleId)
+      .not("latitude", "is", null)
+      .not("longitude", "is", null)
+      .order("recorded_at", { ascending: false })
+      .limit(limit);
+
+    if (!data || data.length === 0) return [];
+    return data
+      .filter((p: any) => {
+        const lat = Number(p.latitude);
+        const lng = Number(p.longitude);
+        return !isNaN(lat) && !isNaN(lng) && lat !== 0 && lng !== 0;
+      })
+      .map((p: any) => [Number(p.latitude), Number(p.longitude)] as [number, number])
+      .reverse();
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Loads live telemetry for a single vehicle (used in dedicated/customer live tracking)
+ */
+export async function getSingleLiveVehicle(
+  vehicleId: string
+): Promise<LiveTrackedVehicle | null> {
+  try {
+    const [{ data: machine }, { data: position }] = await Promise.all([
+      (supabase as any)
+        .from("machines")
+        .select("id, name, plate_number, make, model, status, current_odometer_km, telematics_latitude, telematics_longitude, telematics_speed, telematics_ignition, telematics_battery_volt, telematics_last_at, telematics_raw")
+        .eq("id", vehicleId)
+        .single(),
+      (supabase as any)
+        .from("latest_vehicle_positions")
+        .select("*")
+        .eq("vehicle_id", vehicleId)
+        .maybeSingle(),
+    ]);
+
+    if (!machine) return null;
+
+    const lat = position ? Number(position.latitude) : machine.telematics_latitude ? Number(machine.telematics_latitude) : null;
+    const lng = position ? Number(position.longitude) : machine.telematics_longitude ? Number(machine.telematics_longitude) : null;
+    const speed = position ? Number(position.speed_kmh || 0) : Number(machine.telematics_speed || 0);
+    const ignition = position ? Boolean(position.ignition) : Boolean(machine.telematics_ignition);
+    const heading = position ? Number(position.heading || 0) : 0;
+    const altitude = position ? Number(position.altitude || 0) : 0;
+    const batteryVoltage = position?.battery_voltage ? Number(position.battery_voltage) : machine.telematics_battery_volt ? Number(machine.telematics_battery_volt) : null;
+    const recordedAt = position ? position.recorded_at : machine.telematics_last_at;
+
+    const now = Date.now();
+    let motionStatus: "moving" | "idling" | "stopped" | "offline" = "offline";
+    const isRecent = recordedAt && (now - new Date(recordedAt).getTime()) < 24 * 3600 * 1000;
+
+    if (!isRecent || !lat || !lng) {
+      motionStatus = "offline";
+    } else if (speed > 3) {
+      motionStatus = "moving";
+    } else if (ignition) {
+      motionStatus = "idling";
+    } else {
+      motionStatus = "stopped";
+    }
+
+    return {
+      vehicleId: machine.id,
+      name: machine.name,
+      plateNumber: machine.plate_number,
+      make: machine.make,
+      model: machine.model,
+      status: machine.status,
+      currentOdometerKm: machine.current_odometer_km ? Number(machine.current_odometer_km) : null,
+      deviceId: position?.device_id || null,
+      latitude: lat,
+      longitude: lng,
+      speedKmh: Math.round(speed),
+      heading,
+      altitude,
+      ignition,
+      batteryVoltage,
+      motionStatus,
+      satelliteCount: position?.satellite_count || 0,
+      accuracyM: position?.accuracy_m ? Number(position.accuracy_m) : null,
+      recordedAt,
+      address: position?.address || null,
+    };
+  } catch {
+    return null;
+  }
+}
+
+
 
 
