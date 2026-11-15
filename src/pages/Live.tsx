@@ -27,6 +27,7 @@ import {
   PowerOff,
   CheckCircle2,
   Navigation,
+  ShieldAlert,
 } from "lucide-react";
 import { toast } from "sonner";
 
