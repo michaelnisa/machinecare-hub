@@ -418,7 +418,8 @@ export default function Live() {
   useEffect(() => {
     const orgId = organisation?.id || profile?.organisation_id;
     if (!orgId) return;
-    const channel = supabase.channel(`${orgId}:live-kpis`);
+    const channelName = `live-kpis:${orgId}:${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+    const channel = supabase.channel(channelName);
     if (isGpsTracking) {
       channel
         .on("postgres_changes", { event: "*", schema: "public", table: "latest_vehicle_positions" }, () => loadGps())

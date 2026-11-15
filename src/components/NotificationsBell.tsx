@@ -35,25 +35,35 @@ export function NotificationsBell() {
   }, [organisation?.id, isGpsTracking]);
 
   useEffect(() => {
-    if (isGpsTracking) {
-      loadGpsAlerts();
-      const channel = supabase
-        .channel(`gps-alerts-bell:${organisation?.id}`)
-        .on(
-          "postgres_changes",
-          {
-            event: "*",
-            schema: "public",
-            table: "gps_alerts",
-            filter: `organisation_id=eq.${organisation?.id}`,
-          },
-          () => loadGpsAlerts()
-        )
-        .subscribe();
-      return () => {
-        supabase.removeChannel(channel);
-      };
-    }
+    const orgId = organisation?.id;
+    if (!isGpsTracking || !orgId) return;
+
+    loadGpsAlerts();
+
+    // 30s polling fallback
+    const interval = setInterval(loadGpsAlerts, 30000);
+
+    // Unique channel topic name per mount to prevent reusing subscribed channel instance
+    const channelName = `gps-alerts-bell:${orgId}:${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+    const channel = supabase
+      .channel(channelName)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "gps_alerts",
+          filter: `organisation_id=eq.${orgId}`,
+        },
+        () => loadGpsAlerts()
+      );
+
+    channel.subscribe();
+
+    return () => {
+      clearInterval(interval);
+      supabase.removeChannel(channel);
+    };
   }, [isGpsTracking, organisation?.id, loadGpsAlerts]);
 
   const handleOpenChange = (o: boolean) => {
