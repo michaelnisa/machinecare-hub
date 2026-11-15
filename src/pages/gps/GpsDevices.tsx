@@ -30,6 +30,7 @@ import {
   getDeviceAssignmentHistory,
   validateImei,
   computeDeviceHealthSummary,
+  toggleDevicePowerState,
   GpsDevice,
   DeviceAssignmentHistoryItem,
 } from "@/services/gpsService";
@@ -60,6 +61,8 @@ import {
   MapPin,
   Check,
   XCircle,
+  Power,
+  PowerOff,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -263,6 +266,30 @@ export default function GpsDevices() {
       loadData();
     } catch (err: any) {
       toast.error(err.message || "Failed to unassign device");
+    }
+  };
+
+  const [togglingPowerId, setTogglingPowerId] = useState<string | null>(null);
+
+  const handleToggleDevicePower = async (dev: GpsDevice) => {
+    const isSuspended = dev.status === "suspended";
+    const targetStatus = isSuspended ? "active" : "suspended";
+    const actionLabel = isSuspended ? "turn ON / activate" : "turn OFF / suspend";
+
+    if (!window.confirm(`Are you sure you want to ${actionLabel} tracker ${dev.imei} (${dev.name})?`)) {
+      return;
+    }
+
+    setTogglingPowerId(dev.id);
+    try {
+      const res = await toggleDevicePowerState(dev.id, targetStatus);
+      if (!res.success) throw new Error(res.error || "Failed to update device status");
+      toast.success(isSuspended ? "Tracker activated successfully" : "Tracker suspended / turned off");
+      await loadData();
+    } catch (err: any) {
+      toast.error(err.message || "Failed to toggle tracker power state");
+    } finally {
+      setTogglingPowerId(null);
     }
   };
 
@@ -565,12 +592,16 @@ export default function GpsDevices() {
                               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-rose-500/10 text-rose-600 border border-rose-500/20">
                                 <AlertCircle className="h-3 w-3" /> OFFLINE &gt;24H
                               </span>
+                            ) : d.status === "suspended" ? (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-500/10 text-amber-600 border border-amber-500/20">
+                                <PowerOff className="h-3 w-3" /> SUSPENDED (OFF)
+                              </span>
                             ) : hasAssigned ? (
                               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/10 text-emerald-600 border border-emerald-500/20">
-                                <CheckCircle2 className="h-3 w-3" /> ACTIVE
+                                <CheckCircle2 className="h-3 w-3" /> ACTIVE (ON)
                               </span>
                             ) : (
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-500/10 text-amber-600 border border-amber-500/20">
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-500/10 text-slate-600 border border-slate-500/20">
                                 <Clock className="h-3 w-3" /> IN STOCK
                               </span>
                             )}
@@ -578,6 +609,25 @@ export default function GpsDevices() {
 
                           <td className="py-3 px-4 text-right whitespace-nowrap">
                             <div className="flex items-center justify-end gap-1.5">
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                disabled={togglingPowerId === d.id}
+                                title={d.status === "suspended" ? "Turn Tracker ON (Activate)" : "Turn Tracker OFF (Suspend)"}
+                                className={`h-7 text-xs px-2 ${
+                                  d.status === "suspended"
+                                    ? "text-emerald-600 hover:text-emerald-700 hover:bg-emerald-500/10"
+                                    : "text-amber-600 hover:text-amber-700 hover:bg-amber-500/10"
+                                }`}
+                                onClick={() => handleToggleDevicePower(d)}
+                              >
+                                {d.status === "suspended" ? (
+                                  <Power className="h-3.5 w-3.5 text-emerald-600" />
+                                ) : (
+                                  <PowerOff className="h-3.5 w-3.5 text-amber-600" />
+                                )}
+                              </Button>
+
                               <Button
                                 size="sm"
                                 variant="ghost"
@@ -738,6 +788,25 @@ export default function GpsDevices() {
 
                         <td className="py-3 px-4 text-right whitespace-nowrap">
                           <div className="flex items-center justify-end gap-1.5">
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              disabled={togglingPowerId === d.id}
+                              title={d.status === "suspended" ? "Turn Tracker ON (Activate)" : "Turn Tracker OFF (Suspend)"}
+                              className={`h-7 text-xs px-2 ${
+                                d.status === "suspended"
+                                  ? "text-emerald-600 hover:text-emerald-700 hover:bg-emerald-500/10"
+                                  : "text-amber-600 hover:text-amber-700 hover:bg-amber-500/10"
+                              }`}
+                              onClick={() => handleToggleDevicePower(d)}
+                            >
+                              {d.status === "suspended" ? (
+                                <Power className="h-3.5 w-3.5 text-emerald-600" />
+                              ) : (
+                                <PowerOff className="h-3.5 w-3.5 text-amber-600" />
+                              )}
+                            </Button>
+
                             {hasAssigned && (
                               <Link
                                 to="/gps/live-map"

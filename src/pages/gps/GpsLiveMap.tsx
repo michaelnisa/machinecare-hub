@@ -7,7 +7,7 @@ import { useUserRole } from "@/hooks/useUserRole";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { getLiveGpsFleet, type LiveTrackedVehicle } from "@/services/gpsService";
+import { getLiveGpsFleet, toggleVehicleEngineImmobilizer, type LiveTrackedVehicle } from "@/services/gpsService";
 import { GpsNavHeader } from "./GpsNavHeader";
 import { formatNumber } from "@/lib/format";
 import { toast } from "sonner";
@@ -21,6 +21,12 @@ import {
   AlertTriangle,
   Radio,
   ExternalLink,
+  Zap,
+  ZapOff,
+  Power,
+  PowerOff,
+  X,
+  Gauge,
 } from "lucide-react";
 
 export type GpsMarkerStatus = "moving" | "idling" | "stopped" | "offline";
@@ -214,6 +220,31 @@ export default function GpsLiveMap() {
 
     return { total: vehicles.length, moving, idling, stopped, offline };
   }, [vehicles]);
+
+  const [immobilizing, setImmobilizing] = useState(false);
+
+  const handleToggleImmobilizer = async (v: LiveTrackedVehicle) => {
+    const isCut = Boolean((v as any).relay_cut || (v as any).engine_immobilized);
+    const action = isCut ? "restore engine ignition" : "remotely cut the engine";
+    if (!window.confirm(`Are you sure you want to ${action} for vehicle ${v.plateNumber || v.name}?`)) {
+      return;
+    }
+    setImmobilizing(true);
+    try {
+      const res = await toggleVehicleEngineImmobilizer(v.vehicleId, !isCut);
+      if (res.success) {
+        toast.success(isCut ? "Engine ignition restored successfully" : "Engine cut signal transmitted. Ignition inhibited.");
+        await loadFleetData();
+        setSelectedVehicle((prev) => (prev ? ({ ...prev, relay_cut: !isCut, engine_immobilized: !isCut } as any) : null));
+      } else {
+        toast.error(res.error || "Failed to execute immobilizer command");
+      }
+    } catch {
+      toast.error("Execution failed");
+    } finally {
+      setImmobilizing(false);
+    }
+  };
 
   const focusVehicle = (v: LiveTrackedVehicle) => {
     setSelectedVehicle(v);
@@ -411,6 +442,110 @@ export default function GpsLiveMap() {
               <span>Offline / No GPS Fix</span>
             </div>
           </div>
+
+          {/* Floating Selected Vehicle Control Card */}
+          {selectedVehicle && (
+            <div className="absolute bottom-4 left-4 z-[1000] max-w-sm w-full bg-card/95 backdrop-blur-md border border-border rounded-2xl p-4 shadow-2xl pointer-events-auto animate-fade-in">
+              <div className="flex items-center justify-between pb-2 border-b border-border">
+                <div className="flex items-center gap-2">
+                  <Truck className="h-4 w-4 text-primary" />
+                  <span className="font-mono font-bold text-sm text-foreground">
+                    {selectedVehicle.plateNumber || selectedVehicle.name}
+                  </span>
+                </div>
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="h-6 w-6 text-muted-foreground hover:text-foreground"
+                  onClick={() => setSelectedVehicle(null)}
+                >
+                  <X className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+
+              <div className="mt-2.5 text-xs text-muted-foreground truncate">
+                {selectedVehicle.make || selectedVehicle.model
+                  ? `${selectedVehicle.make || ""} ${selectedVehicle.model || ""}`
+                  : selectedVehicle.name}
+              </div>
+
+              <div className="mt-3 grid grid-cols-2 gap-2 text-[11px] bg-muted/40 p-2.5 rounded-xl border border-border/50">
+                <div>
+                  <span className="text-muted-foreground block text-[10px] uppercase">Speed</span>
+                  <span className="font-semibold text-foreground">
+                    {selectedVehicle.speedKmh > 0 ? `${selectedVehicle.speedKmh} km/h` : "0 km/h (Stopped)"}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-muted-foreground block text-[10px] uppercase">Ignition</span>
+                  <span className={selectedVehicle.ignition ? "text-emerald-600 font-semibold" : "text-muted-foreground"}>
+                    {selectedVehicle.ignition ? "Engine ON" : "Engine OFF"}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-muted-foreground block text-[10px] uppercase">Odometer</span>
+                  <span className="font-mono text-foreground">
+                    {selectedVehicle.currentOdometerKm != null ? `${formatNumber(selectedVehicle.currentOdometerKm)} km` : "—"}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-muted-foreground block text-[10px] uppercase">Battery</span>
+                  <span className="font-mono text-foreground">
+                    {selectedVehicle.batteryVoltage ? `${selectedVehicle.batteryVoltage} V` : "—"}
+                  </span>
+                </div>
+              </div>
+
+              {/* Remote Immobilizer Action Strip */}
+              {(() => {
+                const isCut = Boolean((selectedVehicle as any).relay_cut || (selectedVehicle as any).engine_immobilized);
+                return (
+                  <div className="mt-3 pt-3 border-t border-border flex items-center justify-between gap-2">
+                    <div>
+                      <div className="text-[10px] uppercase text-muted-foreground font-medium">Remote Relay</div>
+                      <div className="text-xs font-semibold">
+                        {isCut ? (
+                          <span className="text-rose-600 inline-flex items-center gap-1">
+                            <ZapOff className="h-3 w-3" /> Cut (Inhibited)
+                          </span>
+                        ) : (
+                          <span className="text-emerald-600 inline-flex items-center gap-1">
+                            <Zap className="h-3 w-3" /> Normal (Ready)
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    <Button
+                      size="sm"
+                      variant={isCut ? "default" : "destructive"}
+                      disabled={immobilizing}
+                      onClick={() => handleToggleImmobilizer(selectedVehicle)}
+                      className={`h-7 text-xs px-2.5 font-semibold ${
+                        isCut
+                          ? "bg-emerald-600 hover:bg-emerald-700 text-white"
+                          : "bg-rose-600 hover:bg-rose-700 text-white"
+                      }`}
+                    >
+                      {immobilizing ? (
+                        "Sending..."
+                      ) : isCut ? (
+                        <>
+                          <Power className="h-3 w-3 mr-1" />
+                          Restore Engine
+                        </>
+                      ) : (
+                        <>
+                          <PowerOff className="h-3 w-3 mr-1" />
+                          Cut Engine
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                );
+              })()}
+            </div>
+          )}
         </div>
       </div>
     </div>

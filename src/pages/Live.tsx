@@ -7,7 +7,28 @@ import { PageLoader } from "@/components/PageLoader";
 import { Button } from "@/components/ui/button";
 import { estimateUsageRate, predictScheduleDue } from "@/lib/pm-prediction";
 import { SAFE_MACHINE_COLUMNS, parseMachine, normalizeTelematicsStatus, type TelematicsStatus } from "@/lib/fleet-metadata";
-import { Activity, Gauge, ShieldCheck, AlertTriangle, Wrench, ClipboardList, Maximize2, Truck, ParkingCircle, CalendarClock } from "lucide-react";
+import { getLiveGpsFleet, getGpsAlerts, toggleVehicleEngineImmobilizer, type LiveTrackedVehicle, type GpsAlert } from "@/services/gpsService";
+import {
+  Activity,
+  Gauge,
+  ShieldCheck,
+  AlertTriangle,
+  Wrench,
+  ClipboardList,
+  Maximize2,
+  Truck,
+  ParkingCircle,
+  CalendarClock,
+  Radio,
+  Satellite,
+  Zap,
+  ZapOff,
+  Power,
+  PowerOff,
+  CheckCircle2,
+  Navigation,
+} from "lucide-react";
+import { toast } from "sonner";
 
 type FleetKpis = {
   running: number;
@@ -97,12 +118,32 @@ function Tile({
   );
 }
 
+type GpsKpis = {
+  total: number;
+  moving: number;
+  idling: number;
+  stopped: number;
+  offline: number;
+};
+
+const emptyGps: GpsKpis = {
+  total: 0,
+  moving: 0,
+  idling: 0,
+  stopped: 0,
+  offline: 0,
+};
+
 export default function Live() {
   const { user, loading, organisation, profile } = useAuth();
-  const { isFleet, isGarage } = useIndustry();
+  const { isFleet, isGarage, isGpsTracking } = useIndustry();
   const [kpis, setKpis] = useState<Kpis>(empty);
   const [fleetKpis, setFleetKpis] = useState<FleetKpis>(emptyFleet);
   const [garageKpis, setGarageKpis] = useState<GarageKpis>(emptyGarage);
+  const [gpsKpis, setGpsKpis] = useState<GpsKpis>(emptyGps);
+  const [gpsVehicles, setGpsVehicles] = useState<LiveTrackedVehicle[]>([]);
+  const [gpsAlerts, setGpsAlerts] = useState<GpsAlert[]>([]);
+  const [immobilizingId, setImmobilizingId] = useState<string | null>(null);
   const [now, setNow] = useState(new Date());
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
@@ -308,28 +349,83 @@ export default function Live() {
     setLastUpdated(new Date());
   }, [organisation?.id, profile?.organisation_id]);
 
+  const loadGps = useCallback(async () => {
+    const orgId = organisation?.id || profile?.organisation_id;
+    if (!orgId) return;
+    try {
+      const [vehicles, alerts] = await Promise.all([
+        getLiveGpsFleet(orgId),
+        getGpsAlerts(orgId, 10, true),
+      ]);
+      let moving = 0, idling = 0, stopped = 0, offline = 0;
+      vehicles.forEach((v) => {
+        if (v.motionStatus === "moving") moving++;
+        else if (v.motionStatus === "idling") idling++;
+        else if (v.motionStatus === "stopped") stopped++;
+        else offline++;
+      });
+      setGpsKpis({ total: vehicles.length, moving, idling, stopped, offline });
+      setGpsVehicles(vehicles);
+      setGpsAlerts(alerts);
+      setLastUpdated(new Date());
+    } catch (err) {
+      console.error("Failed to load GPS live data:", err);
+    }
+  }, [organisation?.id, profile?.organisation_id]);
+
+  const handleToggleRelay = async (v: LiveTrackedVehicle) => {
+    const isCurrentlyCut = Boolean((v as any).relay_cut || (v as any).engine_immobilized);
+    const action = isCurrentlyCut ? "restore engine ignition" : "remotely cut the engine";
+    if (!window.confirm(`Are you sure you want to ${action} for vehicle ${v.plateNumber || v.name}?`)) {
+      return;
+    }
+    setImmobilizingId(v.vehicleId);
+    try {
+      const res = await toggleVehicleEngineImmobilizer(v.vehicleId, !isCurrentlyCut);
+      if (res.success) {
+        toast.success(isCurrentlyCut ? "Engine ignition restored successfully" : "Engine cut signal transmitted. Ignition inhibited.");
+        await loadGps();
+      } else {
+        toast.error(res.error || "Failed to execute immobilizer command");
+      }
+    } catch {
+      toast.error("Execution failed");
+    } finally {
+      setImmobilizingId(null);
+    }
+  };
+
   // Initial + polling fallback
   useEffect(() => {
     const orgId = organisation?.id || profile?.organisation_id;
     if (!orgId) return;
-    if (isFleet) loadFleet();
+    if (isGpsTracking) loadGps();
+    else if (isFleet) loadFleet();
     else if (isGarage) loadGarage();
     else load();
 
+    const intervalTime = isGpsTracking ? 15000 : 30000;
     const t = setInterval(() => {
-      if (isFleet) loadFleet();
+      if (isGpsTracking) loadGps();
+      else if (isFleet) loadFleet();
       else if (isGarage) loadGarage();
       else load();
-    }, 30000);
+    }, intervalTime);
     return () => clearInterval(t);
-  }, [organisation?.id, profile?.organisation_id, isFleet, isGarage, load, loadFleet, loadGarage]);
+  }, [organisation?.id, profile?.organisation_id, isGpsTracking, isFleet, isGarage, load, loadFleet, loadGarage, loadGps]);
 
   // Realtime subscriptions
   useEffect(() => {
     const orgId = organisation?.id || profile?.organisation_id;
     if (!orgId) return;
     const channel = supabase.channel(`${orgId}:live-kpis`);
-    if (isFleet) {
+    if (isGpsTracking) {
+      channel
+        .on("postgres_changes", { event: "*", schema: "public", table: "latest_vehicle_positions" }, () => loadGps())
+        .on("postgres_changes", { event: "*", schema: "public", table: "gps_alerts", filter: `organisation_id=eq.${orgId}` }, () => loadGps())
+        .on("postgres_changes", { event: "*", schema: "public", table: "gps_events", filter: `organisation_id=eq.${orgId}` }, () => loadGps())
+        .on("postgres_changes", { event: "*", schema: "public", table: "machines", filter: `organisation_id=eq.${orgId}` }, () => loadGps());
+    } else if (isFleet) {
       channel
         .on("postgres_changes", { event: "*", schema: "public", table: "machines", filter: `organisation_id=eq.${orgId}` }, () => loadFleet())
         .on("postgres_changes", { event: "*", schema: "public", table: "trips", filter: `organisation_id=eq.${orgId}` }, () => loadFleet());
@@ -347,7 +443,7 @@ export default function Live() {
     }
     channel.subscribe();
     return () => { supabase.removeChannel(channel); };
-  }, [organisation?.id, profile?.organisation_id, isFleet, isGarage, load, loadFleet, loadGarage]);
+  }, [organisation?.id, profile?.organisation_id, isGpsTracking, isFleet, isGarage, load, loadFleet, loadGarage, loadGps]);
 
   const toggleFullscreen = () => {
     if (!document.fullscreenElement) document.documentElement.requestFullscreen?.().catch(() => {});
@@ -373,7 +469,9 @@ export default function Live() {
             <div>
               <h1 className="text-4xl font-bold tracking-tight">{organisation?.name ?? "Live Operations"}</h1>
               <p className="mt-1 text-white/50">
-                {isFleet
+                {isGpsTracking
+                  ? "Live GPS Telematics Operations & Vehicle Control"
+                  : isFleet
                   ? "Real-time KPI dashboard"
                   : isGarage
                   ? "Workshop & Garage — live service bay board"
@@ -395,7 +493,212 @@ export default function Live() {
           </div>
         </div>
 
-        {isFleet ? (
+        {isGpsTracking ? (
+          <>
+            {/* GPS TRACKING LIVE TELEMETRY TILES */}
+            <SectionTitle icon={<Radio className="h-5 w-5 text-emerald-400" />} title="Live GPS Fleet Telemetry" />
+            <div className="grid grid-cols-2 gap-4 md:grid-cols-5">
+              <Tile
+                icon={<Radio className="h-6 w-6" />}
+                label="Total Tracked"
+                value={String(gpsKpis.total)}
+                sub="Active GPS Units"
+                accent="text-white"
+              />
+              <Tile
+                icon={<Truck className="h-6 w-6" />}
+                label="In Motion"
+                value={String(gpsKpis.moving)}
+                sub="Cruising Speed > 0"
+                accent="text-emerald-400"
+              />
+              <Tile
+                icon={<Activity className="h-6 w-6" />}
+                label="Idling"
+                value={String(gpsKpis.idling)}
+                sub="Engine ON · Parked"
+                accent="text-amber-400"
+              />
+              <Tile
+                icon={<ParkingCircle className="h-6 w-6" />}
+                label="Stopped"
+                value={String(gpsKpis.stopped)}
+                sub="Engine OFF · Secure"
+                accent="text-sky-400"
+              />
+              <Tile
+                icon={<AlertTriangle className="h-6 w-6" />}
+                label="Offline"
+                value={String(gpsKpis.offline)}
+                sub="No Signal > 15m"
+                accent="text-rose-400"
+              />
+            </div>
+
+            {/* LIVE VEHICLE TELEMATICS BOARD */}
+            <SectionTitle icon={<Navigation className="h-5 w-5 text-sky-400" />} title="Live Fleet Telematics & Engine Relay Board" />
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3.5">
+              {gpsVehicles.map((v) => {
+                const isImmobilized = Boolean((v as any).relay_cut || (v as any).engine_immobilized);
+                const isActionBusy = immobilizingId === v.vehicleId;
+                return (
+                  <div
+                    key={v.vehicleId}
+                    className="flex flex-col justify-between rounded-xl border border-white/10 bg-white/5 p-4 hover:bg-white/[0.09] transition-all"
+                  >
+                    <div>
+                      <div className="flex items-center justify-between">
+                        <span className="font-mono text-lg font-bold text-white tracking-wider">
+                          {v.plateNumber || v.name}
+                        </span>
+                        <span
+                          className={`inline-flex items-center gap-1.5 text-xs font-semibold uppercase px-2.5 py-1 rounded-full ${
+                            v.motionStatus === "moving"
+                              ? "bg-emerald-500/20 text-emerald-400"
+                              : v.motionStatus === "idling"
+                              ? "bg-amber-500/20 text-amber-400"
+                              : v.motionStatus === "stopped"
+                              ? "bg-sky-500/20 text-sky-400"
+                              : "bg-slate-500/20 text-slate-300"
+                          }`}
+                        >
+                          <span
+                            className={`h-2 w-2 rounded-full ${
+                              v.motionStatus === "moving"
+                                ? "bg-emerald-400 animate-pulse"
+                                : v.motionStatus === "idling"
+                                ? "bg-amber-400 animate-pulse"
+                                : "bg-current"
+                            }`}
+                          />
+                          {v.motionStatus === "moving"
+                            ? `${v.speedKmh} km/h`
+                            : v.motionStatus === "idling"
+                            ? "Idling (0 km/h)"
+                            : v.motionStatus === "stopped"
+                            ? "Parked"
+                            : "Offline"}
+                        </span>
+                      </div>
+
+                      <div className="mt-2 text-xs text-white/70 truncate">
+                        {v.make || v.model ? `${v.make || ""} ${v.model || ""}` : v.name}
+                      </div>
+
+                      <div className="mt-3 grid grid-cols-2 gap-2 text-xs border-y border-white/10 py-2.5 text-white/60">
+                        <div>
+                          <span className="text-white/40 block text-[10px] uppercase">Ignition</span>
+                          <span className={v.ignition ? "text-emerald-400 font-medium" : "text-slate-400"}>
+                            {v.ignition ? "Engine ON" : "Engine OFF"}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-white/40 block text-[10px] uppercase">Battery</span>
+                          <span className="font-mono text-white/80">
+                            {v.batteryVoltage != null ? `${v.batteryVoltage} V` : "—"}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-white/40 block text-[10px] uppercase">Odometer</span>
+                          <span className="font-mono text-white/80">
+                            {v.currentOdometerKm != null ? `${v.currentOdometerKm.toLocaleString()} km` : "—"}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-white/40 block text-[10px] uppercase">Satellites</span>
+                          <span className="font-mono text-white/80">
+                            {v.satelliteCount || 0} Sats
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Remote Relay Controls */}
+                    <div className="mt-3 pt-2 flex items-center justify-between">
+                      <div className="text-[11px]">
+                        {isImmobilized ? (
+                          <span className="inline-flex items-center gap-1 text-rose-400 font-semibold">
+                            <ZapOff className="h-3 w-3" /> Relay Cut
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 text-emerald-400/80 font-medium">
+                            <Zap className="h-3 w-3" /> Relay Active
+                          </span>
+                        )}
+                      </div>
+
+                      <Button
+                        size="sm"
+                        variant={isImmobilized ? "default" : "destructive"}
+                        disabled={isActionBusy}
+                        onClick={() => handleToggleRelay(v)}
+                        className={`h-7 text-xs px-2.5 font-semibold ${
+                          isImmobilized
+                            ? "bg-emerald-600 hover:bg-emerald-500 text-white"
+                            : "bg-rose-600/80 hover:bg-rose-600 text-white"
+                        }`}
+                      >
+                        {isActionBusy ? (
+                          "Transmitting..."
+                        ) : isImmobilized ? (
+                          <>
+                            <Power className="h-3 w-3 mr-1" />
+                            Restore Engine
+                          </>
+                        ) : (
+                          <>
+                            <PowerOff className="h-3 w-3 mr-1" />
+                            Cut Engine
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+                );
+              })}
+
+              {gpsVehicles.length === 0 && (
+                <div className="col-span-full rounded-xl border border-white/10 bg-white/5 p-12 text-center text-white/50">
+                  <Radio className="h-8 w-8 mx-auto mb-2 text-white/30" />
+                  No GPS tracked vehicles currently streaming data.
+                </div>
+              )}
+            </div>
+
+            {/* LIVE GPS ALERTS STREAM */}
+            <SectionTitle icon={<ShieldAlert className="h-5 w-5 text-amber-400" />} title="Live GPS Telematics Alert Stream" />
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+              {gpsAlerts.map((a) => (
+                <div
+                  key={a.id}
+                  className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-3.5 flex items-start gap-3 text-xs"
+                >
+                  <div className={`p-2 rounded-lg shrink-0 ${a.severity === "critical" ? "bg-rose-500/20 text-rose-400" : "bg-amber-500/20 text-amber-400"}`}>
+                    <AlertTriangle className="h-4 w-4" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center justify-between">
+                      <span className="font-semibold text-white truncate">{a.title}</span>
+                      <span className="text-[10px] text-white/40 whitespace-nowrap ml-2">
+                        {new Date(a.event_time).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                      </span>
+                    </div>
+                    <p className="text-white/70 text-[11px] mt-0.5">{a.message}</p>
+                    <div className="mt-1 text-[10px] font-mono text-white/40">
+                      Vehicle: {a.vehicle?.plate_number || a.vehicle?.name || "Tracked Unit"}
+                    </div>
+                  </div>
+                </div>
+              ))}
+              {gpsAlerts.length === 0 && (
+                <div className="col-span-full rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-6 text-center text-emerald-400/80 text-xs">
+                  <CheckCircle2 className="h-5 w-5 mx-auto mb-1 text-emerald-400" />
+                  All telematics normal · No active GPS overspeed, geofence, or tamper alerts.
+                </div>
+              )}
+            </div>
+          </>
+        ) : isFleet ? (
           <>
             {/* FLEET LIVE MOTION STATUS */}
             <SectionTitle icon={<Truck className="h-5 w-5" />} title="Fleet Live Status" />

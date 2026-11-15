@@ -1,5 +1,5 @@
 import { Link, useLocation } from "react-router-dom";
-import { Navigation, History, ShieldCheck, ShieldAlert, Cpu } from "lucide-react";
+import { Navigation, History, ShieldCheck, ShieldAlert, Cpu, Gauge } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export function GpsNavHeader() {
@@ -11,6 +11,7 @@ export function GpsNavHeader() {
     { to: "/gps/geofences", label: "Geofence Zones", icon: ShieldCheck },
     { to: "/gps/alerts", label: "Telematics Alerts", icon: ShieldAlert },
     { to: "/gps/devices", label: "GPS Hardware Trackers", icon: Cpu },
+    { to: "/gps/insights", label: "Telematics KPIs", icon: Gauge },
   ];
 
   return (

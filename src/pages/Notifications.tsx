@@ -3,6 +3,7 @@ import { useNavigate, Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useUserRole } from "@/hooks/useUserRole";
+import { useIndustry } from "@/hooks/useIndustry";
 import { useServiceNotifications } from "@/hooks/useServiceNotifications";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -52,7 +53,15 @@ type InboxTab = "issues" | "alerts";
 export default function Notifications() {
   const { profile, user } = useAuth();
   const { isManager } = useUserRole();
+  const { isGpsTracking } = useIndustry();
   const navigate = useNavigate();
+
+  useEffect(() => {
+    if (isGpsTracking) {
+      navigate("/gps/alerts", { replace: true });
+    }
+  }, [isGpsTracking, navigate]);
+
   const [tab, setTab] = useState<InboxTab>("issues");
   const [loading, setLoading] = useState(true);
   const [items, setItems] = useState<any[]>([]);

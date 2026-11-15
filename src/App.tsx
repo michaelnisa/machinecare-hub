@@ -119,6 +119,7 @@ const GpsTripHistory = lazy(() => import("./pages/gps/GpsTripHistory"));
 const GpsGeofences = lazy(() => import("./pages/gps/GpsGeofences"));
 const GpsAlerts = lazy(() => import("./pages/gps/GpsAlerts"));
 const GpsDevices = lazy(() => import("./pages/gps/GpsDevices"));
+const GpsTelematicsKpis = lazy(() => import("./pages/gps/GpsTelematicsKpis"));
 const FleetVehicleDetail = lazy(() => import("./pages/fleet/VehicleDetail"));
 const Drivers = lazy(() => import("./pages/fleet/Drivers"));
 const FleetDocuments = lazy(() => import("./pages/fleet/FleetDocuments"));
@@ -247,7 +248,7 @@ const App = () => (
                   <Route path="/gps/alerts" element={<GpsAlerts />} />
                   <Route path="/gps/devices" element={<GpsDevices />} />
                   <Route path="/gps/vehicles" element={<Vehicles />} />
-                  <Route path="/gps/insights" element={<FleetInsights />} />
+                  <Route path="/gps/insights" element={<GpsTelematicsKpis />} />
 
                   {/* Fleet & Logistics Operations */}
                   <Route path="/fleet/live-map" element={<LiveFleetMap />} />
