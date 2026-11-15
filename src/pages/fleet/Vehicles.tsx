@@ -51,7 +51,8 @@ import {
   generateVehicleCode,
   normalizeTelematicsStatus,
   type FleetVehicle,
-  AXLE_CONFIG_OPTIONS
+  AXLE_CONFIG_OPTIONS,
+  TANZANIA_COMMERCIAL_MAKES,
 } from "@/lib/fleet-metadata";
 import type { TruckLayoutConfigId } from "@/lib/fleet-constants";
 
@@ -1017,6 +1018,7 @@ export function VehicleDialog({
   const { t } = useI18n();
   const [submitting, setSubmitting] = useState(false);
   const [form, setForm] = useState<typeof EMPTY_FORM>(EMPTY_FORM);
+  const [customMake, setCustomMake] = useState(false);
   const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
 
@@ -1030,6 +1032,12 @@ export function VehicleDialog({
         } else if (machine.trailer_plate) {
           trailerMode = "manual";
         }
+
+        const existingMake = (machine.make || "").trim();
+        const isInList = TANZANIA_COMMERCIAL_MAKES.some(
+          (m) => m.name.toLowerCase() === existingMake.toLowerCase()
+        );
+        setCustomMake(!isInList && Boolean(existingMake));
 
         setForm({
           category: (machine.category === "Trailer" ? "Trailer" : "Vehicle") as "Vehicle" | "Trailer",
@@ -1064,6 +1072,7 @@ export function VehicleDialog({
         });
       } else {
         const isTrailer = initialCategory === "Trailer";
+        setCustomMake(false);
         setForm({
           ...EMPTY_FORM,
           category: initialCategory,
@@ -1077,6 +1086,25 @@ export function VehicleDialog({
       setPhotoPreview(null);
     }
   }, [open, machine, initialCategory, existingCount]);
+
+  const relevantMakes = useMemo(() => {
+    const isTrailerCategory = form.category === "Trailer" || form.is_trailer;
+    if (isTrailerCategory) {
+      const trailers = TANZANIA_COMMERCIAL_MAKES.filter((m) => m.category === "trailer");
+      const others = TANZANIA_COMMERCIAL_MAKES.filter((m) => m.category !== "trailer");
+      return [...trailers, ...others];
+    }
+    if (form.vehicle_type === "bus") {
+      const buses = TANZANIA_COMMERCIAL_MAKES.filter((m) => m.category === "bus");
+      const trucks = TANZANIA_COMMERCIAL_MAKES.filter((m) => m.category === "truck");
+      const trailers = TANZANIA_COMMERCIAL_MAKES.filter((m) => m.category === "trailer");
+      return [...buses, ...trucks, ...trailers];
+    }
+    const trucks = TANZANIA_COMMERCIAL_MAKES.filter((m) => m.category === "truck");
+    const buses = TANZANIA_COMMERCIAL_MAKES.filter((m) => m.category === "bus");
+    const trailers = TANZANIA_COMMERCIAL_MAKES.filter((m) => m.category === "trailer");
+    return [...trucks, ...buses, ...trailers];
+  }, [form.category, form.is_trailer, form.vehicle_type]);
 
   const onPhotoSelected = (file: File | null) => {
     if (!file) { setPhotoFile(null); setPhotoPreview(null); return; }
@@ -1510,12 +1538,72 @@ export function VehicleDialog({
 
             {/* Make */}
             <div className="space-y-1.5">
-              <Label>Make</Label>
-              <Input
-                value={form.make}
-                onChange={(e) => setForm({ ...form, make: e.target.value })}
-                placeholder={isTrailer ? "e.g. CIMC / BPW / Afrit" : "e.g. Scania / Mercedes-Benz / Sinotruk"}
-              />
+              <div className="flex items-center justify-between">
+                <Label>Make *</Label>
+                {form.make && (
+                  <span className="text-[10px] font-mono text-primary font-medium">
+                    {form.make}
+                  </span>
+                )}
+              </div>
+              <Select
+                value={
+                  customMake
+                    ? "OTHER"
+                    : (relevantMakes.some(
+                        (m) => m.name.toLowerCase() === (form.make || "").trim().toLowerCase()
+                      )
+                        ? relevantMakes.find(
+                            (m) => m.name.toLowerCase() === (form.make || "").trim().toLowerCase()
+                          )!.name
+                        : (form.make ? "OTHER" : ""))
+                }
+                onValueChange={(val) => {
+                  if (val === "OTHER") {
+                    setCustomMake(true);
+                  } else {
+                    setCustomMake(false);
+                    setForm({ ...form, make: val });
+                  }
+                }}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder={isTrailer ? "Select Trailer Make..." : "Select Truck / Bus Make..."} />
+                </SelectTrigger>
+                <SelectContent className="max-h-72">
+                  <div className="px-2 py-1.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
+                    {isTrailer
+                      ? "Common Trailer Makes (Tanzania)"
+                      : (form.vehicle_type === "bus"
+                          ? "Common Bus Makes (Tanzania)"
+                          : "Common Truck Makes (Tanzania)")}
+                  </div>
+                  {relevantMakes.map((m) => (
+                    <SelectItem key={m.name} value={m.name}>
+                      <div className="flex items-center justify-between gap-3 w-full py-0.5">
+                        <span className="font-medium text-xs">{m.name}</span>
+                        <span className="text-[10px] text-muted-foreground">({m.category})</span>
+                      </div>
+                    </SelectItem>
+                  ))}
+                  <SelectItem value="OTHER">
+                    <span className="font-semibold text-primary text-xs">Other / Custom Make...</span>
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+
+              {customMake && (
+                <div className="space-y-1 mt-1.5">
+                  <Input
+                    value={form.make}
+                    onChange={(e) => setForm({ ...form, make: e.target.value })}
+                    placeholder="Enter custom make (e.g. Kenworth, Peterbilt, Sinotruk Sitrak)"
+                    className="text-xs"
+                    autoFocus
+                  />
+                  <p className="text-[10px] text-muted-foreground">Type custom or unlisted vehicle make</p>
+                </div>
+              )}
             </div>
 
             {/* Model */}

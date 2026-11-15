@@ -47,6 +47,9 @@ import {
   parseMachine,
   serializeDriverPayload,
   generateDriverCode,
+  getGuaranteedUniqueDriverCode,
+  TANZANIA_DRIVING_CLASSES,
+  type TanzaniaDrivingClassOption,
   type FleetDriver,
 } from "@/lib/fleet-metadata";
 import { syncTrakzeeDrivers } from "@/services/trakzeeService";
@@ -107,7 +110,7 @@ export default function Drivers() {
   const [confirm, setConfirm] = useState<string | null>(null);
   const [nokDriver, setNokDriver] = useState<Driver | null>(null);
   const [search, setSearch] = useState("");
-  const [syncingTrakzee, setSyncingTrakzee] = useState(false);
+  const [syncingLiveDrivers, setSyncingLiveDrivers] = useState(false);
 
   const [viewMode, setViewMode] = useState<"table" | "cards">("table");
 
@@ -117,16 +120,16 @@ export default function Drivers() {
       toast.error("Organisation not loaded yet");
       return;
     }
-    setSyncingTrakzee(true);
+    setSyncingLiveDrivers(true);
     const res = await syncTrakzeeDrivers(orgId);
-    setSyncingTrakzee(false);
+    setSyncingLiveDrivers(false);
     if (!res.success) {
-      toast.error(res.error || "Failed to sync drivers from Trakzee");
+      toast.error(res.error || "Failed to sync live drivers");
     } else if (res.drivers_imported === 0) {
-      toast.info(`Found ${res.drivers_found} driver(s) in Trakzee. All are registered.`);
+      toast.info(`Found ${res.drivers_found} live driver(s). All are already registered.`);
       load();
     } else {
-      toast.success(`Successfully imported ${res.drivers_imported} new driver(s) from Trakzee telematics!`);
+      toast.success(`Successfully imported ${res.drivers_imported} new live driver(s)!`);
       load();
     }
   };
@@ -295,12 +298,12 @@ export default function Drivers() {
             <Button
               variant="outline"
               onClick={handleSyncDrivers}
-              disabled={syncingTrakzee}
+              disabled={syncingLiveDrivers}
               className="gap-2 shadow-xs cursor-pointer"
-              title="Fetch and register assigned drivers from Trakzee telematics"
+              title="Fetch and register assigned drivers from live telematics"
             >
-              <RefreshCw className={`h-4 w-4 ${syncingTrakzee ? "animate-spin text-amber-500" : "text-emerald-600"}`} />
-              {syncingTrakzee ? "Syncing Drivers..." : "Sync Drivers from Trakzee"}
+              <RefreshCw className={`h-4 w-4 ${syncingLiveDrivers ? "animate-spin text-amber-500" : "text-emerald-600"}`} />
+              {syncingLiveDrivers ? "Syncing Live Drivers..." : "Sync Live Drivers"}
             </Button>
             <Button onClick={() => { setEditing(null); setOpen(true); }} className="gap-2 shadow-xs cursor-pointer">
               <Plus className="h-4 w-4" /> {t.fleet.addDriver}
@@ -386,13 +389,13 @@ export default function Drivers() {
         <EmptyState
           icon={<Contact className="h-5 w-5" />}
           title="No drivers yet"
-          description="Add your first driver or sync live drivers directly from Trakzee telematics."
+          description="Add your first driver or sync live drivers directly from telematics."
           action={
             canWrite ? (
               <div className="flex flex-wrap items-center justify-center gap-2">
-                <Button variant="outline" onClick={handleSyncDrivers} disabled={syncingTrakzee}>
-                  <RefreshCw className={`mr-2 h-4 w-4 ${syncingTrakzee ? "animate-spin text-amber-500" : "text-emerald-600"}`} />
-                  Sync Drivers from Trakzee
+                <Button variant="outline" onClick={handleSyncDrivers} disabled={syncingLiveDrivers}>
+                  <RefreshCw className={`mr-2 h-4 w-4 ${syncingLiveDrivers ? "animate-spin text-amber-500" : "text-emerald-600"}`} />
+                  Sync Live Drivers
                 </Button>
                 <Button onClick={() => { setEditing(null); setOpen(true); }}>
                   <Plus className="mr-2 h-4 w-4" /> New driver
@@ -644,7 +647,7 @@ export default function Drivers() {
         </div>
       )}
 
-      <DriverDialog open={open} onOpenChange={setOpen} driver={editing} onSaved={load} existingCount={drivers.length} />
+      <DriverDialog open={open} onOpenChange={setOpen} driver={editing} onSaved={load} existingDrivers={drivers} />
 
       {selectedDriver && (
         <DriverDetailModal
@@ -690,16 +693,17 @@ export default function Drivers() {
   );
 }
 
-function DriverDialog({ open, onOpenChange, driver, onSaved, existingCount }: {
+function DriverDialog({ open, onOpenChange, driver, onSaved, existingDrivers = [] }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
   driver: Driver | null;
   onSaved: () => void;
-  existingCount?: number;
+  existingDrivers?: Driver[];
 }) {
   const { profile } = useAuth();
   const [submitting, setSubmitting] = useState(false);
   const [form, setForm] = useState<typeof EMPTY_FORM>(EMPTY_FORM);
+  const [customLicenceClass, setCustomLicenceClass] = useState(false);
   const [driverPhotoFile, setDriverPhotoFile] = useState<File | null>(null);
   const [driverPhotoPreview, setDriverPhotoPreview] = useState<string | null>(null);
   const [nokPhotoFile, setNokPhotoFile] = useState<File | null>(null);
@@ -707,41 +711,61 @@ function DriverDialog({ open, onOpenChange, driver, onSaved, existingCount }: {
 
   useEffect(() => {
     if (open) {
-      setForm(
-        driver
-          ? {
-              driver_code: driver.driver_code,
-              full_name: driver.full_name,
-              phone: driver.phone ?? "",
-              email: driver.email ?? "",
-              licence_number: driver.licence_number ?? "",
-              licence_class: driver.licence_class ?? "",
-              licence_expiry: driver.licence_expiry ?? "",
-              medical_expiry: driver.medical_expiry ?? "",
-              passport_number: driver.passport_number ?? "",
-              nida_number: driver.nida_number ?? "",
-              other_id_type: driver.other_id_type ?? "Voter ID",
-              other_id_number: driver.other_id_number ?? "",
-              photo_url: driver.photo_url ?? "",
-              next_of_kin_name: driver.next_of_kin_name ?? "",
-              next_of_kin_relation: driver.next_of_kin_relation ?? "Spouse",
-              next_of_kin_phone: driver.next_of_kin_phone ?? "",
-              next_of_kin_nida: driver.next_of_kin_nida ?? "",
-              next_of_kin_photo_url: driver.next_of_kin_photo_url ?? "",
-              status: driver.status,
-              notes: driver.user_notes ?? "",
-            }
-          : {
-              ...EMPTY_FORM,
-              driver_code: generateDriverCode(undefined, existingCount ?? 0),
-            },
-      );
+      const existingCodes = (existingDrivers || []).map((d) => d.driver_code);
+      if (driver) {
+        const standardClass = TANZANIA_DRIVING_CLASSES.some(
+          (c) => c.code.toLowerCase() === (driver.licence_class || "").trim().toLowerCase()
+        );
+        setCustomLicenceClass(!standardClass && Boolean(driver.licence_class));
+        setForm({
+          driver_code: driver.driver_code,
+          full_name: driver.full_name,
+          phone: driver.phone ?? "",
+          email: driver.email ?? "",
+          licence_number: driver.licence_number ?? "",
+          licence_class: driver.licence_class ?? "",
+          licence_expiry: driver.licence_expiry ?? "",
+          medical_expiry: driver.medical_expiry ?? "",
+          passport_number: driver.passport_number ?? "",
+          nida_number: driver.nida_number ?? "",
+          other_id_type: driver.other_id_type ?? "Voter ID",
+          other_id_number: driver.other_id_number ?? "",
+          photo_url: driver.photo_url ?? "",
+          next_of_kin_name: driver.next_of_kin_name ?? "",
+          next_of_kin_relation: driver.next_of_kin_relation ?? "Spouse",
+          next_of_kin_phone: driver.next_of_kin_phone ?? "",
+          next_of_kin_nida: driver.next_of_kin_nida ?? "",
+          next_of_kin_photo_url: driver.next_of_kin_photo_url ?? "",
+          status: driver.status,
+          notes: driver.user_notes ?? "",
+        });
+      } else {
+        setCustomLicenceClass(false);
+        setForm({
+          ...EMPTY_FORM,
+          driver_code: getGuaranteedUniqueDriverCode(existingCodes),
+        });
+      }
       setDriverPhotoFile(null);
       setDriverPhotoPreview(null);
       setNokPhotoFile(null);
       setNokPhotoPreview(null);
     }
-  }, [open, driver]);
+  }, [open, driver, existingDrivers]);
+
+  const duplicateDriver = useMemo(() => {
+    const raw = (form.driver_code || "").trim().toUpperCase();
+    if (!raw) return null;
+    return (existingDrivers || []).find(
+      (d) => d.id !== driver?.id && (d.driver_code || "").trim().toUpperCase() === raw
+    );
+  }, [form.driver_code, existingDrivers, driver]);
+
+  const selectedDrivingClass = useMemo(() => {
+    const val = (form.licence_class || "").trim().toLowerCase();
+    if (!val) return null;
+    return TANZANIA_DRIVING_CLASSES.find((c) => c.code.toLowerCase() === val) ?? null;
+  }, [form.licence_class]);
 
   const onDriverPhotoSelected = (file: File | null) => {
     if (!file) { setDriverPhotoFile(null); setDriverPhotoPreview(null); return; }
@@ -767,6 +791,12 @@ function DriverDialog({ open, onOpenChange, driver, onSaved, existingCount }: {
     e.preventDefault();
     if (!profile) return;
     if (!form.full_name.trim()) return toast.error("Driver full name is required");
+    const cleanCode = (form.driver_code || "").trim().toUpperCase();
+    if (!cleanCode) return toast.error("Driver ID / Code is required");
+    if (duplicateDriver) {
+      toast.error(`Driver ID "${cleanCode}" is already assigned to ${duplicateDriver.full_name}. Driver ID must be unique.`);
+      return;
+    }
     setSubmitting(true);
     try {
       let driverPhotoUrl = driver?.photo_url ?? null;
@@ -890,21 +920,36 @@ function DriverDialog({ open, onOpenChange, driver, onSaved, existingCount }: {
                 <Label className="text-xs font-semibold">Driver ID / Code *</Label>
                 <button
                   type="button"
-                  onClick={() => setForm({ ...form, driver_code: generateDriverCode(undefined, (existingCount ?? 0) + Math.floor(1 + Math.random() * 20)) })}
+                  onClick={() => {
+                    const nextCode = getGuaranteedUniqueDriverCode(existingDrivers.map((d) => d.driver_code));
+                    setForm((prev) => ({ ...prev, driver_code: nextCode }));
+                  }}
                   className="text-[10px] text-primary hover:underline flex items-center gap-0.5 cursor-pointer font-medium"
-                  title="Generate next ID"
+                  title="Generate guaranteed unique Driver ID"
                 >
-                  <RefreshCw className="h-2.5 w-2.5" /> Auto-Gen
+                  <RefreshCw className="h-2.5 w-2.5" /> Auto-Gen Next
                 </button>
               </div>
               <Input
                 value={form.driver_code}
                 onChange={(e) => setForm({ ...form, driver_code: e.target.value.toUpperCase() })}
                 placeholder="DRV-001"
-                className="font-mono font-bold text-foreground tracking-wider uppercase h-10"
+                className={`font-mono font-bold text-foreground tracking-wider uppercase h-10 ${
+                  duplicateDriver ? "border-destructive focus-visible:ring-destructive" : ""
+                }`}
                 required
               />
-              <p className="text-[10px] text-muted-foreground">e.g. DRV-001, EMP-024</p>
+              {duplicateDriver ? (
+                <div className="rounded-md border border-destructive/40 bg-destructive/10 p-2 text-xs text-destructive flex items-start gap-1.5 mt-1">
+                  <Shield className="h-3.5 w-3.5 shrink-0 mt-0.5 text-destructive" />
+                  <span>
+                    Driver ID <strong>{form.driver_code}</strong> is already taken by <strong>{duplicateDriver.full_name}</strong>.
+                    Every driver must have a unique Driver ID.
+                  </span>
+                </div>
+              ) : (
+                <p className="text-[10px] text-muted-foreground">Unique ID across fleet (e.g. DRV-001, EMP-024)</p>
+              )}
             </div>
           </div>
 
@@ -949,13 +994,67 @@ function DriverDialog({ open, onOpenChange, driver, onSaved, existingCount }: {
               />
             </div>
 
-            <div className="space-y-1.5">
-              <Label>Licence Class</Label>
-              <Input
-                value={form.licence_class}
-                onChange={(e) => setForm({ ...form, licence_class: e.target.value })}
-                placeholder="e.g. Class C, CE, E (Heavy Trailer / Tanker)"
-              />
+            <div className="space-y-1.5 sm:col-span-2">
+              <div className="flex items-center justify-between">
+                <Label>Licence Class (Tanzania)</Label>
+                {form.licence_class && (
+                  <span className="text-[10px] font-mono text-primary font-medium">
+                    {form.licence_class}
+                  </span>
+                )}
+              </div>
+              <Select
+                value={
+                  customLicenceClass
+                    ? "Other"
+                    : (TANZANIA_DRIVING_CLASSES.some(
+                        (c) => c.code.toLowerCase() === (form.licence_class || "").trim().toLowerCase()
+                      )
+                        ? TANZANIA_DRIVING_CLASSES.find(
+                            (c) => c.code.toLowerCase() === (form.licence_class || "").trim().toLowerCase()
+                          )!.code
+                        : (form.licence_class ? "Other" : ""))
+                }
+                onValueChange={(val) => {
+                  if (val === "Other") {
+                    setCustomLicenceClass(true);
+                  } else {
+                    setCustomLicenceClass(false);
+                    setForm((prev) => ({ ...prev, licence_class: val }));
+                  }
+                }}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select Tanzania driving licence class..." />
+                </SelectTrigger>
+                <SelectContent className="max-h-72">
+                  {TANZANIA_DRIVING_CLASSES.map((cls) => (
+                    <SelectItem key={cls.code} value={cls.code}>
+                      <div className="flex flex-col text-left py-0.5">
+                        <span className="font-medium text-xs text-foreground">{cls.name}</span>
+                        <span className="text-[10px] text-muted-foreground">{cls.description}</span>
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {customLicenceClass && (
+                <div className="space-y-1 mt-1.5">
+                  <Input
+                    value={form.licence_class}
+                    onChange={(e) => setForm((prev) => ({ ...prev, licence_class: e.target.value }))}
+                    placeholder="e.g. Class C, CE, E or international licence"
+                    className="text-xs"
+                    autoFocus
+                  />
+                  <p className="text-[10px] text-muted-foreground">Specify custom licence endorsement or foreign class</p>
+                </div>
+              )}
+              {!customLicenceClass && selectedDrivingClass && (
+                <p className="text-[11px] text-muted-foreground bg-muted/30 rounded px-2 py-1">
+                  {selectedDrivingClass.description}
+                </p>
+              )}
             </div>
 
             <div className="space-y-1.5">
@@ -1125,7 +1224,7 @@ function DriverDialog({ open, onOpenChange, driver, onSaved, existingCount }: {
 
           <DialogFooter>
             <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>Cancel</Button>
-            <Button type="submit" disabled={submitting}>
+            <Button type="submit" disabled={submitting || Boolean(duplicateDriver)}>
               {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Save Driver
             </Button>
           </DialogFooter>

@@ -461,6 +461,194 @@ export function generateDriverCode(seed?: string, index?: number): string {
   return `DRV-${String(rand).padStart(3, "0")}`;
 }
 
+/**
+ * Scans all existing driver codes and deterministically generates
+ * the next non-colliding unique Driver ID (e.g. DRV-001, DRV-002...).
+ */
+export function getGuaranteedUniqueDriverCode(
+  existingCodes: (string | null | undefined)[],
+  prefix: string = "DRV"
+): string {
+  const cleanPrefix = (prefix || "DRV").trim().toUpperCase();
+  const pattern = new RegExp(`^${cleanPrefix}-(\\d+)$`, "i");
+
+  const existingNormalized = new Set<string>();
+  let maxNum = 0;
+
+  for (const raw of existingCodes) {
+    if (!raw) continue;
+    const trimmed = String(raw).trim().toUpperCase();
+    existingNormalized.add(trimmed);
+
+    const match = trimmed.match(pattern);
+    if (match && match[1]) {
+      const num = parseInt(match[1], 10);
+      if (!Number.isNaN(num) && num > maxNum) {
+        maxNum = num;
+      }
+    }
+  }
+
+  let candidateNum = maxNum + 1;
+  let padLen = Math.max(3, String(candidateNum).length);
+  let candidate = `${cleanPrefix}-${String(candidateNum).padStart(padLen, "0")}`;
+
+  while (existingNormalized.has(candidate)) {
+    candidateNum++;
+    padLen = Math.max(3, String(candidateNum).length);
+    candidate = `${cleanPrefix}-${String(candidateNum).padStart(padLen, "0")}`;
+  }
+
+  return candidate;
+}
+
+/**
+ * Standard driving licence classes in Tanzania (Road Traffic Act / TRA / Tanzania Traffic Police).
+ */
+export interface TanzaniaDrivingClassOption {
+  code: string;
+  name: string;
+  category: "commercial_heavy" | "commercial_bus" | "commercial_light" | "general" | "special";
+  description: string;
+}
+
+export const TANZANIA_DRIVING_CLASSES: TanzaniaDrivingClassOption[] = [
+  {
+    code: "Class F",
+    name: "Class F – Articulated Heavy Goods",
+    category: "commercial_heavy",
+    description: "Articulated trucks, semi-trailers, prime movers, cross-border multi-axle freight (Zambia, DRC, Rwanda)",
+  },
+  {
+    code: "Class E",
+    name: "Class E – Medium / Heavy Goods Vehicle",
+    category: "commercial_heavy",
+    description: "Heavy rigid trucks, tippers, fuel tankers, flatbeds exceeding 7,500 kg gross weight",
+  },
+  {
+    code: "Class E & F",
+    name: "Class E & F – Heavy Goods & Articulated Combination",
+    category: "commercial_heavy",
+    description: "Rigid commercial trucks and articulated tractor-trailer combinations",
+  },
+  {
+    code: "Class C2",
+    name: "Class C2 – Heavy Commercial Bus & Coach",
+    category: "commercial_bus",
+    description: "Heavy intercity passenger buses and luxury coaches (Mabasi ya Mikoani > 65 passengers)",
+  },
+  {
+    code: "Class C1",
+    name: "Class C1 – Medium Commercial Bus / Minibus",
+    category: "commercial_bus",
+    description: "Mid-size buses, Coasters, commuter minibuses (30 to 65 passengers)",
+  },
+  {
+    code: "Class C",
+    name: "Class C – Light PSV / Passenger Transport",
+    category: "commercial_bus",
+    description: "Public Service Vehicles (PSV), daladala, vans, taxis (up to 30 passengers)",
+  },
+  {
+    code: "Class C, E & F",
+    name: "Class C, E & F – All Commercial (Bus, Heavy Truck & Articulated)",
+    category: "commercial_heavy",
+    description: "All heavy commercial passenger coaches, rigid trucks and articulated semi-trailers",
+  },
+  {
+    code: "Class D",
+    name: "Class D – Light Commercial Goods",
+    category: "commercial_light",
+    description: "Canters, pickups, delivery vans, box trucks not exceeding 3,500 kg",
+  },
+  {
+    code: "Class B",
+    name: "Class B – Private / Light Motor Vehicle",
+    category: "general",
+    description: "Saloon cars, station wagons, SUVs, private motor cars (≤ 3,500 kg)",
+  },
+  {
+    code: "Class A",
+    name: "Class A – Motorcycles (Pikipiki)",
+    category: "general",
+    description: "Two-wheeled motorcycles and mopeds",
+  },
+  {
+    code: "Class A3",
+    name: "Class A3 – Motorized Tricycles (Bajaji)",
+    category: "general",
+    description: "Three-wheeled motorized passenger and cargo bajaji / rickshaws",
+  },
+  {
+    code: "Class G",
+    name: "Class G – Special Plant & Machinery",
+    category: "special",
+    description: "Tractors, excavators, wheel loaders, cranes, and heavy earthmoving machinery",
+  },
+  {
+    code: "Other",
+    name: "Other / Custom Licence Class",
+    category: "general",
+    description: "International licence, military/police endorsement, or custom class",
+  },
+];
+
+/**
+ * Common commercial truck, bus, and trailer makes in Tanzania.
+ */
+export interface CommercialMakeOption {
+  name: string;
+  category: "truck" | "bus" | "trailer";
+  note: string;
+}
+
+export const TANZANIA_COMMERCIAL_MAKES: CommercialMakeOption[] = [
+  // Heavy Haulage, Tippers, Tankers & Prime Movers
+  { name: "Scania", category: "truck", note: "Leading prime mover & transit haulage in Tanzania" },
+  { name: "Mercedes-Benz", category: "truck", note: "Actros, Axor, Arocs heavy haulage & tippers" },
+  { name: "Sinotruk / Howo", category: "truck", note: "Very popular Howo & Sitrak tippers, tankers, prime movers" },
+  { name: "FAW", category: "truck", note: "J5, J6 heavy freight and transit haulage" },
+  { name: "Shacman", category: "truck", note: "F3000, X3000 heavy tippers and prime movers" },
+  { name: "Foton", category: "truck", note: "Auman transit trucks & medium commercial" },
+  { name: "Isuzu", category: "truck", note: "Giga, Forward, FVR, NPR delivery & distribution" },
+  { name: "Mitsubishi Fuso", category: "truck", note: "Super Great, Fighter, Canter" },
+  { name: "Volvo", category: "truck", note: "FH12, FH16 long-haul heavy haulage" },
+  { name: "MAN", category: "truck", note: "TGA, TGX long-distance freight" },
+  { name: "DAF", category: "truck", note: "XF, CF prime movers" },
+  { name: "Iveco", category: "truck", note: "Stralis, Trakker heavy transport" },
+  { name: "Tata", category: "truck", note: "Prima, Novus, LPT cargo & tippers" },
+  { name: "Dongfeng", category: "truck", note: "Tianlong, Kingrun heavy commercial" },
+  { name: "JAC", category: "truck", note: "Gallop heavy trucks & cargo" },
+  { name: "Beiben", category: "truck", note: "V3 heavy prime movers and tippers" },
+  { name: "Hino", category: "truck", note: "500, 700 series medium & heavy" },
+
+  // Commercial Buses & Coaches (Mabasi ya Mikoani & Daladala / Coasters)
+  { name: "Yutong", category: "bus", note: "Leading intercity passenger bus in Tanzania (Mabasi ya Mikoani)" },
+  { name: "Zhongtong", category: "bus", note: "Widely used long-distance passenger coach" },
+  { name: "Higer", category: "bus", note: "Intercity coaches & municipal buses" },
+  { name: "Golden Dragon", category: "bus", note: "Long-distance passenger transport" },
+  { name: "King Long", category: "bus", note: "Commercial passenger coaches" },
+  { name: "Scania Marcopolo / Irizar", category: "bus", note: "Luxury intercity Tanzanian coaches" },
+  { name: "Toyota", category: "bus", note: "Coaster (26-30 seater) & Hiace Daladala" },
+  { name: "Nissan", category: "bus", note: "Civilian minibus & Caravan" },
+  { name: "Ashok Leyland", category: "bus", note: "Falcon & Eagle commuter/staff buses" },
+  { name: "Eicher", category: "bus", note: "Skyline commercial passenger buses" },
+  { name: "Sunlong", category: "bus", note: "Intercity & tour buses" },
+  { name: "Ankai", category: "bus", note: "Commuter & coach transport" },
+
+  // Semi-Trailers, Fuel Tankers & Flatbeds
+  { name: "Superdoll", category: "trailer", note: "Premier Tanzania local trailer manufacturer (Dar es Salaam)" },
+  { name: "Afrit", category: "trailer", note: "Heavy interlink and flatbed trailers" },
+  { name: "BPW", category: "trailer", note: "Heavy German axle & trailer systems" },
+  { name: "CIMC", category: "trailer", note: "Fuel tankers, skeletal container chassis & flatbeds" },
+  { name: "Henred Fruehauf", category: "trailer", note: "Heavy duty haulage trailers" },
+  { name: "Fuwa", category: "trailer", note: "Heavy commercial trailer chassis" },
+  { name: "GRW", category: "trailer", note: "Liquid fuel and chemical tanker trailers" },
+  { name: "Randon", category: "trailer", note: "Heavy grain & cargo semi-trailers" },
+  { name: "York", category: "trailer", note: "Commercial freight trailer systems" },
+  { name: "SAF-Holland", category: "trailer", note: "Specialist suspension & trailer chassis" },
+];
+
 export interface FleetDriver {
   id: string;
   driver_code: string; // Unique Driver ID (e.g. DRV-001)
