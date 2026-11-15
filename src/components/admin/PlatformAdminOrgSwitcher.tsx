@@ -202,7 +202,7 @@ export function PlatformAdminOrgSwitcher({ compact = false }: { compact?: boolea
           <div className="space-y-0.5 py-1">
             {orgs.map((org) => {
               const isActive = org.id === organisation?.id;
-              const isGps = org.industry_profile === "gps_tracking";
+              const isGps = org.industry_profile === "gps_tracking" || org.name.toLowerCase().includes("gps");
               return (
                 <DropdownMenuItem
                   key={org.id}
@@ -215,7 +215,11 @@ export function PlatformAdminOrgSwitcher({ compact = false }: { compact?: boolea
                   )}
                 >
                   <div className="flex items-center gap-2 min-w-0">
-                    {getProfileIcon(org.industry_profile)}
+                    {isGps ? (
+                      <Radio className="h-3.5 w-3.5 text-sky-500 shrink-0" />
+                    ) : (
+                      getProfileIcon(org.industry_profile)
+                    )}
                     <div className="min-w-0">
                       <div className="truncate font-medium text-foreground flex items-center gap-1.5">
                         <span>{org.name}</span>
@@ -226,7 +230,7 @@ export function PlatformAdminOrgSwitcher({ compact = false }: { compact?: boolea
                         )}
                       </div>
                       <div className="text-[10px] text-muted-foreground capitalize">
-                        {getProfileLabel(org.industry_profile)}
+                        {isGps ? "GPS Tracking" : getProfileLabel(org.industry_profile)}
                       </div>
                     </div>
                   </div>

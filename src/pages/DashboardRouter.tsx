@@ -27,6 +27,15 @@ export default function DashboardRouter() {
     }
   }
 
+  // 2. MachineCare GPS Tracking independent profile resolution
+  if (
+    industry === "gps_tracking" ||
+    (enabledMods?.includes("gps_tracking") && !enabledMods?.includes("fleet")) ||
+    organisation?.name?.toLowerCase().includes("gps")
+  ) {
+    return <GpsLiveMap />;
+  }
+
   // 3. Direct Industry Profile resolution (Fleet & Logistics defaults immediately to FleetDashboard)
   if (industry === "fleet_logistics" || isFleet) {
     return <FleetDashboard />;
@@ -35,11 +44,6 @@ export default function DashboardRouter() {
   // 4. Garage & Workshop profile resolution
   if (industry === "garage" || isGarage) {
     return <GarageDashboard />;
-  }
-
-  // 4.5. MachineCare GPS Tracking independent profile resolution
-  if (industry === "gps_tracking" || (enabledMods?.includes("gps_tracking") && !enabledMods?.includes("fleet"))) {
-    return <GpsLiveMap />;
   }
 
   // 4. Specific module-based routing for modular configurations

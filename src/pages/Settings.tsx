@@ -339,9 +339,16 @@ export default function Settings() {
   const confirmIndustryProfileChange = async () => {
     if (!organisation || !pendingProfile) return;
     setSavingIndustryProfile(true);
+    const payload: any = {
+      industry_profile: pendingProfile === "gps_tracking" ? "fleet_logistics" : pendingProfile,
+    };
+    if (pendingProfile === "gps_tracking") {
+      payload.enabled_modules = ["gps_tracking"];
+    }
+
     const { error } = await supabase
       .from("organisations")
-      .update({ industry_profile: pendingProfile })
+      .update(payload)
       .eq("id", organisation.id);
     setSavingIndustryProfile(false);
     setPendingProfile(null);

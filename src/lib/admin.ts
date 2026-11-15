@@ -75,8 +75,8 @@ export async function provisionMachineCareGpsAccount(): Promise<{ success: boole
     // 2. Client-side fallback: check existing or insert
     const { data: existingOrg } = await supabase
       .from("organisations")
-      .select("id, name, industry_profile")
-      .or("industry_profile.eq.gps_tracking,name.ilike.%MachineCare GPS%")
+      .select("id, name, industry_profile, enabled_modules")
+      .ilike("name", "%MachineCare GPS%")
       .limit(1)
       .maybeSingle();
 
@@ -85,11 +85,13 @@ export async function provisionMachineCareGpsAccount(): Promise<{ success: boole
     }
 
     // Insert new MachineCare GPS organisation
+    // Uses 'fleet_logistics' for industry_profile to stay 100% compatible with PostgreSQL enum,
+    // and enabled_modules: ['gps_tracking'] to activate the dedicated GPS tracking suite.
     const { data: newOrg, error: orgErr } = await supabase
       .from("organisations")
       .insert({
-        name: "MachineCare GPS",
-        industry_profile: "gps_tracking",
+        name: "MachineCare GPS Tracking",
+        industry_profile: "fleet_logistics",
         plan: "enterprise",
         enabled_modules: ["gps_tracking"],
       } as any)

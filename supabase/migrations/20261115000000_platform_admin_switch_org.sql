@@ -86,7 +86,8 @@ BEGIN
   -- Check if MachineCare GPS already exists
   SELECT id INTO _org_id
   FROM public.organisations
-  WHERE industry_profile = 'gps_tracking' OR LOWER(name) LIKE '%machinecare gps%'
+  WHERE LOWER(name) LIKE '%machinecare gps%'
+     OR 'gps_tracking' = ANY(enabled_modules)
   LIMIT 1;
 
   IF _org_id IS NULL THEN
@@ -97,8 +98,8 @@ BEGIN
       plan,
       enabled_modules
     ) VALUES (
-      'MachineCare GPS',
-      'gps_tracking',
+      'MachineCare GPS Tracking',
+      'fleet_logistics',
       'enterprise',
       ARRAY['gps_tracking']
     )

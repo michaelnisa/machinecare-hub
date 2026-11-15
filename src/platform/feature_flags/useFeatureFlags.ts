@@ -47,14 +47,26 @@ export function useFeatureFlags() {
     return true;
   };
 
+  const isGpsTracking =
+    profile === "gps_tracking" ||
+    Boolean(
+      organisation?.enabled_modules?.includes("gps_tracking") &&
+      !organisation?.enabled_modules?.includes("fleet")
+    ) ||
+    Boolean(organisation?.name?.toLowerCase().includes("gps"));
+
   return {
     profile,
-    isFleet: (profile === "fleet_logistics" || isLogisticsOrg) && profile !== "mixed" && profile !== "gps_tracking",
-    isManufacturing: profile === "manufacturing" && !isLogisticsOrg,
+    isFleet:
+      (profile === "fleet_logistics" || isLogisticsOrg) &&
+      profile !== "mixed" &&
+      profile !== "gps_tracking" &&
+      !isGpsTracking,
+    isManufacturing: profile === "manufacturing" && !isLogisticsOrg && !isGpsTracking,
     isGarage: profile === "garage",
     isMixed: profile === "mixed",
     isIoT: isFeatureEnabled("connected_data"),
-    isGpsTracking: profile === "gps_tracking" || Boolean(organisation?.enabled_modules?.includes("gps_tracking") && !organisation?.enabled_modules?.includes("fleet")),
+    isGpsTracking,
     isFeatureEnabled,
   };
 }

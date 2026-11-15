@@ -180,9 +180,9 @@ export default function Admin() {
     const totalUsers = profiles.length;
 
     const industryCounts = {
-      manufacturing: organisations.filter((o) => o.industry_profile === "manufacturing").length,
-      fleet_logistics: organisations.filter((o) => o.industry_profile === "fleet_logistics").length,
-      gps_tracking: organisations.filter((o) => o.industry_profile === "gps_tracking").length,
+      manufacturing: organisations.filter((o) => o.industry_profile === "manufacturing" && !o.name.toLowerCase().includes("gps")).length,
+      fleet_logistics: organisations.filter((o) => o.industry_profile === "fleet_logistics" && !o.name.toLowerCase().includes("gps")).length,
+      gps_tracking: organisations.filter((o) => o.industry_profile === "gps_tracking" || o.name.toLowerCase().includes("gps")).length,
       garage: organisations.filter((o) => o.industry_profile === "garage").length,
       mixed: organisations.filter((o) => o.industry_profile === "mixed").length,
     };
@@ -276,9 +276,16 @@ export default function Admin() {
   // Handle Organization Industry Profile Update (Admin Portal Only)
   const handleUpdateOrgIndustry = async (orgId: string, newProfile: string) => {
     try {
+      const payload: any = {
+        industry_profile: newProfile === "gps_tracking" ? "fleet_logistics" : newProfile,
+      };
+      if (newProfile === "gps_tracking") {
+        payload.enabled_modules = ["gps_tracking"];
+      }
+
       const { error } = await supabase
         .from("organisations")
-        .update({ industry_profile: newProfile } as any)
+        .update(payload as any)
         .eq("id", orgId);
 
       if (error) throw error;
@@ -386,14 +393,15 @@ export default function Admin() {
     }
   };
 
-  const getIndustryIcon = (ind: string | null) => {
+  const getIndustryIcon = (ind: string | null, name?: string) => {
+    if (ind === "gps_tracking" || name?.toLowerCase().includes("gps")) {
+      return <Radio className="h-4 w-4 text-sky-500" />;
+    }
     switch (ind) {
       case "manufacturing":
         return <Factory className="h-4 w-4 text-blue-500" />;
       case "fleet_logistics":
         return <Truck className="h-4 w-4 text-emerald-500" />;
-      case "gps_tracking":
-        return <Radio className="h-4 w-4 text-sky-500" />;
       case "garage":
         return <Wrench className="h-4 w-4 text-orange-500" />;
       default:
@@ -724,13 +732,13 @@ export default function Admin() {
                             )}
                           </CardTitle>
                           <CardDescription className="text-xs capitalize">
-                            {org.industry_profile === "gps_tracking"
+                            {org.industry_profile === "gps_tracking" || org.name.toLowerCase().includes("gps")
                               ? "MachineCare GPS Tracking"
                               : org.industry_profile?.replace("_", " ") || "Manufacturing"}
                           </CardDescription>
                         </div>
                       </div>
-                      {getIndustryIcon(org.industry_profile)}
+                      {getIndustryIcon(org.industry_profile, org.name)}
                     </div>
                   </CardHeader>
                   <CardContent className="space-y-3 text-xs">
@@ -747,7 +755,11 @@ export default function Admin() {
                     <div className="flex items-center justify-between gap-2 border-t border-border pt-2.5">
                       <span className="text-muted-foreground font-medium">{isSwahili ? "Badili Sekta:" : "Industry Profile:"}</span>
                       <select
-                        value={org.industry_profile || "manufacturing"}
+                        value={
+                          org.industry_profile === "gps_tracking" || org.name.toLowerCase().includes("gps")
+                            ? "gps_tracking"
+                            : org.industry_profile || "manufacturing"
+                        }
                         onChange={(e) => handleUpdateOrgIndustry(org.id, e.target.value)}
                         className="rounded-md border border-input bg-background px-2 py-1 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary font-medium"
                       >
