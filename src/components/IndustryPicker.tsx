@@ -1,4 +1,4 @@
-import { Factory, Truck, Wrench, Layers } from "lucide-react";
+import { Factory, Truck, Wrench, Layers, Radio } from "lucide-react";
 import type { IndustryProfile } from "@/hooks/useIndustry";
 import { cn } from "@/lib/utils";
 
@@ -22,6 +22,13 @@ export const INDUSTRY_PROFILES: {
     icon: Truck,
     desc: "Vehicles, Drivers, Trips, Fuel & Documents",
     accent: "border-emerald-500 bg-emerald-50 text-emerald-700",
+  },
+  {
+    value: "gps_tracking",
+    label: "MachineCare GPS Tracking",
+    icon: Radio,
+    desc: "Real-time vehicle tracking, route replay & telematics",
+    accent: "border-sky-500 bg-sky-50 text-sky-700",
   },
   {
     value: "garage",

@@ -5,9 +5,9 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import type { Session, User } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 import { setSentryUser } from "@/lib/sentry";
+import { switchAdminOrganisation } from "@/lib/admin";
 
 export interface Profile {
   id: string;
@@ -51,6 +51,7 @@ export interface AuthContextValue {
   organisation: Organisation | null;
   loading: boolean;
   refresh: () => Promise<void>;
+  switchOrganisation: (orgId: string) => Promise<boolean>;
   signOut: () => Promise<void>;
 }
 
@@ -133,6 +134,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setSentryUser(user ? { id: user.id, email: user.email } : null, profile?.organisation_id);
   }, [user, profile]);
 
+  const switchOrganisation = async (orgId: string): Promise<boolean> => {
+    if (!user) return false;
+    const res = await switchAdminOrganisation(orgId);
+    if (!res.success) {
+      throw new Error(res.error || "Failed to switch organisation");
+    }
+    await loadProfile(user.id);
+    return true;
+  };
+
   const signOut = async () => {
     await supabase.auth.signOut();
   };
@@ -146,6 +157,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         organisation,
         loading,
         refresh,
+        switchOrganisation,
         signOut,
       }}
     >

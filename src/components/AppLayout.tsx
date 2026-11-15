@@ -11,6 +11,7 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { isPlatformAdmin } from "@/lib/admin";
 import { CommandPalette } from "@/components/CommandPalette";
 import { TechnicianQrModal } from "@/components/TechnicianQrModal";
+import { PlatformAdminOrgSwitcher } from "@/components/admin/PlatformAdminOrgSwitcher";
 
 export default function AppLayout() {
   const { user, loading, organisation } = useAuth();
@@ -83,6 +84,7 @@ export default function AppLayout() {
             <Button variant="ghost" size="icon" onClick={() => setQrOpen(true)} title="Technician QR">
               <QrCode className="h-4 w-4 text-primary" />
             </Button>
+            <PlatformAdminOrgSwitcher compact />
             <LanguageSwitcher compact />
             <NotificationsBell />
           </div>
@@ -107,7 +109,9 @@ export default function AppLayout() {
           </Button>
 
           <div className="flex items-center gap-2.5">
-            {organisation && (
+            <PlatformAdminOrgSwitcher />
+
+            {organisation && !isAdmin && (
               <div className="hidden lg:flex items-center gap-2 pr-2.5 border-r border-border">
                 {organisation.logo_url ? (
                   <img

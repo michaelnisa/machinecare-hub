@@ -57,11 +57,14 @@ import {
   Mail,
   Loader2,
   BookOpen,
+  Radio,
+  ArrowRightLeft,
+  Check,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useI18n } from "@/i18n/I18nProvider";
-import { isPlatformAdmin, PLATFORM_ADMIN_EMAILS } from "@/lib/admin";
-import { Link } from "react-router-dom";
+import { isPlatformAdmin, PLATFORM_ADMIN_EMAILS, provisionMachineCareGpsAccount } from "@/lib/admin";
+import { Link, useNavigate } from "react-router-dom";
 
 interface OnboardingRequest {
   id: string;
@@ -90,7 +93,8 @@ interface Profile {
 }
 
 export default function Admin() {
-  const { user, profile } = useAuth();
+  const { user, profile, organisation, switchOrganisation } = useAuth();
+  const navigate = useNavigate();
   const isAdmin = isPlatformAdmin(user?.email || profile?.email);
   const { t, currentLang } = useI18n();
   const isSwahili = currentLang === "sw";
@@ -102,6 +106,8 @@ export default function Admin() {
 
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [switchingOrgId, setSwitchingOrgId] = useState<string | null>(null);
+  const [provisioningGps, setProvisioningGps] = useState(false);
 
   // Modal states
   const [inviteModalOpen, setInviteModalOpen] = useState(false);
@@ -176,6 +182,7 @@ export default function Admin() {
     const industryCounts = {
       manufacturing: organisations.filter((o) => o.industry_profile === "manufacturing").length,
       fleet_logistics: organisations.filter((o) => o.industry_profile === "fleet_logistics").length,
+      gps_tracking: organisations.filter((o) => o.industry_profile === "gps_tracking").length,
       garage: organisations.filter((o) => o.industry_profile === "garage").length,
       mixed: organisations.filter((o) => o.industry_profile === "mixed").length,
     };
@@ -318,12 +325,75 @@ export default function Admin() {
     }
   };
 
+  // Handle Switching Active Organisation for Platform Admin
+  const handleSwitchOrg = async (org: Organisation) => {
+    if (org.id === organisation?.id) {
+      toast.info(isSwahili ? "Tayari upo kwenye akaunti hii" : "Already active in this account");
+      navigate("/dashboard");
+      return;
+    }
+    setSwitchingOrgId(org.id);
+    try {
+      await switchOrganisation(org.id);
+      toast.success(
+        isSwahili
+          ? `Umebadilisha akaunti kuwa: ${org.name}`
+          : `Switched active account to: ${org.name}`
+      );
+      navigate("/dashboard");
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to switch organisation");
+    } finally {
+      setSwitchingOrgId(null);
+    }
+  };
+
+  // Handle Provisioning MachineCare GPS Suite & Demo Telematics
+  const handleProvisionGps = async () => {
+    const existing = organisations.find(
+      (o) => o.industry_profile === "gps_tracking" || o.name.toLowerCase().includes("gps")
+    );
+    if (existing) {
+      toast.info(
+        isSwahili
+          ? `Akaunti ya MachineCare GPS ipo tayari (${existing.name}). Inabadilisha sasa...`
+          : `MachineCare GPS account already exists (${existing.name}). Switching now...`
+      );
+      handleSwitchOrg(existing);
+      return;
+    }
+
+    setProvisioningGps(true);
+    try {
+      const res = await provisionMachineCareGpsAccount();
+      if (!res.success) throw new Error(res.error || "Failed to provision GPS");
+
+      await fetchData();
+      toast.success(
+        isSwahili
+          ? "Akaunti ya MachineCare GPS imeundwa kikamilifu pamoja na vifaa vya majaribio!"
+          : "MachineCare GPS account provisioned successfully with demo tracking hardware!"
+      );
+
+      if (res.orgId) {
+        await switchOrganisation(res.orgId);
+        navigate("/dashboard");
+      }
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to provision GPS account");
+    } finally {
+      setProvisioningGps(false);
+    }
+  };
+
   const getIndustryIcon = (ind: string | null) => {
     switch (ind) {
       case "manufacturing":
         return <Factory className="h-4 w-4 text-blue-500" />;
       case "fleet_logistics":
         return <Truck className="h-4 w-4 text-emerald-500" />;
+      case "gps_tracking":
+        return <Radio className="h-4 w-4 text-sky-500" />;
       case "garage":
         return <Wrench className="h-4 w-4 text-orange-500" />;
       default:
@@ -598,23 +668,65 @@ export default function Admin() {
                 className="pl-9"
               />
             </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={handleProvisionGps}
+                disabled={provisioningGps}
+                className="gap-1.5 border-sky-500/30 text-sky-700 dark:text-sky-400 hover:bg-sky-500/10 font-semibold shadow-xs"
+              >
+                {provisioningGps ? (
+                  <Loader2 className="h-4 w-4 animate-spin text-sky-600" />
+                ) : (
+                  <Radio className="h-4 w-4 text-sky-600" />
+                )}
+                <span>
+                  {isSwahili ? "+ Tengeneza Akaunti ya MachineCare GPS" : "+ Provision MachineCare GPS Account"}
+                </span>
+              </Button>
+            </div>
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {filteredOrgs.map((org) => {
               const memberCount = profiles.filter((p) => p.organisation_id === org.id).length;
+              const isActive = org.id === organisation?.id;
               return (
-                <Card key={org.id} className="border-border shadow-sm hover:border-primary/40 transition-all">
+                <Card
+                  key={org.id}
+                  className={cn(
+                    "border shadow-sm transition-all relative overflow-hidden",
+                    isActive
+                      ? "border-emerald-500/60 bg-emerald-500/5 dark:bg-emerald-500/5 ring-1 ring-emerald-500/30"
+                      : "border-border hover:border-primary/40"
+                  )}
+                >
                   <CardHeader className="pb-3">
                     <div className="flex items-start justify-between">
                       <div className="flex items-center gap-2.5">
-                        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary-soft text-primary font-bold">
+                        <div className={cn(
+                          "flex h-10 w-10 items-center justify-center rounded-xl font-bold",
+                          isActive
+                            ? "bg-emerald-600 text-white"
+                            : "bg-primary-soft text-primary"
+                        )}>
                           {org.name.slice(0, 2).toUpperCase()}
                         </div>
                         <div>
-                          <CardTitle className="text-base">{org.name}</CardTitle>
+                          <CardTitle className="text-base flex items-center gap-1.5 flex-wrap">
+                            <span>{org.name}</span>
+                            {isActive && (
+                              <Badge variant="outline" className="text-[10px] font-bold bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30 gap-1 px-1.5 py-0">
+                                <Check className="h-3 w-3" />
+                                {isSwahili ? "Amilifu" : "Active"}
+                              </Badge>
+                            )}
+                          </CardTitle>
                           <CardDescription className="text-xs capitalize">
-                            {org.industry_profile?.replace("_", " ") || "Manufacturing"}
+                            {org.industry_profile === "gps_tracking"
+                              ? "MachineCare GPS Tracking"
+                              : org.industry_profile?.replace("_", " ") || "Manufacturing"}
                           </CardDescription>
                         </div>
                       </div>
@@ -640,28 +752,54 @@ export default function Admin() {
                         className="rounded-md border border-input bg-background px-2 py-1 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary font-medium"
                       >
                         <option value="fleet_logistics">Fleet & Logistics</option>
+                        <option value="gps_tracking">MachineCare GPS Tracking</option>
                         <option value="manufacturing">Manufacturing</option>
                         <option value="garage">Garage & Workshop</option>
                         <option value="mixed">Mixed Enterprise</option>
                       </select>
                     </div>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="w-full mt-2"
-                      onClick={() => {
-                        const link = `${window.location.origin}/signup?org_id=${org.id}`;
-                        navigator.clipboard.writeText(link);
-                        toast.success(
-                          isSwahili
-                            ? "Kiungo cha kualika mfanyakazi kimenakiliwa!"
-                            : "Member invite link copied!"
-                        );
-                      }}
-                    >
-                      <Copy className="mr-1.5 h-3.5 w-3.5" />
-                      {isSwahili ? "Nakili Kiungo cha Kualika" : "Copy Team Invite Link"}
-                    </Button>
+
+                    <div className="grid grid-cols-2 gap-2 mt-3 pt-2 border-t border-border">
+                      <Button
+                        size="sm"
+                        variant={isActive ? "secondary" : "default"}
+                        disabled={switchingOrgId === org.id}
+                        onClick={() => handleSwitchOrg(org)}
+                        className={cn(
+                          "gap-1 font-semibold text-xs h-8",
+                          !isActive && "shadow-xs"
+                        )}
+                      >
+                        {switchingOrgId === org.id ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <ArrowRightLeft className="h-3.5 w-3.5" />
+                        )}
+                        <span>
+                          {isActive
+                            ? (isSwahili ? "Upo Hapa" : "Current Active")
+                            : (isSwahili ? "Ingia Kwenye Akaunti" : "Switch Account")}
+                        </span>
+                      </Button>
+
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="gap-1 text-xs h-8"
+                        onClick={() => {
+                          const link = `${window.location.origin}/signup?org_id=${org.id}`;
+                          navigator.clipboard.writeText(link);
+                          toast.success(
+                            isSwahili
+                              ? "Kiungo cha kualika mfanyakazi kimenakiliwa!"
+                              : "Member invite link copied!"
+                          );
+                        }}
+                      >
+                        <Copy className="h-3.5 w-3.5" />
+                        <span>{isSwahili ? "Nakili Kiungo" : "Invite Link"}</span>
+                      </Button>
+                    </div>
                   </CardContent>
                 </Card>
               );
