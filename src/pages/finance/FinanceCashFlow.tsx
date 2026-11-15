@@ -81,7 +81,7 @@ export default function FinanceCashFlow() {
 
         (supabase as any)
           .from("trip_expenses")
-          .select("id, expense_type, amount, occurred_at")
+          .select("id, expense_type, amount, currency, occurred_at")
           .eq("organisation_id", organisation.id)
           .gt("amount", 0),
 
@@ -138,15 +138,17 @@ export default function FinanceCashFlow() {
 
       // 4. Outflows: Trip & driver expenses
       (tripExps || []).forEach((t: any) => {
+        const isUsd = (t.currency || "").toUpperCase() === "USD";
+        const amtTzs = isUsd ? Number(t.amount || 0) * 2600 : Number(t.amount || 0);
         list.push({
           id: `out-trip-${t.id}`,
           date: t.occurred_at || new Date().toISOString(),
           type: "outflow",
           category: "Trip & Transit",
-          description: `Trip disbursement: ${t.expense_type}`,
+          description: isUsd ? `Trip disbursement: ${t.expense_type} ($${t.amount} USD)` : `Trip disbursement: ${t.expense_type}`,
           counterparty: "Driver / Transit Toll",
-          amount: Number(t.amount || 0),
-          paymentMethod: "cash",
+          amount: amtTzs,
+          paymentMethod: isUsd ? "wire_transfer" : "cash",
         });
       });
 

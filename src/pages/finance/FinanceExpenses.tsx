@@ -219,21 +219,24 @@ export default function FinanceExpenses() {
     let maintenanceTotal = 0;
     let tripTotal = 0;
     let otherTotal = 0;
+    const rate = 2600;
 
     expenses.forEach((e) => {
-      total += e.amount;
-      if (e.category === "fuel") fuelTotal += e.amount;
+      const isUsd = (e.currency || "").toUpperCase() === "USD";
+      const amtTzs = isUsd ? e.amount * rate : e.amount;
+      total += amtTzs;
+      if (e.category === "fuel") fuelTotal += amtTzs;
       else if (
         e.category === "maintenance_service" ||
         e.category === "spare_part" ||
         e.category.includes("maintenance") ||
         e.category.includes("spare")
       ) {
-        maintenanceTotal += e.amount;
+        maintenanceTotal += amtTzs;
       } else if (e.category === "trip_expense") {
-        tripTotal += e.amount;
+        tripTotal += amtTzs;
       } else {
-        otherTotal += e.amount;
+        otherTotal += amtTzs;
       }
     });
 
@@ -549,7 +552,12 @@ export default function FinanceExpenses() {
                       {exp.paymentMethod.replace(/_/g, " ")}
                     </td>
                     <td className="py-3.5 px-4 text-right font-semibold text-foreground whitespace-nowrap">
-                      {formatMoney(exp.amount, exp.currency)}
+                      <div>{formatMoney(exp.amount, exp.currency)}</div>
+                      {exp.currency === "USD" && (
+                        <div className="text-[10px] text-muted-foreground font-mono">
+                          ≈ {formatMoney(exp.amount * 2600, "TZS")}
+                        </div>
+                      )}
                     </td>
                     <td className="py-3.5 px-4 text-center whitespace-nowrap">
                       <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/10 text-emerald-600 border border-emerald-500/20">

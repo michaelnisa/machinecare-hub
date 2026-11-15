@@ -37,6 +37,10 @@ import {
   SlidersHorizontal,
   Info,
   Fuel,
+  Wallet,
+  Banknote,
+  CheckCheck,
+  Coins,
 } from "lucide-react";
 import { TripExpensesListDialog } from "@/components/TripExpensesListDialog";
 import { CorridorExpenseCatalogDialog } from "@/components/CorridorExpenseCatalogDialog";
@@ -71,6 +75,8 @@ import {
   parseCargoMeta,
   type FleetVehicle,
   type FleetDriver,
+  type SafariFloatRecord,
+  type SafariFloatReceipt,
 } from "@/lib/fleet-metadata";
 
 type Machine = FleetVehicle;
@@ -116,6 +122,7 @@ type Trip = {
   tax_percent?: number | null;
   include_statutory_tolls?: boolean | null;
   custom_logo_url?: string | null;
+  safari_float?: SafariFloatRecord | null;
 };
 
 const STATUS_CLASS: Record<string, string> = {
@@ -155,6 +162,7 @@ function parseTripRecord(raw: any): Trip {
   let tax_percent = raw.tax_percent ?? null;
   let include_statutory_tolls = raw.include_statutory_tolls ?? null;
   let custom_logo_url = raw.custom_logo_url ?? null;
+  let safari_float = raw.safari_float ?? null;
 
   if (raw.cargo_description && typeof raw.cargo_description === "string" && raw.cargo_description.trim().startsWith("{")) {
     const parsed = parseCargoMeta(raw.cargo_description);
@@ -183,6 +191,7 @@ function parseTripRecord(raw: any): Trip {
       if (parsed.tax_percent != null) tax_percent = Number(parsed.tax_percent);
       if (parsed.include_statutory_tolls != null) include_statutory_tolls = Boolean(parsed.include_statutory_tolls);
       if (parsed.custom_logo_url) custom_logo_url = parsed.custom_logo_url;
+      if (parsed.safari_float) safari_float = parsed.safari_float;
     } else {
       cargo_description = null;
     }
@@ -214,6 +223,7 @@ function parseTripRecord(raw: any): Trip {
     tax_percent,
     include_statutory_tolls,
     custom_logo_url,
+    safari_float,
   };
 }
 
@@ -297,6 +307,7 @@ export default function Trips() {
   const [detailTrip, setDetailTrip] = useState<Trip | null>(null);
   const [receiptTrip, setReceiptTrip] = useState<Trip | null>(null);
   const [fuelTrip, setFuelTrip] = useState<Trip | null>(null);
+  const [surrenderTrip, setSurrenderTrip] = useState<Trip | null>(null);
 
   const openReceiptById = async (tripId: string) => {
     const existing = trips.find((t) => t.id === tripId);
@@ -654,9 +665,42 @@ export default function Trips() {
                                 Incl. {formatMoney(expCost)} expenses
                               </div>
                             )}
+                            {t.safari_float && (
+                              <button
+                                type="button"
+                                onClick={() => setSurrenderTrip(t)}
+                                className={cn(
+                                  "text-[10px] flex items-center gap-1 font-medium mt-0.5 hover:underline",
+                                  t.safari_float.surrendered
+                                    ? "text-emerald-700 dark:text-emerald-400"
+                                    : "text-amber-700 dark:text-amber-400"
+                                )}
+                              >
+                                <Wallet className="h-2.5 w-2.5" />
+                                <span>Float: {formatMoney(t.safari_float.dispatched_amount, t.safari_float.currency)}</span>
+                                <span className="opacity-80">({t.safari_float.surrendered ? "Reconciled" : "Surrender"})</span>
+                              </button>
+                            )}
                           </div>
                         ) : (
-                          <span className="text-muted-foreground text-xs">—</span>
+                          <div>
+                            <span className="text-muted-foreground text-xs">—</span>
+                            {t.safari_float && (
+                              <button
+                                type="button"
+                                onClick={() => setSurrenderTrip(t)}
+                                className={cn(
+                                  "text-[10px] flex items-center gap-1 font-medium mt-0.5 hover:underline",
+                                  t.safari_float.surrendered
+                                    ? "text-emerald-700 dark:text-emerald-400"
+                                    : "text-amber-700 dark:text-amber-400"
+                                )}
+                              >
+                                <Wallet className="h-2.5 w-2.5" />
+                                <span>Float: {formatMoney(t.safari_float.dispatched_amount, t.safari_float.currency)}</span>
+                              </button>
+                            )}
+                          </div>
                         )}
                       </td>
 
@@ -697,6 +741,16 @@ export default function Trips() {
                           >
                             <Fuel className="h-3.5 w-3.5 text-emerald-600" />
                             <span>Add Fuel</span>
+                          </Button>
+
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            title={t.safari_float ? (t.safari_float.surrendered ? "Safari Float (Reconciled)" : "Safari Float (Surrender Pending)") : "Safari Float & Road Cash Surrender"}
+                            onClick={() => setSurrenderTrip(t)}
+                            className={t.safari_float?.surrendered ? "text-emerald-600 hover:bg-emerald-500/10" : t.safari_float ? "text-amber-600 hover:bg-amber-500/10" : "text-muted-foreground hover:text-foreground"}
+                          >
+                            <Wallet className="h-4 w-4" />
                           </Button>
 
                           <Button
@@ -778,6 +832,7 @@ export default function Trips() {
         onOpenChange={(v) => !v && setCloseTrip(null)}
         onSaved={load}
         expensesSummary={closeTrip ? expenseSummaries.get(closeTrip.id) : undefined}
+        onOpenSurrender={(t) => setSurrenderTrip(t)}
       />
 
       {expensesTrip && (
@@ -803,6 +858,7 @@ export default function Trips() {
           expenseSummary={expenseSummaries.get(detailTrip.id)}
           open={!!detailTrip}
           onOpenChange={(v) => !v && setDetailTrip(null)}
+          onOpenSurrender={(t) => setSurrenderTrip(t)}
           onStart={() => {
             const t = detailTrip;
             setDetailTrip(null);
@@ -823,6 +879,22 @@ export default function Trips() {
             const t = detailTrip;
             setDetailTrip(null);
             setConfirmDeleteTrip(t);
+          }}
+        />
+      )}
+
+      {surrenderTrip && (
+        <SafariFloatSurrenderDialog
+          open={!!surrenderTrip}
+          onOpenChange={(v) => !v && setSurrenderTrip(null)}
+          trip={surrenderTrip}
+          driver={surrenderTrip.driver_id ? driverMap.get(surrenderTrip.driver_id) : undefined}
+          onSaved={async () => {
+            await load();
+            if (detailTrip && detailTrip.id === surrenderTrip.id) {
+              const refreshed = (await supabase.from("trips").select("*").eq("id", surrenderTrip.id).maybeSingle()).data;
+              if (refreshed) setDetailTrip(parseTripRecord(refreshed));
+            }
           }}
         />
       )}
@@ -885,6 +957,14 @@ type NewTripForm = {
   roundtrip_hours_est: string;
   start_odo: string;
   start_now: boolean;
+  enable_safari_float: boolean;
+  safari_float_amount: string;
+  safari_float_currency: "TZS" | "USD";
+  safari_float_method: "mpesa" | "tigo_pesa" | "airtel_money" | "cash" | "bank_transfer";
+  safari_float_ref: string;
+  safari_float_posho_days: string;
+  safari_float_posho_daily_rate: string;
+  safari_float_notes: string;
 };
 
 const EMPTY_NEW_TRIP: NewTripForm = {
@@ -904,6 +984,14 @@ const EMPTY_NEW_TRIP: NewTripForm = {
   roundtrip_hours_est: "48",
   start_odo: "",
   start_now: true,
+  enable_safari_float: false,
+  safari_float_amount: "",
+  safari_float_currency: "TZS",
+  safari_float_method: "mpesa",
+  safari_float_ref: "",
+  safari_float_posho_days: "4",
+  safari_float_posho_daily_rate: "30000",
+  safari_float_notes: "",
 };
 
 interface EditableCorridorExpense {
@@ -968,6 +1056,7 @@ function NewTripDialog({
 
   const applyCorridor = (c: CrossBorderCorridor) => {
     setCorridorId(c.id);
+    const estDays = Math.max(1, Math.round(Number(c.estimatedRoundtripHours || 48) / 24));
     setForm((prev) => ({
       ...prev,
       origin: c.defaultOrigin,
@@ -975,6 +1064,7 @@ function NewTripDialog({
       roundtrip_hours_est: String(c.estimatedRoundtripHours),
       route_notes: `${c.description} (Primary Border: ${c.borderPost})`,
       purpose: prev.purpose || `Transit Run: ${c.name}`,
+      safari_float_posho_days: String(estDays),
     }));
 
     const mapped: EditableCorridorExpense[] = c.expenses.map((e) => ({
@@ -1111,6 +1201,31 @@ function NewTripDialog({
     const billingAmountNum = form.client_billing_amount.trim() ? Number(form.client_billing_amount) : null;
     const taxPercentNum = form.tax_percent.trim() ? Number(form.tax_percent) : 0;
 
+    let safariFloatPayload: SafariFloatRecord | null = null;
+    if (form.enable_safari_float && Number(form.safari_float_amount) > 0) {
+      const floatAmt = Number(form.safari_float_amount);
+      const poshoDays = Number(form.safari_float_posho_days) || 1;
+      const poshoDaily = Number(form.safari_float_posho_daily_rate) || 30000;
+      const poshoTotal = Math.min(floatAmt, poshoDays * poshoDaily);
+      const emergencyFloat = Math.max(0, floatAmt - poshoTotal);
+
+      safariFloatPayload = {
+        dispatched_amount: floatAmt,
+        currency: form.safari_float_currency,
+        payment_method: form.safari_float_method,
+        reference_no: form.safari_float_ref.trim() || undefined,
+        disbursed_at: now.toISOString(),
+        driver_id: form.driver_id || null,
+        driver_name: drivers.find((d) => d.id === form.driver_id)?.full_name || null,
+        posho_amount: poshoTotal,
+        emergency_float: emergencyFloat,
+        notes: form.safari_float_notes.trim() || undefined,
+        surrendered: false,
+        surrender_status: "pending",
+        receipts: [],
+      };
+    }
+
     const cargoMeta = {
       client: form.client_name.trim() || null,
       order_no: form.client_order_no.trim() || null,
@@ -1131,6 +1246,7 @@ function NewTripDialog({
       currency: currencyMode,
       exchange_rate: exchangeRate,
       expenses: cleanExpensesPayload,
+      safari_float: safariFloatPayload,
     };
 
     const safePayload: any = {
@@ -1148,7 +1264,7 @@ function NewTripDialog({
       status: form.start_now ? "in_progress" : "planned",
       start_at: form.start_now ? now.toISOString() : null,
       created_by: user?.id,
-      cost: totalSelectedTzs > 0 ? totalSelectedTzs : null,
+      cost: null,
     };
 
     const { data: newTrip, error } = await supabase
@@ -1722,6 +1838,130 @@ function NewTripDialog({
               />
             </div>
 
+            {/* Safari Float & Driver Road Cash */}
+            <div className="sm:col-span-2 rounded-xl border border-primary/30 bg-primary/[0.03] p-4 space-y-3.5">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Wallet className="h-4 w-4 text-primary" />
+                  <span className="text-sm font-bold text-foreground">
+                    Driver Safari Float & Posho (Safari Allowance)
+                  </span>
+                </div>
+                <label className="flex items-center gap-2 text-xs font-semibold cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={form.enable_safari_float}
+                    onChange={(e) => setForm({ ...form, enable_safari_float: e.target.checked })}
+                    className="rounded border-input text-primary"
+                  />
+                  <span>Disburse Float for this Trip</span>
+                </label>
+              </div>
+
+              {form.enable_safari_float && (
+                <div className="grid gap-3 sm:grid-cols-2 pt-2 border-t border-border/60">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-semibold">Total Dispatched Float Amount *</Label>
+                    <div className="flex gap-2">
+                      <Input
+                        type="number"
+                        min={0}
+                        step="any"
+                        value={form.safari_float_amount}
+                        onChange={(e) => setForm({ ...form, safari_float_amount: e.target.value })}
+                        placeholder={form.safari_float_currency === "USD" ? "e.g. 400" : "e.g. 800000"}
+                        className="h-9 text-sm font-mono font-bold flex-1"
+                      />
+                      <Select
+                        value={form.safari_float_currency}
+                        onValueChange={(v: "TZS" | "USD") => setForm({ ...form, safari_float_currency: v })}
+                      >
+                        <SelectTrigger className="w-24 h-9 font-semibold"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="TZS">TZS</SelectItem>
+                          <SelectItem value="USD">USD</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-semibold">Disbursement Channel</Label>
+                    <Select
+                      value={form.safari_float_method}
+                      onValueChange={(v: any) => setForm({ ...form, safari_float_method: v })}
+                    >
+                      <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="mpesa">M-Pesa (Vodacom)</SelectItem>
+                        <SelectItem value="tigo_pesa">Tigo Pesa (Mixx by Yas)</SelectItem>
+                        <SelectItem value="airtel_money">Airtel Money</SelectItem>
+                        <SelectItem value="cash">Cash in Hand</SelectItem>
+                        <SelectItem value="bank_transfer">Bank Transfer (NMB / CRDB)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label className="text-xs">Transaction Ref / M-Pesa Code</Label>
+                    <Input
+                      value={form.safari_float_ref}
+                      onChange={(e) => setForm({ ...form, safari_float_ref: e.target.value })}
+                      placeholder="e.g. QK84729101 or Cash Voucher #12"
+                      className="h-9 text-sm font-mono"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between text-xs">
+                      <Label className="text-xs">Driver Posho (Subsistence)</Label>
+                      <span className="text-[11px] text-muted-foreground font-mono">
+                        {form.safari_float_posho_days} days × {formatMoney(Number(form.safari_float_posho_daily_rate) || 30000)}
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <Input
+                        type="number"
+                        min={1}
+                        value={form.safari_float_posho_days}
+                        onChange={(e) => setForm({ ...form, safari_float_posho_days: e.target.value })}
+                        placeholder="Days"
+                        className="h-9 text-xs"
+                      />
+                      <Input
+                        type="number"
+                        min={0}
+                        step={5000}
+                        value={form.safari_float_posho_daily_rate}
+                        onChange={(e) => setForm({ ...form, safari_float_posho_daily_rate: e.target.value })}
+                        placeholder="Rate / Day"
+                        className="h-9 text-xs font-mono"
+                      />
+                    </div>
+                  </div>
+
+                  {Number(form.safari_float_amount) > 0 && (
+                    <div className="sm:col-span-2 rounded-lg bg-background p-2.5 border border-border text-xs flex flex-wrap items-center justify-between gap-2">
+                      <div className="space-y-0.5">
+                        <span className="text-[10px] text-muted-foreground uppercase font-semibold block">Float Breakdown</span>
+                        <div className="flex items-center gap-3">
+                          <span className="text-foreground">
+                            Posho: <strong className="font-mono text-emerald-600">{formatMoney(Math.min(Number(form.safari_float_amount), (Number(form.safari_float_posho_days) || 1) * (Number(form.safari_float_posho_daily_rate) || 30000)))}</strong>
+                          </span>
+                          <span className="text-foreground">
+                            Road Transit Cash: <strong className="font-mono text-primary">{formatMoney(Math.max(0, Number(form.safari_float_amount) - ((Number(form.safari_float_posho_days) || 1) * (Number(form.safari_float_posho_daily_rate) || 30000))))}</strong>
+                          </span>
+                        </div>
+                      </div>
+                      <span className="text-[10px] text-muted-foreground font-mono">
+                        Reconciled at trip close
+                      </span>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
             <div className="sm:col-span-2 flex items-center justify-between pt-1 border-t border-border">
               <label className="flex items-center gap-2 text-sm cursor-pointer">
                 <input
@@ -1762,11 +2002,18 @@ function NewTripDialog({
 
 type CloseTripForm = { end_odo: string | number; fuel_used_l: string; cost: string };
 
-function CloseTripDialog({ trip, onOpenChange, onSaved, expensesSummary }: {
+function CloseTripDialog({
+  trip,
+  onOpenChange,
+  onSaved,
+  expensesSummary,
+  onOpenSurrender,
+}: {
   trip: Trip | null;
   onOpenChange: (v: boolean) => void;
   onSaved: () => void;
   expensesSummary?: ExpenseSummary;
+  onOpenSurrender?: (t: Trip) => void;
 }) {
   const [submitting, setSubmitting] = useState(false);
   const [form, setForm] = useState<CloseTripForm>({ end_odo: "", fuel_used_l: "", cost: "" });
@@ -1861,6 +2108,45 @@ function CloseTripDialog({ trip, onOpenChange, onSaved, expensesSummary }: {
             If fuel used is greater than 0, an automated fuel log is generated for the vehicle.
           </p>
 
+          {/* Safari Float Surrender Notice */}
+          {trip.safari_float && (
+            <div className={cn(
+              "rounded-xl border p-3 text-xs space-y-1.5",
+              trip.safari_float.surrendered
+                ? "border-emerald-500/30 bg-emerald-500/5 text-emerald-800 dark:text-emerald-300"
+                : "border-amber-500/30 bg-amber-500/5 text-amber-800 dark:text-amber-300"
+            )}>
+              <div className="flex items-center justify-between font-semibold">
+                <span className="flex items-center gap-1.5">
+                  <Wallet className="h-3.5 w-3.5 text-primary" />
+                  Safari Float: {formatMoney(trip.safari_float.dispatched_amount, trip.safari_float.currency)}
+                </span>
+                <span className="capitalize text-[10px] px-1.5 py-0.5 rounded border bg-background/50">
+                  {trip.safari_float.surrender_status?.replace(/_/g, " ") || (trip.safari_float.surrendered ? "Reconciled" : "Pending Surrender")}
+                </span>
+              </div>
+              <div className="flex items-center justify-between text-[11px] text-muted-foreground pt-1 border-t border-border/40">
+                <span>
+                  {trip.safari_float.surrendered
+                    ? `Settlement Balance: ${formatMoney(trip.safari_float.balance_amount || 0)}`
+                    : "Receipts not yet surrendered by driver."}
+                </span>
+                {onOpenSurrender && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-6 text-[10px] px-2 gap-1"
+                    onClick={() => onOpenSurrender(trip)}
+                  >
+                    <Receipt className="h-3 w-3" />
+                    {trip.safari_float.surrendered ? "Review Receipts" : "Reconcile Float Now"}
+                  </Button>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* Driver Cost Calculation Breakdown */}
           <div className="rounded-xl border border-border bg-muted/40 p-3 space-y-1.5 text-xs">
             <div className="flex justify-between text-muted-foreground">
@@ -1919,6 +2205,7 @@ function TripDetailDialog({
   onOpenReceipt,
   canManage,
   onDelete,
+  onOpenSurrender,
 }: {
   trip: Trip;
   machine?: Machine;
@@ -1931,6 +2218,7 @@ function TripDetailDialog({
   onOpenReceipt?: () => void;
   canManage?: boolean;
   onDelete?: () => void;
+  onOpenSurrender?: (t: Trip) => void;
 }) {
   const rt = calculateRoundtripDisplay(trip);
   const totalCost = (Number(trip.cost) || 0) + (expenseSummary?.total || 0);
@@ -2139,6 +2427,118 @@ function TripDetailDialog({
             </div>
           </div>
 
+          {/* Safari Float & Road Cash Card */}
+          <div className="rounded-xl border border-amber-500/30 bg-gradient-to-r from-amber-500/10 via-amber-500/5 to-background p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="text-xs font-semibold uppercase tracking-wider text-amber-800 dark:text-amber-400 flex items-center gap-1.5">
+                <Wallet className="h-4 w-4" /> Safari Float & Posho (Safari Allowance)
+              </div>
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 text-xs gap-1.5 border-amber-500/30 text-amber-800 dark:text-amber-300 hover:bg-amber-500/10 font-semibold px-2.5"
+                onClick={() => {
+                  onOpenChange(false);
+                  onOpenSurrender?.(trip);
+                }}
+              >
+                <Banknote className="h-3.5 w-3.5" />
+                {trip.safari_float?.surrendered ? "Review Surrendered Receipts" : "Reconcile Float (Surrender)"}
+              </Button>
+            </div>
+
+            {trip.safari_float ? (
+              <div className="space-y-2 text-xs">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1">
+                  <div>
+                    <span className="text-muted-foreground block text-[11px]">Dispatched Float:</span>
+                    <span className="font-bold text-foreground text-sm font-mono">
+                      {formatMoney(trip.safari_float.dispatched_amount, trip.safari_float.currency)}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground block text-[11px]">Disbursed Via:</span>
+                    <span className="font-semibold text-foreground uppercase">
+                      {trip.safari_float.payment_method?.replace(/_/g, " ")}
+                    </span>
+                    {trip.safari_float.payment_ref && (
+                      <div className="text-[10px] font-mono text-muted-foreground truncate">
+                        Ref: {trip.safari_float.payment_ref}
+                      </div>
+                    )}
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground block text-[11px]">Driver Posho:</span>
+                    <span className="font-medium text-foreground">
+                      {trip.safari_float.posho_days ? `${trip.safari_float.posho_days} days` : "—"}
+                      {trip.safari_float.daily_posho_rate ? ` @ ${formatMoney(trip.safari_float.daily_posho_rate)}/day` : ""}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground block text-[11px]">Status:</span>
+                    <Badge
+                      variant="outline"
+                      className={cn(
+                        "text-[10px] font-semibold px-2 py-0.5",
+                        trip.safari_float.surrendered
+                          ? "bg-emerald-500/15 text-emerald-700 border-emerald-500/30"
+                          : "bg-amber-500/15 text-amber-700 border-amber-500/30"
+                      )}
+                    >
+                      {trip.safari_float.surrender_status === "reconciled"
+                        ? "Settled & Reconciled"
+                        : trip.safari_float.surrendered
+                        ? "Surrendered (Discrepancy)"
+                        : "Pending Driver Surrender"}
+                    </Badge>
+                  </div>
+                </div>
+
+                {trip.safari_float.surrendered && (
+                  <div className={cn(
+                    "rounded-lg p-2.5 border text-xs flex flex-wrap items-center justify-between gap-2 mt-2",
+                    (trip.safari_float.balance_amount || 0) > 0
+                      ? "bg-blue-500/10 border-blue-500/30 text-blue-900 dark:text-blue-300"
+                      : (trip.safari_float.balance_amount || 0) < 0
+                      ? "bg-amber-500/10 border-amber-500/30 text-amber-900 dark:text-amber-300"
+                      : "bg-emerald-500/10 border-emerald-500/30 text-emerald-900 dark:text-emerald-300"
+                  )}>
+                    <div className="flex items-center gap-2">
+                      <Coins className="h-4 w-4 shrink-0" />
+                      <div>
+                        <span className="font-bold">
+                          {(trip.safari_float.balance_amount || 0) > 0
+                            ? `Driver Refund Due to Company: ${formatMoney(trip.safari_float.balance_amount || 0)}`
+                            : (trip.safari_float.balance_amount || 0) < 0
+                            ? `Reimbursement Due to Driver: ${formatMoney(Math.abs(trip.safari_float.balance_amount || 0))}`
+                            : "Safari Float Fully Balanced (0 TZS Discrepancy)"}
+                        </span>
+                        <div className="text-[10px] opacity-80">
+                          {trip.safari_float.verified_receipts?.length || 0} road receipts surrendered on {trip.safari_float.surrendered_at ? formatDate(trip.safari_float.surrendered_at) : "surrender"}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="flex items-center justify-between text-xs text-muted-foreground pt-1">
+                <span>No advance safari float logged for this run.</span>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-6 text-[11px] text-primary hover:underline px-1 font-semibold"
+                  onClick={() => {
+                    onOpenChange(false);
+                    onOpenSurrender?.(trip);
+                  }}
+                >
+                  + Add Road Float
+                </Button>
+              </div>
+            )}
+          </div>
+
           {/* Financials & Fuel Card */}
           <div className="rounded-xl border border-border bg-muted/20 p-4 space-y-2 text-xs">
             <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
@@ -2259,6 +2659,669 @@ function TripDetailDialog({
           <Button variant="outline" size="sm" onClick={() => onOpenChange(false)}>
             Close
           </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function SafariFloatSurrenderDialog({
+  open,
+  onOpenChange,
+  trip,
+  driver,
+  onSaved,
+}: {
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  trip: Trip;
+  driver?: Driver;
+  onSaved: () => void;
+}) {
+  const [submitting, setSubmitting] = useState(false);
+
+  // Dispatched Float info
+  const [dispatchedAmount, setDispatchedAmount] = useState<string>(
+    trip.safari_float?.dispatched_amount != null ? String(trip.safari_float.dispatched_amount) : "0"
+  );
+  const [currency, setCurrency] = useState<"TZS" | "USD">(
+    trip.safari_float?.currency || "TZS"
+  );
+  const [paymentMethod, setPaymentMethod] = useState<
+    "m_pesa" | "tigo_pesa" | "airtel_money" | "cash" | "bank_transfer"
+  >(trip.safari_float?.payment_method || "m_pesa");
+  const [paymentRef, setPaymentRef] = useState<string>(
+    trip.safari_float?.payment_ref || ""
+  );
+  const [poshoDays, setPoshoDays] = useState<string>(
+    trip.safari_float?.posho_days != null ? String(trip.safari_float.posho_days) : "0"
+  );
+  const [dailyPoshoRate, setDailyPoshoRate] = useState<string>(
+    trip.safari_float?.daily_posho_rate != null ? String(trip.safari_float.daily_posho_rate) : "35000"
+  );
+  const [reconciliationNotes, setReconciliationNotes] = useState<string>(
+    trip.safari_float?.reconciliation_notes || ""
+  );
+
+  // Receipts list
+  const [receipts, setReceipts] = useState<SafariFloatReceipt[]>(
+    trip.safari_float?.verified_receipts || []
+  );
+
+  // New item form
+  const [newTitle, setNewTitle] = useState("");
+  const [newCategory, setNewCategory] = useState<SafariFloatReceipt["category"]>("parking");
+  const [newAmount, setNewAmount] = useState("");
+  const [newCurrency, setNewCurrency] = useState<"TZS" | "USD">("TZS");
+  const [newReceiptNo, setNewReceiptNo] = useState("");
+  const [newNotes, setNewNotes] = useState("");
+
+  const exchangeRate = trip.exchange_rate || 2600;
+
+  // Sync state whenever trip changes
+  useEffect(() => {
+    if (trip) {
+      setDispatchedAmount(
+        trip.safari_float?.dispatched_amount != null ? String(trip.safari_float.dispatched_amount) : "0"
+      );
+      setCurrency(trip.safari_float?.currency || "TZS");
+      setPaymentMethod(trip.safari_float?.payment_method || "m_pesa");
+      setPaymentRef(trip.safari_float?.payment_ref || "");
+      setPoshoDays(
+        trip.safari_float?.posho_days != null ? String(trip.safari_float.posho_days) : "0"
+      );
+      setDailyPoshoRate(
+        trip.safari_float?.daily_posho_rate != null ? String(trip.safari_float.daily_posho_rate) : "35000"
+      );
+      setReconciliationNotes(trip.safari_float?.reconciliation_notes || "");
+      setReceipts(trip.safari_float?.verified_receipts || []);
+    }
+  }, [trip]);
+
+  // Conversion calculations
+  const numDispatched = Number(dispatchedAmount) || 0;
+  const dispatchedTzs = currency === "USD" ? numDispatched * exchangeRate : numDispatched;
+
+  const totalReceiptsTzs = receipts.reduce((sum, r) => {
+    const amt = Number(r.amount) || 0;
+    return sum + (r.currency === "USD" ? amt * exchangeRate : amt);
+  }, 0);
+
+  // Net Balance: Dispatched - Expenses
+  // If > 0: Driver owes company (Refund due to company / Chenji)
+  // If < 0: Company owes driver (Reimbursement due to driver)
+  // If == 0: Balanced
+  const balanceTzs = dispatchedTzs - totalReceiptsTzs;
+
+  const addReceipt = () => {
+    const amt = Number(newAmount);
+    if (!amt || amt <= 0) return toast.error("Enter a valid expense amount");
+    if (!newTitle.trim()) return toast.error("Enter an expense description or station name");
+
+    const newRec: SafariFloatReceipt = {
+      id: "rec-" + Date.now() + "-" + Math.random().toString(36).slice(2, 6),
+      title: newTitle.trim(),
+      category: newCategory,
+      amount: amt,
+      currency: newCurrency,
+      receipt_no: newReceiptNo.trim() || undefined,
+      notes: newNotes.trim() || undefined,
+      created_at: new Date().toISOString(),
+    };
+
+    setReceipts([...receipts, newRec]);
+    setNewTitle("");
+    setNewAmount("");
+    setNewReceiptNo("");
+    setNewNotes("");
+    toast.success(`Added receipt: ${newRec.title}`);
+  };
+
+  const removeReceipt = (id: string) => {
+    setReceipts(receipts.filter((r) => r.id !== id));
+  };
+
+  const quickAdd = (
+    title: string,
+    category: SafariFloatReceipt["category"],
+    amount: number,
+    curr: "TZS" | "USD" = "TZS"
+  ) => {
+    const newRec: SafariFloatReceipt = {
+      id: "rec-" + Date.now() + "-" + Math.random().toString(36).slice(2, 6),
+      title,
+      category,
+      amount,
+      currency: curr,
+      created_at: new Date().toISOString(),
+    };
+    setReceipts((prev) => [...prev, newRec]);
+    toast.success(`Added ${title} (${formatMoney(amount, curr)})`);
+  };
+
+  const addPoshoReceipt = () => {
+    const days = Number(poshoDays) || 0;
+    const rate = Number(dailyPoshoRate) || 0;
+    const totalPosho = days * rate;
+    if (totalPosho <= 0) {
+      return toast.error("Posho days and daily allowance rate must be greater than zero");
+    }
+    quickAdd(
+      `Posho ya Dereva (${days} days @ ${formatMoney(rate)}/day)`,
+      "driver_allowance",
+      totalPosho,
+      "TZS"
+    );
+  };
+
+  const handleSaveReconciliation = async (markSurrendered: boolean) => {
+    setSubmitting(true);
+    try {
+      const updatedFloat: SafariFloatRecord = {
+        dispatched_amount: numDispatched,
+        currency,
+        disbursed_at: trip.safari_float?.disbursed_at || new Date().toISOString(),
+        payment_method: paymentMethod,
+        payment_ref: paymentRef.trim() || undefined,
+        posho_days: Number(poshoDays) || 0,
+        daily_posho_rate: Number(dailyPoshoRate) || 0,
+        surrendered: markSurrendered,
+        surrendered_at: markSurrendered
+          ? trip.safari_float?.surrendered_at || new Date().toISOString()
+          : undefined,
+        surrender_status: markSurrendered
+          ? balanceTzs === 0
+            ? "reconciled"
+            : "discrepancy"
+          : "pending",
+        verified_receipts: receipts,
+        balance_amount: balanceTzs,
+        reconciliation_notes: reconciliationNotes.trim() || undefined,
+      };
+
+      // 1. Fetch current raw trip cargo_description
+      const { data: currentTrip } = await supabase
+        .from("trips")
+        .select("cargo_description")
+        .eq("id", trip.id)
+        .maybeSingle();
+
+      let meta: Record<string, any> = {};
+      if (currentTrip?.cargo_description) {
+        const parsed = parseCargoMeta(currentTrip.cargo_description);
+        if (parsed) meta = parsed;
+      }
+      meta.safari_float = updatedFloat;
+
+      const { error: tripErr } = await supabase
+        .from("trips")
+        .update({
+          cargo_description: JSON.stringify(meta),
+        })
+        .eq("id", trip.id);
+
+      if (tripErr) throw tripErr;
+
+      // 2. If reconciling and there are receipts, synchronize into trip_expenses table
+      if (receipts.length > 0 && markSurrendered) {
+        const nowIso = new Date().toISOString();
+        const expenseRows = receipts.map((r) => ({
+          trip_id: trip.id,
+          machine_id: trip.machine_id,
+          driver_id: trip.driver_id || null,
+          expense_type:
+            r.category === "repair_puncture"
+              ? "repair"
+              : r.category === "driver_allowance"
+              ? "driver_allowance"
+              : r.category,
+          title: r.title,
+          amount: r.amount,
+          currency: r.currency,
+          reference_number: r.receipt_no || null,
+          notes: `Surrender ya Safari (Float) · ${r.notes || ""}`.trim(),
+          occurred_at: r.created_at || nowIso,
+        }));
+
+        try {
+          await (supabase as any).from("trip_expenses").insert(expenseRows);
+        } catch (e) {
+          console.warn("Notice: trip_expenses sync retained in metadata", e);
+        }
+      }
+
+      toast.success(
+        markSurrendered
+          ? balanceTzs > 0
+            ? `Surrender complete! Driver owes TZS ${Math.round(balanceTzs).toLocaleString()} refund to company.`
+            : balanceTzs < 0
+            ? `Surrender complete! Company owes TZS ${Math.round(Math.abs(balanceTzs)).toLocaleString()} reimbursement to driver.`
+            : "Surrender complete! Float is perfectly balanced (0 TZS)."
+          : "Safari float details saved."
+      );
+      onOpenChange(false);
+      onSaved();
+    } catch (err: any) {
+      toast.error(`Failed to reconcile safari float: ${err?.message || "Unknown error"}`);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-3xl">
+        <DialogHeader>
+          <div className="flex items-center justify-between pr-6">
+            <DialogTitle className="flex items-center gap-2 text-lg">
+              <Wallet className="h-5 w-5 text-amber-600" />
+              Safari Float & Road Expense Surrender (Surrender ya Safari)
+            </DialogTitle>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Reconcile advance road money (petty cash & M-Pesa float) with physical receipts surrendered by{" "}
+            <strong className="text-foreground">{driver?.full_name || "the driver"}</strong> for route{" "}
+            <span className="font-semibold text-foreground">
+              {trip.origin || "Origin"} → {trip.destination || "Destination"}
+            </span>.
+          </p>
+        </DialogHeader>
+
+        <div className="space-y-4 pt-2">
+          {/* Section 1: Dispatched Float Details */}
+          <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4 space-y-3">
+            <div className="flex items-center justify-between text-xs font-semibold uppercase tracking-wider text-amber-800 dark:text-amber-400">
+              <span className="flex items-center gap-1.5">
+                <Banknote className="h-4 w-4" /> Dispatched Road Float Advance
+              </span>
+              <Badge variant="outline" className="text-[10px] bg-background">
+                Exchange: 1 USD = {exchangeRate} TZS
+              </Badge>
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+              <div className="space-y-1">
+                <Label className="text-[11px]">Dispatched Amount</Label>
+                <div className="flex items-center gap-1">
+                  <Input
+                    type="number"
+                    min="0"
+                    step="1000"
+                    value={dispatchedAmount}
+                    onChange={(e) => setDispatchedAmount(e.target.value)}
+                    className="font-mono font-bold"
+                  />
+                  <Select value={currency} onValueChange={(v: "TZS" | "USD") => setCurrency(v)}>
+                    <SelectTrigger className="w-20 font-bold shrink-0">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="TZS">TZS</SelectItem>
+                      <SelectItem value="USD">USD</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <Label className="text-[11px]">Payment Channel</Label>
+                <Select value={paymentMethod} onValueChange={(v: any) => setPaymentMethod(v)}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="m_pesa">M-Pesa (Vodacom)</SelectItem>
+                    <SelectItem value="tigo_pesa">Tigo Pesa (Mixx)</SelectItem>
+                    <SelectItem value="airtel_money">Airtel Money</SelectItem>
+                    <SelectItem value="cash">Depot Petty Cash</SelectItem>
+                    <SelectItem value="bank_transfer">Bank Transfer / Card</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-1">
+                <Label className="text-[11px]">M-Pesa / Cash Ref No</Label>
+                <Input
+                  placeholder="e.g. QK8912LX4"
+                  value={paymentRef}
+                  onChange={(e) => setPaymentRef(e.target.value)}
+                  className="font-mono text-xs"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <Label className="text-[11px]">Posho / Allowance Days</Label>
+                <div className="flex items-center gap-1">
+                  <Input
+                    type="number"
+                    min="0"
+                    value={poshoDays}
+                    onChange={(e) => setPoshoDays(e.target.value)}
+                    className="w-16"
+                  />
+                  <span className="text-[11px] text-muted-foreground whitespace-nowrap">
+                    days @ {Number(dailyPoshoRate).toLocaleString()}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Section 2: Real-time Settlement Balance Banner */}
+          <div
+            className={cn(
+              "rounded-xl border p-4 text-sm shadow-xs transition-colors",
+              balanceTzs > 0
+                ? "border-blue-500/40 bg-blue-500/10 text-blue-900 dark:text-blue-200"
+                : balanceTzs < 0
+                ? "border-amber-500/40 bg-amber-500/10 text-amber-900 dark:text-amber-200"
+                : "border-emerald-500/40 bg-emerald-500/10 text-emerald-900 dark:text-emerald-200"
+            )}
+          >
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className="rounded-full p-2 bg-background/60 shadow-xs">
+                  {balanceTzs === 0 ? (
+                    <CheckCheck className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
+                  ) : (
+                    <Coins className="h-6 w-6 text-primary" />
+                  )}
+                </div>
+                <div>
+                  <div className="text-xs font-semibold uppercase tracking-wider opacity-80">
+                    Net Settlement Balance (Hali ya Chenji)
+                  </div>
+                  <div className="text-lg font-black font-mono">
+                    {balanceTzs > 0
+                      ? `Driver Refund Due to Company: ${formatMoney(balanceTzs)}`
+                      : balanceTzs < 0
+                      ? `Reimbursement Due to Driver: ${formatMoney(Math.abs(balanceTzs))}`
+                      : "Safari Float Fully Reconciled & Balanced (0 TZS)"}
+                  </div>
+                  <div className="text-xs opacity-90 mt-0.5">
+                    {balanceTzs > 0
+                      ? "Driver returned with excess cash. Driver must surrender this balance to fleet treasury."
+                      : balanceTzs < 0
+                      ? "Driver incurred out-of-pocket expenses beyond initial float. Fleet office owes reimbursement."
+                      : "Total surrendered road receipts match the advance float perfectly."}
+                  </div>
+                </div>
+              </div>
+
+              <div className="text-right font-mono text-xs border-l border-border/30 pl-4 space-y-1">
+                <div>
+                  <span className="opacity-70">Dispatched Float: </span>
+                  <strong className="text-foreground">{formatMoney(dispatchedTzs)}</strong>
+                </div>
+                <div>
+                  <span className="opacity-70">Road Expenses: </span>
+                  <strong className="text-foreground">{formatMoney(totalReceiptsTzs)}</strong>
+                </div>
+                <div className="text-[10px] opacity-75">
+                  ({receipts.length} verified receipts)
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Section 3: Quick Add Common Road Expenses */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between text-xs">
+              <span className="font-semibold text-muted-foreground uppercase tracking-wider">
+                Quick-Add Common Tanzania Highway Expenses
+              </span>
+              {Number(poshoDays) > 0 && (
+                <button
+                  type="button"
+                  onClick={addPoshoReceipt}
+                  className="text-primary hover:underline font-semibold flex items-center gap-1"
+                >
+                  <Plus className="h-3 w-3" /> Add Driver Posho ({formatMoney((Number(poshoDays) || 0) * (Number(dailyPoshoRate) || 0))})
+                </button>
+              )}
+            </div>
+            <div className="flex flex-wrap gap-2 text-xs">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-7 text-xs gap-1 border-border hover:border-primary/40"
+                onClick={() => quickAdd("Boma Truck Parking (Manyoni / Morogoro)", "parking", 15000, "TZS")}
+              >
+                + Boma Parking (15,000 TZS)
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-7 text-xs gap-1 border-border hover:border-primary/40"
+                onClick={() => quickAdd("Kuziba Pancha / Tyre Puncture", "repair_puncture", 20000, "TZS")}
+              >
+                + Tyre Puncture / Pancha (20,000 TZS)
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-7 text-xs gap-1 border-border hover:border-primary/40"
+                onClick={() => quickAdd("Ushuru wa Halmashauri / Municipal Gate", "toll", 10000, "TZS")}
+              >
+                + Council Gate Ushuru (10,000 TZS)
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-7 text-xs gap-1 border-border hover:border-primary/40"
+                onClick={() => quickAdd("Border Escort / Clearing Agent Fee", "other", 50000, "TZS")}
+              >
+                + Border Escort Agent (50,000 TZS)
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-7 text-xs gap-1 border-border hover:border-primary/40"
+                onClick={() => quickAdd("Gari Osha / Truck Wash", "other", 25000, "TZS")}
+              >
+                + Truck Wash (25,000 TZS)
+              </Button>
+            </div>
+          </div>
+
+          {/* Section 4: Add New Receipt Form */}
+          <div className="rounded-xl border border-border bg-muted/30 p-3 space-y-3">
+            <span className="text-xs font-semibold uppercase tracking-wider text-primary flex items-center gap-1.5">
+              <Receipt className="h-3.5 w-3.5" /> Add Individual Surrendered Receipt / Ticket
+            </span>
+            <div className="grid grid-cols-1 sm:grid-cols-6 gap-2 text-xs">
+              <div className="sm:col-span-2 space-y-1">
+                <Label className="text-[11px]">Expense Description *</Label>
+                <Input
+                  placeholder="e.g. Weighbridge re-weigh / TAZARA parking"
+                  value={newTitle}
+                  onChange={(e) => setNewTitle(e.target.value)}
+                />
+              </div>
+
+              <div className="space-y-1">
+                <Label className="text-[11px]">Category</Label>
+                <Select value={newCategory} onValueChange={(v: any) => setNewCategory(v)}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="parking">Parking</SelectItem>
+                    <SelectItem value="toll">Road Toll / Ushuru</SelectItem>
+                    <SelectItem value="repair_puncture">Tyre / Puncture</SelectItem>
+                    <SelectItem value="driver_allowance">Posho / Food</SelectItem>
+                    <SelectItem value="weighbridge">Weighbridge</SelectItem>
+                    <SelectItem value="fine">Traffic Fine</SelectItem>
+                    <SelectItem value="other">Other Misc</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-1">
+                <Label className="text-[11px]">Amount *</Label>
+                <div className="flex items-center gap-1">
+                  <Input
+                    type="number"
+                    min="0"
+                    placeholder="Amount"
+                    value={newAmount}
+                    onChange={(e) => setNewAmount(e.target.value)}
+                    className="font-mono"
+                  />
+                  <Select value={newCurrency} onValueChange={(v: "TZS" | "USD") => setNewCurrency(v)}>
+                    <SelectTrigger className="w-16 font-bold shrink-0">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="TZS">TZS</SelectItem>
+                      <SelectItem value="USD">USD</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <Label className="text-[11px]">Receipt / Voucher #</Label>
+                <Input
+                  placeholder="Ticket #"
+                  value={newReceiptNo}
+                  onChange={(e) => setNewReceiptNo(e.target.value)}
+                  className="font-mono text-xs"
+                />
+              </div>
+
+              <div className="flex items-end">
+                <Button
+                  type="button"
+                  onClick={addReceipt}
+                  className="w-full h-9 text-xs gap-1 font-semibold"
+                >
+                  <Plus className="h-3.5 w-3.5" /> Add
+                </Button>
+              </div>
+            </div>
+          </div>
+
+          {/* Section 5: List of Surrendered Receipts */}
+          <div className="rounded-xl border border-border bg-card p-3 space-y-2">
+            <div className="flex items-center justify-between text-xs pb-1 border-b border-border">
+              <span className="font-bold text-foreground uppercase tracking-wider flex items-center gap-1.5">
+                <Receipt className="h-4 w-4 text-primary" /> Surrendered Receipts & Vouchers ({receipts.length})
+              </span>
+              <span className="font-mono font-semibold text-foreground">
+                Total: {formatMoney(totalReceiptsTzs)}
+              </span>
+            </div>
+
+            {receipts.length === 0 ? (
+              <div className="text-center py-6 text-xs text-muted-foreground">
+                No receipts recorded yet. Click quick-add buttons above or type receipt details to begin reconciliation.
+              </div>
+            ) : (
+              <div className="max-h-60 overflow-y-auto space-y-1.5 divide-y divide-border/40 pr-1 text-xs">
+                {receipts.map((r, idx) => {
+                  const isUsd = r.currency === "USD";
+                  const amtTzs = isUsd ? r.amount * exchangeRate : r.amount;
+                  return (
+                    <div key={r.id || idx} className="pt-1.5 first:pt-0 flex items-center justify-between gap-2">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="font-semibold text-foreground">{r.title}</span>
+                          <Badge variant="outline" className="text-[9px] px-1 py-0 capitalize">
+                            {r.category.replace("_", " ")}
+                          </Badge>
+                          {r.receipt_no && (
+                            <span className="text-[10px] font-mono bg-muted px-1 py-0.5 rounded text-muted-foreground">
+                              #{r.receipt_no}
+                            </span>
+                          )}
+                        </div>
+                        {r.notes && (
+                          <div className="text-[10px] text-muted-foreground line-clamp-1">{r.notes}</div>
+                        )}
+                      </div>
+
+                      <div className="flex items-center gap-3 shrink-0">
+                        <div className="text-right font-mono">
+                          <span className="font-bold text-foreground">
+                            {isUsd ? `$${r.amount.toFixed(2)} USD` : `${Math.round(r.amount).toLocaleString()} TZS`}
+                          </span>
+                          {isUsd && (
+                            <span className="text-[10px] text-muted-foreground block">
+                              ≈ {Math.round(amtTzs).toLocaleString()} TZS
+                            </span>
+                          )}
+                        </div>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                          onClick={() => removeReceipt(r.id)}
+                          title="Remove receipt"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* Section 6: Reconciliation Notes */}
+          <div className="space-y-1">
+            <Label className="text-xs">Reconciliation / Surrender Remarks (Maoni ya Surrender)</Label>
+            <Input
+              placeholder="e.g. Driver surrendered 15,000 TZS balance to cashier Jane / Discrepancy explained by detour"
+              value={reconciliationNotes}
+              onChange={(e) => setReconciliationNotes(e.target.value)}
+              className="text-xs"
+            />
+          </div>
+        </div>
+
+        <DialogFooter className="flex sm:justify-between items-center gap-2 pt-2 border-t border-border">
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={() => onOpenChange(false)}
+            disabled={submitting}
+          >
+            Cancel
+          </Button>
+
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              disabled={submitting}
+              onClick={() => handleSaveReconciliation(false)}
+            >
+              Save Draft
+            </Button>
+            <Button
+              type="button"
+              disabled={submitting}
+              className={cn(
+                "gap-1.5 font-bold shadow-xs",
+                balanceTzs === 0
+                  ? "bg-emerald-600 hover:bg-emerald-700 text-white"
+                  : "bg-primary text-primary-foreground hover:bg-primary/90"
+              )}
+              onClick={() => handleSaveReconciliation(true)}
+            >
+              {submitting && <Loader2 className="h-4 w-4 animate-spin mr-1" />}
+              <CheckCheck className="h-4 w-4" />
+              Complete & Reconcile Surrender
+            </Button>
+          </div>
         </DialogFooter>
       </DialogContent>
     </Dialog>

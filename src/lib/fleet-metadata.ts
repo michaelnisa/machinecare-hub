@@ -860,9 +860,40 @@ export interface TripCargoMetadata {
   include_statutory_tolls?: boolean | null;
   est_hours?: number | null;
   is_round_trip?: boolean | null;
-  estimated_return_at?: string | null;
   custom_logo_url?: string | null;
   expenses?: any[] | null;
+  safari_float?: SafariFloatRecord | null;
+}
+
+export interface SafariFloatReceipt {
+  id: string;
+  category: string;
+  title: string;
+  amount: number;
+  currency: "TZS" | "USD";
+  receipt_no?: string;
+  notes?: string;
+  occurred_at?: string;
+}
+
+export interface SafariFloatRecord {
+  dispatched_amount: number;
+  currency: "TZS" | "USD";
+  payment_method: "mpesa" | "tigo_pesa" | "airtel_money" | "cash" | "bank_transfer";
+  reference_no?: string;
+  disbursed_at?: string;
+  driver_id?: string | null;
+  driver_name?: string | null;
+  posho_amount?: number;
+  emergency_float?: number;
+  notes?: string;
+  surrendered?: boolean;
+  surrendered_at?: string;
+  surrender_status?: "pending" | "reconciled" | "refund_due_company" | "reimbursement_due_driver";
+  total_receipts_amount?: number;
+  balance_amount?: number;
+  receipts?: SafariFloatReceipt[];
+  surrender_notes?: string;
 }
 
 /**
@@ -909,6 +940,7 @@ export function parseCargoMeta(raw: any): TripCargoMetadata | null {
       is_round_trip: extract("is_round_trip"),
       estimated_return_at: extract("estimated_return_at"),
       custom_logo_url: extract("custom_logo_url"),
+      safari_float: extract("safari_float"),
     };
   }
 }

@@ -88,7 +88,7 @@ export default function FinanceTrips() {
 
         (supabase as any)
           .from("trip_expenses")
-          .select("trip_id, amount, expense_type")
+          .select("trip_id, amount, expense_type, currency")
           .eq("organisation_id", organisation.id),
 
         (supabase as any)
@@ -98,11 +98,13 @@ export default function FinanceTrips() {
           .not("trip_id", "is", null),
       ]);
 
-      // Map trip expenses
+      // Map trip expenses with dual currency conversion (USD -> TZS)
       const expenseMap = new Map<string, number>();
       (tripExps || []).forEach((e: any) => {
         if (e.trip_id) {
-          expenseMap.set(e.trip_id, (expenseMap.get(e.trip_id) || 0) + Number(e.amount || 0));
+          const isUsd = (e.currency || "").toUpperCase() === "USD";
+          const amtTzs = isUsd ? Number(e.amount || 0) * 2600 : Number(e.amount || 0);
+          expenseMap.set(e.trip_id, (expenseMap.get(e.trip_id) || 0) + amtTzs);
         }
       });
 
@@ -117,29 +119,43 @@ export default function FinanceTrips() {
       });
 
       const parsed: TripFinancialRecord[] = (trips || []).map((t: any) => {
-        const directCost = Number(t.cost || 0);
-        const subExpenses = expenseMap.get(t.id) || 0;
-        const totalExpenses = directCost + subExpenses;
-
         const meta = parseCargoMeta(t.cargo_description);
         const cargoText = extractCleanCargo(t.cargo_description, t.purpose || meta?.purpose);
+        const rate = Number(meta?.exchange_rate) || 2600;
 
-        // Revenue: from linked customer invoice, or contracted corridor price, or fallback multiplier
+        // Sub-expenses from expenseMap or fallback to metadata expenses
+        let subExpenses = expenseMap.get(t.id) || 0;
+        if (subExpenses === 0 && Array.isArray(meta?.expenses) && meta.expenses.length > 0) {
+          subExpenses = meta.expenses.reduce((sum: number, exp: any) => {
+            const isExpUsd = (exp.currency || meta?.currency || "").toUpperCase() === "USD";
+            const amt = Number(exp.amount ?? exp.amountUsd ?? exp.amountTzs) || 0;
+            return sum + (isExpUsd ? amt * rate : amt);
+          }, 0);
+        }
+
+        // Fuel cost calculation (avoid double counting when closed)
+        const fuelL = Number(t.fuel_used_l || 0);
+        let fuelCost = 0;
+        if (fuelL > 0) {
+          fuelCost = Number(t.cost || 0) > 0 ? Number(t.cost) : fuelL * 3100;
+        } else if (t.status === "completed" && Number(t.cost || 0) > 0) {
+          fuelCost = Number(t.cost);
+        }
+
+        // Total operational expenses
+        const totalExpenses = Math.round(fuelCost + subExpenses);
+
+        // Revenue: linked invoice, contracted price, or corridor baseline
         let revenue = invoiceRevMap.get(t.id) || 0;
         if (!revenue && meta?.client_billing_amount) {
-          const rate = Number(meta.exchange_rate) || 2600;
           const isUsd = (meta.billing_currency || meta.currency || "").toUpperCase() === "USD";
           revenue = isUsd ? Math.round(Number(meta.client_billing_amount) * rate) : Number(meta.client_billing_amount);
         }
-        if (!revenue && directCost > 0) {
-          revenue = Math.round(directCost * 1.35);
+        if (!revenue && totalExpenses > 0) {
+          revenue = Math.round(totalExpenses * 1.35);
         }
 
         const km = (t.end_odo && t.start_odo && t.end_odo > t.start_odo) ? (t.end_odo - t.start_odo) : 0;
-        const fuelL = Number(t.fuel_used_l || 0);
-        const estFuelCost = fuelL > 0 ? fuelL * 3100 : directCost * 0.6;
-        const otherExps = Math.max(totalExpenses - estFuelCost, 0);
-
         const netMargin = revenue - totalExpenses;
         const marginPct = revenue > 0 ? Math.round((netMargin / revenue) * 100) : 0;
 
@@ -153,8 +169,8 @@ export default function FinanceTrips() {
           vehicleName: t.machines?.name || "Vehicle",
           status: t.status || "completed",
           revenue,
-          fuelCost: Math.round(estFuelCost),
-          expenses: Math.round(otherExps),
+          fuelCost: Math.round(fuelCost),
+          expenses: Math.round(subExpenses),
           totalCost: totalExpenses,
           netMargin,
           marginPct,

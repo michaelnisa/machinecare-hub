@@ -204,7 +204,7 @@ export async function getFinancialOverview(organisationId: string): Promise<Fina
     (supabase as any).from("finance_supplier_bills").select("*").eq("organisation_id", organisationId),
     fuelPromise,
     (supabase as any).from("accountant_receipts").select("amount, category, receipt_type, payment_date").eq("organisation_id", organisationId),
-    (supabase as any).from("trip_expenses").select("amount, expense_type, occurred_at").eq("organisation_id", organisationId),
+    (supabase as any).from("trip_expenses").select("amount, expense_type, currency, occurred_at").eq("organisation_id", organisationId),
     (supabase as any).from("trips").select("id, cost, cargo_description, start_at, status").eq("organisation_id", organisationId),
   ]);
 
@@ -258,7 +258,9 @@ export async function getFinancialOverview(organisationId: string): Promise<Fina
 
   let tripExpensesTotal = 0;
   (tripExps || []).forEach((e: any) => {
-    tripExpensesTotal += Number(e.amount || 0);
+    const isUsd = (e.currency || "").toUpperCase() === "USD";
+    const amtTzs = isUsd ? Number(e.amount || 0) * 2600 : Number(e.amount || 0);
+    tripExpensesTotal += amtTzs;
   });
 
   let supplierBillsPaid = 0;
@@ -602,7 +604,7 @@ export async function getVehicleProfitability(organisationId: string): Promise<V
     (supabase as any).from("finance_invoices").select("machine_id, total_amount, paid_amount").eq("organisation_id", organisationId),
     fuelPromise,
     (supabase as any).from("accountant_receipts").select("machine_id, amount").eq("organisation_id", organisationId),
-    (supabase as any).from("trip_expenses").select("machine_id, amount").eq("organisation_id", organisationId),
+    (supabase as any).from("trip_expenses").select("machine_id, amount, currency").eq("organisation_id", organisationId),
     (supabase as any).from("trips").select("machine_id, start_odo, end_odo, cost").eq("organisation_id", organisationId),
   ]);
 
@@ -650,7 +652,9 @@ export async function getVehicleProfitability(organisationId: string): Promise<V
   // Aggregate trip expenses
   (tripExps || []).forEach((t: any) => {
     if (t.machine_id && map.has(t.machine_id)) {
-      map.get(t.machine_id)!.tripExpenses += Number(t.amount || 0);
+      const isUsd = (t.currency || "").toUpperCase() === "USD";
+      const amtTzs = isUsd ? Number(t.amount || 0) * 2600 : Number(t.amount || 0);
+      map.get(t.machine_id)!.tripExpenses += amtTzs;
     }
   });
 
