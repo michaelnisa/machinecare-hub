@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useUserRole } from "@/hooks/useUserRole";
@@ -269,6 +270,10 @@ export default function Trips() {
   const { profile, organisation } = useAuth();
   const { canWrite } = useUserRole();
   const { t: i18n } = useI18n();
+  const [searchParams] = useSearchParams();
+  const preselectVehicleId = searchParams.get("vehicle") || searchParams.get("machine");
+  const autoOpenNew = searchParams.get("new") === "1" || Boolean(preselectVehicleId);
+
   const [loading, setLoading] = useState(true);
   const [trips, setTrips] = useState<Trip[]>([]);
   const [machines, setMachines] = useState<Machine[]>([]);
@@ -276,6 +281,12 @@ export default function Trips() {
   const [tab, setTab] = useState<(typeof TABS)[number]>("all");
   const [search, setSearch] = useState("");
   const [newOpen, setNewOpen] = useState(false);
+
+  useEffect(() => {
+    if (autoOpenNew && machines.length > 0) {
+      setNewOpen(true);
+    }
+  }, [autoOpenNew, machines.length]);
   const [catalogOpen, setCatalogOpen] = useState(false);
   const [corridorForNewTrip, setCorridorForNewTrip] = useState<CrossBorderCorridor | null>(null);
   const [closeTrip, setCloseTrip] = useState<Trip | null>(null);
@@ -749,6 +760,7 @@ export default function Trips() {
         onSaved={handleTripSaved}
         onOpenReceipt={openReceiptById}
         initialCorridor={corridorForNewTrip}
+        initialVehicleId={preselectVehicleId}
         onOpenCatalog={() => setCatalogOpen(true)}
       />
 
@@ -913,6 +925,7 @@ function NewTripDialog({
   onSaved,
   onOpenReceipt,
   initialCorridor,
+  initialVehicleId,
   onOpenCatalog,
 }: {
   open: boolean;
@@ -922,6 +935,7 @@ function NewTripDialog({
   onSaved: (createdTripId?: string) => void;
   onOpenReceipt?: (createdTripId: string) => void;
   initialCorridor?: CrossBorderCorridor | null;
+  initialVehicleId?: string | null;
   onOpenCatalog?: () => void;
 }) {
   const { profile, user } = useAuth();
@@ -935,7 +949,12 @@ function NewTripDialog({
   // Initialize or reset form and corridor items
   useEffect(() => {
     if (!open) return;
-    setForm(EMPTY_NEW_TRIP);
+    const initialM = initialVehicleId ? machines.find((x) => x.id === initialVehicleId) : null;
+    setForm({
+      ...EMPTY_NEW_TRIP,
+      machine_id: initialVehicleId || "",
+      start_odo: initialM?.current_odometer_km != null ? String(initialM.current_odometer_km) : (initialM?.current_hours != null ? String(initialM.current_hours) : ""),
+    });
     setCurrencyMode("USD");
     setExchangeRate(DEFAULT_USD_TO_TZS_RATE);
 
@@ -945,7 +964,7 @@ function NewTripDialog({
       setCorridorId("custom");
       setExpenseItems([]);
     }
-  }, [open, initialCorridor]);
+  }, [open, initialCorridor, initialVehicleId, machines]);
 
   const applyCorridor = (c: CrossBorderCorridor) => {
     setCorridorId(c.id);
@@ -1808,7 +1827,10 @@ function CloseTripDialog({ trip, onOpenChange, onSaved, expensesSummary }: {
       return toast.error(error.message);
     }
 
-    await supabase.from("machines").update({ current_odometer_km: endOdo }).eq("id", trip.machine_id);
+    await supabase
+      .from("machines")
+      .update({ current_odometer_km: endOdo, current_hours: endOdo })
+      .eq("id", trip.machine_id);
 
     setSubmitting(false);
     toast.success(fuelLogId ? "Trip closed and fuel logged" : "Trip successfully completed");

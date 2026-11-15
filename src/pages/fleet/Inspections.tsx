@@ -56,7 +56,7 @@ export default function Inspections() {
     let templateIds = (templates ?? []).map((t) => t.id);
 
     const [{ data: m }, { data: d }] = await Promise.all([
-      supabase.from("machines").select("id, name, plate_number, organisation_id, current_odometer_km, category").eq("category", "Vehicle"),
+      supabase.from("machines").select("id, name, plate_number, organisation_id, current_odometer_km, category").in("category", ["Vehicle", "Trailer"]),
       supabase.from("drivers").select("id, full_name").eq("status", "active"),
     ]);
     const vehicleList = (m ?? []) as Machine[];

@@ -63,6 +63,7 @@ import {
   Loader2,
   ExternalLink,
   Radio,
+  Building2,
 } from "lucide-react";
 
 type Trip = {
@@ -142,6 +143,21 @@ export default function FleetVehicleDetail() {
   const [serviceLogs, setServiceLogs] = useState<ServiceLog[]>([]);
   const [documents, setDocuments] = useState<VehicleDoc[]>([]);
   const [drivers, setDrivers] = useState<FleetDriver[]>([]);
+  const [workOrders, setWorkOrders] = useState<Array<{
+    id: string;
+    wo_number: number;
+    wo_year: number;
+    title: string;
+    work_type: string;
+    status: string;
+    priority: string;
+    is_outsourced?: boolean | null;
+    vendor_id?: string | null;
+    vendor_cost?: number | null;
+    created_at: string;
+    due_date?: string | null;
+  }>>([]);
+  const [vendors, setVendors] = useState<Array<{ id: string; name: string; specialization?: string | null }>>([]);
   const [editOpen, setEditOpen] = useState(false);
   const [qrOpen, setQrOpen] = useState(false);
 
@@ -206,6 +222,8 @@ export default function FleetVehicleDetail() {
         { data: rawDocs, error: eDocs },
         { data: rawDrivers, error: eDrivers },
         { data: rawAllVeh, error: eAllVeh },
+        { data: rawWOs, error: eWOs },
+        { data: rawVendors, error: eVendors },
       ] = await Promise.all([
         vehRecord
           ? Promise.resolve({ data: vehRecord, error: null })
@@ -217,6 +235,8 @@ export default function FleetVehicleDetail() {
         supabase.from("vehicle_documents").select("*").eq("machine_id", targetMachineId).order("expires_on"),
         supabase.from("drivers").select(SAFE_DRIVER_COLUMNS),
         supabase.from("machines").select(SAFE_MACHINE_COLUMNS).in("category", ["Vehicle", "Trailer"]),
+        supabase.from("work_orders").select("id, wo_number, wo_year, title, work_type, status, priority, is_outsourced, vendor_id, vendor_cost, created_at, due_date").eq("machine_id", targetMachineId).order("created_at", { ascending: false }).limit(20),
+        supabase.from("vendors").select("id, name, specialization, phone"),
       ]);
 
       const rawVeh = vehRes.data;
@@ -227,9 +247,9 @@ export default function FleetVehicleDetail() {
         return;
       }
 
-      if (eTrips || eTyres || eSched || eLogs || eDocs || eDrivers || eAllVeh) {
+      if (eTrips || eTyres || eSched || eLogs || eDocs || eDrivers || eAllVeh || eWOs || eVendors) {
         console.warn("Ancillary vehicle details encountered query warning:", {
-          eTrips, eTyres, eSched, eLogs, eDocs, eDrivers, eAllVeh
+          eTrips, eTyres, eSched, eLogs, eDocs, eDrivers, eAllVeh, eWOs, eVendors
         });
       }
 
@@ -242,6 +262,8 @@ export default function FleetVehicleDetail() {
       setDocuments((rawDocs ?? []) as VehicleDoc[]);
       setDrivers(((rawDrivers ?? []).map(parseDriver)) as FleetDriver[]);
       setAllTrailers(((rawAllVeh ?? []).map(parseMachine)) as FleetVehicle[]);
+      setWorkOrders((rawWOs ?? []) as any[]);
+      setVendors((rawVendors ?? []) as any[]);
 
       setOdoValue(parsedVehicle.current_odometer_km != null ? String(parsedVehicle.current_odometer_km) : "");
       setHoursValue(parsedVehicle.current_hours != null ? String(parsedVehicle.current_hours) : "");
@@ -255,6 +277,9 @@ export default function FleetVehicleDetail() {
   useEffect(() => {
     load();
   }, [id, profile]);
+
+  // Vendor map lookup
+  const vendorMap = useMemo(() => new Map(vendors.map((v) => [v.id, v])), [vendors]);
 
   // Current Driver lookup
   const currentDriver = useMemo(() => {
@@ -503,7 +528,7 @@ export default function FleetVehicleDetail() {
               asChild
               className="gap-1.5 shadow-2xs"
             >
-              <Link to="/fleet/trips">
+              <Link to={`/fleet/trips?vehicle=${vehicle.id}&new=1`}>
                 <Navigation className="h-4 w-4 text-blue-600" /> Dispatch
               </Link>
             </Button>
@@ -1208,6 +1233,93 @@ export default function FleetVehicleDetail() {
               )}
             </div>
           </div>
+
+          {/* Workshop Job Cards & Work Orders */}
+          <div className="rounded-2xl border border-border bg-card p-5 shadow-2xs space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-border">
+              <div>
+                <h3 className="font-semibold text-base text-foreground flex items-center gap-2">
+                  <ClipboardList className="h-4 w-4 text-primary" /> Active & Recent Workshop Job Cards
+                </h3>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Internal mechanical repairs, preventive maintenance services, and outsourced garage work orders
+                </p>
+              </div>
+              {canWrite && (
+                <Button size="sm" asChild className="gap-1.5 h-8 text-xs shadow-xs">
+                  <Link to={`/work-orders/new?machine=${vehicle?.id}`}>
+                    <Plus className="h-3.5 w-3.5" /> Create Job Card
+                  </Link>
+                </Button>
+              )}
+            </div>
+
+            {workOrders.length === 0 ? (
+              <div className="text-center py-8 text-xs text-muted-foreground space-y-3">
+                <p>No job cards or work orders recorded for this asset yet.</p>
+                {canWrite && (
+                  <Button size="sm" variant="outline" asChild>
+                    <Link to={`/work-orders/new?machine=${vehicle?.id}`}>
+                      <Plus className="mr-1.5 h-3.5 w-3.5" /> Open First Job Card
+                    </Link>
+                  </Button>
+                )}
+              </div>
+            ) : (
+              <div className="divide-y divide-border/60">
+                {workOrders.map((wo) => {
+                  const vendor = wo.vendor_id ? vendorMap.get(wo.vendor_id) : null;
+                  return (
+                    <div
+                      key={wo.id}
+                      className="py-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-muted/10 rounded-lg px-2 transition-colors"
+                    >
+                      <div className="space-y-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Link
+                            to={`/work-orders/${wo.id}`}
+                            className="font-mono text-xs font-bold text-primary hover:underline"
+                          >
+                            WO-{wo.wo_year}-{String(wo.wo_number).padStart(4, "0")}
+                          </Link>
+                          <span className="font-medium text-sm text-foreground">{wo.title}</span>
+                          <StatusBadge status={wo.status} />
+                          <span className="capitalize text-[10px] font-medium px-2 py-0.5 rounded-full bg-muted text-muted-foreground border border-border/50">
+                            {wo.work_type}
+                          </span>
+                          {wo.is_outsourced && (
+                            <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-600 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded-full">
+                              <Building2 className="h-3 w-3" />
+                              Outsourced: {vendor?.name || "External Specialist"}
+                              {wo.vendor_cost ? ` · ${formatMoney(wo.vendor_cost)}` : ""}
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-xs text-muted-foreground flex flex-wrap items-center gap-3">
+                          <span>Opened: {formatDate(wo.created_at)}</span>
+                          {wo.due_date && <span>Target Due: {formatDate(wo.due_date)}</span>}
+                          <span className="capitalize">
+                            Priority:{" "}
+                            <span className={wo.priority === "urgent" || wo.priority === "critical" ? "text-red-500 font-semibold" : ""}>
+                              {wo.priority}
+                            </span>
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2 self-end sm:self-center shrink-0">
+                        <Button size="sm" variant="ghost" asChild className="h-7 text-xs gap-1">
+                          <Link to={`/work-orders/${wo.id}`}>
+                            View Job Card <ExternalLink className="h-3 w-3 ml-0.5" />
+                          </Link>
+                        </Button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </TabsContent>
 
         {/* Tab 5: Documents & Compliance */}
@@ -1390,11 +1502,16 @@ export default function FleetVehicleDetail() {
               <Select value={docType} onValueChange={setDocType}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="insurance">Commercial Insurance</SelectItem>
-                  <SelectItem value="road_licence">Road Licence / Motor Vehicle Tax</SelectItem>
-                  <SelectItem value="inspection">Safety / Fitness Inspection</SelectItem>
-                  <SelectItem value="permit">LATRA / Cross-Border Permit</SelectItem>
-                  <SelectItem value="other">Other Compliance Certificate</SelectItem>
+                  <SelectItem value="insurance">Commercial Insurance (Comprehensive / Third Party)</SelectItem>
+                  <SelectItem value="road_licence">TRA Road Licence (Motor Vehicle Tax)</SelectItem>
+                  <SelectItem value="latra_licence">LATRA Commercial Transport Licence</SelectItem>
+                  <SelectItem value="inspection">TBS / Police Roadworthiness Inspection</SelectItem>
+                  <SelectItem value="comesa_yellow_card">COMESA Yellow Card (Cross-Border Insurance)</SelectItem>
+                  <SelectItem value="tanker_calibration">EWURA / WMA Calibration Chart (Fuel Tanker)</SelectItem>
+                  <SelectItem value="fire_equipment">Fire Extinguisher & Safety Certificate</SelectItem>
+                  <SelectItem value="fitness">Vehicle Fitness Certificate</SelectItem>
+                  <SelectItem value="permit">Cross-Border Transit / Abnormal Load Permit</SelectItem>
+                  <SelectItem value="other">Other Legal Compliance Document</SelectItem>
                 </SelectContent>
               </Select>
             </div>

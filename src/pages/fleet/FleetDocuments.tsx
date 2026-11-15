@@ -16,13 +16,17 @@ import { formatDate } from "@/lib/format";
 import { scheduleStatus } from "@/lib/machine-constants";
 import { useI18n } from "@/i18n/I18nProvider";
 
-const DOC_TYPES = [
-  { value: "insurance", label: "Insurance" },
-  { value: "road_licence", label: "Road licence" },
-  { value: "inspection", label: "Inspection" },
-  { value: "fitness", label: "Fitness" },
-  { value: "permit", label: "Permit" },
-  { value: "other", label: "Other" },
+export const DOC_TYPES = [
+  { value: "insurance", label: "Commercial Insurance (Comprehensive / Third Party)" },
+  { value: "road_licence", label: "TRA Road Licence (Motor Vehicle Tax)" },
+  { value: "latra_licence", label: "LATRA Commercial Transport Licence" },
+  { value: "inspection", label: "TBS / Police Roadworthiness Inspection" },
+  { value: "comesa_yellow_card", label: "COMESA Yellow Card (Cross-Border Insurance)" },
+  { value: "tanker_calibration", label: "EWURA / WMA Calibration Chart (Fuel Tanker)" },
+  { value: "fire_equipment", label: "Fire Extinguisher & Safety Certificate" },
+  { value: "fitness", label: "Vehicle Fitness Certificate" },
+  { value: "permit", label: "Cross-Border Transit / Abnormal Load Permit" },
+  { value: "other", label: "Other Legal Compliance Document" },
 ];
 
 type VehicleDoc = {
@@ -75,7 +79,7 @@ export default function FleetDocuments() {
     setLoading(true);
     const [{ data: d, error: dErr }, { data: m }, { data: dr }] = await Promise.all([
       supabase.from("vehicle_documents").select("*"),
-      supabase.from("machines").select("id, name, plate_number"),
+      supabase.from("machines").select("id, name, plate_number").in("category", ["Vehicle", "Trailer"]),
       supabase.from("drivers").select("id, full_name, licence_expiry, medical_expiry").eq("status", "active"),
     ]);
     if (dErr) toast.error(dErr.message);
