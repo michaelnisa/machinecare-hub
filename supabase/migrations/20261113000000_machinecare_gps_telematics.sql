@@ -320,13 +320,7 @@ ON public.gps_alerts FOR UPDATE
 TO authenticated
 USING (public.can_write(organisation_id));
 
--- 8. gps_installations policies
-CREATE POLICY "org members can view gps installations"
-ON public.gps_installations FOR SELECT
-TO authenticated
-USING (organisation_id = public.current_org_id());
+-- 8. Enable Realtime Publications for Live Fleet Streaming
+ALTER PUBLICATION supabase_realtime ADD TABLE public.latest_vehicle_positions;
+ALTER PUBLICATION supabase_realtime ADD TABLE public.gps_alerts;
 
-CREATE POLICY "org writers can manage gps installations"
-ON public.gps_installations FOR ALL
-TO authenticated
-USING (public.can_write(organisation_id));

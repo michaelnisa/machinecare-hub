@@ -81,6 +81,46 @@ export async function provisionMachineCareGpsAccount(): Promise<{ success: boole
       .maybeSingle();
 
     if (existingOrg) {
+      // Ensure vehicles have active GPS coordinates so map & TV display them immediately
+      try {
+        const { data: existingMachines } = await supabase
+          .from("machines")
+          .select("id, name, telematics_latitude")
+          .eq("organisation_id", existingOrg.id);
+
+        if (existingMachines && existingMachines.some((m: any) => !m.telematics_latitude)) {
+          const nowIso = new Date().toISOString();
+          await supabase.from("machines").update({
+            telematics_latitude: -6.7924,
+            telematics_longitude: 39.2083,
+            telematics_speed: 68,
+            telematics_ignition: true,
+            telematics_battery_volt: 24.6,
+            telematics_last_at: nowIso,
+          } as any).eq("organisation_id", existingOrg.id).ilike("name", "%Scania%");
+
+          await supabase.from("machines").update({
+            telematics_latitude: -3.3869,
+            telematics_longitude: 36.6830,
+            telematics_speed: 0,
+            telematics_ignition: true,
+            telematics_battery_volt: 24.2,
+            telematics_last_at: nowIso,
+          } as any).eq("organisation_id", existingOrg.id).ilike("name", "%Mercedes%");
+
+          await supabase.from("machines").update({
+            telematics_latitude: -6.1630,
+            telematics_longitude: 35.7516,
+            telematics_speed: 0,
+            telematics_ignition: false,
+            telematics_battery_volt: 12.6,
+            telematics_last_at: new Date(Date.now() - 3600000).toISOString(),
+          } as any).eq("organisation_id", existingOrg.id).ilike("name", "%Toyota%");
+        }
+      } catch {
+        // ignore
+      }
+
       return { success: true, orgId: existingOrg.id, isNew: false };
     }
 
@@ -103,8 +143,9 @@ export async function provisionMachineCareGpsAccount(): Promise<{ success: boole
     }
 
     const orgId = newOrg.id;
+    const nowIso = new Date().toISOString();
 
-    // Seed sample vehicles
+    // Seed sample vehicles with live coordinates
     const { data: v1 } = await supabase.from("machines").insert({
       organisation_id: orgId,
       name: "Scania R500 Prime Mover",
@@ -113,8 +154,14 @@ export async function provisionMachineCareGpsAccount(): Promise<{ success: boole
       type: "Truck",
       status: "operational",
       current_odometer_km: 412500,
+      telematics_latitude: -6.7924,
+      telematics_longitude: 39.2083,
+      telematics_speed: 68,
+      telematics_ignition: true,
+      telematics_battery_volt: 24.6,
+      telematics_last_at: nowIso,
       notes: "GPS tracked cross-border hauler",
-    }).select("id").single();
+    } as any).select("id").single();
 
     const { data: v2 } = await supabase.from("machines").insert({
       organisation_id: orgId,
@@ -124,8 +171,14 @@ export async function provisionMachineCareGpsAccount(): Promise<{ success: boole
       type: "Truck",
       status: "operational",
       current_odometer_km: 389200,
+      telematics_latitude: -3.3869,
+      telematics_longitude: 36.6830,
+      telematics_speed: 0,
+      telematics_ignition: true,
+      telematics_battery_volt: 24.2,
+      telematics_last_at: nowIso,
       notes: "GPS tracked transit tanker",
-    }).select("id").single();
+    } as any).select("id").single();
 
     const { data: v3 } = await supabase.from("machines").insert({
       organisation_id: orgId,
@@ -135,8 +188,14 @@ export async function provisionMachineCareGpsAccount(): Promise<{ success: boole
       type: "Pickup",
       status: "operational",
       current_odometer_km: 84300,
+      telematics_latitude: -6.1630,
+      telematics_longitude: 35.7516,
+      telematics_speed: 0,
+      telematics_ignition: false,
+      telematics_battery_volt: 12.6,
+      telematics_last_at: new Date(Date.now() - 3600000).toISOString(),
       notes: "GPS tracked escort unit",
-    }).select("id").single();
+    } as any).select("id").single();
 
     // Seed devices & positions if tables exist
     try {

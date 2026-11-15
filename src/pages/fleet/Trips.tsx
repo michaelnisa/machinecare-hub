@@ -2678,6 +2678,7 @@ function SafariFloatSurrenderDialog({
   driver?: Driver;
   onSaved: () => void;
 }) {
+  const { organisation, profile, user } = useAuth();
   const [submitting, setSubmitting] = useState(false);
 
   // Dispatched Float info
@@ -2689,23 +2690,33 @@ function SafariFloatSurrenderDialog({
   );
   const [paymentMethod, setPaymentMethod] = useState<
     "m_pesa" | "tigo_pesa" | "airtel_money" | "cash" | "bank_transfer"
-  >(trip.safari_float?.payment_method || "m_pesa");
+  >(
+    (trip.safari_float?.payment_method as any) || "m_pesa"
+  );
   const [paymentRef, setPaymentRef] = useState<string>(
-    trip.safari_float?.payment_ref || ""
+    trip.safari_float?.payment_ref || (trip.safari_float as any)?.reference_no || ""
   );
   const [poshoDays, setPoshoDays] = useState<string>(
-    trip.safari_float?.posho_days != null ? String(trip.safari_float.posho_days) : "0"
+    trip.safari_float?.posho_days != null
+      ? String(trip.safari_float.posho_days)
+      : (trip.safari_float as any)?.posho_amount != null
+      ? "1"
+      : "0"
   );
   const [dailyPoshoRate, setDailyPoshoRate] = useState<string>(
-    trip.safari_float?.daily_posho_rate != null ? String(trip.safari_float.daily_posho_rate) : "35000"
+    trip.safari_float?.daily_posho_rate != null
+      ? String(trip.safari_float.daily_posho_rate)
+      : (trip.safari_float as any)?.posho_amount != null
+      ? String((trip.safari_float as any).posho_amount)
+      : "35000"
   );
   const [reconciliationNotes, setReconciliationNotes] = useState<string>(
-    trip.safari_float?.reconciliation_notes || ""
+    trip.safari_float?.reconciliation_notes || (trip.safari_float as any)?.notes || ""
   );
 
   // Receipts list
   const [receipts, setReceipts] = useState<SafariFloatReceipt[]>(
-    trip.safari_float?.verified_receipts || []
+    trip.safari_float?.verified_receipts || (trip.safari_float as any)?.receipts || []
   );
 
   // New item form
@@ -2725,16 +2736,30 @@ function SafariFloatSurrenderDialog({
         trip.safari_float?.dispatched_amount != null ? String(trip.safari_float.dispatched_amount) : "0"
       );
       setCurrency(trip.safari_float?.currency || "TZS");
-      setPaymentMethod(trip.safari_float?.payment_method || "m_pesa");
-      setPaymentRef(trip.safari_float?.payment_ref || "");
+      setPaymentMethod((trip.safari_float?.payment_method as any) || "m_pesa");
+      setPaymentRef(
+        trip.safari_float?.payment_ref || (trip.safari_float as any)?.reference_no || ""
+      );
       setPoshoDays(
-        trip.safari_float?.posho_days != null ? String(trip.safari_float.posho_days) : "0"
+        trip.safari_float?.posho_days != null
+          ? String(trip.safari_float.posho_days)
+          : (trip.safari_float as any)?.posho_amount != null
+          ? "1"
+          : "0"
       );
       setDailyPoshoRate(
-        trip.safari_float?.daily_posho_rate != null ? String(trip.safari_float.daily_posho_rate) : "35000"
+        trip.safari_float?.daily_posho_rate != null
+          ? String(trip.safari_float.daily_posho_rate)
+          : (trip.safari_float as any)?.posho_amount != null
+          ? String((trip.safari_float as any).posho_amount)
+          : "35000"
       );
-      setReconciliationNotes(trip.safari_float?.reconciliation_notes || "");
-      setReceipts(trip.safari_float?.verified_receipts || []);
+      setReconciliationNotes(
+        trip.safari_float?.reconciliation_notes || (trip.safari_float as any)?.notes || ""
+      );
+      setReceipts(
+        trip.safari_float?.verified_receipts || (trip.safari_float as any)?.receipts || []
+      );
     }
   }, [trip]);
 
@@ -2823,6 +2848,7 @@ function SafariFloatSurrenderDialog({
         disbursed_at: trip.safari_float?.disbursed_at || new Date().toISOString(),
         payment_method: paymentMethod,
         payment_ref: paymentRef.trim() || undefined,
+        reference_no: paymentRef.trim() || undefined,
         posho_days: Number(poshoDays) || 0,
         daily_posho_rate: Number(dailyPoshoRate) || 0,
         surrendered: markSurrendered,
@@ -2832,17 +2858,21 @@ function SafariFloatSurrenderDialog({
         surrender_status: markSurrendered
           ? balanceTzs === 0
             ? "reconciled"
-            : "discrepancy"
+            : balanceTzs > 0
+            ? "refund_due_company"
+            : "reimbursement_due_driver"
           : "pending",
         verified_receipts: receipts,
+        receipts,
         balance_amount: balanceTzs,
+        total_receipts_amount: totalReceiptsTzs,
         reconciliation_notes: reconciliationNotes.trim() || undefined,
       };
 
       // 1. Fetch current raw trip cargo_description
       const { data: currentTrip } = await supabase
         .from("trips")
-        .select("cargo_description")
+        .select("cargo_description, organisation_id")
         .eq("id", trip.id)
         .maybeSingle();
 
@@ -2863,30 +2893,48 @@ function SafariFloatSurrenderDialog({
       if (tripErr) throw tripErr;
 
       // 2. If reconciling and there are receipts, synchronize into trip_expenses table
-      if (receipts.length > 0 && markSurrendered) {
-        const nowIso = new Date().toISOString();
-        const expenseRows = receipts.map((r) => ({
-          trip_id: trip.id,
-          machine_id: trip.machine_id,
-          driver_id: trip.driver_id || null,
-          expense_type:
-            r.category === "repair_puncture"
-              ? "repair"
-              : r.category === "driver_allowance"
-              ? "driver_allowance"
-              : r.category,
-          title: r.title,
-          amount: r.amount,
-          currency: r.currency,
-          reference_number: r.receipt_no || null,
-          notes: `Surrender ya Safari (Float) · ${r.notes || ""}`.trim(),
-          occurred_at: r.created_at || nowIso,
-        }));
+      const targetOrgId = currentTrip?.organisation_id || (trip as any).organisation_id || organisation?.id || profile?.organisation_id;
+      if (targetOrgId) {
+        // Clean up previous float surrender rows to avoid duplicate rows on re-save
+        await (supabase as any)
+          .from("trip_expenses")
+          .delete()
+          .eq("trip_id", trip.id)
+          .ilike("notes", "Surrender ya Safari (Float)%");
 
-        try {
-          await (supabase as any).from("trip_expenses").insert(expenseRows);
-        } catch (e) {
-          console.warn("Notice: trip_expenses sync retained in metadata", e);
+        if (receipts.length > 0 && markSurrendered) {
+          const nowIso = new Date().toISOString();
+          const expenseRows = receipts.map((r) => {
+            // Map category strictly into DB allowed enum: 'fine', 'receipt', 'toll', 'parking', 'fuel', 'repair', 'other'
+            let expenseType: "fine" | "receipt" | "toll" | "parking" | "fuel" | "repair" | "other" = "other";
+            if (r.category === "fuel") expenseType = "fuel";
+            else if (r.category === "toll") expenseType = "toll";
+            else if (r.category === "parking") expenseType = "parking";
+            else if (r.category === "fine") expenseType = "fine";
+            else if (r.category === "repair" || r.category === "repair_puncture") expenseType = "repair";
+            else expenseType = "other";
+
+            return {
+              trip_id: trip.id,
+              machine_id: trip.machine_id,
+              organisation_id: targetOrgId,
+              driver_id: trip.driver_id || null,
+              expense_type: expenseType,
+              title: r.title,
+              amount: r.amount,
+              currency: r.currency || "TZS",
+              reference_number: r.receipt_no || null,
+              notes: `Surrender ya Safari (Float) · [${r.category}] ${r.notes || ""}`.trim(),
+              occurred_at: r.created_at || (r as any).occurred_at || nowIso,
+              created_by: user?.id || null,
+            };
+          });
+
+          try {
+            await (supabase as any).from("trip_expenses").insert(expenseRows);
+          } catch (e) {
+            console.warn("Notice: trip_expenses sync retained in metadata", e);
+          }
         }
       }
 

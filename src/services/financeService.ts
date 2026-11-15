@@ -605,12 +605,47 @@ export async function getVehicleProfitability(organisationId: string): Promise<V
     fuelPromise,
     (supabase as any).from("accountant_receipts").select("machine_id, amount").eq("organisation_id", organisationId),
     (supabase as any).from("trip_expenses").select("machine_id, amount, currency").eq("organisation_id", organisationId),
-    (supabase as any).from("trips").select("machine_id, start_odo, end_odo, cost").eq("organisation_id", organisationId),
+    (supabase as any).from("trips").select("id, machine_id, start_odo, end_odo, cost, cargo_description").eq("organisation_id", organisationId),
   ]);
 
   const map = new Map<string, VehicleProfitability>();
+  const tripKmMap = new Map<string, number>();
+  const tripMetaExpenseMap = new Map<string, number>();
+
+  // Calculate actual km driven and extract fallback cargo_description expenses
+  (trips || []).forEach((tr: any) => {
+    if (tr.machine_id) {
+      if (tr.end_odo && tr.start_odo && Number(tr.end_odo) > Number(tr.start_odo)) {
+        const diff = Number(tr.end_odo) - Number(tr.start_odo);
+        tripKmMap.set(tr.machine_id, (tripKmMap.get(tr.machine_id) || 0) + diff);
+      }
+
+      // Check for safari_float or expenses in cargo_description
+      if (tr.cargo_description && typeof tr.cargo_description === "string" && tr.cargo_description.trim().startsWith("{")) {
+        try {
+          const meta = JSON.parse(tr.cargo_description);
+          const sFloat = meta?.safari_float;
+          if (sFloat) {
+            const receipts = sFloat.verified_receipts || sFloat.receipts || [];
+            let floatTotal = 0;
+            if (Array.isArray(receipts) && receipts.length > 0) {
+              floatTotal = receipts.reduce((sum: number, r: any) => sum + (Number(r.amount) || 0), 0);
+            } else if (Number(sFloat.dispatched_amount) > 0) {
+              floatTotal = Number(sFloat.dispatched_amount);
+            }
+            if (floatTotal > 0) {
+              tripMetaExpenseMap.set(tr.machine_id, (tripMetaExpenseMap.get(tr.machine_id) || 0) + floatTotal);
+            }
+          }
+        } catch {
+          // ignore
+        }
+      }
+    }
+  });
 
   (machines || []).forEach((m: any) => {
+    const actualTripKm = tripKmMap.get(m.id) || 0;
     map.set(m.id, {
       machineId: m.id,
       plateNumber: m.plate_number || m.name,
@@ -622,7 +657,7 @@ export async function getVehicleProfitability(organisationId: string): Promise<V
       totalCost: 0,
       netProfit: 0,
       marginPct: 0,
-      kmDriven: Number(m.current_odometer_km || 0),
+      kmDriven: actualTripKm,
       costPerKm: 0,
       revenuePerKm: 0,
     });
@@ -655,6 +690,13 @@ export async function getVehicleProfitability(organisationId: string): Promise<V
       const isUsd = (t.currency || "").toUpperCase() === "USD";
       const amtTzs = isUsd ? Number(t.amount || 0) * 2600 : Number(t.amount || 0);
       map.get(t.machine_id)!.tripExpenses += amtTzs;
+    }
+  });
+
+  // If trip_expenses table was empty, fallback to metadata trip expenses
+  map.forEach((vp, mId) => {
+    if (vp.tripExpenses === 0 && tripMetaExpenseMap.has(mId)) {
+      vp.tripExpenses += tripMetaExpenseMap.get(mId) || 0;
     }
   });
 

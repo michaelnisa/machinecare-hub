@@ -123,14 +123,33 @@ export default function FinanceTrips() {
         const cargoText = extractCleanCargo(t.cargo_description, t.purpose || meta?.purpose);
         const rate = Number(meta?.exchange_rate) || 2600;
 
-        // Sub-expenses from expenseMap or fallback to metadata expenses
+        // Sub-expenses from expenseMap or fallback to metadata expenses & safari_float
         let subExpenses = expenseMap.get(t.id) || 0;
-        if (subExpenses === 0 && Array.isArray(meta?.expenses) && meta.expenses.length > 0) {
-          subExpenses = meta.expenses.reduce((sum: number, exp: any) => {
-            const isExpUsd = (exp.currency || meta?.currency || "").toUpperCase() === "USD";
-            const amt = Number(exp.amount ?? exp.amountUsd ?? exp.amountTzs) || 0;
-            return sum + (isExpUsd ? amt * rate : amt);
-          }, 0);
+        if (subExpenses === 0) {
+          if (Array.isArray(meta?.expenses) && meta.expenses.length > 0) {
+            subExpenses = meta.expenses.reduce((sum: number, exp: any) => {
+              const isExpUsd = (exp.currency || meta?.currency || "").toUpperCase() === "USD";
+              const amt = Number(exp.amount ?? exp.amountUsd ?? exp.amountTzs) || 0;
+              return sum + (isExpUsd ? amt * rate : amt);
+            }, 0);
+          }
+          // Also factor in Safari Float road expenses if not yet in trip_expenses
+          const sFloat: any = meta?.safari_float;
+          if (sFloat) {
+            const floatReceipts = sFloat.verified_receipts || sFloat.receipts || [];
+            if (Array.isArray(floatReceipts) && floatReceipts.length > 0) {
+              const receiptsTotal = floatReceipts.reduce((sum: number, r: any) => {
+                const isRUsd = (r.currency || "").toUpperCase() === "USD";
+                const amt = Number(r.amount) || 0;
+                return sum + (isRUsd ? amt * rate : amt);
+              }, 0);
+              subExpenses += receiptsTotal;
+            } else if (Number(sFloat.dispatched_amount) > 0) {
+              const isFUsd = (sFloat.currency || "").toUpperCase() === "USD";
+              const amt = Number(sFloat.dispatched_amount) || 0;
+              subExpenses += (isFUsd ? amt * rate : amt);
+            }
+          }
         }
 
         // Fuel cost calculation (avoid double counting when closed)
