@@ -2322,3 +2322,57 @@ export const CROSS_BORDER_CORRIDORS: CrossBorderCorridor[] = [
     ],
   },
 ];
+
+const CUSTOM_CORRIDORS_KEY = "mc_custom_cross_border_corridors";
+
+/**
+ * Retrieves user-created custom cross-border corridors from localStorage.
+ */
+export function getCustomCorridors(): CrossBorderCorridor[] {
+  try {
+    const raw = localStorage.getItem(CUSTOM_CORRIDORS_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (_e) {
+    return [];
+  }
+}
+
+/**
+ * Saves a custom cross-border corridor to persistent storage.
+ */
+export function saveCustomCorridor(corridor: CrossBorderCorridor): CrossBorderCorridor {
+  const list = getCustomCorridors();
+  const idx = list.findIndex((c) => c.id === corridor.id);
+  if (idx >= 0) {
+    list[idx] = corridor;
+  } else {
+    list.unshift(corridor);
+  }
+  try {
+    localStorage.setItem(CUSTOM_CORRIDORS_KEY, JSON.stringify(list));
+    window.dispatchEvent(new CustomEvent("mc_corridors_updated", { detail: corridor }));
+  } catch (_e) {}
+  return corridor;
+}
+
+/**
+ * Deletes a custom cross-border corridor by id.
+ */
+export function deleteCustomCorridor(id: string): void {
+  const list = getCustomCorridors().filter((c) => c.id !== id);
+  try {
+    localStorage.setItem(CUSTOM_CORRIDORS_KEY, JSON.stringify(list));
+    window.dispatchEvent(new CustomEvent("mc_corridors_updated"));
+  } catch (_e) {}
+}
+
+/**
+ * Retrieves all corridors (custom user-created + standard presets).
+ */
+export function getAllCorridors(): CrossBorderCorridor[] {
+  const custom = getCustomCorridors();
+  return [...custom, ...CROSS_BORDER_CORRIDORS];
+}
+

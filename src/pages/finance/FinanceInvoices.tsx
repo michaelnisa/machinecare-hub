@@ -760,7 +760,7 @@ export default function FinanceInvoices() {
                   value={clientName}
                   onChange={(name) => setClientName(name)}
                   organisation={organisation}
-                  placeholder="Select Logistixware Customer or enter client name..."
+                  placeholder="Select registered customer or enter client name..."
                 />
                 {!isLogistixwareAccount(organisation) && uniqueClientsFromTrips.length > 0 && !clientName && (
                   <div className="flex flex-wrap items-center gap-1.5 pt-1.5">

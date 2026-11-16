@@ -8,11 +8,13 @@ import {
 } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   RegisteredCustomer,
   getRegisteredCustomers,
 } from "@/services/customerService";
-import { Building2, Check, Sparkles, Edit3 } from "lucide-react";
+import { Check, Edit3, Plus } from "lucide-react";
+import { RegisterCustomerModal } from "./RegisterCustomerModal";
 
 interface CustomerSelectProps {
   value: string;
@@ -31,6 +33,15 @@ export function CustomerSelect({
   className,
   onAutoFillCargo,
 }: CustomerSelectProps) {
+  const [customerListVersion, setCustomerListVersion] = useState(0);
+  const [registerOpen, setRegisterOpen] = useState(false);
+
+  useEffect(() => {
+    const handleUpdate = () => setCustomerListVersion((v) => v + 1);
+    window.addEventListener("mc_customers_updated", handleUpdate);
+    return () => window.removeEventListener("mc_customers_updated", handleUpdate);
+  }, []);
+
   const customers = getRegisteredCustomers(organisation);
 
   // Check if current value matches one of the registered customers
@@ -50,6 +61,11 @@ export function CustomerSelect({
   }, [value, currentMatch]);
 
   const handleSelectChange = (val: string) => {
+    if (val === "__register_new__") {
+      setRegisterOpen(true);
+      return;
+    }
+
     if (val === "__custom__") {
       setIsCustomMode(true);
       return;
@@ -73,6 +89,10 @@ export function CustomerSelect({
     }
   };
 
+  const handleCustomerRegistered = (newCust: RegisteredCustomer) => {
+    handlePillClick(newCust);
+  };
+
   return (
     <div className={`space-y-2 ${className || ""}`}>
       {/* Primary Customer Dropdown */}
@@ -93,10 +113,9 @@ export function CustomerSelect({
           {customers.map((c) => (
             <SelectItem key={c.id} value={c.name} className="cursor-pointer text-xs py-2">
               <div className="flex flex-col gap-0.5 text-left">
-                <div className="font-bold text-foreground flex items-center gap-1.5">
-                  <Building2 className="h-3.5 w-3.5 text-primary shrink-0" />
-                  <span>{c.name}</span>
-                </div>
+                <span className="font-bold text-foreground">
+                  {c.name}
+                </span>
                 <span className="text-[10px] text-muted-foreground">
                   {c.industryCategory}
                 </span>
@@ -104,7 +123,10 @@ export function CustomerSelect({
             </SelectItem>
           ))}
           <SelectItem value="__custom__" className="text-xs text-muted-foreground border-t border-border mt-1">
-            ✏️ Other / Enter Custom Client Name...
+            Other / Enter Custom Client Name...
+          </SelectItem>
+          <SelectItem value="__register_new__" className="text-xs text-primary font-bold border-t border-border/60 mt-0.5">
+            + Register New Customer to Directory...
           </SelectItem>
         </SelectContent>
       </Select>
@@ -140,8 +162,7 @@ export function CustomerSelect({
 
       {/* 1-Click Quick Select Pills */}
       <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
-        <span className="text-[10.5px] font-semibold text-muted-foreground flex items-center gap-1">
-          <Sparkles className="h-3 w-3 text-primary" />
+        <span className="text-[10.5px] font-semibold text-muted-foreground">
           Quick Pick:
         </span>
         {customers.map((cust) => {
@@ -163,7 +184,21 @@ export function CustomerSelect({
             </button>
           );
         })}
+        <button
+          type="button"
+          onClick={() => setRegisterOpen(true)}
+          className="text-[10.5px] px-2 py-0.5 rounded-md font-semibold text-primary hover:bg-primary/10 border border-dashed border-primary/40 transition-colors flex items-center gap-1"
+        >
+          <Plus className="h-3 w-3" />
+          <span>New Customer</span>
+        </button>
       </div>
+
+      <RegisterCustomerModal
+        open={registerOpen}
+        onOpenChange={setRegisterOpen}
+        onCustomerRegistered={handleCustomerRegistered}
+      />
     </div>
   );
 }

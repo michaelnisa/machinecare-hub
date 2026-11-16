@@ -181,11 +181,15 @@ export default function TripReceiptPrint() {
     try {
       const element = sheetRef.current;
       const canvas = await html2canvas(element, {
-        scale: 3,
+        scale: 2.5,
         backgroundColor: "#ffffff",
         useCORS: true,
         logging: false,
-        windowWidth: 840,
+        scrollX: 0,
+        scrollY: 0,
+        width: element.scrollWidth || element.offsetWidth,
+        height: element.scrollHeight || element.offsetHeight,
+        windowWidth: element.scrollWidth || 840,
       });
 
       const imgData = canvas.toDataURL("image/jpeg", 0.98);
@@ -198,35 +202,31 @@ export default function TripReceiptPrint() {
 
       const pageWidth = pdf.internal.pageSize.getWidth(); // 210mm
       const pageHeight = pdf.internal.pageSize.getHeight(); // 297mm
-      const margin = 8; // 8mm margin
-      const maxW = pageWidth - margin * 2; // 194mm
-      const maxH = pageHeight - margin * 2; // 281mm
+      const margin = 6; // 6mm margin to maximize printable area
+      const maxW = pageWidth - margin * 2; // 198mm
+      const maxH = pageHeight - margin * 2; // 285mm
 
       let imgW = maxW;
       let imgH = (canvas.height * imgW) / canvas.width;
 
-      // Auto-fit to single page if within 18% threshold so it never splits into a tiny second page
-      if (imgH > maxH && imgH <= maxH * 1.18) {
+      // Fit to single A4 page if within 35% margin so complete waybill (all boxes + 3 signatures) is on 1 crisp sheet
+      if (imgH > maxH && imgH <= maxH * 1.35) {
         const factor = maxH / imgH;
         imgH = maxH;
         imgW = imgW * factor;
       }
 
       const posX = margin + (maxW - imgW) / 2;
-      const posY = margin;
 
       if (imgH <= maxH) {
-        pdf.addImage(imgData, "JPEG", posX, posY, imgW, imgH, undefined, "FAST");
+        pdf.addImage(imgData, "JPEG", posX, margin, imgW, imgH, undefined, "FAST");
       } else {
-        let heightLeft = imgH;
-        let position = margin;
-        pdf.addImage(imgData, "JPEG", posX, position, imgW, imgH, undefined, "FAST");
-        heightLeft -= maxH;
-        while (heightLeft > 5) {
-          position = heightLeft - imgH + margin;
-          pdf.addPage();
-          pdf.addImage(imgData, "JPEG", posX, position, imgW, imgH, undefined, "FAST");
-          heightLeft -= maxH;
+        // Multi-page export with proper non-overlapping pagination
+        const totalPages = Math.ceil(imgH / maxH);
+        for (let p = 0; p < totalPages; p++) {
+          if (p > 0) pdf.addPage();
+          const pageOffsetY = margin - p * maxH;
+          pdf.addImage(imgData, "JPEG", posX, pageOffsetY, imgW, imgH, undefined, "FAST");
         }
       }
 

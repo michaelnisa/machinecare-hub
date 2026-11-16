@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   CROSS_BORDER_CORRIDORS,
+  getAllCorridors,
   DEFAULT_USD_TO_TZS_RATE,
   DEFAULT_USD_TO_ZMW_RATE,
   DEFAULT_USD_TO_BWP_RATE,
@@ -22,6 +23,8 @@ import {
   formatTurnaroundDuration,
   type CrossBorderCorridor,
 } from "@/services/crossBorderCorridors";
+import { CreateCrossBorderRouteModal } from "@/components/fleet/CreateCrossBorderRouteModal";
+import { Plus } from "lucide-react";
 import {
   Globe2,
   Search,
@@ -77,8 +80,18 @@ export function CorridorExpenseCatalogDialog({
   onOpenChange,
   onSelectCorridor,
 }: Props) {
+  const [createRouteOpen, setCreateRouteOpen] = useState(false);
+  const [, setCorridorsVersion] = useState(0);
+
+  useEffect(() => {
+    const handleCorridorUpdate = () => setCorridorsVersion((v) => v + 1);
+    window.addEventListener("mc_corridors_updated", handleCorridorUpdate);
+    return () => window.removeEventListener("mc_corridors_updated", handleCorridorUpdate);
+  }, []);
+
+  const allCorridors = getAllCorridors();
   const [selectedCorridorId, setSelectedCorridorId] = useState<string>(
-    CROSS_BORDER_CORRIDORS[0].id
+    () => allCorridors[0]?.id || CROSS_BORDER_CORRIDORS[0].id
   );
   const [search, setSearch] = useState("");
   const [currencyMode, setCurrencyMode] = useState<"USD" | "TZS" | "ZMW" | "BWP" | "ZAR">("USD");
@@ -113,10 +126,11 @@ export function CorridorExpenseCatalogDialog({
 
   const currentCorridor = useMemo(() => {
     return (
-      CROSS_BORDER_CORRIDORS.find((c) => c.id === selectedCorridorId) ||
+      allCorridors.find((c) => c.id === selectedCorridorId) ||
+      allCorridors[0] ||
       CROSS_BORDER_CORRIDORS[0]
     );
-  }, [selectedCorridorId]);
+  }, [allCorridors, selectedCorridorId]);
 
   const filteredExpenses = useMemo(() => {
     if (!search.trim()) return currentCorridor.expenses;
@@ -153,7 +167,8 @@ export function CorridorExpenseCatalogDialog({
   }, [currentCorridor, currencyMode, rates]);
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <>
+      <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-5xl max-h-[94vh] flex flex-col p-0 overflow-hidden">
         {/* Header */}
         <div className="p-5 border-b border-border bg-gradient-to-r from-primary/10 via-background to-background">
@@ -234,7 +249,15 @@ export function CorridorExpenseCatalogDialog({
           {/* Corridor Tabs Scrollable */}
           {activeTab === "catalog" && (
             <div className="flex items-center gap-1.5 overflow-x-auto pt-3 pb-0.5 no-scrollbar">
-              {CROSS_BORDER_CORRIDORS.map((c) => {
+              <button
+                type="button"
+                onClick={() => setCreateRouteOpen(true)}
+                className="flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-semibold text-primary hover:bg-primary/10 border border-dashed border-primary/50 transition-colors shrink-0"
+              >
+                <Plus className="h-3 w-3" />
+                <span>Create Route</span>
+              </button>
+              {allCorridors.map((c) => {
                 const active = c.id === selectedCorridorId;
                 return (
                   <button
@@ -598,5 +621,14 @@ export function CorridorExpenseCatalogDialog({
         )}
       </DialogContent>
     </Dialog>
+
+    <CreateCrossBorderRouteModal
+      open={createRouteOpen}
+      onOpenChange={setCreateRouteOpen}
+      onCorridorCreated={(newC) => {
+        setSelectedCorridorId(newC.id);
+      }}
+    />
+  </>
   );
 }

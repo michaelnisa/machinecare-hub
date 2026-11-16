@@ -50,10 +50,16 @@ import { SearchableVehicleSelect } from "@/components/fleet/SearchableVehicleSel
 import { SearchableDriverSelect } from "@/components/fleet/SearchableDriverSelect";
 import { PaymentTermsInput } from "@/components/fleet/PaymentTermsInput";
 import { CustomerSelect } from "@/components/fleet/CustomerSelect";
-import { isLogistixwareAccount, LOGISTIXWARE_CUSTOMERS } from "@/services/customerService";
+import {
+  isLogistixwareAccount,
+  getRegisteredCustomers,
+} from "@/services/customerService";
+import { RegisterCustomerModal } from "@/components/fleet/RegisterCustomerModal";
+import { CreateCrossBorderRouteModal } from "@/components/fleet/CreateCrossBorderRouteModal";
 import { createFinanceInvoice } from "@/services/financeService";
 import {
   CROSS_BORDER_CORRIDORS,
+  getAllCorridors,
   DEFAULT_USD_TO_TZS_RATE,
   convertUsdToTzs,
   convertTzsToUsd,
@@ -303,6 +309,14 @@ export default function Trips() {
   }, [autoOpenNew, machines.length]);
   const [catalogOpen, setCatalogOpen] = useState(false);
   const [corridorForNewTrip, setCorridorForNewTrip] = useState<CrossBorderCorridor | null>(null);
+  const [registerCustomerOpen, setRegisterCustomerOpen] = useState(false);
+  const [, setCustomerVersion] = useState(0);
+
+  useEffect(() => {
+    const handleCustUpdate = () => setCustomerVersion((v) => v + 1);
+    window.addEventListener("mc_customers_updated", handleCustUpdate);
+    return () => window.removeEventListener("mc_customers_updated", handleCustUpdate);
+  }, []);
   const [closeTrip, setCloseTrip] = useState<Trip | null>(null);
   const [confirmCancel, setConfirmCancel] = useState<string | null>(null);
   const [confirmDeleteTrip, setConfirmDeleteTrip] = useState<Trip | null>(null);
@@ -540,41 +554,46 @@ export default function Trips() {
         </div>
       </div>
 
-      {isLogistixwareAccount(organisation) && (
-        <div className="flex flex-wrap items-center gap-1.5 p-2 rounded-xl bg-primary/5 border border-primary/20 text-xs">
-          <span className="text-[11px] font-bold text-foreground flex items-center gap-1 shrink-0">
-            <Building2 className="h-3.5 w-3.5 text-primary" />
-            Logistixware Customers:
-          </span>
-          <button
-            type="button"
-            onClick={() => setSearch("")}
-            className={`px-2 py-0.5 rounded text-[11px] font-medium transition-colors ${
-              !search ? "bg-primary text-primary-foreground font-semibold" : "bg-background hover:bg-muted text-muted-foreground border border-border/60"
-            }`}
-          >
-            All Clients
-          </button>
-          {LOGISTIXWARE_CUSTOMERS.map((cust) => {
-            const isActive = search.toLowerCase() === cust.name.toLowerCase() || search.toLowerCase() === cust.shortName.toLowerCase();
-            return (
-              <button
-                key={cust.id}
-                type="button"
-                onClick={() => setSearch(cust.shortName)}
-                className={`px-2 py-0.5 rounded text-[11px] font-medium transition-colors border ${
-                  isActive
-                    ? "bg-primary text-primary-foreground border-primary font-semibold shadow-xs"
-                    : "bg-background hover:bg-muted text-foreground border-border/60 hover:border-primary/40"
-                }`}
-                title={cust.name}
-              >
-                {cust.shortName}
-              </button>
-            );
-          })}
-        </div>
-      )}
+      <div className="flex flex-wrap items-center gap-1.5 p-2 rounded-xl bg-primary/5 border border-primary/20 text-xs">
+        <span className="text-[11px] font-bold text-foreground shrink-0">
+          Registered Customers:
+        </span>
+        <button
+          type="button"
+          onClick={() => setSearch("")}
+          className={`px-2 py-0.5 rounded text-[11px] font-medium transition-colors ${
+            !search ? "bg-primary text-primary-foreground font-semibold" : "bg-background hover:bg-muted text-muted-foreground border border-border/60"
+          }`}
+        >
+          All Clients
+        </button>
+        {getRegisteredCustomers(organisation).map((cust) => {
+          const isActive = search.toLowerCase() === cust.name.toLowerCase() || search.toLowerCase() === cust.shortName.toLowerCase();
+          return (
+            <button
+              key={cust.id}
+              type="button"
+              onClick={() => setSearch(cust.shortName)}
+              className={`px-2 py-0.5 rounded text-[11px] font-medium transition-colors border ${
+                isActive
+                  ? "bg-primary text-primary-foreground border-primary font-semibold shadow-xs"
+                  : "bg-background hover:bg-muted text-foreground border-border/60 hover:border-primary/40"
+              }`}
+              title={cust.name}
+            >
+              {cust.shortName}
+            </button>
+          );
+        })}
+        <button
+          type="button"
+          onClick={() => setRegisterCustomerOpen(true)}
+          className="px-2 py-0.5 rounded text-[11px] font-semibold text-primary hover:bg-primary/10 border border-dashed border-primary/40 transition-colors flex items-center gap-1 ml-auto sm:ml-0"
+        >
+          <Plus className="h-3 w-3" />
+          <span>Register Customer</span>
+        </button>
+      </div>
 
       {filtered.length === 0 ? (
         <EmptyState
@@ -960,6 +979,12 @@ export default function Trips() {
         onPriceUpdated={load}
       />
 
+      <RegisterCustomerModal
+        open={registerCustomerOpen}
+        onOpenChange={setRegisterCustomerOpen}
+        onCustomerRegistered={(cust) => setSearch(cust.shortName)}
+      />
+
       {fuelTrip && (
         <QuickFuelDialog
           open={!!fuelTrip}
@@ -1086,6 +1111,16 @@ function NewTripDialog({
   const [submitting, setSubmitting] = useState(false);
   const [form, setForm] = useState<NewTripForm>(EMPTY_NEW_TRIP);
   const [corridorId, setCorridorId] = useState<string>("custom");
+  const [createRouteOpen, setCreateRouteOpen] = useState(false);
+  const [, setCorridorsVersion] = useState(0);
+
+  useEffect(() => {
+    const handleCorridorUpdate = () => setCorridorsVersion((v) => v + 1);
+    window.addEventListener("mc_corridors_updated", handleCorridorUpdate);
+    return () => window.removeEventListener("mc_corridors_updated", handleCorridorUpdate);
+  }, []);
+
+  const allCorridors = getAllCorridors();
   const [currencyMode, setCurrencyMode] = useState<"USD" | "TZS">("USD");
   const [exchangeRate, setExchangeRate] = useState<number>(DEFAULT_USD_TO_TZS_RATE);
   const [expenseItems, setExpenseItems] = useState<EditableCorridorExpense[]>([]);
@@ -1140,12 +1175,16 @@ function NewTripDialog({
   };
 
   const handleCorridorChange = (newId: string) => {
+    if (newId === "__create_new__") {
+      setCreateRouteOpen(true);
+      return;
+    }
     setCorridorId(newId);
     if (newId === "custom") {
       setExpenseItems([]);
       return;
     }
-    const c = CROSS_BORDER_CORRIDORS.find((x) => x.id === newId);
+    const c = allCorridors.find((x) => x.id === newId);
     if (c) {
       applyCorridor(c);
     }
@@ -1216,7 +1255,7 @@ function NewTripDialog({
     ]);
   };
 
-  const selectedCorridor = CROSS_BORDER_CORRIDORS.find((c) => c.id === corridorId);
+  const selectedCorridor = allCorridors.find((c) => c.id === corridorId);
   const activeSelectedExpenses = expenseItems.filter((e) => e.selected);
   const totalSelectedUsd = activeSelectedExpenses.reduce((sum, e) => sum + e.amountUsd, 0);
   const totalSelectedTzs = activeSelectedExpenses.reduce((sum, e) => sum + e.amountTzs, 0);
@@ -1452,7 +1491,8 @@ function NewTripDialog({
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <>
+      <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-3xl">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
@@ -1503,16 +1543,29 @@ function NewTripDialog({
                   <Globe2 className="h-4 w-4 text-primary" />
                   Cross-Border Route & Statutory Fee Corridor
                 </Label>
-                {onOpenCatalog && (
+                <div className="flex items-center gap-2">
                   <button
                     type="button"
-                    onClick={onOpenCatalog}
+                    onClick={() => setCreateRouteOpen(true)}
                     className="text-[11px] text-primary hover:underline font-semibold flex items-center gap-1"
                   >
-                    Browse Complete Corridor Catalog
-                    <ArrowRight className="h-3 w-3" />
+                    <Plus className="h-3 w-3" />
+                    Create Route
                   </button>
-                )}
+                  {onOpenCatalog && (
+                    <>
+                      <span className="text-muted-foreground/60">·</span>
+                      <button
+                        type="button"
+                        onClick={onOpenCatalog}
+                        className="text-[11px] text-primary hover:underline font-semibold flex items-center gap-1"
+                      >
+                        Browse Catalog
+                        <ArrowRight className="h-3 w-3" />
+                      </button>
+                    </>
+                  )}
+                </div>
               </div>
 
               <Select value={corridorId} onValueChange={handleCorridorChange}>
@@ -1521,11 +1574,14 @@ function NewTripDialog({
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="custom">Custom / Domestic Route (No template)</SelectItem>
-                  {CROSS_BORDER_CORRIDORS.map((c) => (
+                  {allCorridors.map((c) => (
                     <SelectItem key={c.id} value={c.id}>
                       {c.name} ({c.expenses.length} statutory fees)
                     </SelectItem>
                   ))}
+                  <SelectItem value="__create_new__" className="text-xs text-primary font-bold border-t border-border mt-1">
+                    + Create New Cross-Border Route...
+                  </SelectItem>
                 </SelectContent>
               </Select>
 
@@ -1770,9 +1826,6 @@ function NewTripDialog({
                 <h4 className="text-sm font-semibold text-foreground flex items-center gap-2">
                   <Building2 className="h-4 w-4 text-primary" /> Client & Billing (For Receipt & Waybill)
                 </h4>
-                <Badge variant="outline" className="text-[10px] bg-background">
-                  Client Receipt Ready
-                </Badge>
               </div>
 
               <div className="grid gap-3 sm:grid-cols-2">
@@ -2203,6 +2256,15 @@ function NewTripDialog({
         </form>
       </DialogContent>
     </Dialog>
+
+    <CreateCrossBorderRouteModal
+      open={createRouteOpen}
+      onOpenChange={setCreateRouteOpen}
+      onCorridorCreated={(newC) => {
+        applyCorridor(newC);
+      }}
+    />
+  </>
   );
 }
 

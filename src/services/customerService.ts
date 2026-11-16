@@ -20,6 +20,10 @@ export interface RegisteredCustomer {
   defaultCargo: string;
   defaultPaymentTerms: string;
   isFuelCarrier?: boolean;
+  phone?: string;
+  email?: string;
+  notes?: string;
+  isCustom?: boolean;
 }
 
 export const LOGISTIXWARE_CUSTOMERS: RegisteredCustomer[] = [
@@ -83,6 +87,63 @@ export const LOGISTIXWARE_CUSTOMERS: RegisteredCustomer[] = [
   },
 ];
 
+const CUSTOM_CUSTOMERS_KEY = "mc_custom_registered_customers";
+
+/**
+ * Retrieves custom customers saved by the user from localStorage.
+ */
+export function getCustomCustomers(): RegisteredCustomer[] {
+  try {
+    const raw = localStorage.getItem(CUSTOM_CUSTOMERS_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (_e) {
+    return [];
+  }
+}
+
+/**
+ * Saves or updates a custom customer.
+ */
+export function saveCustomCustomer(
+  input: Omit<RegisteredCustomer, "id"> & { id?: string }
+): RegisteredCustomer {
+  const customList = getCustomCustomers();
+  const id = input.id || `cust_custom_${Date.now()}`;
+  const newCustomer: RegisteredCustomer = {
+    ...input,
+    id,
+    isCustom: true,
+    shortName: input.shortName?.trim() || input.name.trim(),
+  };
+
+  const existingIdx = customList.findIndex((c) => c.id === id);
+  if (existingIdx >= 0) {
+    customList[existingIdx] = newCustomer;
+  } else {
+    customList.push(newCustomer);
+  }
+
+  try {
+    localStorage.setItem(CUSTOM_CUSTOMERS_KEY, JSON.stringify(customList));
+    window.dispatchEvent(new CustomEvent("mc_customers_updated", { detail: newCustomer }));
+  } catch (_e) {}
+
+  return newCustomer;
+}
+
+/**
+ * Deletes a custom customer by id.
+ */
+export function deleteCustomCustomer(id: string): void {
+  const customList = getCustomCustomers().filter((c) => c.id !== id);
+  try {
+    localStorage.setItem(CUSTOM_CUSTOMERS_KEY, JSON.stringify(customList));
+    window.dispatchEvent(new CustomEvent("mc_customers_updated"));
+  } catch (_e) {}
+}
+
 /**
  * Checks if an organization is Logistixware.
  */
@@ -94,11 +155,11 @@ export function isLogistixwareAccount(org?: { id?: string | null; name?: string 
 }
 
 /**
- * Retrieves registered customers for the dropdown list.
- * Always returns the customer list so dispatchers and accountants can pick from the dropdown.
+ * Retrieves all registered customers (standard + custom) for dropdowns and filter pills.
  */
 export function getRegisteredCustomers(
   _org?: { id?: string | null; name?: string | null } | null
 ): RegisteredCustomer[] {
-  return LOGISTIXWARE_CUSTOMERS;
+  const custom = getCustomCustomers();
+  return [...LOGISTIXWARE_CUSTOMERS, ...custom];
 }
