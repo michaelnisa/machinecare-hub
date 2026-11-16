@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useSearchParams, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useUserRole } from "@/hooks/useUserRole";
@@ -49,6 +49,7 @@ import { QuickFuelDialog } from "@/components/QuickFuelDialog";
 import { SearchableVehicleSelect } from "@/components/fleet/SearchableVehicleSelect";
 import { SearchableDriverSelect } from "@/components/fleet/SearchableDriverSelect";
 import { PaymentTermsInput } from "@/components/fleet/PaymentTermsInput";
+import { createFinanceInvoice } from "@/services/financeService";
 import {
   CROSS_BORDER_CORRIDORS,
   DEFAULT_USD_TO_TZS_RATE,
@@ -281,6 +282,7 @@ export default function Trips() {
   const { canWrite } = useUserRole();
   const { t: i18n } = useI18n();
   const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
   const preselectVehicleId = searchParams.get("vehicle") || searchParams.get("machine");
   const autoOpenNew = searchParams.get("new") === "1" || Boolean(preselectVehicleId);
 
@@ -735,6 +737,17 @@ export default function Trips() {
                           <Button
                             variant="outline"
                             size="sm"
+                            className="h-7 px-2 text-xs gap-1 border-muted-foreground/25 text-foreground hover:bg-muted font-semibold"
+                            title="Commercial Invoice for this Trip"
+                            onClick={() => navigate(`/finance/invoices?tripId=${t.id}`)}
+                          >
+                            <Receipt className="h-3.5 w-3.5 text-muted-foreground" />
+                            <span>Invoice</span>
+                          </Button>
+
+                          <Button
+                            variant="outline"
+                            size="sm"
                             className="h-7 px-2 text-xs gap-1 border-emerald-500/30 text-emerald-600 hover:bg-emerald-500/10 font-semibold"
                             title="Add Fuel Fill-Up for this Trip"
                             onClick={() => setFuelTrip(t)}
@@ -965,6 +978,7 @@ type NewTripForm = {
   safari_float_posho_days: string;
   safari_float_posho_daily_rate: string;
   safari_float_notes: string;
+  create_invoice: boolean;
 };
 
 const EMPTY_NEW_TRIP: NewTripForm = {
@@ -992,6 +1006,7 @@ const EMPTY_NEW_TRIP: NewTripForm = {
   safari_float_posho_days: "4",
   safari_float_posho_daily_rate: "30000",
   safari_float_notes: "",
+  create_invoice: true,
 };
 
 interface EditableCorridorExpense {
@@ -1000,6 +1015,9 @@ interface EditableCorridorExpense {
   category: "toll" | "receipt" | "parking" | "fine" | "fuel" | "repair" | "other";
   amountUsd: number;
   amountTzs: number;
+  localCurrency?: string;
+  defaultAmountLocal?: number;
+  countryStage?: string;
   selected: boolean;
   isRequired: boolean;
   notes?: string;
@@ -1073,6 +1091,9 @@ function NewTripDialog({
       category: e.category,
       amountUsd: e.defaultAmountUsd,
       amountTzs: e.defaultAmountTzs || Math.round(e.defaultAmountUsd * exchangeRate),
+      localCurrency: e.localCurrency,
+      defaultAmountLocal: e.defaultAmountLocal,
+      countryStage: e.countryStage,
       selected: true,
       isRequired: e.isRequired,
       notes: e.notes,
@@ -1162,6 +1183,28 @@ function NewTripDialog({
   const totalSelectedUsd = activeSelectedExpenses.reduce((sum, e) => sum + e.amountUsd, 0);
   const totalSelectedTzs = activeSelectedExpenses.reduce((sum, e) => sum + e.amountTzs, 0);
 
+  const countryStagesSummary = useMemo(() => {
+    const stageMap: Record<
+      string,
+      { count: number; totalUsd: number; totalTzs: number }
+    > = {};
+
+    for (const exp of activeSelectedExpenses) {
+      const stage = exp.countryStage || "Transit Route";
+      if (!stageMap[stage]) {
+        stageMap[stage] = { count: 0, totalUsd: 0, totalTzs: 0 };
+      }
+      stageMap[stage].count += 1;
+      stageMap[stage].totalUsd += exp.amountUsd;
+      stageMap[stage].totalTzs += exp.amountTzs;
+    }
+
+    return Object.entries(stageMap).map(([stage, data]) => ({
+      stage,
+      ...data,
+    }));
+  }, [activeSelectedExpenses]);
+
   const onMachineChange = (machineId: string) => {
     const m = machines.find((x) => x.id === machineId);
     setForm({
@@ -1195,6 +1238,9 @@ function NewTripDialog({
       amountTzs: exp.amountTzs,
       amount: currencyMode === "USD" ? exp.amountUsd : exp.amountTzs,
       currency: currencyMode,
+      localCurrency: exp.localCurrency || null,
+      defaultAmountLocal: exp.defaultAmountLocal || null,
+      countryStage: exp.countryStage || null,
       notes: exp.notes || null,
     }));
 
@@ -1318,14 +1364,45 @@ function NewTripDialog({
         .eq("id", form.machine_id);
     }
 
+    // Auto-generate commercial invoice in Finance if requested and billing amount is present
+    let createdInvoiceId: string | undefined;
+    if (newTrip?.id && form.create_invoice && form.client_name.trim() && billingAmountNum && billingAmountNum > 0) {
+      try {
+        const amountInTzs = currencyMode === "USD"
+          ? Math.round(billingAmountNum * exchangeRate)
+          : billingAmountNum;
+
+        const invRes = await createFinanceInvoice(profile.organisation_id, {
+          client_name: form.client_name.trim(),
+          trip_id: newTrip.id,
+          machine_id: form.machine_id,
+          tax_rate_percent: taxPercentNum,
+          notes: `Auto-generated commercial freight invoice for Trip dispatch.\nOrigin: ${form.origin || "N/A"} ➔ Destination: ${form.destination || "N/A"}\nClient Order: ${form.client_order_no || "N/A"}\nPayment Terms: ${form.payment_terms || "Upon Delivery"}${currencyMode === "USD" ? `\nOriginal Freight Value: $${billingAmountNum.toLocaleString()} USD (Exch. Rate: ${exchangeRate} TZS/USD)` : ""}`,
+          items: [
+            {
+              description: `Freight Carriage Services: ${form.origin || "Origin"} ➔ ${form.destination || "Destination"}${form.cargo_description ? ` (${form.cargo_description})` : ""}`,
+              quantity: 1,
+              unit_price: amountInTzs,
+            },
+          ],
+        });
+
+        if (invRes.success && invRes.invoice?.id) {
+          createdInvoiceId = invRes.invoice.id;
+        }
+      } catch (invErr) {
+        console.warn("Auto-invoice creation error:", invErr);
+      }
+    }
+
     setSubmitting(false);
     toast.success(
       form.start_now
-        ? `Trip dispatched with ${cleanExpensesPayload.length} automated corridor expenses!`
-        : `Trip scheduled with ${cleanExpensesPayload.length} automated corridor expenses!`,
+        ? `Trip dispatched with ${cleanExpensesPayload.length} automated corridor expenses${createdInvoiceId ? " & official commercial invoice generated" : ""}!`
+        : `Trip scheduled with ${cleanExpensesPayload.length} automated corridor expenses${createdInvoiceId ? " & official commercial invoice generated" : ""}!`,
       {
         action: {
-          label: "View Client Receipt",
+          label: "View Waybill & Receipt",
           onClick: () => {
             if (newTrip?.id) onOpenReceipt?.(newTrip.id);
           },
@@ -1482,6 +1559,50 @@ function NewTripDialog({
                   </div>
                 </div>
 
+                {/* Multi-Country Corridor Stages Subtotals */}
+                {countryStagesSummary.length > 1 && (
+                  <div className="rounded-xl border border-primary/20 bg-background/95 p-3 space-y-2">
+                    <div className="flex items-center justify-between text-[11px]">
+                      <span className="font-bold text-foreground flex items-center gap-1.5">
+                        <Globe2 className="h-3.5 w-3.5 text-primary" />
+                        Multi-Country Corridor Leg Breakdown:
+                      </span>
+                      <span className="text-muted-foreground text-[10px]">
+                        {countryStagesSummary.length} route stages
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+                      {countryStagesSummary.map((stg) => (
+                        <div
+                          key={stg.stage}
+                          className="rounded-lg border border-border/80 bg-muted/30 p-2 text-[11px] flex flex-col justify-between"
+                        >
+                          <div className="flex items-center justify-between gap-1 mb-1">
+                            <span className="font-bold text-foreground truncate">
+                              {stg.stage === "Tanzania" ? "🇹🇿 Tanzania" :
+                               stg.stage === "Zambia" ? "🇿🇲 Zambia" :
+                               stg.stage === "Zimbabwe" ? "🇿🇼 Zimbabwe" :
+                               stg.stage === "Botswana" ? "🇧🇼 Botswana" :
+                               stg.stage === "South Africa" ? "🇿🇦 South Africa" :
+                               stg.stage === "Driver Allowance" ? "🚚 Driver Allowance" :
+                               `📍 ${stg.stage}`}
+                            </span>
+                            <span className="text-[10px] text-muted-foreground font-mono font-medium shrink-0">
+                              {stg.count}
+                            </span>
+                          </div>
+                          <div className="font-black text-primary font-mono text-xs">
+                            ${stg.totalUsd.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 1 })} USD
+                          </div>
+                          <div className="text-[10px] text-muted-foreground font-mono truncate">
+                            ≈ {Math.round(stg.totalTzs).toLocaleString()} TZS
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 {/* Filter and Add actions */}
                 <div className="flex items-center justify-between text-[11px]">
                   <div className="flex items-center gap-2">
@@ -1529,6 +1650,11 @@ function NewTripDialog({
                         <div className="min-w-0">
                           <div className="flex items-center gap-1.5 flex-wrap">
                             <span className="font-semibold text-foreground truncate">{item.title}</span>
+                            {item.countryStage && (
+                              <Badge variant="secondary" className="text-[9px] px-1 py-0 font-medium">
+                                {item.countryStage}
+                              </Badge>
+                            )}
                             <Badge variant="outline" className="text-[9px] px-1 py-0 capitalize">
                               {item.category}
                             </Badge>
@@ -1538,9 +1664,16 @@ function NewTripDialog({
                               </span>
                             )}
                           </div>
-                          {item.notes && (
-                            <p className="text-[10px] text-muted-foreground line-clamp-1">{item.notes}</p>
-                          )}
+                          <div className="flex items-center gap-2 flex-wrap">
+                            {item.localCurrency && item.defaultAmountLocal && (
+                              <span className="text-[10px] text-primary/80 font-mono font-medium">
+                                Native Fee: {item.defaultAmountLocal.toLocaleString()} {item.localCurrency}
+                              </span>
+                            )}
+                            {item.notes && (
+                              <p className="text-[10px] text-muted-foreground line-clamp-1">{item.notes}</p>
+                            )}
+                          </div>
                         </div>
                       </div>
 
@@ -1694,6 +1827,26 @@ function NewTripDialog({
                       18% Standard VAT
                     </Button>
                   </div>
+                </div>
+
+                <div className="space-y-1.5 sm:col-span-2 pt-2 border-t border-border/60">
+                  <label className="flex items-start gap-2.5 cursor-pointer select-none rounded-lg p-2 hover:bg-background/80 transition-colors border border-border/40">
+                    <input
+                      type="checkbox"
+                      checked={form.create_invoice}
+                      onChange={(e) => setForm({ ...form, create_invoice: e.target.checked })}
+                      className="rounded border-input text-primary shrink-0 h-4 w-4 mt-0.5"
+                    />
+                    <div className="flex flex-col">
+                      <span className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                        <FileText className="h-3.5 w-3.5 text-primary" />
+                        Generate Commercial Invoice automatically in Finance
+                      </span>
+                      <span className="text-[11px] text-muted-foreground">
+                        Automatically creates an active Accounts Receivable invoice for this trip with customer billing terms.
+                      </span>
+                    </div>
+                  </label>
                 </div>
               </div>
 

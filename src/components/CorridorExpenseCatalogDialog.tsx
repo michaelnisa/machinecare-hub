@@ -262,9 +262,9 @@ export function CorridorExpenseCatalogDialog({
 
         {/* TAB 1: CORRIDOR CATALOG TABLE */}
         {activeTab === "catalog" && (
-          <div className="flex-1 overflow-hidden flex flex-col">
+          <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
             {/* Corridor Info & Stats Banner */}
-            <div className="px-6 py-3 border-b border-border bg-muted/20">
+            <div className="px-6 py-3 border-b border-border bg-muted/20 shrink-0">
               <div className="flex flex-wrap items-center justify-between gap-4">
                 <div className="space-y-1 max-w-2xl">
                   <div className="flex items-center gap-2">
@@ -287,7 +287,7 @@ export function CorridorExpenseCatalogDialog({
                 </div>
 
                 {/* Corridor Cost Summary */}
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-3 shrink-0">
                   <div className="rounded-xl border border-primary/20 bg-primary/5 p-3 text-right">
                     <div className="text-[10px] text-muted-foreground uppercase font-bold tracking-wider">
                       Corridor Statutory Total ({currentCorridor.expenses.length} Fees)
@@ -320,10 +320,10 @@ export function CorridorExpenseCatalogDialog({
               </div>
             </div>
 
-            {/* Filter and Table List */}
-            <div className="flex-1 overflow-hidden flex flex-col p-5 space-y-3">
-              <div className="flex items-center justify-between gap-3">
-                <div className="relative flex-1 max-w-sm">
+            {/* Filter and Table List with Full Horizontal & Vertical Scrolling */}
+            <div className="flex-1 min-h-0 overflow-hidden flex flex-col p-4 sm:p-5 space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-3 shrink-0">
+                <div className="relative flex-1 min-w-[240px] max-w-sm">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
                   <Input
                     placeholder="Search statutory charge, toll, permit, authority..."
@@ -332,22 +332,29 @@ export function CorridorExpenseCatalogDialog({
                     className="pl-8 h-8 text-xs bg-background"
                   />
                 </div>
-                <div className="text-xs text-muted-foreground font-medium">
-                  Showing {filteredExpenses.length} of {currentCorridor.expenses.length} fee items
+                <div className="text-xs text-muted-foreground font-medium flex items-center gap-2">
+                  <Badge variant="outline" className="text-[10px]">
+                    Scroll horizontally ⇄ to view native fees
+                  </Badge>
+                  <span>Showing {filteredExpenses.length} of {currentCorridor.expenses.length} fee items</span>
                 </div>
               </div>
 
-              <div className="flex-1 overflow-y-auto border border-border rounded-xl">
-                <table className="w-full text-xs">
-                  <thead className="bg-muted/70 sticky top-0 border-b border-border text-muted-foreground text-left font-semibold">
+              {/* Scrollable Container (both horizontal and vertical) */}
+              <div className="flex-1 min-h-0 overflow-x-auto overflow-y-auto border border-border rounded-xl bg-card shadow-inner">
+                <table className="w-full min-w-[840px] text-xs">
+                  <thead className="bg-muted/95 backdrop-blur sticky top-0 border-b border-border text-muted-foreground text-left font-semibold z-10">
                     <tr>
-                      <th className="py-2.5 px-3">#</th>
-                      <th className="py-2.5 px-3">Statutory Fee / Toll Item</th>
-                      <th className="py-2.5 px-3">Category</th>
-                      <th className="py-2.5 px-3">Status</th>
-                      <th className="py-2.5 px-3 text-right">Native Country Fee</th>
-                      <th className="py-2.5 px-3 text-right">Fee (USD)</th>
-                      <th className="py-2.5 px-3 text-right">Fee (TZS)</th>
+                      <th className="py-2.5 px-3 w-10">#</th>
+                      <th className="py-2.5 px-3 min-w-[260px]">Statutory Fee / Toll Item</th>
+                      <th className="py-2.5 px-3 min-w-[90px]">Transit Stage</th>
+                      <th className="py-2.5 px-3 min-w-[80px]">Category</th>
+                      <th className="py-2.5 px-3 min-w-[90px]">Status</th>
+                      <th className="py-2.5 px-3 text-right min-w-[140px] whitespace-nowrap bg-primary/5 font-bold text-foreground">
+                        Native Country Fee
+                      </th>
+                      <th className="py-2.5 px-3 text-right min-w-[100px] whitespace-nowrap">Fee (USD)</th>
+                      <th className="py-2.5 px-3 text-right min-w-[130px] whitespace-nowrap">Fee (TZS)</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border">
@@ -363,6 +370,15 @@ export function CorridorExpenseCatalogDialog({
                             <div className="font-semibold text-foreground">{e.title}</div>
                             {e.notes && (
                               <div className="text-[11px] text-muted-foreground mt-0.5">{e.notes}</div>
+                            )}
+                          </td>
+                          <td className="py-2.5 px-3">
+                            {e.countryStage ? (
+                              <Badge variant="outline" className="text-[10px] px-1.5 py-0 font-medium bg-primary/5 text-primary border-primary/20">
+                                {e.countryStage}
+                              </Badge>
+                            ) : (
+                              <span className="text-muted-foreground text-[10px]">—</span>
                             )}
                           </td>
                           <td className="py-2.5 px-3">
@@ -384,13 +400,13 @@ export function CorridorExpenseCatalogDialog({
                               </Badge>
                             )}
                           </td>
-                          <td className="py-2.5 px-3 text-right font-mono font-bold text-foreground">
+                          <td className="py-2.5 px-3 text-right font-mono font-bold text-foreground bg-primary/5 whitespace-nowrap">
                             {formatCorridorAmount(localAmt, localCurr)}
                           </td>
-                          <td className="py-2.5 px-3 text-right font-mono font-semibold text-foreground">
+                          <td className="py-2.5 px-3 text-right font-mono font-semibold text-foreground whitespace-nowrap">
                             ${e.defaultAmountUsd.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                           </td>
-                          <td className="py-2.5 px-3 text-right font-mono font-semibold text-primary">
+                          <td className="py-2.5 px-3 text-right font-mono font-semibold text-primary whitespace-nowrap">
                             {Math.round(calcTzs).toLocaleString()} TZS
                           </td>
                         </tr>
