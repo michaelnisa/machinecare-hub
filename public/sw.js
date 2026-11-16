@@ -1,4 +1,4 @@
-const CACHE_NAME = "machinecare-shell-v7";
+const CACHE_NAME = "machinecare-shell-v8";
 const PRECACHE_URLS = [
   "/",
   "/index.html",
@@ -37,10 +37,10 @@ self.addEventListener("fetch", (event) => {
   const { request } = event;
   const url = new URL(request.url);
 
-  // Network-First for HTML navigation so users ALWAYS get the latest deployed frontend version
+  // Network-First for HTML navigation with cache reload so users ALWAYS get the latest deployed frontend version
   if (request.mode === "navigate" || request.destination === "document" || url.pathname === "/" || url.pathname === "/index.html") {
     event.respondWith(
-      fetch(request)
+      fetch(request, { cache: "reload" })
         .then((networkResponse) => {
           if (networkResponse && networkResponse.status === 200) {
             const copy = networkResponse.clone();

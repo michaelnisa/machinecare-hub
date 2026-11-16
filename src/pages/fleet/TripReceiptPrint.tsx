@@ -12,7 +12,6 @@ import {
   Truck,
   FileText,
   Calendar,
-  Globe2,
   Landmark,
   Smartphone,
   FileCheck2,

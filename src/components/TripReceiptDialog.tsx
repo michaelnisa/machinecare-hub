@@ -21,7 +21,6 @@ import {
   DollarSign,
   Edit3,
   Check,
-  Globe2,
   Calendar,
   X,
   Phone,
