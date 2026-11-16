@@ -658,9 +658,8 @@ export default function Trips() {
                       <td className="px-5 py-3">
                         {t.client_name || t.client_order_no ? (
                           <div>
-                            <div className="font-semibold text-foreground flex items-center gap-1.5">
-                              <Building2 className="h-3.5 w-3.5 text-primary" />
-                              <span>{t.client_name || "Client Order"}</span>
+                            <div className="font-semibold text-foreground">
+                              {t.client_name || "Client Order"}
                             </div>
                             {t.client_order_no && (
                               <div className="text-xs text-muted-foreground font-mono mt-0.5">
@@ -1823,22 +1822,16 @@ function NewTripDialog({
             {/* Client Order & Freight Billing Section */}
             <div className="sm:col-span-2 rounded-xl border border-primary/20 bg-primary/5 p-4 space-y-4">
               <div className="flex items-center justify-between">
-                <h4 className="text-sm font-semibold text-foreground flex items-center gap-2">
-                  <Building2 className="h-4 w-4 text-primary" /> Client & Billing (For Receipt & Waybill)
+                <h4 className="text-sm font-semibold text-foreground">
+                  Client & Billing (For Receipt & Waybill)
                 </h4>
               </div>
 
               <div className="grid gap-3 sm:grid-cols-2">
                 <div className="space-y-1.5 sm:col-span-2">
-                  <div className="flex items-center justify-between">
-                    <Label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
-                      <Building2 className="h-3.5 w-3.5 text-primary" />
-                      Client / Customer Name *
-                    </Label>
-                    <Badge variant="outline" className="text-[9.5px] px-1.5 py-0 bg-primary/10 text-primary border-primary/25 font-semibold">
-                      Registered Customers Directory
-                    </Badge>
-                  </div>
+                  <Label className="text-xs font-semibold text-foreground">
+                    Client / Customer Name *
+                  </Label>
                   <CustomerSelect
                     value={form.client_name}
                     onChange={(name) => setForm((prev) => ({ ...prev, client_name: name }))}
@@ -1956,11 +1949,8 @@ function NewTripDialog({
                 </div>
               </div>
 
-              <div className="rounded-lg bg-background/80 border border-border p-2.5 text-[11px] text-muted-foreground flex items-center gap-2">
-                <Building2 className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                <span>
-                  Company branding and payment accounts (CRDB, Stanbic, M-Pesa / Tigo Pesa Lipa Namba) are included on official receipts.
-                </span>
+              <div className="rounded-lg bg-background/80 border border-border p-2.5 text-[11px] text-muted-foreground">
+                Company branding and payment accounts (CRDB, Stanbic, M-Pesa / Tigo Pesa Lipa Namba) are included on official receipts.
               </div>
             </div>
 
@@ -2579,8 +2569,8 @@ function TripDetailDialog({
           {/* Client Order Card */}
           <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 space-y-3">
             <div className="flex items-center justify-between">
-              <div className="text-xs font-semibold uppercase tracking-wider text-primary flex items-center gap-1.5">
-                <Building2 className="h-4 w-4" /> Client Order & Billing
+              <div className="text-xs font-semibold uppercase tracking-wider text-primary">
+                Client Order & Billing
               </div>
               <Button
                 size="sm"

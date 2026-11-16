@@ -128,8 +128,7 @@ export function RegisterCustomerModal({
     <Dialog open={open} onOpenChange={(v) => { if (!v) resetForm(); onOpenChange(v); }}>
       <DialogContent className="sm:max-w-lg max-h-[92vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2 text-base font-bold text-foreground">
-            <Building2 className="h-5 w-5 text-primary" />
+          <DialogTitle className="text-base font-bold text-foreground">
             Register New Customer
           </DialogTitle>
           <DialogDescription className="text-xs text-muted-foreground">

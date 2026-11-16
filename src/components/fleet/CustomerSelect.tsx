@@ -135,8 +135,7 @@ export function CustomerSelect({
       {isCustomMode && (
         <div className="space-y-1 rounded-lg border border-primary/20 bg-primary/5 p-2">
           <div className="flex items-center justify-between text-[11px] text-muted-foreground font-medium">
-            <span className="flex items-center gap-1 text-primary">
-              <Edit3 className="h-3 w-3" />
+            <span className="text-primary font-medium">
               Custom / Unlisted Client Name:
             </span>
             <button

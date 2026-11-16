@@ -750,12 +750,7 @@ export default function FinanceInvoices() {
           <form onSubmit={handleCreateInvoice} className="space-y-4 py-2">
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div className="sm:col-span-2 space-y-1.5">
-                <div className="flex items-center justify-between">
-                  <Label htmlFor="clientName" className="text-xs font-medium">Customer / Client Name *</Label>
-                  <Badge variant="outline" className="text-[9.5px] px-1.5 py-0 bg-primary/10 text-primary border-primary/25 font-semibold">
-                    Registered Customers Directory
-                  </Badge>
-                </div>
+                <Label htmlFor="clientName" className="text-xs font-medium">Customer / Client Name *</Label>
                 <CustomerSelect
                   value={clientName}
                   onChange={(name) => setClientName(name)}
