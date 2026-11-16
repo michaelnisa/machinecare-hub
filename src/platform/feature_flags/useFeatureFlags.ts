@@ -43,6 +43,7 @@ export function useFeatureFlags() {
     if (featureKey === "garage" || featureKey === "workshop") return profile === "garage" || profile === "mixed";
     if (featureKey === "production") return profile === "manufacturing" || profile === "mixed";
     if (featureKey === "iot" || featureKey === "connected_data") return profile === "manufacturing" || profile === "mixed";
+    if (featureKey === "induction") return profile !== "fleet_logistics" && !isLogisticsOrg;
     // Core capabilities enabled by default
     return true;
   };

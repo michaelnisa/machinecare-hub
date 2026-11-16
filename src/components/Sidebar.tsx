@@ -365,11 +365,6 @@ export function Sidebar() {
         label: "People",
         items: [
           { to: "/team", label: t.nav.team, icon: Users },
-          {
-            to: "/induction/dashboard",
-            label: t.nav.induction,
-            icon: GraduationCap,
-          },
         ],
       },
       {
