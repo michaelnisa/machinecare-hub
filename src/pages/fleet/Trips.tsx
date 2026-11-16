@@ -31,7 +31,6 @@ import {
   User,
   HeartHandshake,
   Phone,
-  Globe2,
   DollarSign,
   Check,
   SlidersHorizontal,
@@ -516,7 +515,7 @@ export default function Trips() {
             onClick={() => setCatalogOpen(true)}
             className="border-primary/30 text-primary hover:bg-primary/5 shadow-xs"
           >
-            <Globe2 className="mr-2 h-4 w-4" /> Cross-Border Corridors & Rates
+            Cross-Border Corridors & Rates
           </Button>
           {canWrite && (
             <Button onClick={() => { setCorridorForNewTrip(null); setNewOpen(true); }}>
@@ -679,8 +678,7 @@ export default function Trips() {
 
                       <td className="px-5 py-3 text-muted-foreground">
                         {t.corridor_name && (
-                          <Badge variant="outline" className="mb-1 text-[10px] px-1.5 py-0 bg-primary/10 text-primary border-primary/20 flex items-center gap-1 w-fit">
-                            <Globe2 className="h-2.5 w-2.5" />
+                          <Badge variant="outline" className="mb-1 text-[10px] px-1.5 py-0 bg-primary/10 text-primary border-primary/20 w-fit">
                             {t.corridor_name.split("–")[0]?.trim()}
                           </Badge>
                         )}
@@ -1538,8 +1536,7 @@ function NewTripDialog({
             {/* Cross-Border Transit Route & Corridor Presets */}
             <div className="space-y-2 sm:col-span-2 rounded-xl border border-primary/25 bg-primary/5 p-4">
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <Label className="text-xs font-bold text-foreground flex items-center gap-1.5">
-                  <Globe2 className="h-4 w-4 text-primary" />
+                <Label className="text-xs font-bold text-foreground">
                   Cross-Border Route & Statutory Fee Corridor
                 </Label>
                 <div className="flex items-center gap-2">
@@ -1656,8 +1653,7 @@ function NewTripDialog({
                 {countryStagesSummary.length > 1 && (
                   <div className="rounded-xl border border-primary/20 bg-background/95 p-3 space-y-2">
                     <div className="flex items-center justify-between text-[11px]">
-                      <span className="font-bold text-foreground flex items-center gap-1.5">
-                        <Globe2 className="h-3.5 w-3.5 text-primary" />
+                      <span className="font-bold text-foreground">
                         Multi-Country Corridor Leg Breakdown:
                       </span>
                       <span className="text-muted-foreground text-[10px]">
@@ -1672,13 +1668,13 @@ function NewTripDialog({
                         >
                           <div className="flex items-center justify-between gap-1 mb-1">
                             <span className="font-bold text-foreground truncate">
-                              {stg.stage === "Tanzania" ? "🇹🇿 Tanzania" :
-                               stg.stage === "Zambia" ? "🇿🇲 Zambia" :
-                               stg.stage === "Zimbabwe" ? "🇿🇼 Zimbabwe" :
-                               stg.stage === "Botswana" ? "🇧🇼 Botswana" :
-                               stg.stage === "South Africa" ? "🇿🇦 South Africa" :
-                               stg.stage === "Driver Allowance" ? "🚚 Driver Allowance" :
-                               `📍 ${stg.stage}`}
+                              {stg.stage === "Tanzania" ? "Tanzania" :
+                               stg.stage === "Zambia" ? "Zambia" :
+                               stg.stage === "Zimbabwe" ? "Zimbabwe" :
+                               stg.stage === "Botswana" ? "Botswana" :
+                               stg.stage === "South Africa" ? "South Africa" :
+                               stg.stage === "Driver Allowance" ? "Driver Allowance" :
+                               stg.stage}
                             </span>
                             <span className="text-[10px] text-muted-foreground font-mono font-medium shrink-0">
                               {stg.count}
@@ -2500,10 +2496,7 @@ function TripDetailDialog({
           {trip.corridor_name && (
             <div className="rounded-xl border border-primary/25 bg-gradient-to-r from-primary/10 via-primary/5 to-background p-4 flex flex-wrap items-center justify-between gap-3 shadow-xs">
               <div className="space-y-1">
-                <div className="flex items-center gap-2">
-                  <Globe2 className="h-4 w-4 text-primary" />
-                  <span className="font-bold text-sm text-foreground">{trip.corridor_name}</span>
-                </div>
+                <span className="font-bold text-sm text-foreground">{trip.corridor_name}</span>
                 {trip.border_post && (
                   <div className="text-xs text-muted-foreground flex items-center gap-1.5">
                     <MapPin className="h-3 w-3 text-rose-500" />

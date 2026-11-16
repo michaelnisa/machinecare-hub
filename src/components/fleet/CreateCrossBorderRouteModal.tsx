@@ -25,7 +25,7 @@ import {
   convertUsdToTzs,
   daysAndHoursToHours,
 } from "@/services/crossBorderCorridors";
-import { Globe2, Plus, Trash2, Route, DollarSign, Clock } from "lucide-react";
+import { Plus, Trash2, Route, DollarSign, Clock } from "lucide-react";
 import { toast } from "sonner";
 
 interface Props {
@@ -200,8 +200,7 @@ export function CreateCrossBorderRouteModal({
     >
       <DialogContent className="sm:max-w-2xl max-h-[92vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2 text-base font-bold text-foreground">
-            <Globe2 className="h-5 w-5 text-primary" />
+          <DialogTitle className="text-base font-bold text-foreground">
             Create Cross-Border Route & Fee Corridor
           </DialogTitle>
           <DialogDescription className="text-xs text-muted-foreground">
