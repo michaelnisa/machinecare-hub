@@ -752,11 +752,9 @@ export default function FinanceInvoices() {
               <div className="sm:col-span-2 space-y-1.5">
                 <div className="flex items-center justify-between">
                   <Label htmlFor="clientName" className="text-xs font-medium">Customer / Client Name *</Label>
-                  {isLogistixwareAccount(organisation) && (
-                    <Badge variant="outline" className="text-[9.5px] px-1.5 py-0 bg-primary/10 text-primary border-primary/25 font-semibold">
-                      Logistixware Customer Directory
-                    </Badge>
-                  )}
+                  <Badge variant="outline" className="text-[9.5px] px-1.5 py-0 bg-primary/10 text-primary border-primary/25 font-semibold">
+                    Registered Customers Directory
+                  </Badge>
                 </div>
                 <CustomerSelect
                   value={clientName}

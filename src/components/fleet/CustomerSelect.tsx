@@ -77,11 +77,11 @@ export function CustomerSelect({
     <div className={`space-y-2 ${className || ""}`}>
       {/* Primary Customer Dropdown */}
       <Select
-        value={currentMatch ? currentMatch.name : (isCustomMode ? "__custom__" : "")}
+        value={currentMatch ? currentMatch.name : (isCustomMode ? "__custom__" : undefined)}
         onValueChange={handleSelectChange}
       >
-        <SelectTrigger className="h-10 text-xs sm:text-sm bg-background border-primary/30 font-semibold text-foreground">
-          <SelectValue placeholder="— Select Customer / Client —" />
+        <SelectTrigger className="h-10 text-xs sm:text-sm bg-background border-primary/40 font-semibold text-foreground">
+          <SelectValue placeholder="— Select Customer / Client from Directory —" />
         </SelectTrigger>
         <SelectContent className="max-h-80">
           <div className="px-2 py-1.5 text-[10px] font-bold text-muted-foreground uppercase tracking-wider flex items-center justify-between border-b border-border/50">

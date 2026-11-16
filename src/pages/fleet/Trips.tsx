@@ -1782,11 +1782,9 @@ function NewTripDialog({
                       <Building2 className="h-3.5 w-3.5 text-primary" />
                       Client / Customer Name *
                     </Label>
-                    {isLogistixwareAccount(organisation) && (
-                      <Badge variant="outline" className="text-[9.5px] px-1.5 py-0 bg-primary/10 text-primary border-primary/25 font-semibold">
-                        Logistixware Customer Directory
-                      </Badge>
-                    )}
+                    <Badge variant="outline" className="text-[9.5px] px-1.5 py-0 bg-primary/10 text-primary border-primary/25 font-semibold">
+                      Registered Customers Directory
+                    </Badge>
                   </div>
                   <CustomerSelect
                     value={form.client_name}
