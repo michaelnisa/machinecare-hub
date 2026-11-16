@@ -49,6 +49,8 @@ import { QuickFuelDialog } from "@/components/QuickFuelDialog";
 import { SearchableVehicleSelect } from "@/components/fleet/SearchableVehicleSelect";
 import { SearchableDriverSelect } from "@/components/fleet/SearchableDriverSelect";
 import { PaymentTermsInput } from "@/components/fleet/PaymentTermsInput";
+import { CustomerSelect } from "@/components/fleet/CustomerSelect";
+import { isLogistixwareAccount, LOGISTIXWARE_CUSTOMERS } from "@/services/customerService";
 import { createFinanceInvoice } from "@/services/financeService";
 import {
   CROSS_BORDER_CORRIDORS,
@@ -537,6 +539,42 @@ export default function Trips() {
           />
         </div>
       </div>
+
+      {isLogistixwareAccount(organisation) && (
+        <div className="flex flex-wrap items-center gap-1.5 p-2 rounded-xl bg-primary/5 border border-primary/20 text-xs">
+          <span className="text-[11px] font-bold text-foreground flex items-center gap-1 shrink-0">
+            <Building2 className="h-3.5 w-3.5 text-primary" />
+            Logistixware Customers:
+          </span>
+          <button
+            type="button"
+            onClick={() => setSearch("")}
+            className={`px-2 py-0.5 rounded text-[11px] font-medium transition-colors ${
+              !search ? "bg-primary text-primary-foreground font-semibold" : "bg-background hover:bg-muted text-muted-foreground border border-border/60"
+            }`}
+          >
+            All Clients
+          </button>
+          {LOGISTIXWARE_CUSTOMERS.map((cust) => {
+            const isActive = search.toLowerCase() === cust.name.toLowerCase() || search.toLowerCase() === cust.shortName.toLowerCase();
+            return (
+              <button
+                key={cust.id}
+                type="button"
+                onClick={() => setSearch(cust.shortName)}
+                className={`px-2 py-0.5 rounded text-[11px] font-medium transition-colors border ${
+                  isActive
+                    ? "bg-primary text-primary-foreground border-primary font-semibold shadow-xs"
+                    : "bg-background hover:bg-muted text-foreground border-border/60 hover:border-primary/40"
+                }`}
+                title={cust.name}
+              >
+                {cust.shortName}
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       {filtered.length === 0 ? (
         <EmptyState
@@ -1044,7 +1082,7 @@ function NewTripDialog({
   initialVehicleId?: string | null;
   onOpenCatalog?: () => void;
 }) {
-  const { profile, user } = useAuth();
+  const { profile, user, organisation } = useAuth();
   const [submitting, setSubmitting] = useState(false);
   const [form, setForm] = useState<NewTripForm>(EMPTY_NEW_TRIP);
   const [corridorId, setCorridorId] = useState<string>("custom");
@@ -1738,16 +1776,33 @@ function NewTripDialog({
               </div>
 
               <div className="grid gap-3 sm:grid-cols-2">
-                <div className="space-y-1.5">
-                  <Label className="text-xs">Client / Customer Name</Label>
-                  <Input
+                <div className="space-y-1.5 sm:col-span-2">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                      <Building2 className="h-3.5 w-3.5 text-primary" />
+                      Client / Customer Name *
+                    </Label>
+                    {isLogistixwareAccount(organisation) && (
+                      <Badge variant="outline" className="text-[9.5px] px-1.5 py-0 bg-primary/10 text-primary border-primary/25 font-semibold">
+                        Logistixware Customer Directory
+                      </Badge>
+                    )}
+                  </div>
+                  <CustomerSelect
                     value={form.client_name}
-                    onChange={(e) => setForm({ ...form, client_name: e.target.value })}
-                    placeholder="e.g. TotalEnergies / Bakhresa / Puma Energy"
-                    className="h-9 text-sm"
+                    onChange={(name) => setForm((prev) => ({ ...prev, client_name: name }))}
+                    organisation={organisation}
+                    placeholder="Select Logistixware Customer or type custom consignee..."
+                    onAutoFillCargo={(suggestedCargo, suggestedTerms) => {
+                      setForm((prev) => ({
+                        ...prev,
+                        cargo_description: prev.cargo_description || suggestedCargo,
+                        payment_terms: prev.payment_terms || suggestedTerms || "Upon Delivery & Offloading",
+                      }));
+                    }}
                   />
                 </div>
-                <div className="space-y-1.5">
+                <div className="space-y-1.5 sm:col-span-2">
                   <Label className="text-xs">Client Order / DO / Sales Order Number</Label>
                   <Input
                     value={form.client_order_no}

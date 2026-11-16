@@ -51,8 +51,9 @@ import {
   Landmark,
   Smartphone,
   Layers,
-} from "lucide-react";
 import { toast } from "sonner";
+import { CustomerSelect } from "@/components/fleet/CustomerSelect";
+import { isLogistixwareAccount } from "@/services/customerService";
 
 export default function FinanceInvoices() {
   const { organisation } = useAuth();
@@ -747,16 +748,22 @@ export default function FinanceInvoices() {
 
           <form onSubmit={handleCreateInvoice} className="space-y-4 py-2">
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <div className="sm:col-span-2">
-                <Label htmlFor="clientName" className="text-xs font-medium">Customer / Client Name *</Label>
-                <Input
-                  id="clientName"
-                  required
-                  placeholder="e.g. Dangote Cement, Bakhresa Group, Coca-Cola Bottlers"
+              <div className="sm:col-span-2 space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="clientName" className="text-xs font-medium">Customer / Client Name *</Label>
+                  {isLogistixwareAccount(organisation) && (
+                    <Badge variant="outline" className="text-[9.5px] px-1.5 py-0 bg-primary/10 text-primary border-primary/25 font-semibold">
+                      Logistixware Customer Directory
+                    </Badge>
+                  )}
+                </div>
+                <CustomerSelect
                   value={clientName}
-                  onChange={(e) => setClientName(e.target.value)}
+                  onChange={(name) => setClientName(name)}
+                  organisation={organisation}
+                  placeholder="Select Logistixware Customer or enter client name..."
                 />
-                {uniqueClientsFromTrips.length > 0 && !clientName && (
+                {!isLogistixwareAccount(organisation) && uniqueClientsFromTrips.length > 0 && !clientName && (
                   <div className="flex flex-wrap items-center gap-1.5 pt-1.5">
                     <span className="text-[11px] text-muted-foreground">Recent Fleet Clients:</span>
                     {uniqueClientsFromTrips.slice(0, 5).map((c) => (
