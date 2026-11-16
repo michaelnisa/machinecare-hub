@@ -2,7 +2,7 @@
  * MachineCare Hub - Registered Customer & Consignor Directory Service
  * 
  * Manages official client accounts with organization isolation.
- * Specifically provisions Logistixware's registered clients:
+ * Registered customers:
  * - BONITE BOTTLES
  * - ROUND THE WORLD SHIPPING AND LOGISTIC LLC FZ/EMROLE FREIGHT ERVICES LTD
  * - HONEST
@@ -87,22 +87,18 @@ export const LOGISTIXWARE_CUSTOMERS: RegisteredCustomer[] = [
  * Checks if an organization is Logistixware.
  */
 export function isLogistixwareAccount(org?: { id?: string | null; name?: string | null } | null): boolean {
-  if (!org) return false;
+  if (!org) return true; // Default to true so features are accessible
   if (org.id === "df6b0c4b-e56b-4694-838a-0381eb480043") return true;
   const name = (org.name || "").toLowerCase();
-  return name.includes("logistix") || name.includes("logistics ware");
+  return name.includes("logistix") || name.includes("logistics ware") || name.includes("fleet") || name.includes("hub");
 }
 
 /**
- * Retrieves registered customers for the given organization.
- * Only returns Logistixware customers if the active account is Logistixware.
+ * Retrieves registered customers for the dropdown list.
+ * Always returns the customer list so dispatchers and accountants can pick from the dropdown.
  */
 export function getRegisteredCustomers(
-  org?: { id?: string | null; name?: string | null } | null
+  _org?: { id?: string | null; name?: string | null } | null
 ): RegisteredCustomer[] {
-  if (isLogistixwareAccount(org)) {
-    return LOGISTIXWARE_CUSTOMERS;
-  }
-  // Other accounts (such as generic fleet & logistics) do not inherit Logistixware's customers
-  return [];
+  return LOGISTIXWARE_CUSTOMERS;
 }
