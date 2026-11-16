@@ -1,4 +1,4 @@
-const CACHE_NAME = "machinecare-shell-v1";
+const CACHE_NAME = "machinecare-shell-v3";
 const PRECACHE_URLS = [
   "/",
   "/index.html",
@@ -6,9 +6,16 @@ const PRECACHE_URLS = [
   "/placeholder.svg"
 ];
 
+self.addEventListener("message", (event) => {
+  if (event.data && event.data.type === "SKIP_WAITING") {
+    self.skipWaiting();
+  }
+});
+
 self.addEventListener("install", (event) => {
+  self.skipWaiting();
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(PRECACHE_URLS)).then(() => self.skipWaiting())
+    caches.open(CACHE_NAME).then((cache) => cache.addAll(PRECACHE_URLS))
   );
 });
 
@@ -30,46 +37,36 @@ self.addEventListener("fetch", (event) => {
   const { request } = event;
   const url = new URL(request.url);
 
-  // For navigation requests (e.g. /m/:id or /m/:id/inspect), try network first, fallback to cached index.html
-  if (request.mode === "navigate") {
+  // Network-First for HTML navigation so users ALWAYS get the latest deployed frontend version
+  if (request.mode === "navigate" || request.destination === "document" || url.pathname === "/" || url.pathname === "/index.html") {
     event.respondWith(
-      fetch(request).catch(() => {
-        return caches.match("/index.html") || caches.match("/");
-      })
+      fetch(request)
+        .then((networkResponse) => {
+          if (networkResponse && networkResponse.status === 200) {
+            const copy = networkResponse.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
+          }
+          return networkResponse;
+        })
+        .catch(() => {
+          return caches.match("/index.html") || caches.match("/");
+        })
     );
     return;
   }
 
-  // Cache same-origin assets (JS bundles, CSS, images, fonts)
+  // Network-First for same-origin assets, fallback to cache if offline
   if (url.origin === self.location.origin) {
     event.respondWith(
-      caches.match(request).then((cachedResponse) => {
-        if (cachedResponse) {
-          // Stale-while-revalidate for background updates
-          fetch(request).then((networkResponse) => {
-            if (networkResponse && networkResponse.status === 200) {
-              caches.open(CACHE_NAME).then((cache) => cache.put(request, networkResponse));
-            }
-          }).catch(() => {});
-          return cachedResponse;
-        }
-
-        return fetch(request).then((response) => {
-          if (!response || response.status !== 200 || response.type !== "basic") {
-            return response;
+      fetch(request)
+        .then((networkResponse) => {
+          if (networkResponse && networkResponse.status === 200) {
+            const copy = networkResponse.clone();
+            caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
           }
-          const responseToCache = response.clone();
-          caches.open(CACHE_NAME).then((cache) => {
-            cache.put(request, responseToCache);
-          });
-          return response;
-        }).catch(() => {
-          // If navigation script fails offline, try index.html
-          if (request.destination === "document") {
-            return caches.match("/index.html");
-          }
-        });
-      })
+          return networkResponse;
+        })
+        .catch(() => caches.match(request))
     );
   }
 });
