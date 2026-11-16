@@ -51,6 +51,7 @@ import {
   Landmark,
   Smartphone,
   Layers,
+} from "lucide-react";
 import { toast } from "sonner";
 import { CustomerSelect } from "@/components/fleet/CustomerSelect";
 import { isLogistixwareAccount } from "@/services/customerService";
