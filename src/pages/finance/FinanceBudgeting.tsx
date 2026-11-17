@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useRef } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { PageLoader } from "@/components/PageLoader";
@@ -26,6 +26,8 @@ import {
 import { FinanceNavHeader } from "./FinanceNavHeader";
 import { getFinancialOverview } from "@/services/financeService";
 import { toast } from "sonner";
+import html2canvas from "html2canvas";
+import jsPDF from "jspdf";
 import {
   PiggyBank,
   Search,
@@ -41,6 +43,14 @@ import {
   ChevronLeft,
   ChevronRight,
   Clock,
+  Download,
+  FileSpreadsheet,
+  ArrowRightLeft,
+  Filter,
+  Check,
+  FileText,
+  ShieldCheck,
+  Building,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -231,7 +241,7 @@ const INITIAL_BUDGET_TEMPLATES: BudgetItem[] = [
 const USD_TO_TZS = 2600;
 
 export default function FinanceBudgeting() {
-  const { organisation, user } = useAuth();
+  const { organisation, user, profile } = useAuth();
   const orgId = organisation?.id || "default_org";
 
   const [loading, setLoading] = useState(true);
@@ -240,6 +250,7 @@ export default function FinanceBudgeting() {
   const [selectedDate, setSelectedDate] = useState<string>(() => new Date().toISOString().slice(0, 10));
   const [search, setSearch] = useState("");
   const [departmentFilter, setDepartmentFilter] = useState("all");
+  const [riskFilter, setRiskFilter] = useState<"all" | "at_risk">("all");
 
   // Budgets state
   const [budgets, setBudgets] = useState<BudgetItem[]>([]);
@@ -283,7 +294,7 @@ export default function FinanceBudgeting() {
     other: 0,
   });
 
-  // Modal State
+  // Modal States
   const [modalOpen, setModalOpen] = useState(false);
   const [editingBudget, setEditingBudget] = useState<BudgetItem | null>(null);
   const [form, setForm] = useState({
@@ -295,6 +306,20 @@ export default function FinanceBudgeting() {
     alertThresholdPct: "85",
     notes: "",
   });
+
+  // Transfer Modal State
+  const [transferModalOpen, setTransferModalOpen] = useState(false);
+  const [transferForm, setTransferForm] = useState({
+    sourceId: "",
+    destinationId: "",
+    amount: "",
+    reason: "",
+  });
+
+  // Professional Report Preview Modal State
+  const [reportModalOpen, setReportModalOpen] = useState(false);
+  const [generatingPdf, setGeneratingPdf] = useState(false);
+  const reportRef = useRef<HTMLDivElement>(null);
 
   // Format currency helper
   const fmtMoney = (tzsAmount: number) => {
@@ -309,7 +334,6 @@ export default function FinanceBudgeting() {
   const loadData = async () => {
     setLoading(true);
     try {
-      // 1. Load budgets (localStorage + Supabase fallback)
       const storageKey = `company_budgets_${orgId}`;
       let loadedBudgets: BudgetItem[] = [];
       const saved = localStorage.getItem(storageKey);
@@ -345,13 +369,10 @@ export default function FinanceBudgeting() {
             updatedAt: d.updated_at,
           }));
         }
-      } catch (err) {
-        // Fall back to stored state
-      }
+      } catch (err) {}
 
       setBudgets(loadedBudgets);
 
-      // 2. Load overview actuals
       if (organisation?.id) {
         const overview = await getFinancialOverview(organisation.id);
         setOverallActuals({
@@ -365,7 +386,6 @@ export default function FinanceBudgeting() {
           contingency: Math.round((overview.totalExpenses || 0) * 0.05),
         });
 
-        // 3. Load daily expenses for selectedDate
         await loadDailyExpenses(selectedDate);
       }
     } catch (e) {
@@ -611,7 +631,7 @@ export default function FinanceBudgeting() {
 
   // Helper to determine actual spend for each budget item
   const getItemActualSpend = (b: BudgetItem): number => {
-    if (activeTab === "daily") {
+    if (b.periodType === "daily") {
       switch (b.category) {
         case "fuel":
           return dailyActuals.fuel;
@@ -626,7 +646,7 @@ export default function FinanceBudgeting() {
         default:
           return 0;
       }
-    } else if (activeTab === "monthly") {
+    } else if (b.periodType === "monthly") {
       switch (b.category) {
         case "fuel":
           return Math.round(overallActuals.fuel / 12);
@@ -667,11 +687,20 @@ export default function FinanceBudgeting() {
     }
   };
 
-  // Filter budgets for active tab
+  // Filter budgets for active tab & risk filter
   const displayedBudgets = useMemo(() => {
     return budgets.filter((b) => {
       if (b.periodType !== activeTab) return false;
       if (departmentFilter !== "all" && b.department !== departmentFilter) return false;
+
+      // Risk Filter check
+      if (riskFilter === "at_risk") {
+        const allocated = b.allocatedAmountTzs;
+        const actual = getItemActualSpend(b);
+        const pct = allocated > 0 ? (actual / allocated) * 100 : 0;
+        if (pct < b.alertThresholdPct && actual <= allocated) return false;
+      }
+
       if (!search.trim()) return true;
       const q = search.toLowerCase();
       return (
@@ -680,7 +709,7 @@ export default function FinanceBudgeting() {
         (b.notes && b.notes.toLowerCase().includes(q))
       );
     });
-  }, [budgets, activeTab, departmentFilter, search]);
+  }, [budgets, activeTab, departmentFilter, riskFilter, search, dailyActuals, overallActuals]);
 
   // Aggregate KPIs
   const kpiTotals = useMemo(() => {
@@ -698,6 +727,132 @@ export default function FinanceBudgeting() {
       burnPct,
     };
   }, [displayedBudgets, dailyActuals, overallActuals, activeTab]);
+
+  // Handle Budget Reallocation (Virement)
+  const openTransferModal = () => {
+    const eligibleSources = budgets.filter((b) => b.periodType === activeTab);
+    setTransferForm({
+      sourceId: eligibleSources[0]?.id || "",
+      destinationId: eligibleSources[1]?.id || "",
+      amount: "",
+      reason: "",
+    });
+    setTransferModalOpen(true);
+  };
+
+  const handleExecuteTransfer = (e: React.FormEvent) => {
+    e.preventDefault();
+    const { sourceId, destinationId, amount, reason } = transferForm;
+    if (!sourceId || !destinationId) return toast.error("Please select source and destination budgets");
+    if (sourceId === destinationId) return toast.error("Source and destination must be different cost centers");
+    const num = Number(amount.replace(/,/g, ""));
+    if (isNaN(num) || num <= 0) return toast.error("Enter a valid transfer amount");
+
+    const amountInTzs = currencyMode === "USD" ? Math.round(num * USD_TO_TZS) : num;
+
+    const source = budgets.find((b) => b.id === sourceId);
+    const destination = budgets.find((b) => b.id === destinationId);
+    if (!source || !destination) return toast.error("Selected budget line not found");
+
+    if (source.allocatedAmountTzs < amountInTzs) {
+      return toast.error(`Source budget only has ${fmtMoney(source.allocatedAmountTzs)} allocated.`);
+    }
+
+    const updated = budgets.map((b) => {
+      if (b.id === sourceId) {
+        return {
+          ...b,
+          allocatedAmountTzs: b.allocatedAmountTzs - amountInTzs,
+          notes: `${b.notes || ""} [Reallocated -${fmtMoney(amountInTzs)} to ${destination.title}: ${reason}]`.trim(),
+          updatedAt: new Date().toISOString(),
+        };
+      }
+      if (b.id === destinationId) {
+        return {
+          ...b,
+          allocatedAmountTzs: b.allocatedAmountTzs + amountInTzs,
+          notes: `${b.notes || ""} [Reallocated +${fmtMoney(amountInTzs)} from ${source.title}: ${reason}]`.trim(),
+          updatedAt: new Date().toISOString(),
+        };
+      }
+      return b;
+    });
+
+    setBudgets(updated);
+    localStorage.setItem(`company_budgets_${orgId}`, JSON.stringify(updated));
+    toast.success(`Successfully transferred ${fmtMoney(amountInTzs)} from "${source.title}" to "${destination.title}"`);
+    setTransferModalOpen(false);
+  };
+
+  // Export CSV
+  const handleExportCsv = () => {
+    const rows = [
+      ["Department", "Budget Title", "Period", "Approved Budget (TZS)", "Actual Spend (TZS)", "Variance (TZS)", "Burn Rate (%)", "Status"],
+      ...displayedBudgets.map((b) => {
+        const allocated = b.allocatedAmountTzs;
+        const actual = getItemActualSpend(b);
+        const remaining = allocated - actual;
+        const pct = allocated > 0 ? Math.round((actual / allocated) * 100) : 0;
+        const status = remaining < 0 ? "OVER BUDGET" : pct >= b.alertThresholdPct ? "NEARING CAP" : "WITHIN BUDGET";
+        return [
+          `"${b.department}"`,
+          `"${b.title}"`,
+          `"${b.periodType}"`,
+          allocated,
+          actual,
+          remaining,
+          `${pct}%`,
+          `"${status}"`,
+        ];
+      }),
+    ];
+
+    const csvContent = "data:text/csv;charset=utf-8," + rows.map((e) => e.join(",")).join("\n");
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `Budget_Report_${activeTab}_${activeTab === "daily" ? selectedDate : "2026"}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    toast.success("CSV report downloaded successfully");
+  };
+
+  // Download PDF Report
+  const handleDownloadPdf = async () => {
+    if (!reportRef.current) return;
+    setGeneratingPdf(true);
+    try {
+      const canvas = await html2canvas(reportRef.current, {
+        scale: 2,
+        useCORS: true,
+        logging: false,
+        backgroundColor: "#ffffff",
+      });
+
+      const imgData = canvas.toDataURL("image/png");
+      const pdf = new jsPDF({
+        orientation: "portrait",
+        unit: "mm",
+        format: "a4",
+      });
+
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+
+      pdf.addImage(imgData, "PNG", 0, 0, pdfWidth, pdfHeight);
+      pdf.save(`Executive_Budget_Report_${activeTab}_${activeTab === "daily" ? selectedDate : "2026"}.pdf`);
+      toast.success("Executive PDF report downloaded successfully!");
+    } catch (err: any) {
+      console.error("PDF generation failed:", err);
+      toast.error("Failed to generate PDF: " + (err?.message || "Unknown error"));
+    } finally {
+      setGeneratingPdf(false);
+    }
+  };
+
+  const companyName = organisation?.name || "MACHINECARE FLEET & LOGISTICS LIMITED";
+  const reportRefNumber = `RPT-BGT-${activeTab.toUpperCase()}-${activeTab === "daily" ? selectedDate.replace(/-/g, "") : "2026"}-01`;
 
   if (loading) {
     return <PageLoader message="Loading budget allocations..." />;
@@ -730,13 +885,24 @@ export default function FinanceBudgeting() {
               ))}
             </div>
 
+            {/* Quick Reallocation / Transfer */}
             <Button
               variant="outline"
               size="sm"
-              onClick={() => window.print()}
+              onClick={openTransferModal}
               className="gap-1.5 text-xs"
             >
-              <Printer className="h-3.5 w-3.5" /> Print
+              <ArrowRightLeft className="h-3.5 w-3.5" /> Transfer Funds
+            </Button>
+
+            {/* Professional Report Download */}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setReportModalOpen(true)}
+              className="gap-1.5 text-xs border-primary/30 text-primary hover:bg-primary/5 font-bold"
+            >
+              <Download className="h-3.5 w-3.5" /> Download Report
             </Button>
 
             <Button onClick={openCreateModal} size="sm" className="gap-1.5 font-bold shadow-xs">
@@ -751,7 +917,10 @@ export default function FinanceBudgeting() {
         <div className="flex items-center gap-1.5 bg-background border border-border rounded-lg p-1">
           <button
             type="button"
-            onClick={() => setActiveTab("daily")}
+            onClick={() => {
+              setActiveTab("daily");
+              setRiskFilter("all");
+            }}
             className={cn(
               "flex items-center gap-1.5 px-3.5 py-1.5 rounded-md text-xs font-bold transition-all",
               activeTab === "daily"
@@ -763,7 +932,10 @@ export default function FinanceBudgeting() {
           </button>
           <button
             type="button"
-            onClick={() => setActiveTab("monthly")}
+            onClick={() => {
+              setActiveTab("monthly");
+              setRiskFilter("all");
+            }}
             className={cn(
               "flex items-center gap-1.5 px-3.5 py-1.5 rounded-md text-xs font-bold transition-all",
               activeTab === "monthly"
@@ -775,7 +947,10 @@ export default function FinanceBudgeting() {
           </button>
           <button
             type="button"
-            onClick={() => setActiveTab("annual")}
+            onClick={() => {
+              setActiveTab("annual");
+              setRiskFilter("all");
+            }}
             className={cn(
               "flex items-center gap-1.5 px-3.5 py-1.5 rounded-md text-xs font-bold transition-all",
               activeTab === "annual"
@@ -937,27 +1112,59 @@ export default function FinanceBudgeting() {
             </Badge>
           </div>
 
-          <div className="relative w-full sm:w-60">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-            <Input
-              placeholder="Search category or notes..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="pl-8 h-8 text-xs bg-background"
-            />
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Risk Filter */}
+            <div className="flex items-center rounded-lg border border-border bg-card p-0.5 text-xs">
+              <button
+                type="button"
+                onClick={() => setRiskFilter("all")}
+                className={cn(
+                  "px-2.5 py-1 rounded-md font-semibold text-xs transition-all",
+                  riskFilter === "all" ? "bg-muted text-foreground font-bold" : "text-muted-foreground"
+                )}
+              >
+                All ({budgets.filter((b) => b.periodType === activeTab).length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setRiskFilter("at_risk")}
+                className={cn(
+                  "px-2.5 py-1 rounded-md font-semibold text-xs transition-all flex items-center gap-1",
+                  riskFilter === "at_risk" ? "bg-rose-500/20 text-rose-700 dark:text-rose-400 font-bold" : "text-muted-foreground hover:text-rose-600"
+                )}
+              >
+                <AlertTriangle className="h-3 w-3" /> Near / Over Cap
+              </button>
+            </div>
+
+            <div className="relative w-full sm:w-56">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+              <Input
+                placeholder="Search category or notes..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="pl-8 h-8 text-xs bg-background"
+              />
+            </div>
           </div>
         </div>
 
         {displayedBudgets.length === 0 ? (
           <div className="rounded-xl border border-dashed border-border p-8 text-center bg-card">
             <PiggyBank className="h-8 w-8 mx-auto text-muted-foreground/60 mb-2" />
-            <h3 className="text-sm font-bold text-foreground">No budgets configured for this period</h3>
+            <h3 className="text-sm font-bold text-foreground">No budgets match your criteria</h3>
             <p className="text-xs text-muted-foreground mt-1 max-w-sm mx-auto">
-              Click the button below to allocate a budget for this period.
+              {riskFilter === "at_risk" ? "Great news! None of your budget lines are currently nearing or exceeding limits." : "Click below to allocate a budget line."}
             </p>
-            <Button onClick={openCreateModal} size="sm" className="mt-4 gap-1.5 font-bold">
-              <Plus className="h-4 w-4" /> Add Budget
-            </Button>
+            {riskFilter === "at_risk" ? (
+              <Button onClick={() => setRiskFilter("all")} variant="outline" size="sm" className="mt-4">
+                View All Budgets
+              </Button>
+            ) : (
+              <Button onClick={openCreateModal} size="sm" className="mt-4 gap-1.5 font-bold">
+                <Plus className="h-4 w-4" /> Add Budget
+              </Button>
+            )}
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
@@ -1246,6 +1453,428 @@ export default function FinanceBudgeting() {
               </Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Budget Transfer / Reallocation Modal (Virement) */}
+      <Dialog open={transferModalOpen} onOpenChange={setTransferModalOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <ArrowRightLeft className="h-4 w-4 text-primary" /> Transfer / Reallocate Funds
+            </DialogTitle>
+            <DialogDescription>
+              Shift funds from one cost center to another to handle unexpected operational demands.
+            </DialogDescription>
+          </DialogHeader>
+
+          <form onSubmit={handleExecuteTransfer} className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <Label className="text-xs font-bold">Transfer From (Source Line) *</Label>
+              <Select
+                value={transferForm.sourceId}
+                onValueChange={(v) => setTransferForm({ ...transferForm, sourceId: v })}
+              >
+                <SelectTrigger className="text-xs bg-background">
+                  <SelectValue placeholder="Select Source Budget" />
+                </SelectTrigger>
+                <SelectContent>
+                  {budgets
+                    .filter((b) => b.periodType === activeTab)
+                    .map((b) => (
+                      <SelectItem key={b.id} value={b.id}>
+                        {b.title} ({fmtMoney(b.allocatedAmountTzs)})
+                      </SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-xs font-bold">Transfer To (Destination Line) *</Label>
+              <Select
+                value={transferForm.destinationId}
+                onValueChange={(v) => setTransferForm({ ...transferForm, destinationId: v })}
+              >
+                <SelectTrigger className="text-xs bg-background">
+                  <SelectValue placeholder="Select Destination Budget" />
+                </SelectTrigger>
+                <SelectContent>
+                  {budgets
+                    .filter((b) => b.periodType === activeTab && b.id !== transferForm.sourceId)
+                    .map((b) => (
+                      <SelectItem key={b.id} value={b.id}>
+                        {b.title} ({fmtMoney(b.allocatedAmountTzs)})
+                      </SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-xs font-bold">Amount to Transfer ({currencyMode}) *</Label>
+              <Input
+                type="number"
+                placeholder={currencyMode === "USD" ? "e.g. 200" : "e.g. 500000"}
+                value={transferForm.amount}
+                onChange={(e) => setTransferForm({ ...transferForm, amount: e.target.value })}
+                className="text-xs font-mono font-bold"
+                required
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-xs font-bold">Reason for Reallocation *</Label>
+              <Input
+                placeholder="e.g. Emergency diesel required for Zambian copper run"
+                value={transferForm.reason}
+                onChange={(e) => setTransferForm({ ...transferForm, reason: e.target.value })}
+                className="text-xs"
+                required
+              />
+            </div>
+
+            <DialogFooter className="pt-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setTransferModalOpen(false)}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" size="sm" className="font-bold">
+                Confirm Transfer
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Professional Executive Report Preview & Download Dialog */}
+      <Dialog open={reportModalOpen} onOpenChange={setReportModalOpen}>
+        <DialogContent className="max-w-4xl max-h-[92vh] overflow-y-auto p-0">
+          {/* Header Controls Bar */}
+          <div className="p-4 border-b border-border bg-muted/40 flex flex-wrap items-center justify-between gap-3 sticky top-0 z-10 backdrop-blur-md">
+            <div>
+              <h3 className="text-base font-bold text-foreground">Executive Budget Performance Report</h3>
+              <p className="text-xs text-muted-foreground">
+                Audited report for {activeTab === "daily" ? `Day: ${selectedDate}` : activeTab === "monthly" ? "Month: Current Cycle" : "Full Year 2026"}
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleExportCsv}
+                className="gap-1.5 text-xs"
+              >
+                <FileSpreadsheet className="h-3.5 w-3.5 text-emerald-600" /> Export CSV
+              </Button>
+
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => window.print()}
+                className="gap-1.5 text-xs"
+              >
+                <Printer className="h-3.5 w-3.5" /> Print
+              </Button>
+
+              <Button
+                size="sm"
+                onClick={handleDownloadPdf}
+                disabled={generatingPdf}
+                className="gap-1.5 text-xs font-bold"
+              >
+                <Download className="h-3.5 w-3.5" />
+                {generatingPdf ? "Generating PDF..." : "Download PDF"}
+              </Button>
+            </div>
+          </div>
+
+          {/* Printable A4 Report Preview Container */}
+          <div className="p-6 bg-slate-100 dark:bg-slate-950 flex justify-center">
+            <div
+              ref={reportRef}
+              id="budget-report-sheet"
+              className="bg-white text-slate-900 p-8 shadow-xl rounded-md w-full max-w-3xl border border-slate-200 print:shadow-none print:border-none print:p-0 text-xs"
+              style={{ minHeight: "1050px" }}
+            >
+              {/* Report Header Letterhead */}
+              <div className="border-b-2 border-slate-900 pb-4 mb-6">
+                <div className="flex justify-between items-start gap-4">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <div className="h-8 w-8 rounded-md bg-slate-900 flex items-center justify-center text-white font-black text-sm">
+                        MC
+                      </div>
+                      <div>
+                        <h1 className="text-base font-black tracking-tight text-slate-900 uppercase">
+                          {companyName}
+                        </h1>
+                        <p className="text-[10px] text-slate-500 font-semibold tracking-wider uppercase">
+                          Commercial Fleet Management &amp; Freight ERP
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="text-right">
+                    <span className="inline-block px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-widest bg-slate-900 text-white mb-1">
+                      Official Fiscal Report
+                    </span>
+                    <div className="text-[10px] font-mono text-slate-600">
+                      Ref: <strong>{reportRefNumber}</strong>
+                    </div>
+                    <div className="text-[10px] text-slate-500">
+                      Date: {new Date().toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-4 pt-3 border-t border-slate-100 flex justify-between items-center text-[11px]">
+                  <div>
+                    <span className="text-slate-500 font-medium">Report Scope: </span>
+                    <strong className="text-slate-900 uppercase">
+                      {activeTab === "daily" ? `Daily Operations (${selectedDate})` : activeTab === "monthly" ? "Monthly Operating Budget" : "Fiscal Year 2026 Budget"}
+                    </strong>
+                  </div>
+                  <div>
+                    <span className="text-slate-500 font-medium">Reporting Currency: </span>
+                    <strong className="text-slate-900">{currencyMode} (Peg: 1 USD = 2,600 TZS)</strong>
+                  </div>
+                </div>
+              </div>
+
+              {/* Executive Summary Dashboard Box */}
+              <div className="grid grid-cols-4 gap-3 bg-slate-50 border border-slate-200 rounded-lg p-3.5 mb-6">
+                <div>
+                  <div className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">
+                    Total Budget Cap
+                  </div>
+                  <div className="text-base font-black font-mono text-slate-900 mt-0.5">
+                    {fmtMoney(kpiTotals.allocated)}
+                  </div>
+                  <div className="text-[9px] text-slate-500 mt-0.5">Approved Limit</div>
+                </div>
+
+                <div>
+                  <div className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">
+                    Actual Realized Spend
+                  </div>
+                  <div className="text-base font-black font-mono text-amber-700 mt-0.5">
+                    {fmtMoney(kpiTotals.actual)}
+                  </div>
+                  <div className="text-[9px] text-slate-500 mt-0.5">Operational Incurred</div>
+                </div>
+
+                <div>
+                  <div className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">
+                    Net Variance
+                  </div>
+                  <div
+                    className={cn(
+                      "text-base font-black font-mono mt-0.5",
+                      kpiTotals.isOver ? "text-rose-700" : "text-emerald-700"
+                    )}
+                  >
+                    {kpiTotals.isOver ? "-" : "+"}
+                    {fmtMoney(Math.abs(kpiTotals.variance))}
+                  </div>
+                  <div className="text-[9px] text-slate-500 mt-0.5">
+                    {kpiTotals.isOver ? "Budget Deficit" : "Operating Surplus"}
+                  </div>
+                </div>
+
+                <div>
+                  <div className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">
+                    Fiscal Health
+                  </div>
+                  <div className="text-base font-black font-mono text-slate-900 mt-0.5">
+                    {kpiTotals.burnPct}%
+                  </div>
+                  <div className="text-[9px] font-bold text-slate-600 mt-0.5">
+                    {kpiTotals.isOver ? "OVERRUN" : kpiTotals.burnPct >= 80 ? "NEAR CAP" : "COMPLIANT"}
+                  </div>
+                </div>
+              </div>
+
+              {/* Departmental Cost Allocations Table */}
+              <div className="mb-6">
+                <div className="font-bold text-slate-900 text-xs uppercase tracking-wider mb-2 flex items-center justify-between">
+                  <span>1. Cost Center Allocations &amp; Variance Matrix</span>
+                  <span className="text-[10px] text-slate-500 normal-case font-normal">
+                    {displayedBudgets.length} Budget Lines Monitored
+                  </span>
+                </div>
+
+                <table className="w-full text-[11px] border-collapse border border-slate-300">
+                  <thead className="bg-slate-100 text-slate-700 font-bold border-b border-slate-300">
+                    <tr>
+                      <th className="py-2 px-2 text-left border-r border-slate-300">Department</th>
+                      <th className="py-2 px-2 text-left border-r border-slate-300">Line Item Description</th>
+                      <th className="py-2 px-2 text-right border-r border-slate-300">Budget Cap</th>
+                      <th className="py-2 px-2 text-right border-r border-slate-300">Actual Spend</th>
+                      <th className="py-2 px-2 text-right border-r border-slate-300">Variance</th>
+                      <th className="py-2 px-2 text-center border-r border-slate-300">Burn %</th>
+                      <th className="py-2 px-2 text-center">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-200">
+                    {displayedBudgets.map((b) => {
+                      const allocated = b.allocatedAmountTzs;
+                      const actual = getItemActualSpend(b);
+                      const remaining = allocated - actual;
+                      const pct = allocated > 0 ? Math.round((actual / allocated) * 100) : 0;
+                      const isOver = remaining < 0;
+
+                      return (
+                        <tr key={b.id} className="hover:bg-slate-50">
+                          <td className="py-1.5 px-2 font-medium text-slate-600 border-r border-slate-200">
+                            {b.department}
+                          </td>
+                          <td className="py-1.5 px-2 font-bold text-slate-900 border-r border-slate-200">
+                            {b.title}
+                          </td>
+                          <td className="py-1.5 px-2 text-right font-mono border-r border-slate-200">
+                            {fmtMoney(allocated)}
+                          </td>
+                          <td className="py-1.5 px-2 text-right font-mono border-r border-slate-200 font-semibold">
+                            {fmtMoney(actual)}
+                          </td>
+                          <td
+                            className={cn(
+                              "py-1.5 px-2 text-right font-mono border-r border-slate-200 font-bold",
+                              isOver ? "text-rose-700" : "text-emerald-700"
+                            )}
+                          >
+                            {isOver ? "-" : "+"}
+                            {fmtMoney(Math.abs(remaining))}
+                          </td>
+                          <td className="py-1.5 px-2 text-center font-mono border-r border-slate-200">
+                            {pct}%
+                          </td>
+                          <td className="py-1.5 px-2 text-center">
+                            <span
+                              className={cn(
+                                "text-[9px] font-bold px-1.5 py-0.5 rounded",
+                                isOver
+                                  ? "bg-rose-100 text-rose-800"
+                                  : pct >= b.alertThresholdPct
+                                  ? "bg-amber-100 text-amber-800"
+                                  : "bg-emerald-100 text-emerald-800"
+                              )}
+                            >
+                              {isOver ? "OVERRUN" : pct >= b.alertThresholdPct ? "NEAR CAP" : "COMPLIANT"}
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                  <tfoot className="bg-slate-100 font-bold border-t-2 border-slate-400">
+                    <tr>
+                      <td colSpan={2} className="py-2 px-2 text-slate-900 uppercase tracking-wider border-r border-slate-300">
+                        TOTAL SUMMARY
+                      </td>
+                      <td className="py-2 px-2 text-right font-mono text-slate-900 border-r border-slate-300">
+                        {fmtMoney(kpiTotals.allocated)}
+                      </td>
+                      <td className="py-2 px-2 text-right font-mono text-slate-900 border-r border-slate-300">
+                        {fmtMoney(kpiTotals.actual)}
+                      </td>
+                      <td
+                        className={cn(
+                          "py-2 px-2 text-right font-mono border-r border-slate-300",
+                          kpiTotals.isOver ? "text-rose-700" : "text-emerald-700"
+                        )}
+                      >
+                        {kpiTotals.isOver ? "-" : "+"}
+                        {fmtMoney(Math.abs(kpiTotals.variance))}
+                      </td>
+                      <td className="py-2 px-2 text-center font-mono border-r border-slate-300">
+                        {kpiTotals.burnPct}%
+                      </td>
+                      <td className="py-2 px-2 text-center">
+                        <span className="text-[9px] font-black uppercase text-slate-900">
+                          {kpiTotals.isOver ? "DEFICIT" : "APPROVED"}
+                        </span>
+                      </td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+
+              {/* If Daily: Realized Daily Transactions */}
+              {activeTab === "daily" && dailyExpenses.length > 0 && (
+                <div className="mb-6">
+                  <div className="font-bold text-slate-900 text-xs uppercase tracking-wider mb-2">
+                    2. Daily Operating Transactions Log ({selectedDate})
+                  </div>
+                  <table className="w-full text-[10px] border border-slate-300">
+                    <thead className="bg-slate-50 font-bold text-slate-600 border-b border-slate-300">
+                      <tr>
+                        <th className="py-1.5 px-2 text-left border-r border-slate-300">Type</th>
+                        <th className="py-1.5 px-2 text-left border-r border-slate-300">Transaction</th>
+                        <th className="py-1.5 px-2 text-left border-r border-slate-300">Vehicle / Corridor</th>
+                        <th className="py-1.5 px-2 text-center border-r border-slate-300">Time</th>
+                        <th className="py-1.5 px-2 text-right">Amount</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-200">
+                      {dailyExpenses.map((e) => (
+                        <tr key={e.id}>
+                          <td className="py-1 px-2 font-semibold text-slate-600 border-r border-slate-200">{e.source}</td>
+                          <td className="py-1 px-2 font-medium text-slate-900 border-r border-slate-200">{e.title}</td>
+                          <td className="py-1 px-2 text-slate-600 font-mono border-r border-slate-200">{e.plateNumber || "--"}</td>
+                          <td className="py-1 px-2 text-center text-slate-500 border-r border-slate-200">{e.time}</td>
+                          <td className="py-1 px-2 text-right font-mono font-bold text-slate-900">{fmtMoney(e.amount)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              {/* Executive Sign-off & Audit Block */}
+              <div className="pt-8 mt-8 border-t-2 border-slate-300">
+                <div className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-4">
+                  Corporate Governance &amp; Sign-off Approvals
+                </div>
+                <div className="grid grid-cols-3 gap-6 pt-2">
+                  <div className="border-t border-slate-400 pt-2 text-center">
+                    <div className="text-[10px] font-bold text-slate-900">
+                      {profile?.full_name || "Finance Officer"}
+                    </div>
+                    <div className="text-[9px] text-slate-500 uppercase">Prepared By (Operations / Accounts)</div>
+                    <div className="text-[8px] text-slate-400 font-mono mt-0.5">Date: {new Date().toISOString().slice(0, 10)}</div>
+                  </div>
+
+                  <div className="border-t border-slate-400 pt-2 text-center">
+                    <div className="text-[10px] font-bold text-slate-900">
+                      Financial Controller
+                    </div>
+                    <div className="text-[9px] text-slate-500 uppercase">Reviewed &amp; Audited By</div>
+                    <div className="text-[8px] text-slate-400 font-mono mt-0.5">Signature / Stamp</div>
+                  </div>
+
+                  <div className="border-t border-slate-400 pt-2 text-center">
+                    <div className="text-[10px] font-bold text-slate-900">
+                      Managing Director / CFO
+                    </div>
+                    <div className="text-[9px] text-slate-500 uppercase">Executive Approval</div>
+                    <div className="text-[8px] text-slate-400 font-mono mt-0.5">Authorized Signatory</div>
+                  </div>
+                </div>
+
+                <div className="mt-8 text-center text-[9px] text-slate-400 border-t border-slate-100 pt-2">
+                  Generated via MachineCare Enterprise ERP • Confidential • For Internal Management &amp; Board Review Only
+                </div>
+              </div>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
     </div>
