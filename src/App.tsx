@@ -170,6 +170,7 @@ const FinanceExpenses = lazy(() => import("./pages/finance/FinanceExpenses"));
 const FinanceFuel = lazy(() => import("./pages/finance/FinanceFuel"));
 const FinanceTrips = lazy(() => import("./pages/finance/FinanceTrips"));
 const FinanceInvoices = lazy(() => import("./pages/finance/FinanceInvoices"));
+const FinanceBudgeting = lazy(() => import("./pages/finance/FinanceBudgeting"));
 const FinanceSuppliers = lazy(() => import("./pages/finance/FinanceSuppliers"));
 const FinanceApAr = lazy(() => import("./pages/finance/FinanceApAr"));
 const FinanceCashFlow = lazy(() => import("./pages/finance/FinanceCashFlow"));
@@ -354,6 +355,7 @@ const App = () => (
                   <Route path="/finance/fuel" element={<FinanceFuel />} />
                   <Route path="/finance/trips" element={<FinanceTrips />} />
                   <Route path="/finance/invoices" element={<FinanceInvoices />} />
+                  <Route path="/finance/budgeting" element={<FinanceBudgeting />} />
                   <Route path="/finance/suppliers" element={<FinanceSuppliers />} />
                   <Route path="/finance/ap-ar" element={<FinanceApAr />} />
                   <Route path="/finance/cash-flow" element={<FinanceCashFlow />} />

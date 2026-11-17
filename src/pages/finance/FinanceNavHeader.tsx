@@ -10,6 +10,7 @@ import {
   Wallet,
   TrendingUp,
   BarChart3,
+  PiggyBank,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -25,6 +26,7 @@ export const FINANCE_NAV_ITEMS = [
   { to: "/finance/fuel", label: "Fuel Finance", icon: Fuel },
   { to: "/finance/trips", label: "Trip Revenue & Costs", icon: Route },
   { to: "/finance/invoices", label: "Customers & Invoicing", icon: FileText },
+  { to: "/finance/budgeting", label: "Budgeting", icon: PiggyBank },
   { to: "/finance/suppliers", label: "Supplier Payments", icon: Building2 },
   { to: "/finance/ap-ar", label: "AP & AR Aging", icon: Calendar },
   { to: "/finance/cash-flow", label: "Cash Flow", icon: Wallet },

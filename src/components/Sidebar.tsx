@@ -60,6 +60,7 @@ import {
   BookOpen,
   Wallet,
   BarChart3,
+  PiggyBank,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { initials } from "@/lib/format";
@@ -127,6 +128,7 @@ export function Sidebar() {
         { to: "/finance/fuel", label: "Fuel Finance", icon: Fuel },
         { to: "/finance/trips", label: "Trip Revenue & Costs", icon: Route },
         { to: "/finance/invoices", label: "Customers & Invoicing", icon: FileText },
+        { to: "/finance/budgeting", label: "Budgeting", icon: PiggyBank },
         { to: "/finance/suppliers", label: "Supplier Payments", icon: Building2 },
         { to: "/finance/ap-ar", label: "AP & AR Aging", icon: Calendar },
         { to: "/finance/cash-flow", label: "Cash Flow", icon: Wallet },
