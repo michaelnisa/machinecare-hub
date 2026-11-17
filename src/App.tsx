@@ -166,6 +166,10 @@ const BlogPostDetail = lazy(() => import("./pages/blog/BlogPostDetail"));
 const BlogManage = lazy(() => import("./pages/blog/BlogManage"));
 
 const FinanceOverview = lazy(() => import("./pages/finance/FinanceOverview"));
+const FinanceRouter = lazy(() => import("./pages/finance/FinanceRouter"));
+const ProductionCosting = lazy(() => import("./pages/finance/manufacturing/ProductionCosting"));
+const MachineMaintenanceCosts = lazy(() => import("./pages/finance/manufacturing/MachineMaintenanceCosts"));
+const InventoryValuation = lazy(() => import("./pages/finance/manufacturing/InventoryValuation"));
 const FinanceExpenses = lazy(() => import("./pages/finance/FinanceExpenses"));
 const FinanceFuel = lazy(() => import("./pages/finance/FinanceFuel"));
 const FinanceTrips = lazy(() => import("./pages/finance/FinanceTrips"));
@@ -350,7 +354,10 @@ const App = () => (
                   <Route path="/inventory/reports" element={<InventoryReports />} />
                   <Route path="/inventory/reorder" element={<InventoryReorder />} />
                   {/* Finance & Commercial Operations */}
-                  <Route path="/finance" element={<FinanceOverview />} />
+                  <Route path="/finance" element={<FinanceRouter />} />
+                  <Route path="/finance/production-costing" element={<ProductionCosting />} />
+                  <Route path="/finance/maintenance-costs" element={<MachineMaintenanceCosts />} />
+                  <Route path="/finance/inventory-valuation" element={<InventoryValuation />} />
                   <Route path="/finance/expenses" element={<FinanceExpenses />} />
                   <Route path="/finance/fuel" element={<FinanceFuel />} />
                   <Route path="/finance/trips" element={<FinanceTrips />} />

@@ -118,10 +118,10 @@ export function Sidebar() {
     [t],
   );
 
-  const financeNavGroup: NavGroup = useMemo(
+  const fleetFinanceNavGroup: NavGroup = useMemo(
     () => ({
-      id: "finance",
-      label: "Finance",
+      id: "fleet-finance",
+      label: "Fleet Finance",
       items: [
         { to: "/finance", label: "Financial Overview", icon: LayoutDashboard },
         { to: "/finance/expenses", label: "Expenses", icon: Receipt },
@@ -133,6 +133,26 @@ export function Sidebar() {
         { to: "/finance/ap-ar", label: "AP & AR Aging", icon: Calendar },
         { to: "/finance/cash-flow", label: "Cash Flow", icon: Wallet },
         { to: "/finance/vehicle-profitability", label: "Vehicle Profitability", icon: TrendingUp },
+        { to: "/finance/reports", label: "Financial Reports", icon: BarChart3 },
+      ],
+    }),
+    [],
+  );
+
+  const manufacturingFinanceNavGroup: NavGroup = useMemo(
+    () => ({
+      id: "manufacturing-finance",
+      label: "Plant Finance",
+      items: [
+        { to: "/finance", label: "Plant Financial Overview", icon: LayoutDashboard },
+        { to: "/finance/production-costing", label: "Batch & SKU Costing", icon: Boxes },
+        { to: "/finance/maintenance-costs", label: "Machine Maintenance Cost", icon: Wrench },
+        { to: "/finance/inventory-valuation", label: "Inventory Valuation", icon: Package },
+        { to: "/finance/invoices", label: "Customers & Invoicing", icon: FileText },
+        { to: "/finance/budgeting", label: "Plant Budgeting", icon: PiggyBank },
+        { to: "/finance/suppliers", label: "Supplier Payments", icon: Building2 },
+        { to: "/finance/ap-ar", label: "AP & AR Aging", icon: Calendar },
+        { to: "/finance/cash-flow", label: "Cash Flow", icon: Wallet },
         { to: "/finance/reports", label: "Financial Reports", icon: BarChart3 },
       ],
     }),
@@ -259,7 +279,7 @@ export function Sidebar() {
           ]
         : []),
       inventoryNavGroup,
-      financeNavGroup,
+      manufacturingFinanceNavGroup,
       ...(!isLite
         ? [
             {
@@ -298,7 +318,7 @@ export function Sidebar() {
         ],
       },
     ],
-    [t, isLite, profile?.department, isManager, isAdmin, inventoryNavGroup, financeNavGroup],
+    [t, isLite, profile?.department, isManager, isAdmin, inventoryNavGroup, manufacturingFinanceNavGroup],
   );
 
   // Fleet & Logistics nav — pages not yet built (Phases 2-6) route to a
@@ -349,7 +369,7 @@ export function Sidebar() {
         ],
       },
       inventoryNavGroup,
-      financeNavGroup,
+      fleetFinanceNavGroup,
       {
         id: "fleet-insights",
         label: "Insights",
@@ -380,7 +400,7 @@ export function Sidebar() {
         ],
       },
     ],
-    [t, isAdmin, inventoryNavGroup, financeNavGroup],
+    [t, isAdmin, inventoryNavGroup, fleetFinanceNavGroup],
   );
 
   // Workshop/Garage nav — a fully separate product experience from
@@ -783,6 +803,17 @@ export function Sidebar() {
         if (vGroup) dynamicGroups.push(vGroup);
         const insGroup = manufacturingGroups.find((g) => g.id === "insights");
         if (insGroup) dynamicGroups.push(insGroup);
+      }
+
+      // Finance
+      if (enabledMods.includes("fleet")) {
+        dynamicGroups.push(fleetFinanceNavGroup);
+      } else if (
+        enabledMods.includes("production") ||
+        enabledMods.includes("maintenance") ||
+        enabledMods.includes("inventory")
+      ) {
+        dynamicGroups.push(manufacturingFinanceNavGroup);
       }
 
       // System
