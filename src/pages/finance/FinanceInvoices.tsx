@@ -1,3 +1,5 @@
+import { ConsolidatedInvoiceModal } from "@/components/fleet/ConsolidatedInvoiceModal";
+import { RealisticBarcode } from "@/components/fleet/WaybillDocumentView";
 import { useEffect, useState, useMemo } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
@@ -70,6 +72,9 @@ export default function FinanceInvoices() {
   const [statusFilter, setStatusFilter] = useState("all");
 
   // Create Invoice Modal
+  const [consolidatedModalOpen, setConsolidatedModalOpen] = useState(false);
+  const [consolidatedClient, setConsolidatedClient] = useState("");
+  const [consolidatedTripIds, setConsolidatedTripIds] = useState<string[]>([]);
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [submittingInvoice, setSubmittingInvoice] = useState(false);
   const [clientName, setClientName] = useState("");
@@ -224,8 +229,22 @@ export default function FinanceInvoices() {
     const invoicedTripSet = new Set<string>();
     invoices.forEach((inv) => {
       if (inv.trip_id) invoicedTripSet.add(inv.trip_id);
+      if (inv.notes?.includes("[CONSOLIDATED_TRIPS:")) {
+        try {
+          const match = inv.notes.match(/\[CONSOLIDATED_TRIPS:(.*?)\]/);
+          if (match && match[1]) {
+            const ids = JSON.parse(match[1]);
+            if (Array.isArray(ids)) ids.forEach((id: string) => invoicedTripSet.add(id));
+          }
+        } catch {}
+      }
     });
-    return availableTrips.filter((t) => !invoicedTripSet.has(t.id));
+    return availableTrips.filter((t) => {
+      if (invoicedTripSet.has(t.id)) return false;
+      const meta = parseCargoMeta(t.cargo_description);
+      if (meta?.invoice_id || meta?.invoice_number) return false;
+      return true;
+    });
   }, [availableTrips, invoices]);
 
   const uninvoicedSummary = useMemo(() => {
@@ -430,10 +449,29 @@ export default function FinanceInvoices() {
         title="Customers & Invoicing"
         subtitle="Freight billing, commercial client accounts, payment receipts, and Accounts Receivable."
         actions={
-          <Button size="sm" onClick={() => setCreateModalOpen(true)} className="gap-1.5">
-            <Plus className="h-4 w-4" />
-            Create Customer Invoice
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              size="sm"
+              onClick={() => {
+                setConsolidatedClient("");
+                setConsolidatedTripIds([]);
+                setConsolidatedModalOpen(true);
+              }}
+              className="gap-1.5 bg-slate-900 text-white hover:bg-slate-800 shadow-xs"
+            >
+              <Layers className="h-4 w-4 text-emerald-400" />
+              Consolidated Invoice (Multi-Trip)
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setCreateModalOpen(true)}
+              className="gap-1.5"
+            >
+              <Plus className="h-4 w-4" />
+              Single Invoice
+            </Button>
+          </div>
         }
       />
 
@@ -514,19 +552,33 @@ export default function FinanceInvoices() {
                 </p>
               </div>
             </div>
-            <Button
-              size="sm"
-              variant="outline"
-              className="text-xs border-amber-500/30 hover:bg-amber-500/10 text-foreground"
-              onClick={() => {
-                if (uninvoicedTrips.length > 0) {
-                  startInvoiceForTrip(uninvoicedTrips[0]);
-                }
-              }}
-            >
-              <Plus className="h-3.5 w-3.5 mr-1.5" />
-              Bill Next Trip
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button
+                size="sm"
+                onClick={() => {
+                  setConsolidatedClient("");
+                  setConsolidatedTripIds([]);
+                  setConsolidatedModalOpen(true);
+                }}
+                className="text-xs gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white shadow-2xs"
+              >
+                <Layers className="h-3.5 w-3.5" />
+                Consolidate Into 1 Invoice
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                className="text-xs border-amber-500/30 hover:bg-amber-500/10 text-foreground"
+                onClick={() => {
+                  if (uninvoicedTrips.length > 0) {
+                    startInvoiceForTrip(uninvoicedTrips[0]);
+                  }
+                }}
+              >
+                <Plus className="h-3.5 w-3.5 mr-1.5" />
+                Bill Next Single Trip
+              </Button>
+            </div>
           </div>
 
           <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 max-h-60 overflow-y-auto pr-1">
@@ -1097,6 +1149,16 @@ export default function FinanceInvoices() {
         </DialogContent>
       </Dialog>
 
+      {/* Consolidated Multi-Trip Invoice Modal */}
+      <ConsolidatedInvoiceModal
+        open={consolidatedModalOpen}
+        onOpenChange={setConsolidatedModalOpen}
+        availableTrips={availableTrips}
+        onInvoiceCreated={loadData}
+        preselectedClient={consolidatedClient}
+        preselectedTripIds={consolidatedTripIds}
+      />
+
       {/* Printable Invoice Modal */}
       {printInvoice && (
         <Dialog open={!!printInvoice} onOpenChange={() => setPrintInvoice(null)}>
@@ -1109,6 +1171,7 @@ export default function FinanceInvoices() {
                     <img
                       src={organisation.logo_url}
                       alt={organisation?.name || "Company Logo"}
+                      crossOrigin="anonymous"
                       className="h-14 w-auto max-w-[170px] object-contain rounded"
                     />
                   ) : (
@@ -1124,13 +1187,18 @@ export default function FinanceInvoices() {
                     {organisation?.email && <p className="text-[11px] text-gray-400">{organisation.email}</p>}
                   </div>
                 </div>
-                <div className="text-right">
-                  <span className="text-xl font-bold font-mono text-primary">
+                <div className="text-right flex flex-col items-end space-y-1">
+                  <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded bg-slate-900 text-white text-[9.5px] font-black uppercase tracking-wider">
+                    {printInvoice.notes?.includes("[CONSOLIDATED_TRIPS:") || (printInvoice.items && printInvoice.items.length > 1)
+                      ? "CONSOLIDATED FREIGHT INVOICE"
+                      : "COMMERCIAL FREIGHT INVOICE"}
+                  </div>
+                  <span className="text-xl font-black font-mono text-slate-950">
                     {printInvoice.invoice_number}
                   </span>
-                  <p className="text-xs text-gray-500">Date: {formatDate(printInvoice.issued_at)}</p>
-                  <p className="text-xs font-semibold text-rose-600">
-                    Due: {formatDate(printInvoice.due_date)}
+                  <RealisticBarcode code={printInvoice.invoice_number} />
+                  <p className="text-[10px] text-gray-500 pt-0.5">
+                    Issued: <strong className="text-gray-800">{formatDate(printInvoice.issued_at)}</strong> · Due: <strong className="text-rose-600">{formatDate(printInvoice.due_date)}</strong>
                   </p>
                 </div>
               </div>

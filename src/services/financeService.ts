@@ -459,6 +459,130 @@ export async function createFinanceInvoice(
 }
 
 /**
+ * Locks an array of trip records with the master invoice ID and number to prevent double-billing.
+ */
+export async function lockTripsToInvoice(tripIds: string[], invoiceId: string, invoiceNumber: string): Promise<void> {
+  if (!tripIds || tripIds.length === 0) return;
+
+  const now = new Date().toISOString();
+  await Promise.all(
+    tripIds.map(async (tId) => {
+      try {
+        const { data: trip } = await (supabase as any)
+          .from("trips")
+          .select("id, cargo_description")
+          .eq("id", tId)
+          .maybeSingle();
+
+        if (trip) {
+          const currentMeta = parseCargoMeta(trip.cargo_description) || {};
+          currentMeta.invoice_id = invoiceId;
+          currentMeta.invoice_number = invoiceNumber;
+          currentMeta.invoiced_at = now;
+
+          await (supabase as any)
+            .from("trips")
+            .update({ cargo_description: JSON.stringify(currentMeta) })
+            .eq("id", tId);
+        }
+      } catch (err) {
+        console.warn(`Could not tag trip ${tId} with invoice ${invoiceNumber}:`, err);
+      }
+    })
+  );
+}
+
+/**
+ * Creates a consolidated commercial freight invoice containing multiple trips,
+ * and automatically locks all included trips with the master invoice ID and number.
+ */
+export async function createConsolidatedFinanceInvoice(
+  organisationId: string,
+  payload: {
+    client_name: string;
+    client_email?: string;
+    client_phone?: string;
+    trip_ids: string[];
+    currency?: "USD" | "TZS";
+    issued_at?: string;
+    due_date?: string;
+    tax_rate_percent?: number;
+    discount_amount?: number;
+    notes?: string;
+    items: {
+      description: string;
+      quantity: number;
+      unit_price: number;
+    }[];
+  }
+): Promise<{ success: boolean; invoice?: FinanceInvoice; error?: string }> {
+  try {
+    const invoiceNumber = await getNextFinanceInvoiceNumber(organisationId);
+    const subtotal = (payload.items || []).reduce(
+      (sum, item) => sum + Number(item.quantity || 1) * Number(item.unit_price || 0),
+      0
+    );
+    const taxRate = Number(payload.tax_rate_percent || 0);
+    const taxAmount = Math.round((subtotal * taxRate) / 100);
+    const discount = Number(payload.discount_amount || 0);
+    const totalAmount = Math.max(subtotal + taxAmount - discount, 0);
+
+    // Embed structured trip IDs in notes so consolidated trips can always be recalled & audited
+    const tripMetadataTag = `[CONSOLIDATED_TRIPS:${JSON.stringify(payload.trip_ids || [])}]`;
+    const finalNotes = payload.notes
+      ? `${payload.notes.trim()}\n\n${tripMetadataTag}`
+      : tripMetadataTag;
+
+    const { data: inv, error: invErr } = await (supabase as any)
+      .from("finance_invoices")
+      .insert({
+        organisation_id: organisationId,
+        invoice_number: invoiceNumber,
+        client_name: payload.client_name.trim(),
+        client_email: payload.client_email?.trim() || null,
+        client_phone: payload.client_phone?.trim() || null,
+        trip_id: payload.trip_ids?.[0] || null,
+        subtotal,
+        tax_rate_percent: taxRate,
+        tax_amount: taxAmount,
+        discount_amount: discount,
+        total_amount: totalAmount,
+        paid_amount: 0,
+        status: "sent",
+        issued_at: payload.issued_at || new Date().toISOString().slice(0, 10),
+        due_date:
+          payload.due_date || new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10),
+        notes: finalNotes,
+      })
+      .select()
+      .single();
+
+    if (invErr) throw invErr;
+
+    // Insert line items
+    if (payload.items?.length > 0) {
+      const lineItems = payload.items.map((it) => ({
+        invoice_id: inv.id,
+        description: it.description,
+        quantity: Number(it.quantity || 1),
+        unit_price: Number(it.unit_price || 0),
+        total_amount: Number(it.quantity || 1) * Number(it.unit_price || 0),
+      }));
+      await (supabase as any).from("finance_invoice_items").insert(lineItems);
+    }
+
+    // Automatically tag & lock all consolidated trips to prevent double-billing
+    if (payload.trip_ids && payload.trip_ids.length > 0) {
+      await lockTripsToInvoice(payload.trip_ids, inv.id, invoiceNumber);
+    }
+
+    return { success: true, invoice: inv };
+  } catch (err: any) {
+    return { success: false, error: err.message || "Failed to create consolidated invoice" };
+  }
+}
+
+/**
  * Updates an invoice's payment status or registers payments.
  */
 export async function updateFinanceInvoicePayment(

@@ -1,3 +1,4 @@
+import { ConsolidatedInvoiceModal } from "@/components/fleet/ConsolidatedInvoiceModal";
 import { useEffect, useState, useMemo } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
@@ -28,6 +29,7 @@ import {
   CheckCircle2,
   Clock,
   FileText,
+  Layers,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -56,6 +58,9 @@ export default function FinanceTrips() {
   const [records, setRecords] = useState<TripFinancialRecord[]>([]);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [selectedTripIds, setSelectedTripIds] = useState<string[]>([]);
+  const [consolidatedModalOpen, setConsolidatedModalOpen] = useState(false);
+  const [rawTrips, setRawTrips] = useState<any[]>([]);
 
   const loadData = async () => {
     if (!organisation?.id) return;
@@ -108,6 +113,8 @@ export default function FinanceTrips() {
         }
       });
 
+      setRawTrips(trips || []);
+
       // Map invoice revenues linked to trips
       const invoiceRevMap = new Map<string, number>();
       const invoicedTripSet = new Set<string>();
@@ -115,6 +122,15 @@ export default function FinanceTrips() {
         if (inv.trip_id) {
           invoicedTripSet.add(inv.trip_id);
           invoiceRevMap.set(inv.trip_id, (invoiceRevMap.get(inv.trip_id) || 0) + Number(inv.total_amount || 0));
+        }
+        if (inv.notes?.includes("[CONSOLIDATED_TRIPS:")) {
+          try {
+            const match = inv.notes.match(/\[CONSOLIDATED_TRIPS:(.*?)\]/);
+            if (match && match[1]) {
+              const ids = JSON.parse(match[1]);
+              if (Array.isArray(ids)) ids.forEach((id: string) => invoicedTripSet.add(id));
+            }
+          } catch {}
         }
       });
 
@@ -194,7 +210,7 @@ export default function FinanceTrips() {
           netMargin,
           marginPct,
           kmDriven: km,
-          isInvoiced: invoicedTripSet.has(t.id),
+          isInvoiced: invoicedTripSet.has(t.id) || !!meta?.invoice_id || !!meta?.invoice_number,
         };
       });
 
@@ -425,6 +441,21 @@ export default function FinanceTrips() {
             <table className="w-full text-left text-sm">
               <thead className="border-b border-border bg-muted/40 text-xs uppercase tracking-wider text-muted-foreground">
                 <tr>
+                  <th className="py-3 px-3 w-10 text-center">
+                    <input
+                      type="checkbox"
+                      checked={selectedTripIds.length > 0 && selectedTripIds.length === filtered.filter(f => !f.isInvoiced).length}
+                      onChange={() => {
+                        const unbilled = filtered.filter(f => !f.isInvoiced).map(f => f.id);
+                        if (selectedTripIds.length === unbilled.length) {
+                          setSelectedTripIds([]);
+                        } else {
+                          setSelectedTripIds(unbilled);
+                        }
+                      }}
+                      className="h-4 w-4 rounded text-primary focus:ring-primary"
+                    />
+                  </th>
                   <th className="py-3 px-4 font-semibold">Date</th>
                   <th className="py-3 px-4 font-semibold">Transit Route</th>
                   <th className="py-3 px-4 font-semibold">Vehicle</th>
@@ -442,7 +473,19 @@ export default function FinanceTrips() {
                 {filtered.map((r) => {
                   const isProfitable = r.netMargin >= 0;
                   return (
-                    <tr key={r.id} className="hover:bg-muted/30 transition-colors">
+                    <tr key={r.id} className={`hover:bg-muted/30 transition-colors ${selectedTripIds.includes(r.id) ? "bg-primary/5" : ""}`}>
+                      <td className="py-3.5 px-3 text-center">
+                        <input
+                          type="checkbox"
+                          checked={selectedTripIds.includes(r.id)}
+                          onChange={() => {
+                            setSelectedTripIds(prev =>
+                              prev.includes(r.id) ? prev.filter(id => id !== r.id) : [...prev, r.id]
+                            );
+                          }}
+                          className="h-4 w-4 rounded text-primary focus:ring-primary"
+                        />
+                      </td>
                       <td className="py-3.5 px-4 text-xs font-medium text-muted-foreground whitespace-nowrap">
                         {formatDate(r.startDate)}
                       </td>
@@ -553,6 +596,49 @@ export default function FinanceTrips() {
           </div>
         </div>
       )}
+
+      {/* Floating Batch Invoicing Action Bar */}
+      {selectedTripIds.length > 0 && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 bg-slate-950 text-white px-5 py-3 rounded-full shadow-2xl border border-slate-800 flex items-center gap-4 animate-in fade-in slide-in-from-bottom-4">
+          <div className="flex items-center gap-2 text-xs font-bold">
+            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-emerald-500 text-slate-950 font-black text-xs">
+              {selectedTripIds.length}
+            </span>
+            <span>{selectedTripIds.length === 1 ? "Trip Selected" : "Trips Selected for Invoicing"}</span>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              onClick={() => setConsolidatedModalOpen(true)}
+              className="h-8 text-xs font-bold gap-1.5 bg-emerald-500 hover:bg-emerald-600 text-slate-950"
+            >
+              <Layers className="h-3.5 w-3.5" />
+              Consolidate Into 1 Master Invoice
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => setSelectedTripIds([])}
+              className="h-8 text-xs text-slate-400 hover:text-white"
+            >
+              Clear
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* Consolidated Invoice Modal */}
+      <ConsolidatedInvoiceModal
+        open={consolidatedModalOpen}
+        onOpenChange={setConsolidatedModalOpen}
+        availableTrips={rawTrips}
+        onInvoiceCreated={() => {
+          setSelectedTripIds([]);
+          loadData();
+        }}
+        preselectedTripIds={selectedTripIds}
+      />
     </div>
   );
 }
