@@ -50,12 +50,17 @@ export function useFeatureFlags() {
 
   const isGpsTracking =
     profile === "gps_tracking" ||
-    organisation?.industry?.toLowerCase() === "gps_tracking" ||
+    (organisation?.industry?.toLowerCase() === "gps_tracking" &&
+      profile !== "manufacturing" &&
+      profile !== "fleet_logistics" &&
+      profile !== "garage" &&
+      profile !== "mixed") ||
     Boolean(
       organisation?.enabled_modules?.includes("gps_tracking") &&
-      !organisation?.enabled_modules?.includes("fleet")
-    ) ||
-    Boolean(organisation?.name?.toLowerCase().includes("gps"));
+      !organisation?.enabled_modules?.includes("fleet") &&
+      !organisation?.enabled_modules?.includes("production") &&
+      !organisation?.enabled_modules?.includes("maintenance")
+    );
 
   return {
     profile,
@@ -64,7 +69,9 @@ export function useFeatureFlags() {
       profile !== "mixed" &&
       profile !== "gps_tracking" &&
       !isGpsTracking,
-    isManufacturing: profile === "manufacturing" && !isLogisticsOrg && !isGpsTracking,
+    isManufacturing:
+      (profile === "manufacturing" || (!profile && !isLogisticsOrg)) &&
+      !isGpsTracking,
     isGarage: profile === "garage",
     isMixed: profile === "mixed",
     isIoT: isFeatureEnabled("connected_data"),

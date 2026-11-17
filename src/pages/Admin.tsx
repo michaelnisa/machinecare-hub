@@ -2,6 +2,7 @@ import { useEffect, useState, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useUserRole } from "@/hooks/useUserRole";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -80,6 +81,7 @@ interface Organisation {
   id: string;
   name: string;
   industry_profile: string | null;
+  industry?: string | null;
   plan: string | null;
   created_at: string;
 }
@@ -93,7 +95,7 @@ interface Profile {
 }
 
 export default function Admin() {
-  const { user, profile, organisation, switchOrganisation } = useAuth();
+  const { user, profile, organisation, switchOrganisation, refresh } = useAuth();
   const navigate = useNavigate();
   const isAdmin = isPlatformAdmin(user?.email || profile?.email);
   const { t, currentLang } = useI18n();
@@ -145,7 +147,7 @@ export default function Admin() {
         { data: profData, error: profErr },
       ] = await Promise.all([
         (supabase as any).from("onboarding_requests").select("*").order("created_at", { ascending: false }),
-        supabase.from("organisations").select("id, name, industry_profile, plan, created_at").order("created_at", { ascending: false }),
+        supabase.from("organisations").select("id, name, industry_profile, industry, plan, created_at").order("created_at", { ascending: false }),
         supabase.from("profiles").select("id, organisation_id, full_name, email, created_at"),
       ]);
 
@@ -179,12 +181,20 @@ export default function Admin() {
     const totalOrgs = organisations.length;
     const totalUsers = profiles.length;
 
+    const isOrgGps = (o: Organisation) =>
+      o.industry_profile === "gps_tracking" ||
+      (o.industry?.toLowerCase() === "gps_tracking" &&
+        o.industry_profile !== "manufacturing" &&
+        o.industry_profile !== "fleet_logistics" &&
+        o.industry_profile !== "garage" &&
+        o.industry_profile !== "mixed");
+
     const industryCounts = {
-      manufacturing: organisations.filter((o) => o.industry_profile === "manufacturing" && !o.name.toLowerCase().includes("gps")).length,
-      fleet_logistics: organisations.filter((o) => o.industry_profile === "fleet_logistics" && !o.name.toLowerCase().includes("gps")).length,
-      gps_tracking: organisations.filter((o) => o.industry_profile === "gps_tracking" || o.name.toLowerCase().includes("gps")).length,
-      garage: organisations.filter((o) => o.industry_profile === "garage").length,
-      mixed: organisations.filter((o) => o.industry_profile === "mixed").length,
+      manufacturing: organisations.filter((o) => o.industry_profile === "manufacturing" && !isOrgGps(o)).length,
+      fleet_logistics: organisations.filter((o) => o.industry_profile === "fleet_logistics" && !isOrgGps(o)).length,
+      gps_tracking: organisations.filter(isOrgGps).length,
+      garage: organisations.filter((o) => o.industry_profile === "garage" && !isOrgGps(o)).length,
+      mixed: organisations.filter((o) => o.industry_profile === "mixed" && !isOrgGps(o)).length,
     };
 
     return {
@@ -276,12 +286,17 @@ export default function Admin() {
   // Handle Organization Industry Profile Update (Admin Portal Only)
   const handleUpdateOrgIndustry = async (orgId: string, newProfile: string) => {
     try {
+      let modules = ["production", "maintenance", "inventory"];
+      if (newProfile === "fleet_logistics") modules = ["fleet", "maintenance", "inventory"];
+      else if (newProfile === "garage") modules = ["workshop", "inventory"];
+      else if (newProfile === "mixed") modules = ["maintenance", "production", "fleet", "inventory", "workshop"];
+      else if (newProfile === "gps_tracking") modules = ["gps_tracking"];
+
       const payload: any = {
         industry_profile: newProfile === "gps_tracking" ? "fleet_logistics" : newProfile,
+        industry: newProfile === "gps_tracking" ? "gps_tracking" : newProfile,
+        enabled_modules: modules,
       };
-      if (newProfile === "gps_tracking") {
-        payload.industry = "gps_tracking";
-      }
 
       const { error } = await supabase
         .from("organisations")
@@ -291,8 +306,13 @@ export default function Admin() {
       if (error) throw error;
 
       setOrganisations((prev) =>
-        prev.map((o) => (o.id === orgId ? { ...o, industry_profile: newProfile } : o))
+        prev.map((o) => (o.id === orgId ? { ...o, industry_profile: newProfile, industry: payload.industry } : o))
       );
+
+      if (orgId === organisation?.id) {
+        await refresh();
+      }
+
       toast.success(
         isSwahili
           ? "Sekta ya kampuni imeboreshwa kikamilifu!"
@@ -336,7 +356,7 @@ export default function Admin() {
   const handleSwitchOrg = async (org: Organisation) => {
     if (org.id === organisation?.id) {
       toast.info(isSwahili ? "Tayari upo kwenye akaunti hii" : "Already active in this account");
-      navigate("/dashboard");
+      window.location.href = "/dashboard";
       return;
     }
     setSwitchingOrgId(org.id);
@@ -347,7 +367,7 @@ export default function Admin() {
           ? `Umebadilisha akaunti kuwa: ${org.name}`
           : `Switched active account to: ${org.name}`
       );
-      navigate("/dashboard");
+      window.location.href = "/dashboard";
     } catch (err: any) {
       toast.error(err?.message || "Failed to switch organisation");
     } finally {
@@ -358,7 +378,7 @@ export default function Admin() {
   // Handle Provisioning MachineCare GPS Suite & Demo Telematics
   const handleProvisionGps = async () => {
     const existing = organisations.find(
-      (o) => o.industry_profile === "gps_tracking" || o.name.toLowerCase().includes("gps")
+      (o) => o.industry_profile === "gps_tracking" || o.industry?.toLowerCase() === "gps_tracking"
     );
     if (existing) {
       toast.info(
@@ -384,7 +404,7 @@ export default function Admin() {
 
       if (res.orgId) {
         await switchOrganisation(res.orgId);
-        navigate("/dashboard");
+        window.location.href = "/dashboard";
       }
     } catch (err: any) {
       toast.error(err?.message || "Failed to provision GPS account");
@@ -393,8 +413,15 @@ export default function Admin() {
     }
   };
 
-  const getIndustryIcon = (ind: string | null, name?: string) => {
-    if (ind === "gps_tracking" || name?.toLowerCase().includes("gps")) {
+  const getIndustryIcon = (ind: string | null, indText?: string | null) => {
+    if (
+      ind === "gps_tracking" ||
+      (indText?.toLowerCase() === "gps_tracking" &&
+        ind !== "manufacturing" &&
+        ind !== "fleet_logistics" &&
+        ind !== "garage" &&
+        ind !== "mixed")
+    ) {
       return <Radio className="h-4 w-4 text-sky-500" />;
     }
     switch (ind) {
@@ -732,13 +759,18 @@ export default function Admin() {
                             )}
                           </CardTitle>
                           <CardDescription className="text-xs capitalize">
-                            {org.industry_profile === "gps_tracking" || org.name.toLowerCase().includes("gps")
+                            {org.industry_profile === "gps_tracking" ||
+                            (org.industry?.toLowerCase() === "gps_tracking" &&
+                              org.industry_profile !== "manufacturing" &&
+                              org.industry_profile !== "fleet_logistics" &&
+                              org.industry_profile !== "garage" &&
+                              org.industry_profile !== "mixed")
                               ? "MachineCare GPS Tracking"
                               : org.industry_profile?.replace("_", " ") || "Manufacturing"}
                           </CardDescription>
                         </div>
                       </div>
-                      {getIndustryIcon(org.industry_profile, org.name)}
+                      {getIndustryIcon(org.industry_profile, org.industry)}
                     </div>
                   </CardHeader>
                   <CardContent className="space-y-3 text-xs">
@@ -756,7 +788,12 @@ export default function Admin() {
                       <span className="text-muted-foreground font-medium">{isSwahili ? "Badili Sekta:" : "Industry Profile:"}</span>
                       <select
                         value={
-                          org.industry_profile === "gps_tracking" || org.name.toLowerCase().includes("gps")
+                          org.industry_profile === "gps_tracking" ||
+                          (org.industry?.toLowerCase() === "gps_tracking" &&
+                            org.industry_profile !== "manufacturing" &&
+                            org.industry_profile !== "fleet_logistics" &&
+                            org.industry_profile !== "garage" &&
+                            org.industry_profile !== "mixed")
                             ? "gps_tracking"
                             : org.industry_profile || "manufacturing"
                         }

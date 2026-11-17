@@ -606,12 +606,15 @@ export function Sidebar() {
     // Direct Industry Profile or GPS Tracking Suite matching
     if (
       organisation?.industry_profile === "gps_tracking" ||
-      organisation?.industry?.toLowerCase() === "gps_tracking" ||
+      (organisation?.industry?.toLowerCase() === "gps_tracking" &&
+        organisation?.industry_profile !== "manufacturing" &&
+        organisation?.industry_profile !== "fleet_logistics" &&
+        organisation?.industry_profile !== "garage" &&
+        organisation?.industry_profile !== "mixed") ||
       (organisation?.enabled_modules?.includes("gps_tracking") &&
         !organisation?.enabled_modules?.includes("fleet") &&
         !organisation?.enabled_modules?.includes("production") &&
-        !organisation?.enabled_modules?.includes("maintenance")) ||
-      organisation?.name?.toLowerCase().includes("gps")
+        !organisation?.enabled_modules?.includes("maintenance"))
     ) {
       return gpsTrackingGroups;
     }
@@ -877,9 +880,14 @@ export function Sidebar() {
             {(() => {
               if (
                 organisation?.industry_profile === "gps_tracking" ||
-                organisation?.industry?.toLowerCase() === "gps_tracking" ||
-                organisation?.name?.toLowerCase().includes("gps") ||
-                (organisation?.enabled_modules?.includes("gps_tracking") && !organisation?.enabled_modules?.includes("fleet"))
+                (organisation?.industry?.toLowerCase() === "gps_tracking" &&
+                  organisation?.industry_profile !== "manufacturing" &&
+                  organisation?.industry_profile !== "fleet_logistics" &&
+                  organisation?.industry_profile !== "garage" &&
+                  organisation?.industry_profile !== "mixed") ||
+                (organisation?.enabled_modules?.includes("gps_tracking") &&
+                  !organisation?.enabled_modules?.includes("fleet") &&
+                  !organisation?.enabled_modules?.includes("production"))
               ) {
                 return <div className="text-[11px] font-semibold uppercase tracking-wider text-sky-500 truncate">GPS Tracking</div>;
               }

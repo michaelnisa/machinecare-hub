@@ -9,7 +9,7 @@ import GpsLiveMap from "@/pages/gps/GpsLiveMap";
 
 export default function DashboardRouter() {
   const { organisation, profile } = useAuth();
-  const { isFleet, isGarage } = useFeatureFlags();
+  const { isFleet, isGarage, isManufacturing, isGpsTracking } = useFeatureFlags();
 
   const enabledMods = organisation?.enabled_modules;
   const isSafetyDept = profile?.department === "safety";
@@ -20,29 +20,36 @@ export default function DashboardRouter() {
     return <Safety />;
   }
 
-  // 2. Mixed Operations profile routes directly to Master Dashboard
-  if (industry === "mixed" || !industry || (industry !== "fleet_logistics" && industry !== "garage" && !isFleet && !isGarage)) {
-    if (industry === "mixed") {
-      return <Dashboard />;
-    }
-  }
-
   // 2. MachineCare GPS Tracking independent profile resolution
   if (
+    isGpsTracking ||
     industry === "gps_tracking" ||
-    organisation?.industry?.toLowerCase() === "gps_tracking" ||
-    (enabledMods?.includes("gps_tracking") && !enabledMods?.includes("fleet")) ||
-    organisation?.name?.toLowerCase().includes("gps")
+    (organisation?.industry?.toLowerCase() === "gps_tracking" &&
+      industry !== "manufacturing" &&
+      industry !== "fleet_logistics" &&
+      industry !== "garage" &&
+      industry !== "mixed") ||
+    (enabledMods?.length === 1 && enabledMods.includes("gps_tracking"))
   ) {
     return <GpsLiveMap />;
   }
 
-  // 3. Direct Industry Profile resolution (Fleet & Logistics defaults immediately to FleetDashboard)
+  // 3. Mixed Operations profile routes directly to Master Dashboard
+  if (industry === "mixed") {
+    return <Dashboard />;
+  }
+
+  // 4. Manufacturing profile resolution
+  if (industry === "manufacturing" || isManufacturing) {
+    return <Dashboard />;
+  }
+
+  // 5. Direct Industry Profile resolution (Fleet & Logistics defaults immediately to FleetDashboard)
   if (industry === "fleet_logistics" || isFleet) {
     return <FleetDashboard />;
   }
 
-  // 4. Garage & Workshop profile resolution
+  // 6. Garage & Workshop profile resolution
   if (industry === "garage" || isGarage) {
     return <GarageDashboard />;
   }

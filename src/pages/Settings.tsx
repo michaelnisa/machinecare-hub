@@ -339,12 +339,18 @@ export default function Settings() {
   const confirmIndustryProfileChange = async () => {
     if (!organisation || !pendingProfile) return;
     setSavingIndustryProfile(true);
+
+    let modules = ["production", "maintenance", "inventory"];
+    if (pendingProfile === "fleet_logistics") modules = ["fleet", "maintenance", "inventory"];
+    else if (pendingProfile === "garage") modules = ["workshop", "inventory"];
+    else if (pendingProfile === "mixed") modules = ["maintenance", "production", "fleet", "inventory", "workshop"];
+    else if (pendingProfile === "gps_tracking") modules = ["gps_tracking"];
+
     const payload: any = {
       industry_profile: pendingProfile === "gps_tracking" ? "fleet_logistics" : pendingProfile,
+      industry: pendingProfile === "gps_tracking" ? "gps_tracking" : pendingProfile,
+      enabled_modules: modules,
     };
-    if (pendingProfile === "gps_tracking") {
-      payload.industry = "gps_tracking";
-    }
 
     const { error } = await supabase
       .from("organisations")
@@ -355,7 +361,7 @@ export default function Settings() {
     if (error) toast.error(error.message);
     else {
       toast.success("Industry profile updated");
-      refresh();
+      await refresh();
     }
   };
 

@@ -86,7 +86,7 @@ export function PlatformAdminOrgSwitcher({ compact = false }: { compact?: boolea
       await switchOrganisation(targetOrg.id);
       toast.success(`Switched active account to: ${targetOrg.name}`);
       setOpen(false);
-      navigate("/dashboard");
+      window.location.href = "/dashboard";
     } catch (err: any) {
       toast.error(err?.message || "Failed to switch organisation");
     } finally {
@@ -107,7 +107,7 @@ export function PlatformAdminOrgSwitcher({ compact = false }: { compact?: boolea
       if (res.orgId) {
         await switchOrganisation(res.orgId);
         setOpen(false);
-        navigate("/dashboard");
+        window.location.href = "/dashboard";
       }
     } catch (err: any) {
       toast.error(err?.message || "Failed to provision GPS account");
@@ -147,7 +147,13 @@ export function PlatformAdminOrgSwitcher({ compact = false }: { compact?: boolea
   };
 
   const hasGpsOrg = orgs.some(
-    (o) => o.industry_profile === "gps_tracking" || o.name.toLowerCase().includes("gps") || o.industry?.toLowerCase() === "gps_tracking"
+    (o) =>
+      o.industry_profile === "gps_tracking" ||
+      (o.industry?.toLowerCase() === "gps_tracking" &&
+        o.industry_profile !== "manufacturing" &&
+        o.industry_profile !== "fleet_logistics" &&
+        o.industry_profile !== "garage" &&
+        o.industry_profile !== "mixed")
   );
 
   return (
@@ -205,8 +211,11 @@ export function PlatformAdminOrgSwitcher({ compact = false }: { compact?: boolea
               const isActive = org.id === organisation?.id;
               const isGps =
                 org.industry_profile === "gps_tracking" ||
-                org.name.toLowerCase().includes("gps") ||
-                org.industry?.toLowerCase() === "gps_tracking";
+                (org.industry?.toLowerCase() === "gps_tracking" &&
+                  org.industry_profile !== "manufacturing" &&
+                  org.industry_profile !== "fleet_logistics" &&
+                  org.industry_profile !== "garage" &&
+                  org.industry_profile !== "mixed");
               return (
                 <DropdownMenuItem
                   key={org.id}
