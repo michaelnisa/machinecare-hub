@@ -457,9 +457,9 @@ export default function FinanceInvoices() {
                 setConsolidatedTripIds([]);
                 setConsolidatedModalOpen(true);
               }}
-              className="gap-1.5 bg-slate-900 text-white hover:bg-slate-800 shadow-xs"
+              className="gap-1.5 shadow-xs"
             >
-              <Layers className="h-4 w-4 text-emerald-400" />
+              <Layers className="h-4 w-4" />
               Consolidated Invoice (Multi-Trip)
             </Button>
             <Button
@@ -477,12 +477,14 @@ export default function FinanceInvoices() {
 
       {/* KPI Cards */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <div className="rounded-xl border border-border bg-card p-4 shadow-sm">
-          <div className="flex items-center justify-between text-muted-foreground">
-            <span className="text-xs font-medium uppercase tracking-wider">Total Billed</span>
-            <DollarSign className="h-4 w-4 text-primary" />
+        <div className="rounded-xl border border-border bg-card p-4 shadow-sm hover:border-primary/40 transition-colors">
+          <div className="flex items-center justify-between text-xs font-medium text-muted-foreground">
+            <span className="uppercase tracking-wider">Total Invoiced</span>
+            <span className="rounded-md bg-primary/10 p-1.5 text-primary">
+              <DollarSign className="h-4 w-4" />
+            </span>
           </div>
-          <p className="mt-2 text-2xl font-bold tracking-tight text-primary">
+          <p className="mt-2 text-2xl font-bold tracking-tight text-foreground">
             {formatMoney(metrics.totalInvoiced)}
           </p>
           <p className="text-xs text-muted-foreground mt-1">
@@ -490,12 +492,14 @@ export default function FinanceInvoices() {
           </p>
         </div>
 
-        <div className="rounded-xl border border-border bg-card p-4 shadow-sm">
-          <div className="flex items-center justify-between text-muted-foreground">
-            <span className="text-xs font-medium uppercase tracking-wider">Paid / Collected</span>
-            <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+        <div className="rounded-xl border border-border bg-card p-4 shadow-sm hover:border-primary/40 transition-colors">
+          <div className="flex items-center justify-between text-xs font-medium text-muted-foreground">
+            <span className="uppercase tracking-wider">Paid / Collected</span>
+            <span className="rounded-md bg-emerald-500/10 p-1.5 text-emerald-600 dark:text-emerald-400">
+              <CheckCircle2 className="h-4 w-4" />
+            </span>
           </div>
-          <p className="mt-2 text-2xl font-bold tracking-tight text-emerald-600">
+          <p className="mt-2 text-2xl font-bold tracking-tight text-foreground">
             {formatMoney(metrics.totalCollected)}
           </p>
           <p className="text-xs text-muted-foreground mt-1">
@@ -503,12 +507,14 @@ export default function FinanceInvoices() {
           </p>
         </div>
 
-        <div className="rounded-xl border border-border bg-card p-4 shadow-sm">
-          <div className="flex items-center justify-between text-muted-foreground">
-            <span className="text-xs font-medium uppercase tracking-wider">Accounts Receivable</span>
-            <Calendar className="h-4 w-4 text-amber-500" />
+        <div className="rounded-xl border border-border bg-card p-4 shadow-sm hover:border-primary/40 transition-colors">
+          <div className="flex items-center justify-between text-xs font-medium text-muted-foreground">
+            <span className="uppercase tracking-wider">Accounts Receivable</span>
+            <span className="rounded-md bg-amber-500/10 p-1.5 text-amber-600 dark:text-amber-400">
+              <Calendar className="h-4 w-4" />
+            </span>
           </div>
-          <p className="mt-2 text-2xl font-bold tracking-tight text-amber-600">
+          <p className="mt-2 text-2xl font-bold tracking-tight text-foreground">
             {formatMoney(metrics.totalOutstanding)}
           </p>
           <p className="text-xs text-muted-foreground mt-1">
@@ -516,12 +522,14 @@ export default function FinanceInvoices() {
           </p>
         </div>
 
-        <div className="rounded-xl border border-border bg-card p-4 shadow-sm">
-          <div className="flex items-center justify-between text-muted-foreground">
-            <span className="text-xs font-medium uppercase tracking-wider">Overdue Invoices</span>
-            <AlertCircle className="h-4 w-4 text-rose-500" />
+        <div className="rounded-xl border border-border bg-card p-4 shadow-sm hover:border-primary/40 transition-colors">
+          <div className="flex items-center justify-between text-xs font-medium text-muted-foreground">
+            <span className="uppercase tracking-wider">Overdue Invoices</span>
+            <span className="rounded-md bg-rose-500/10 p-1.5 text-rose-600 dark:text-rose-400">
+              <AlertCircle className="h-4 w-4" />
+            </span>
           </div>
-          <p className="mt-2 text-2xl font-bold tracking-tight text-rose-600">
+          <p className="mt-2 text-2xl font-bold tracking-tight text-foreground">
             {metrics.overdueCount}
           </p>
           <p className="text-xs text-muted-foreground mt-1">
@@ -560,7 +568,7 @@ export default function FinanceInvoices() {
                   setConsolidatedTripIds([]);
                   setConsolidatedModalOpen(true);
                 }}
-                className="text-xs gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white shadow-2xs"
+                className="text-xs gap-1.5 shadow-xs"
               >
                 <Layers className="h-3.5 w-3.5" />
                 Consolidate Into 1 Invoice
@@ -601,7 +609,7 @@ export default function FinanceInvoices() {
                     <div className="text-muted-foreground truncate">
                       {trip.origin} → {trip.destination} · <span className="font-mono">{plate}</span>
                     </div>
-                    <div className="font-medium text-emerald-600 mt-0.5">
+                    <div className="font-semibold text-primary mt-0.5">
                       {formatMoney(tzsAmt)}
                     </div>
                   </div>

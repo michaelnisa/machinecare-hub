@@ -338,7 +338,7 @@ export function ConsolidatedInvoiceModal({
             <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border pb-2.5">
               <div>
                 <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-                  <Truck className="h-4 w-4 text-emerald-500" /> 02. Select Trips to Include in Invoice
+                  <Truck className="h-4 w-4 text-primary" /> 02. Select Trips to Include in Invoice
                 </Label>
                 <p className="text-[11px] text-muted-foreground mt-0.5">
                   {customerEligibleTrips.length} completed trips eligible for {clientName || "selected client"}
@@ -579,11 +579,11 @@ export function ConsolidatedInvoiceModal({
                 </div>
               </div>
 
-              <div className="p-2.5 rounded-md bg-emerald-500/10 border border-emerald-500/20 text-[11px] text-emerald-800 dark:text-emerald-300 leading-snug space-y-1">
-                <div className="font-bold flex items-center gap-1.5">
+              <div className="p-2.5 rounded-md bg-primary/5 border border-primary/20 text-[11px] text-foreground leading-snug space-y-1">
+                <div className="font-bold flex items-center gap-1.5 text-primary">
                   <CheckCircle2 className="h-3.5 w-3.5" /> Double-Billing Protection Active
                 </div>
-                <p>
+                <p className="text-muted-foreground">
                   All {selectedTripIds.length} selected trips will be locked with this master invoice number upon creation.
                 </p>
               </div>

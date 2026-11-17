@@ -599,9 +599,9 @@ export default function FinanceTrips() {
 
       {/* Floating Batch Invoicing Action Bar */}
       {selectedTripIds.length > 0 && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 bg-slate-950 text-white px-5 py-3 rounded-full shadow-2xl border border-slate-800 flex items-center gap-4 animate-in fade-in slide-in-from-bottom-4">
-          <div className="flex items-center gap-2 text-xs font-bold">
-            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-emerald-500 text-slate-950 font-black text-xs">
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 bg-card text-foreground px-5 py-3 rounded-xl shadow-2xl border border-border flex items-center gap-4 animate-in fade-in slide-in-from-bottom-4">
+          <div className="flex items-center gap-2 text-xs font-semibold">
+            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary text-primary-foreground font-bold text-xs">
               {selectedTripIds.length}
             </span>
             <span>{selectedTripIds.length === 1 ? "Trip Selected" : "Trips Selected for Invoicing"}</span>
@@ -611,7 +611,7 @@ export default function FinanceTrips() {
             <Button
               size="sm"
               onClick={() => setConsolidatedModalOpen(true)}
-              className="h-8 text-xs font-bold gap-1.5 bg-emerald-500 hover:bg-emerald-600 text-slate-950"
+              className="h-8 text-xs font-semibold gap-1.5 shadow-xs"
             >
               <Layers className="h-3.5 w-3.5" />
               Consolidate Into 1 Master Invoice
@@ -620,7 +620,7 @@ export default function FinanceTrips() {
               size="sm"
               variant="ghost"
               onClick={() => setSelectedTripIds([])}
-              className="h-8 text-xs text-slate-400 hover:text-white"
+              className="h-8 text-xs text-muted-foreground hover:text-foreground"
             >
               Clear
             </Button>
