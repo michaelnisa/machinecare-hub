@@ -46,15 +46,17 @@ import {
   Download,
   FileSpreadsheet,
   ArrowRightLeft,
-  Filter,
-  Check,
-  FileText,
-  ShieldCheck,
-  Building,
+  Edit,
+  Trash2,
+  Layers,
+  LayoutGrid,
+  Table as TableIcon,
+  SlidersHorizontal,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export type BudgetPeriod = "daily" | "monthly" | "annual";
+export type BudgetFilter = "all" | "daily" | "monthly" | "annual";
 
 export interface BudgetItem {
   id: string;
@@ -246,7 +248,9 @@ export default function FinanceBudgeting() {
 
   const [loading, setLoading] = useState(true);
   const [currencyMode, setCurrencyMode] = useState<"TZS" | "USD">("TZS");
-  const [activeTab, setActiveTab] = useState<BudgetPeriod>("daily");
+  // Default to 'all' so that clicking budget shows ALL budgets right away
+  const [activeTab, setActiveTab] = useState<BudgetFilter>("all");
+  const [viewMode, setViewMode] = useState<"cards" | "table">("cards");
   const [selectedDate, setSelectedDate] = useState<string>(() => new Date().toISOString().slice(0, 10));
   const [search, setSearch] = useState("");
   const [departmentFilter, setDepartmentFilter] = useState("all");
@@ -301,7 +305,7 @@ export default function FinanceBudgeting() {
     title: "",
     department: DEFAULT_DEPARTMENTS[0],
     category: "fuel" as BudgetItem["category"],
-    periodType: "daily" as BudgetPeriod,
+    periodType: "monthly" as BudgetPeriod,
     allocatedAmount: "",
     alertThresholdPct: "85",
     notes: "",
@@ -316,10 +320,20 @@ export default function FinanceBudgeting() {
     reason: "",
   });
 
-  // Professional Report Preview Modal State
+  // Professional Report Preview & Edit Modal State
   const [reportModalOpen, setReportModalOpen] = useState(false);
   const [generatingPdf, setGeneratingPdf] = useState(false);
   const reportRef = useRef<HTMLDivElement>(null);
+
+  // Editable Report Metadata
+  const [reportMeta, setReportMeta] = useState({
+    title: "EXECUTIVE BUDGET PERFORMANCE & VARIANCE REPORT",
+    preparedBy: profile?.full_name || "Finance & Accounts Department",
+    reviewedBy: "Financial Controller",
+    approvedBy: "Managing Director / CFO",
+    notes: "Official corporate budget allocation vs. actual operational expenditure review.",
+    reportPeriod: "all" as BudgetFilter,
+  });
 
   // Format currency helper
   const fmtMoney = (tzsAmount: number) => {
@@ -362,7 +376,7 @@ export default function FinanceBudgeting() {
             department: d.department || "Fleet Operations",
             category: d.category || "fuel",
             fiscalYear: d.fiscal_year || 2026,
-            periodType: (d.period_type || "daily") as BudgetPeriod,
+            periodType: (d.period_type || "monthly") as BudgetPeriod,
             allocatedAmountTzs: Number(d.allocated_amount || 0),
             alertThresholdPct: Number(d.alert_threshold_pct || 85),
             notes: d.notes || "",
@@ -524,14 +538,14 @@ export default function FinanceBudgeting() {
 
   const isToday = selectedDate === new Date().toISOString().slice(0, 10);
 
-  // Form handling
+  // Form handling (Create / Edit)
   const openCreateModal = () => {
     setEditingBudget(null);
     setForm({
       title: "",
       department: DEFAULT_DEPARTMENTS[0],
       category: "fuel",
-      periodType: activeTab,
+      periodType: activeTab === "all" ? "monthly" : activeTab,
       allocatedAmount: "",
       alertThresholdPct: "85",
       notes: "",
@@ -579,7 +593,7 @@ export default function FinanceBudgeting() {
             }
           : b
       );
-      toast.success(`Budget "${form.title}" updated`);
+      toast.success(`Budget "${form.title}" updated successfully`);
     } else {
       const newItem: BudgetItem = {
         id: `budget_${Date.now()}`,
@@ -594,7 +608,7 @@ export default function FinanceBudgeting() {
         updatedAt: new Date().toISOString(),
       };
       updated = [newItem, ...budgets];
-      toast.success(`Budget "${form.title}" added`);
+      toast.success(`Budget "${form.title}" allocated successfully`);
     }
 
     setBudgets(updated);
@@ -622,7 +636,7 @@ export default function FinanceBudgeting() {
   };
 
   const handleDeleteBudget = (id: string, title: string) => {
-    if (!confirm(`Delete budget line "${title}"?`)) return;
+    if (!confirm(`Are you sure you want to delete budget line "${title}"?`)) return;
     const updated = budgets.filter((b) => b.id !== id);
     setBudgets(updated);
     localStorage.setItem(`company_budgets_${orgId}`, JSON.stringify(updated));
@@ -690,7 +704,8 @@ export default function FinanceBudgeting() {
   // Filter budgets for active tab & risk filter
   const displayedBudgets = useMemo(() => {
     return budgets.filter((b) => {
-      if (b.periodType !== activeTab) return false;
+      // If activeTab is 'all', show ALL budgets!
+      if (activeTab !== "all" && b.periodType !== activeTab) return false;
       if (departmentFilter !== "all" && b.department !== departmentFilter) return false;
 
       // Risk Filter check
@@ -706,6 +721,7 @@ export default function FinanceBudgeting() {
       return (
         b.title.toLowerCase().includes(q) ||
         b.department.toLowerCase().includes(q) ||
+        b.periodType.toLowerCase().includes(q) ||
         (b.notes && b.notes.toLowerCase().includes(q))
       );
     });
@@ -726,14 +742,13 @@ export default function FinanceBudgeting() {
       isOver,
       burnPct,
     };
-  }, [displayedBudgets, dailyActuals, overallActuals, activeTab]);
+  }, [displayedBudgets, dailyActuals, overallActuals]);
 
   // Handle Budget Reallocation (Virement)
   const openTransferModal = () => {
-    const eligibleSources = budgets.filter((b) => b.periodType === activeTab);
     setTransferForm({
-      sourceId: eligibleSources[0]?.id || "",
-      destinationId: eligibleSources[1]?.id || "",
+      sourceId: budgets[0]?.id || "",
+      destinationId: budgets[1]?.id || "",
       amount: "",
       reason: "",
     });
@@ -763,7 +778,7 @@ export default function FinanceBudgeting() {
         return {
           ...b,
           allocatedAmountTzs: b.allocatedAmountTzs - amountInTzs,
-          notes: `${b.notes || ""} [Reallocated -${fmtMoney(amountInTzs)} to ${destination.title}: ${reason}]`.trim(),
+          notes: `${b.notes || ""} [Transferred -${fmtMoney(amountInTzs)} to ${destination.title}: ${reason}]`.trim(),
           updatedAt: new Date().toISOString(),
         };
       }
@@ -771,7 +786,7 @@ export default function FinanceBudgeting() {
         return {
           ...b,
           allocatedAmountTzs: b.allocatedAmountTzs + amountInTzs,
-          notes: `${b.notes || ""} [Reallocated +${fmtMoney(amountInTzs)} from ${source.title}: ${reason}]`.trim(),
+          notes: `${b.notes || ""} [Received +${fmtMoney(amountInTzs)} from ${source.title}: ${reason}]`.trim(),
           updatedAt: new Date().toISOString(),
         };
       }
@@ -797,7 +812,7 @@ export default function FinanceBudgeting() {
         return [
           `"${b.department}"`,
           `"${b.title}"`,
-          `"${b.periodType}"`,
+          `"${b.periodType.toUpperCase()}"`,
           allocated,
           actual,
           remaining,
@@ -811,11 +826,20 @@ export default function FinanceBudgeting() {
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
     link.setAttribute("href", encodedUri);
-    link.setAttribute("download", `Budget_Report_${activeTab}_${activeTab === "daily" ? selectedDate : "2026"}.csv`);
+    link.setAttribute("download", `Company_Budget_Report_${activeTab}_2026.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
     toast.success("CSV report downloaded successfully");
+  };
+
+  // Open Report Modal & configure
+  const handleOpenReportModal = () => {
+    setReportMeta((prev) => ({
+      ...prev,
+      reportPeriod: activeTab,
+    }));
+    setReportModalOpen(true);
   };
 
   // Download PDF Report
@@ -841,7 +865,7 @@ export default function FinanceBudgeting() {
       const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
 
       pdf.addImage(imgData, "PNG", 0, 0, pdfWidth, pdfHeight);
-      pdf.save(`Executive_Budget_Report_${activeTab}_${activeTab === "daily" ? selectedDate : "2026"}.pdf`);
+      pdf.save(`Executive_Budget_Report_${reportMeta.reportPeriod}_2026.pdf`);
       toast.success("Executive PDF report downloaded successfully!");
     } catch (err: any) {
       console.error("PDF generation failed:", err);
@@ -851,8 +875,13 @@ export default function FinanceBudgeting() {
     }
   };
 
+  // Print Isolated Document
+  const handlePrintDocument = () => {
+    window.print();
+  };
+
   const companyName = organisation?.name || "MACHINECARE FLEET & LOGISTICS LIMITED";
-  const reportRefNumber = `RPT-BGT-${activeTab.toUpperCase()}-${activeTab === "daily" ? selectedDate.replace(/-/g, "") : "2026"}-01`;
+  const reportRefNumber = `RPT-BGT-${activeTab.toUpperCase()}-${new Date().getFullYear()}-01`;
 
   if (loading) {
     return <PageLoader message="Loading budget allocations..." />;
@@ -860,6 +889,38 @@ export default function FinanceBudgeting() {
 
   return (
     <div className="space-y-6">
+      {/* Isolated Print CSS: When printing, hides EVERYTHING except #budget-report-sheet */}
+      <style>{`
+        @media print {
+          body * {
+            visibility: hidden !important;
+          }
+          #budget-report-sheet,
+          #budget-report-sheet * {
+            visibility: visible !important;
+          }
+          #budget-report-sheet {
+            position: fixed !important;
+            left: 0 !important;
+            top: 0 !important;
+            width: 100vw !important;
+            max-width: 100% !important;
+            height: auto !important;
+            margin: 0 !important;
+            padding: 15mm 20mm !important;
+            box-shadow: none !important;
+            border: none !important;
+            background: white !important;
+            color: #0f172a !important;
+            z-index: 9999999 !important;
+          }
+          @page {
+            size: A4 portrait;
+            margin: 8mm;
+          }
+        }
+      `}</style>
+
       {/* Clean Top Header */}
       <FinanceNavHeader
         title="Budgeting"
@@ -895,12 +956,12 @@ export default function FinanceBudgeting() {
               <ArrowRightLeft className="h-3.5 w-3.5" /> Transfer Funds
             </Button>
 
-            {/* Professional Report Download */}
+            {/* Professional Report Download / Print Modal Trigger */}
             <Button
               variant="outline"
               size="sm"
-              onClick={() => setReportModalOpen(true)}
-              className="gap-1.5 text-xs border-primary/30 text-primary hover:bg-primary/5 font-bold"
+              onClick={handleOpenReportModal}
+              className="gap-1.5 text-xs border-primary/40 text-primary hover:bg-primary/5 font-bold"
             >
               <Download className="h-3.5 w-3.5" /> Download Report
             </Button>
@@ -912,9 +973,24 @@ export default function FinanceBudgeting() {
         }
       />
 
-      {/* Primary Period View Switcher */}
+      {/* Primary Period View Switcher: Shows 'All Budgets' first! */}
       <div className="flex flex-wrap items-center justify-between gap-3 bg-muted/30 border border-border p-2 rounded-xl">
         <div className="flex items-center gap-1.5 bg-background border border-border rounded-lg p-1">
+          <button
+            type="button"
+            onClick={() => {
+              setActiveTab("all");
+              setRiskFilter("all");
+            }}
+            className={cn(
+              "flex items-center gap-1.5 px-3.5 py-1.5 rounded-md text-xs font-bold transition-all",
+              activeTab === "all"
+                ? "bg-primary text-primary-foreground shadow-xs"
+                : "text-muted-foreground hover:text-foreground"
+            )}
+          >
+            <Layers className="h-3.5 w-3.5" /> All Budgets ({budgets.length})
+          </button>
           <button
             type="button"
             onClick={() => {
@@ -963,7 +1039,7 @@ export default function FinanceBudgeting() {
         </div>
 
         {/* Date Selector for Daily View */}
-        {activeTab === "daily" && (
+        {activeTab === "daily" ? (
           <div className="flex items-center gap-2">
             <Button
               variant="outline"
@@ -1003,6 +1079,31 @@ export default function FinanceBudgeting() {
               </Button>
             )}
           </div>
+        ) : (
+          <div className="flex items-center gap-1.5 bg-background border border-border rounded-lg p-0.5">
+            <button
+              type="button"
+              onClick={() => setViewMode("cards")}
+              className={cn(
+                "p-1.5 rounded-md text-xs transition-all",
+                viewMode === "cards" ? "bg-muted text-foreground font-bold" : "text-muted-foreground hover:text-foreground"
+              )}
+              title="Card View"
+            >
+              <LayoutGrid className="h-3.5 w-3.5" />
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode("table")}
+              className={cn(
+                "p-1.5 rounded-md text-xs transition-all",
+                viewMode === "table" ? "bg-muted text-foreground font-bold" : "text-muted-foreground hover:text-foreground"
+              )}
+              title="Table View"
+            >
+              <TableIcon className="h-3.5 w-3.5" />
+            </button>
+          </div>
         )}
       </div>
 
@@ -1012,7 +1113,7 @@ export default function FinanceBudgeting() {
         <div className="rounded-xl border border-border bg-card p-4 space-y-1.5 shadow-2xs">
           <div className="flex items-center justify-between text-muted-foreground">
             <span className="text-xs font-semibold uppercase tracking-wider">
-              {activeTab === "daily" ? "Today's Budget Cap" : activeTab === "monthly" ? "Monthly Budget" : "Annual Budget"}
+              {activeTab === "daily" ? "Today's Budget Cap" : activeTab === "monthly" ? "Monthly Budget" : activeTab === "annual" ? "Annual Budget" : "Total Approved Budgets"}
             </span>
             <PiggyBank className="h-4 w-4 text-primary" />
           </div>
@@ -1020,7 +1121,7 @@ export default function FinanceBudgeting() {
             {fmtMoney(kpiTotals.allocated)}
           </div>
           <p className="text-[11px] text-muted-foreground">
-            {activeTab === "daily" ? `Allocated for ${selectedDate}` : `Total approved limit`}
+            {activeTab === "daily" ? `Allocated for ${selectedDate}` : `Across ${displayedBudgets.length} cost centers`}
           </p>
         </div>
 
@@ -1036,7 +1137,7 @@ export default function FinanceBudgeting() {
             {fmtMoney(kpiTotals.actual)}
           </div>
           <p className="text-[11px] text-muted-foreground">
-            {activeTab === "daily" ? `Logged across trips & fuel` : `Recorded expenses to date`}
+            {activeTab === "daily" ? `Logged across trips & fuel` : `Incurred operational expenditures`}
           </p>
         </div>
 
@@ -1060,7 +1161,7 @@ export default function FinanceBudgeting() {
             {fmtMoney(Math.abs(kpiTotals.variance))}
           </div>
           <p className="text-[11px] text-muted-foreground">
-            {kpiTotals.isOver ? "Over budget cap" : "Available operating funds"}
+            {kpiTotals.isOver ? "Over budget cap" : "Available operating surplus"}
           </p>
         </div>
 
@@ -1105,7 +1206,13 @@ export default function FinanceBudgeting() {
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <h2 className="text-base font-bold text-foreground">
-              {activeTab === "daily" ? "Daily Department Allocations" : activeTab === "monthly" ? "Monthly Department Budgets" : "Annual Department Allocations"}
+              {activeTab === "all"
+                ? "All Department Budgets"
+                : activeTab === "daily"
+                ? "Daily Department Allocations"
+                : activeTab === "monthly"
+                ? "Monthly Department Budgets"
+                : "Annual Department Allocations"}
             </h2>
             <Badge variant="secondary" className="text-xs font-bold">
               {displayedBudgets.length}
@@ -1123,7 +1230,7 @@ export default function FinanceBudgeting() {
                   riskFilter === "all" ? "bg-muted text-foreground font-bold" : "text-muted-foreground"
                 )}
               >
-                All ({budgets.filter((b) => b.periodType === activeTab).length})
+                All
               </button>
               <button
                 type="button"
@@ -1140,7 +1247,7 @@ export default function FinanceBudgeting() {
             <div className="relative w-full sm:w-56">
               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
               <Input
-                placeholder="Search category or notes..."
+                placeholder="Search budget or notes..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 className="pl-8 h-8 text-xs bg-background"
@@ -1154,7 +1261,7 @@ export default function FinanceBudgeting() {
             <PiggyBank className="h-8 w-8 mx-auto text-muted-foreground/60 mb-2" />
             <h3 className="text-sm font-bold text-foreground">No budgets match your criteria</h3>
             <p className="text-xs text-muted-foreground mt-1 max-w-sm mx-auto">
-              {riskFilter === "at_risk" ? "Great news! None of your budget lines are currently nearing or exceeding limits." : "Click below to allocate a budget line."}
+              {riskFilter === "at_risk" ? "All of your budget lines are currently within approved limits." : "Click below to allocate a budget line."}
             </p>
             {riskFilter === "at_risk" ? (
               <Button onClick={() => setRiskFilter("all")} variant="outline" size="sm" className="mt-4">
@@ -1166,7 +1273,107 @@ export default function FinanceBudgeting() {
               </Button>
             )}
           </div>
+        ) : viewMode === "table" ? (
+          /* Table View for High-Density Budget Inspection */
+          <div className="rounded-xl border border-border bg-card overflow-hidden shadow-2xs">
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs text-left">
+                <thead className="bg-muted/50 border-b border-border text-muted-foreground font-bold">
+                  <tr>
+                    <th className="py-2.5 px-3">Department</th>
+                    <th className="py-2.5 px-3">Budget Line</th>
+                    <th className="py-2.5 px-3">Cycle</th>
+                    <th className="py-2.5 px-3 text-right">Budget Cap</th>
+                    <th className="py-2.5 px-3 text-right">Spent</th>
+                    <th className="py-2.5 px-3 text-right">Remaining</th>
+                    <th className="py-2.5 px-3 text-center">Burn %</th>
+                    <th className="py-2.5 px-3 text-center">Status</th>
+                    <th className="py-2.5 px-3 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {displayedBudgets.map((b) => {
+                    const allocated = b.allocatedAmountTzs;
+                    const actual = getItemActualSpend(b);
+                    const remaining = allocated - actual;
+                    const pct = allocated > 0 ? Math.round((actual / allocated) * 100) : 0;
+                    const isOver = remaining < 0;
+
+                    return (
+                      <tr key={b.id} className="hover:bg-muted/30 transition-colors">
+                        <td className="py-2.5 px-3 font-semibold text-muted-foreground">{b.department}</td>
+                        <td className="py-2.5 px-3 font-bold text-foreground">
+                          {b.title}
+                          {b.notes && <span className="block text-[11px] font-normal text-muted-foreground">{b.notes}</span>}
+                        </td>
+                        <td className="py-2.5 px-3">
+                          <Badge variant="outline" className="text-[10px] font-bold uppercase">
+                            {b.periodType}
+                          </Badge>
+                        </td>
+                        <td className="py-2.5 px-3 text-right font-mono font-bold text-foreground">
+                          {fmtMoney(allocated)}
+                        </td>
+                        <td className="py-2.5 px-3 text-right font-mono font-semibold text-foreground">
+                          {fmtMoney(actual)}
+                        </td>
+                        <td
+                          className={cn(
+                            "py-2.5 px-3 text-right font-mono font-bold",
+                            isOver ? "text-rose-600 dark:text-rose-400" : "text-emerald-600 dark:text-emerald-400"
+                          )}
+                        >
+                          {isOver ? "-" : "+"}
+                          {fmtMoney(Math.abs(remaining))}
+                        </td>
+                        <td className="py-2.5 px-3 text-center font-mono font-bold">
+                          {pct}%
+                        </td>
+                        <td className="py-2.5 px-3 text-center">
+                          <Badge
+                            variant="outline"
+                            className={cn(
+                              "text-[10px] font-bold px-1.5 py-0",
+                              isOver
+                                ? "bg-rose-500/10 text-rose-700 dark:text-rose-400 border-rose-500/30"
+                                : pct >= b.alertThresholdPct
+                                ? "bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/30"
+                                : "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/30"
+                            )}
+                          >
+                            {isOver ? "Over Budget" : `${pct}%`}
+                          </Badge>
+                        </td>
+                        <td className="py-2.5 px-3 text-right">
+                          <div className="flex items-center justify-end gap-1">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => openEditModal(b)}
+                              className="h-7 text-xs font-semibold px-2"
+                            >
+                              <Edit className="h-3 w-3 mr-1" /> Edit
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleDeleteBudget(b.id, b.title)}
+                              className="h-7 w-7 text-rose-500 hover:text-rose-600"
+                              title="Delete"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
         ) : (
+          /* Cards View */
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
             {displayedBudgets.map((b) => {
               const allocated = b.allocatedAmountTzs;
@@ -1182,9 +1389,14 @@ export default function FinanceBudgeting() {
                 >
                   <div className="space-y-1">
                     <div className="flex items-center justify-between gap-2">
-                      <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
-                        {b.department}
-                      </span>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
+                          {b.department}
+                        </span>
+                        <Badge variant="outline" className="text-[9px] uppercase font-bold px-1.5 py-0">
+                          {b.periodType}
+                        </Badge>
+                      </div>
                       <Badge
                         variant="outline"
                         className={cn(
@@ -1243,9 +1455,9 @@ export default function FinanceBudgeting() {
                       variant="ghost"
                       size="sm"
                       onClick={() => openEditModal(b)}
-                      className="h-7 text-xs font-medium px-2"
+                      className="h-7 text-xs font-semibold px-2"
                     >
-                      Adjust
+                      <Edit className="h-3 w-3 mr-1" /> Edit Budget
                     </Button>
                     <Button
                       variant="ghost"
@@ -1330,15 +1542,17 @@ export default function FinanceBudgeting() {
         </div>
       )}
 
-      {/* Simple, User-Friendly Budget Modal */}
+      {/* Edit / Create Budget Modal */}
       <Dialog open={modalOpen} onOpenChange={setModalOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>
-              {editingBudget ? "Adjust Budget Allocation" : "Allocate New Budget"}
+              {editingBudget ? `Edit Budget: ${editingBudget.title}` : "Allocate New Budget"}
             </DialogTitle>
             <DialogDescription>
-              Set spending limits for daily operations or monthly departmental cost centers.
+              {editingBudget
+                ? "Update spending limits, department category, or notes for this budget line."
+                : "Set spending limits for daily operations, monthly departmental cost centers, or annual targets."}
             </DialogDescription>
           </DialogHeader>
 
@@ -1479,13 +1693,11 @@ export default function FinanceBudgeting() {
                   <SelectValue placeholder="Select Source Budget" />
                 </SelectTrigger>
                 <SelectContent>
-                  {budgets
-                    .filter((b) => b.periodType === activeTab)
-                    .map((b) => (
-                      <SelectItem key={b.id} value={b.id}>
-                        {b.title} ({fmtMoney(b.allocatedAmountTzs)})
-                      </SelectItem>
-                    ))}
+                  {budgets.map((b) => (
+                    <SelectItem key={b.id} value={b.id}>
+                      {b.title} ({fmtMoney(b.allocatedAmountTzs)}) - {b.periodType}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
@@ -1501,10 +1713,10 @@ export default function FinanceBudgeting() {
                 </SelectTrigger>
                 <SelectContent>
                   {budgets
-                    .filter((b) => b.periodType === activeTab && b.id !== transferForm.sourceId)
+                    .filter((b) => b.id !== transferForm.sourceId)
                     .map((b) => (
                       <SelectItem key={b.id} value={b.id}>
-                        {b.title} ({fmtMoney(b.allocatedAmountTzs)})
+                        {b.title} ({fmtMoney(b.allocatedAmountTzs)}) - {b.periodType}
                       </SelectItem>
                     ))}
                 </SelectContent>
@@ -1526,7 +1738,7 @@ export default function FinanceBudgeting() {
             <div className="space-y-1.5">
               <Label className="text-xs font-bold">Reason for Reallocation *</Label>
               <Input
-                placeholder="e.g. Emergency diesel required for Zambian copper run"
+                placeholder="e.g. Additional diesel required for copper transit"
                 value={transferForm.reason}
                 onChange={(e) => setTransferForm({ ...transferForm, reason: e.target.value })}
                 className="text-xs"
@@ -1551,7 +1763,7 @@ export default function FinanceBudgeting() {
         </DialogContent>
       </Dialog>
 
-      {/* Professional Executive Report Preview & Download Dialog */}
+      {/* Professional Report Studio & Isolated Print / PDF Exporter */}
       <Dialog open={reportModalOpen} onOpenChange={setReportModalOpen}>
         <DialogContent className="max-w-4xl max-h-[92vh] overflow-y-auto p-0">
           {/* Header Controls Bar */}
@@ -1559,7 +1771,7 @@ export default function FinanceBudgeting() {
             <div>
               <h3 className="text-base font-bold text-foreground">Executive Budget Performance Report</h3>
               <p className="text-xs text-muted-foreground">
-                Audited report for {activeTab === "daily" ? `Day: ${selectedDate}` : activeTab === "monthly" ? "Month: Current Cycle" : "Full Year 2026"}
+                Customize report parameters, edit remarks, or export to official PDF / CSV.
               </p>
             </div>
 
@@ -1576,10 +1788,10 @@ export default function FinanceBudgeting() {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => window.print()}
-                className="gap-1.5 text-xs"
+                onClick={handlePrintDocument}
+                className="gap-1.5 text-xs font-bold"
               >
-                <Printer className="h-3.5 w-3.5" /> Print
+                <Printer className="h-3.5 w-3.5" /> Print Report
               </Button>
 
               <Button
@@ -1591,6 +1803,51 @@ export default function FinanceBudgeting() {
                 <Download className="h-3.5 w-3.5" />
                 {generatingPdf ? "Generating PDF..." : "Download PDF"}
               </Button>
+            </div>
+          </div>
+
+          {/* Report Customization / Editing Panel */}
+          <div className="p-4 bg-muted/20 border-b border-border space-y-3">
+            <div className="flex items-center gap-2 text-xs font-bold text-foreground">
+              <SlidersHorizontal className="h-3.5 w-3.5 text-primary" /> Customize Report Details Before Downloading:
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="space-y-1">
+                <Label className="text-[11px] font-semibold text-muted-foreground">Report Document Title</Label>
+                <Input
+                  value={reportMeta.title}
+                  onChange={(e) => setReportMeta({ ...reportMeta, title: e.target.value })}
+                  className="h-7 text-xs bg-background font-bold"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <Label className="text-[11px] font-semibold text-muted-foreground">Prepared By (Name / Title)</Label>
+                <Input
+                  value={reportMeta.preparedBy}
+                  onChange={(e) => setReportMeta({ ...reportMeta, preparedBy: e.target.value })}
+                  className="h-7 text-xs bg-background"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <Label className="text-[11px] font-semibold text-muted-foreground">Approved By (Director / CFO)</Label>
+                <Input
+                  value={reportMeta.approvedBy}
+                  onChange={(e) => setReportMeta({ ...reportMeta, approvedBy: e.target.value })}
+                  className="h-7 text-xs bg-background"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-1">
+              <Label className="text-[11px] font-semibold text-muted-foreground">Executive Remarks / Audit Notes</Label>
+              <Input
+                value={reportMeta.notes}
+                onChange={(e) => setReportMeta({ ...reportMeta, notes: e.target.value })}
+                className="h-7 text-xs bg-background"
+                placeholder="Remarks for board or finance review..."
+              />
             </div>
           </div>
 
@@ -1606,7 +1863,7 @@ export default function FinanceBudgeting() {
               <div className="border-b-2 border-slate-900 pb-4 mb-6">
                 <div className="flex justify-between items-start gap-4">
                   <div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2.5">
                       <div className="h-8 w-8 rounded-md bg-slate-900 flex items-center justify-center text-white font-black text-sm">
                         MC
                       </div>
@@ -1636,23 +1893,27 @@ export default function FinanceBudgeting() {
 
                 <div className="mt-4 pt-3 border-t border-slate-100 flex justify-between items-center text-[11px]">
                   <div>
-                    <span className="text-slate-500 font-medium">Report Scope: </span>
-                    <strong className="text-slate-900 uppercase">
-                      {activeTab === "daily" ? `Daily Operations (${selectedDate})` : activeTab === "monthly" ? "Monthly Operating Budget" : "Fiscal Year 2026 Budget"}
-                    </strong>
+                    <span className="text-slate-500 font-medium">Document: </span>
+                    <strong className="text-slate-900 uppercase">{reportMeta.title}</strong>
                   </div>
                   <div>
                     <span className="text-slate-500 font-medium">Reporting Currency: </span>
                     <strong className="text-slate-900">{currencyMode} (Peg: 1 USD = 2,600 TZS)</strong>
                   </div>
                 </div>
+
+                {reportMeta.notes && (
+                  <div className="mt-2 text-[10px] text-slate-600 italic">
+                    Note: {reportMeta.notes}
+                  </div>
+                )}
               </div>
 
               {/* Executive Summary Dashboard Box */}
               <div className="grid grid-cols-4 gap-3 bg-slate-50 border border-slate-200 rounded-lg p-3.5 mb-6">
                 <div>
                   <div className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">
-                    Total Budget Cap
+                    Total Approved Budget
                   </div>
                   <div className="text-base font-black font-mono text-slate-900 mt-0.5">
                     {fmtMoney(kpiTotals.allocated)}
@@ -1706,7 +1967,7 @@ export default function FinanceBudgeting() {
                 <div className="font-bold text-slate-900 text-xs uppercase tracking-wider mb-2 flex items-center justify-between">
                   <span>1. Cost Center Allocations &amp; Variance Matrix</span>
                   <span className="text-[10px] text-slate-500 normal-case font-normal">
-                    {displayedBudgets.length} Budget Lines Monitored
+                    {displayedBudgets.length} Budget Lines Audited
                   </span>
                 </div>
 
@@ -1714,8 +1975,9 @@ export default function FinanceBudgeting() {
                   <thead className="bg-slate-100 text-slate-700 font-bold border-b border-slate-300">
                     <tr>
                       <th className="py-2 px-2 text-left border-r border-slate-300">Department</th>
-                      <th className="py-2 px-2 text-left border-r border-slate-300">Line Item Description</th>
-                      <th className="py-2 px-2 text-right border-r border-slate-300">Budget Cap</th>
+                      <th className="py-2 px-2 text-left border-r border-slate-300">Line Description</th>
+                      <th className="py-2 px-2 text-center border-r border-slate-300">Cycle</th>
+                      <th className="py-2 px-2 text-right border-r border-slate-300">Approved Budget</th>
                       <th className="py-2 px-2 text-right border-r border-slate-300">Actual Spend</th>
                       <th className="py-2 px-2 text-right border-r border-slate-300">Variance</th>
                       <th className="py-2 px-2 text-center border-r border-slate-300">Burn %</th>
@@ -1737,6 +1999,9 @@ export default function FinanceBudgeting() {
                           </td>
                           <td className="py-1.5 px-2 font-bold text-slate-900 border-r border-slate-200">
                             {b.title}
+                          </td>
+                          <td className="py-1.5 px-2 text-center uppercase text-[9px] font-bold text-slate-500 border-r border-slate-200">
+                            {b.periodType}
                           </td>
                           <td className="py-1.5 px-2 text-right font-mono border-r border-slate-200">
                             {fmtMoney(allocated)}
@@ -1776,7 +2041,7 @@ export default function FinanceBudgeting() {
                   </tbody>
                   <tfoot className="bg-slate-100 font-bold border-t-2 border-slate-400">
                     <tr>
-                      <td colSpan={2} className="py-2 px-2 text-slate-900 uppercase tracking-wider border-r border-slate-300">
+                      <td colSpan={3} className="py-2 px-2 text-slate-900 uppercase tracking-wider border-r border-slate-300">
                         TOTAL SUMMARY
                       </td>
                       <td className="py-2 px-2 text-right font-mono text-slate-900 border-r border-slate-300">
@@ -1807,7 +2072,7 @@ export default function FinanceBudgeting() {
                 </table>
               </div>
 
-              {/* If Daily: Realized Daily Transactions */}
+              {/* If Daily Mode: Realized Daily Transactions */}
               {activeTab === "daily" && dailyExpenses.length > 0 && (
                 <div className="mb-6">
                   <div className="font-bold text-slate-900 text-xs uppercase tracking-wider mb-2">
@@ -1846,7 +2111,7 @@ export default function FinanceBudgeting() {
                 <div className="grid grid-cols-3 gap-6 pt-2">
                   <div className="border-t border-slate-400 pt-2 text-center">
                     <div className="text-[10px] font-bold text-slate-900">
-                      {profile?.full_name || "Finance Officer"}
+                      {reportMeta.preparedBy}
                     </div>
                     <div className="text-[9px] text-slate-500 uppercase">Prepared By (Operations / Accounts)</div>
                     <div className="text-[8px] text-slate-400 font-mono mt-0.5">Date: {new Date().toISOString().slice(0, 10)}</div>
@@ -1854,7 +2119,7 @@ export default function FinanceBudgeting() {
 
                   <div className="border-t border-slate-400 pt-2 text-center">
                     <div className="text-[10px] font-bold text-slate-900">
-                      Financial Controller
+                      {reportMeta.reviewedBy}
                     </div>
                     <div className="text-[9px] text-slate-500 uppercase">Reviewed &amp; Audited By</div>
                     <div className="text-[8px] text-slate-400 font-mono mt-0.5">Signature / Stamp</div>
@@ -1862,7 +2127,7 @@ export default function FinanceBudgeting() {
 
                   <div className="border-t border-slate-400 pt-2 text-center">
                     <div className="text-[10px] font-bold text-slate-900">
-                      Managing Director / CFO
+                      {reportMeta.approvedBy}
                     </div>
                     <div className="text-[9px] text-slate-500 uppercase">Executive Approval</div>
                     <div className="text-[8px] text-slate-400 font-mono mt-0.5">Authorized Signatory</div>
