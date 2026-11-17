@@ -204,9 +204,9 @@ export function PlatformAdminOrgSwitcher({ compact = false }: { compact?: boolea
 
         <div className="px-1 py-1">
           <DropdownMenuItem asChild className="cursor-pointer gap-2 text-xs font-semibold text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10">
-            <Link to="/factory/live-tv" onClick={() => setOpen(false)}>
-              <Tv className="h-4 w-4" />
-              <span>Factory Floor Live TV</span>
+            <Link to="/production/3d-plant" onClick={() => setOpen(false)}>
+              <Factory className="h-4 w-4" />
+              <span>3D Plant & Line Layout</span>
             </Link>
           </DropdownMenuItem>
         </div>

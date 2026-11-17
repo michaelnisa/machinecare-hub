@@ -459,9 +459,9 @@ export default function Admin() {
         </div>
         <div className="flex items-center gap-2">
           <Button asChild variant="outline" size="sm" className="gap-1.5 border-emerald-500/30 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10 font-medium">
-            <Link to="/factory/live-tv">
-              <Tv className="h-4 w-4" />
-              {isSwahili ? "TV ya Kiwanda" : "Factory Floor Live TV"}
+            <Link to="/production/3d-plant">
+              <Factory className="h-4 w-4" />
+              {isSwahili ? "Muundo wa Kiwanda 3D" : "3D Plant & Line Layout"}
             </Link>
           </Button>
           <Button asChild variant="outline" size="sm" className="gap-1.5 border-primary/30 text-primary hover:bg-primary/5">

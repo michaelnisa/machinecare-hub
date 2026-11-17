@@ -91,6 +91,7 @@ const Utilities = lazy(() => import("./pages/Utilities"));
 const Live = lazy(() => import("./pages/Live"));
 const LiveProduction = lazy(() => import("./pages/LiveProduction"));
 const FactoryFloorLiveTV = lazy(() => import("./pages/production/FactoryFloorLiveTV"));
+const Plant3DLayout = lazy(() => import("./pages/production/Plant3DLayout"));
 const SafetyLiveTV = lazy(() => import("./pages/safety/SafetyLiveTV"));
 const VendorRiskAssessmentPublic = lazy(() => import("./pages/safety/VendorRiskAssessmentPublic"));
 const SafetyDepartmentGateway = lazy(() => import("./pages/safety/SafetyDepartmentGateway"));
@@ -238,6 +239,8 @@ const App = () => (
                 <Route path="/live/production" element={<LiveProduction />} />
                 <Route path="/factory/live-tv" element={<FactoryFloorLiveTV />} />
                 <Route path="/production/live-tv" element={<FactoryFloorLiveTV />} />
+                <Route path="/production/3d-plant" element={<Plant3DLayout />} />
+                <Route path="/factory-floor-live" element={<Plant3DLayout />} />
                 <Route path="/safety/live-tv" element={<SafetyLiveTV />} />
                 <Route path="/safety/gateway" element={<SafetyDepartmentGateway />} />
                 <Route path="/safety/gateway/:orgId" element={<SafetyDepartmentGateway />} />
@@ -327,6 +330,8 @@ const App = () => (
                   <Route path="/safety/rules" element={<SafetyRules />} />
                   <Route path="/quality" element={<Quality />} />
                   <Route path="/production" element={<Production />} />
+                  <Route path="/production/3d-plant" element={<Plant3DLayout />} />
+                  <Route path="/factory-floor-live" element={<Plant3DLayout />} />
                   <Route path="/production/overview" element={<ProductionOverview />} />
                   <Route path="/production/planning" element={<ProductionPlanning />} />
                   <Route path="/production/orders" element={<ProductionOrders />} />

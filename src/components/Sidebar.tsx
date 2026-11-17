@@ -166,7 +166,8 @@ export function Sidebar() {
         label: "Overview",
         items: [
           { to: "/dashboard", label: t.nav.dashboard, icon: LayoutDashboard },
-          ...(!isLite ? [{ to: "/factory/live-tv", label: "Factory Floor Live TV", icon: Tv }] : []),
+          ...(!isLite ? [{ to: "/live", label: "Live TV", icon: Tv }] : []),
+          ...(!isLite ? [{ to: "/production/3d-plant", label: "3D Plant & Line Layout", icon: Factory }] : []),
           { to: "/notifications", label: t.nav.notifications, icon: Bell },
         ],
       },
@@ -217,8 +218,8 @@ export function Sidebar() {
               id: "production",
               label: "Production",
               items: [
-                { to: "/factory/live-tv", label: "Shop Floor Physical Twin", icon: Factory },
-                { to: "/live/production", label: "Live Production KPI", icon: Tv },
+                { to: "/production/3d-plant", label: "3D Plant & Line Layout", icon: Factory },
+                { to: "/live/production", label: "Live TV", icon: Tv },
                 { to: "/production/overview", label: "Production Overview", icon: LayoutDashboard },
                 { to: "/production/planning", label: "Production Planning", icon: CalendarRange },
                 { to: "/production/orders", label: "Production Orders", icon: ClipboardList },
@@ -706,9 +707,14 @@ export function Sidebar() {
         items: [
           { to: "/dashboard", label: t.nav.dashboard, icon: LayoutDashboard },
           ...(!isLite ? [{
-            to: enabledMods.includes("fleet") ? "/live" : "/factory/live-tv",
-            label: enabledMods.includes("fleet") ? "Live Fleet TV" : "Factory Floor Live TV",
+            to: isProductionOnly ? "/live/production" : "/live",
+            label: isProductionOnly ? "Live Production TV" : "Live TV",
             icon: Tv,
+          }] : []),
+          ...(!isLite && !isFleetOnly && !isGarageOnly ? [{
+            to: "/production/3d-plant",
+            label: "3D Plant & Line Layout",
+            icon: Factory,
           }] : []),
           { to: "/notifications", label: t.nav.notifications, icon: Bell },
         ],
@@ -730,8 +736,8 @@ export function Sidebar() {
             id: "production",
             label: "Production",
             items: [
-              { to: "/factory/live-tv", label: "Shop Floor Physical Twin", icon: Factory },
-              { to: "/live/production", label: "Live Production KPI", icon: Tv },
+              { to: "/production/3d-plant", label: "3D Plant & Line Layout", icon: Factory },
+              { to: "/live/production", label: "Live TV", icon: Tv },
               { to: "/production/overview", label: "Production Overview", icon: LayoutDashboard },
               { to: "/production/planning", label: "Production Planning", icon: CalendarRange },
               { to: "/production/orders", label: "Production Orders", icon: ClipboardList },
