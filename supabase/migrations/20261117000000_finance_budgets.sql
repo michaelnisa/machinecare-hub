@@ -11,7 +11,7 @@ CREATE TABLE IF NOT EXISTS public.finance_budgets (
   category TEXT NOT NULL,
   department TEXT NOT NULL DEFAULT 'Operations',
   fiscal_year INTEGER NOT NULL DEFAULT EXTRACT(YEAR FROM CURRENT_DATE)::INTEGER,
-  period_type TEXT NOT NULL DEFAULT 'annual' CHECK (period_type IN ('annual', 'q1', 'q2', 'q3', 'q4', 'monthly')),
+  period_type TEXT NOT NULL DEFAULT 'annual' CHECK (period_type IN ('daily', 'monthly', 'q1', 'q2', 'q3', 'q4', 'annual')),
   period_month INTEGER, -- 1 to 12 if period_type = 'monthly'
   allocated_amount NUMERIC NOT NULL DEFAULT 0,
   currency TEXT NOT NULL DEFAULT 'TZS',

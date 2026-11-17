@@ -23,7 +23,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { formatMoney } from "@/lib/format";
 import { FinanceNavHeader } from "./FinanceNavHeader";
 import { getFinancialOverview } from "@/services/financeService";
 import { toast } from "sonner";
@@ -31,39 +30,44 @@ import {
   PiggyBank,
   Search,
   Plus,
-  DollarSign,
   TrendingUp,
   TrendingDown,
   AlertTriangle,
   CheckCircle2,
-  FileSpreadsheet,
   Printer,
-  ChevronRight,
   Calendar,
-  Layers,
-  ArrowRight,
-  Info,
-  ShieldAlert,
   Wallet,
   Building2,
-  Wrench,
-  Fuel,
-  Route,
-  UserCheck,
+  ChevronLeft,
+  ChevronRight,
+  Clock,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+
+export type BudgetPeriod = "daily" | "monthly" | "annual";
 
 export interface BudgetItem {
   id: string;
   title: string;
   department: string;
-  category: string;
+  category: "fuel" | "tolls" | "maintenance" | "posho" | "tyres" | "permits" | "overhead" | "contingency" | "other";
   fiscalYear: number;
-  periodType: "annual" | "q1" | "q2" | "q3" | "q4" | "monthly";
+  periodType: BudgetPeriod;
   allocatedAmountTzs: number;
   alertThresholdPct: number;
   notes?: string;
   updatedAt?: string;
+}
+
+export interface DailyExpenseItem {
+  id: string;
+  source: "Fuel Log" | "Trip Expense" | "Workshop / Receipt";
+  category: string;
+  title: string;
+  amount: number;
+  time: string;
+  plateNumber?: string;
+  notes?: string;
 }
 
 const DEFAULT_DEPARTMENTS = [
@@ -73,97 +77,154 @@ const DEFAULT_DEPARTMENTS = [
   "Crew Management",
   "Compliance & Permits",
   "Administration & Overhead",
-  "Capital Expenditure (CapEx)",
 ];
 
 const INITIAL_BUDGET_TEMPLATES: BudgetItem[] = [
+  // Daily Allocations
   {
-    id: "b-fuel",
-    title: "Fuel & Diesel Procurement",
+    id: "b-daily-fuel",
+    title: "Daily Fleet Fuel Allocation",
+    department: "Fleet Operations",
+    category: "fuel",
+    fiscalYear: 2026,
+    periodType: "daily",
+    allocatedAmountTzs: 1500000,
+    alertThresholdPct: 85,
+    notes: "Daily depot diesel fueling & en-route fuel cards cap.",
+  },
+  {
+    id: "b-daily-posho",
+    title: "Daily Driver Posho & Crew Allowance",
+    department: "Crew Management",
+    category: "posho",
+    fiscalYear: 2026,
+    periodType: "daily",
+    allocatedAmountTzs: 400000,
+    alertThresholdPct: 85,
+    notes: "Daily driver meal allowances, turnboy allowances, and crew rest posho.",
+  },
+  {
+    id: "b-daily-tolls",
+    title: "Daily Transit Tolls & Corridors",
+    department: "Freight Logistics",
+    category: "tolls",
+    fiscalYear: 2026,
+    periodType: "daily",
+    allocatedAmountTzs: 450000,
+    alertThresholdPct: 85,
+    notes: "Weighbridge fees, local municipal transit levies, and corridor access.",
+  },
+  {
+    id: "b-daily-workshop",
+    title: "Daily Workshop Petty Cash & Fixes",
+    department: "Workshop & Engineering",
+    category: "maintenance",
+    fiscalYear: 2026,
+    periodType: "daily",
+    allocatedAmountTzs: 300000,
+    alertThresholdPct: 80,
+    notes: "Emergency quick tyre punctures, bulbs, air hoses, and minor grease fittings.",
+  },
+  {
+    id: "b-daily-contingency",
+    title: "Daily Incident & Road Buffer",
+    department: "Freight Logistics",
+    category: "contingency",
+    fiscalYear: 2026,
+    periodType: "daily",
+    allocatedAmountTzs: 150000,
+    alertThresholdPct: 75,
+    notes: "Daily contingency reserve for unforeseen route delays or towing.",
+  },
+  // Monthly Allocations
+  {
+    id: "b-fuel-monthly",
+    title: "Monthly Bulk Diesel Procurement",
+    department: "Fleet Operations",
+    category: "fuel",
+    fiscalYear: 2026,
+    periodType: "monthly",
+    allocatedAmountTzs: 45000000,
+    alertThresholdPct: 85,
+    notes: "Bulk diesel supply from Puma/TotalEnergies.",
+  },
+  {
+    id: "b-tolls-monthly",
+    title: "Monthly Statutory Corridors & Tolls",
+    department: "Freight Logistics",
+    category: "tolls",
+    fiscalYear: 2026,
+    periodType: "monthly",
+    allocatedAmountTzs: 13500000,
+    alertThresholdPct: 85,
+    notes: "Cross-border bridge tariffs, ZIMRA, RDA, and TANROADS tolls.",
+  },
+  {
+    id: "b-maint-monthly",
+    title: "Monthly Workshop Scheduled PM & Spares",
+    department: "Workshop & Engineering",
+    category: "maintenance",
+    fiscalYear: 2026,
+    periodType: "monthly",
+    allocatedAmountTzs: 16000000,
+    alertThresholdPct: 80,
+    notes: "Oil, filter kits, brake linings, and preventative overhauls.",
+  },
+  {
+    id: "b-tyres-monthly",
+    title: "Monthly Tyre Replacements & Casings",
+    department: "Workshop & Engineering",
+    category: "tyres",
+    fiscalYear: 2026,
+    periodType: "monthly",
+    allocatedAmountTzs: 8500000,
+    alertThresholdPct: 80,
+    notes: "315/80R22.5 steer and drive tyres.",
+  },
+  {
+    id: "b-posho-monthly",
+    title: "Monthly Driver Allowances & Trip Posho",
+    department: "Crew Management",
+    category: "posho",
+    fiscalYear: 2026,
+    periodType: "monthly",
+    allocatedAmountTzs: 11000000,
+    alertThresholdPct: 85,
+    notes: "Line haul drivers, cross-border allowances, and turnboy stipends.",
+  },
+  {
+    id: "b-overhead-monthly",
+    title: "Monthly Yard, Depot & Office Operations",
+    department: "Administration & Overhead",
+    category: "overhead",
+    fiscalYear: 2026,
+    periodType: "monthly",
+    allocatedAmountTzs: 5000000,
+    alertThresholdPct: 85,
+    notes: "Depot security, yard electricity, telematics, and operations staff.",
+  },
+  // Annual Allocations
+  {
+    id: "b-fuel-annual",
+    title: "Annual Fleet Diesel Procurement",
     department: "Fleet Operations",
     category: "fuel",
     fiscalYear: 2026,
     periodType: "annual",
-    allocatedAmountTzs: 160000000,
+    allocatedAmountTzs: 520000000,
     alertThresholdPct: 85,
-    notes: "Main bulk diesel supply, local depot fueling, and en-route emergency diesel cards.",
+    notes: "Full year bulk diesel allocation.",
   },
   {
-    id: "b-tolls",
-    title: "Statutory Corridors & Road Tolls",
-    department: "Freight Logistics",
-    category: "tolls",
-    fiscalYear: 2026,
-    periodType: "annual",
-    allocatedAmountTzs: 65000000,
-    alertThresholdPct: 85,
-    notes: "Cross-border road user fees, Kazungula & Chirundu bridge tolls, ZIMRA, RDA, and SANRAL tariffs.",
-  },
-  {
-    id: "b-maintenance",
-    title: "Preventive Maintenance & Spare Parts",
+    id: "b-maint-annual",
+    title: "Annual Heavy Maintenance & Overhauls",
     department: "Workshop & Engineering",
     category: "maintenance",
     fiscalYear: 2026,
     periodType: "annual",
-    allocatedAmountTzs: 48000000,
+    allocatedAmountTzs: 190000000,
     alertThresholdPct: 80,
-    notes: "PM service intervals, filter packs, synthetic oils, brake overhaul kits, and mechanic tooling.",
-  },
-  {
-    id: "b-posho",
-    title: "Driver Safari Float & Posho Allowances",
-    department: "Crew Management",
-    category: "posho",
-    fiscalYear: 2026,
-    periodType: "annual",
-    allocatedAmountTzs: 32000000,
-    alertThresholdPct: 85,
-    notes: "Per-diem driver allowances, international transit subsistence, and emergency road float.",
-  },
-  {
-    id: "b-tyres",
-    title: "Tyres & Retread Replacements",
-    department: "Fleet Operations",
-    category: "tyres",
-    fiscalYear: 2026,
-    periodType: "annual",
-    allocatedAmountTzs: 28000000,
-    alertThresholdPct: 90,
-    notes: "Prime mover steer/drive axles, trailer 385/65 super singles, and rim inspections.",
-  },
-  {
-    id: "b-permits",
-    title: "Licensing, Insurance & LATRA Compliance",
-    department: "Compliance & Permits",
-    category: "permits",
-    fiscalYear: 2026,
-    periodType: "annual",
-    allocatedAmountTzs: 22000000,
-    alertThresholdPct: 90,
-    notes: "LATRA cross-border permits, COMESA Yellow Cards, vehicle roadworthiness, and comprehensive insurance.",
-  },
-  {
-    id: "b-overhead",
-    title: "Depot Facilities, Utilities & Admin",
-    department: "Administration & Overhead",
-    category: "overhead",
-    fiscalYear: 2026,
-    periodType: "annual",
-    allocatedAmountTzs: 18000000,
-    alertThresholdPct: 85,
-    notes: "Kurasini yard rent, security guards, telematics software subscriptions, and office utilities.",
-  },
-  {
-    id: "b-contingency",
-    title: "Road Incident Contingency & Escort Buffer",
-    department: "Freight Logistics",
-    category: "contingency",
-    fiscalYear: 2026,
-    periodType: "annual",
-    allocatedAmountTzs: 15000000,
-    alertThresholdPct: 75,
-    notes: "Emergency recovery towing, police escorts for out-of-gauge cargo, and border customs demurrage buffers.",
+    notes: "Annual major engine overhauls, gearbox repairs, and spare parts reserve.",
   },
 ];
 
@@ -174,18 +235,17 @@ export default function FinanceBudgeting() {
   const orgId = organisation?.id || "default_org";
 
   const [loading, setLoading] = useState(true);
-  const [fiscalYear, setFiscalYear] = useState<number>(2026);
-  const [periodType, setPeriodType] = useState<"annual" | "q1" | "q2" | "q3" | "q4" | "monthly">("annual");
   const [currencyMode, setCurrencyMode] = useState<"TZS" | "USD">("TZS");
-  const [departmentFilter, setDepartmentFilter] = useState<string>("all");
+  const [activeTab, setActiveTab] = useState<BudgetPeriod>("daily");
+  const [selectedDate, setSelectedDate] = useState<string>(() => new Date().toISOString().slice(0, 10));
   const [search, setSearch] = useState("");
-  const [showHowItWorks, setShowHowItWorks] = useState(true);
+  const [departmentFilter, setDepartmentFilter] = useState("all");
 
   // Budgets state
   const [budgets, setBudgets] = useState<BudgetItem[]>([]);
 
-  // Operational Actuals state
-  const [actuals, setActuals] = useState<{
+  // Operational actuals for full month/year
+  const [overallActuals, setOverallActuals] = useState<{
     fuel: number;
     tolls: number;
     maintenance: number;
@@ -205,25 +265,51 @@ export default function FinanceBudgeting() {
     contingency: 0,
   });
 
+  // Daily actuals & transactions for selectedDate
+  const [dailyExpenses, setDailyExpenses] = useState<DailyExpenseItem[]>([]);
+  const [dailyActuals, setDailyActuals] = useState<{
+    fuel: number;
+    posho: number;
+    tolls: number;
+    maintenance: number;
+    contingency: number;
+    other: number;
+  }>({
+    fuel: 0,
+    posho: 0,
+    tolls: 0,
+    maintenance: 0,
+    contingency: 0,
+    other: 0,
+  });
+
   // Modal State
   const [modalOpen, setModalOpen] = useState(false);
   const [editingBudget, setEditingBudget] = useState<BudgetItem | null>(null);
   const [form, setForm] = useState({
     title: "",
     department: DEFAULT_DEPARTMENTS[0],
-    category: "other",
-    fiscalYear: 2026,
-    periodType: "annual" as "annual" | "q1" | "q2" | "q3" | "q4" | "monthly",
+    category: "fuel" as BudgetItem["category"],
+    periodType: "daily" as BudgetPeriod,
     allocatedAmount: "",
     alertThresholdPct: "85",
     notes: "",
   });
 
-  // Load budgets & calculate actuals
-  const loadBudgetsAndActuals = async () => {
+  // Format currency helper
+  const fmtMoney = (tzsAmount: number) => {
+    if (currencyMode === "USD") {
+      const usd = Math.round(tzsAmount / USD_TO_TZS);
+      return `$${usd.toLocaleString()}`;
+    }
+    return `${Math.round(tzsAmount).toLocaleString()} TZS`;
+  };
+
+  // Load budgets & operational actuals
+  const loadData = async () => {
     setLoading(true);
     try {
-      // 1. Load budgets from localStorage first (reliable offline & immediate)
+      // 1. Load budgets (localStorage + Supabase fallback)
       const storageKey = `company_budgets_${orgId}`;
       let loadedBudgets: BudgetItem[] = [];
       const saved = localStorage.getItem(storageKey);
@@ -240,7 +326,6 @@ export default function FinanceBudgeting() {
         localStorage.setItem(storageKey, JSON.stringify(INITIAL_BUDGET_TEMPLATES));
       }
 
-      // Also try fetching from Supabase if table exists
       try {
         const { data: dbData } = await supabase
           .from("finance_budgets")
@@ -250,10 +335,10 @@ export default function FinanceBudgeting() {
           loadedBudgets = dbData.map((d: any) => ({
             id: d.id,
             title: d.title,
-            department: d.department || "Operations",
-            category: d.category || "other",
+            department: d.department || "Fleet Operations",
+            category: d.category || "fuel",
             fiscalYear: d.fiscal_year || 2026,
-            periodType: d.period_type || "annual",
+            periodType: (d.period_type || "daily") as BudgetPeriod,
             allocatedAmountTzs: Number(d.allocated_amount || 0),
             alertThresholdPct: Number(d.alert_threshold_pct || 85),
             notes: d.notes || "",
@@ -261,15 +346,15 @@ export default function FinanceBudgeting() {
           }));
         }
       } catch (err) {
-        // Table might not be migrated yet on cloud; safely fall back to localStorage
+        // Fall back to stored state
       }
 
       setBudgets(loadedBudgets);
 
-      // 2. Compute live actual expenditures from trips, fuel, and work orders
+      // 2. Load overview actuals
       if (organisation?.id) {
         const overview = await getFinancialOverview(organisation.id);
-        setActuals({
+        setOverallActuals({
           fuel: overview.fuelTotalCost || 0,
           tolls: overview.tripExpensesTotal || 0,
           maintenance: overview.maintenanceTotalCost || 0,
@@ -279,96 +364,154 @@ export default function FinanceBudgeting() {
           overhead: Math.round((overview.totalExpenses || 0) * 0.07),
           contingency: Math.round((overview.totalExpenses || 0) * 0.05),
         });
+
+        // 3. Load daily expenses for selectedDate
+        await loadDailyExpenses(selectedDate);
       }
     } catch (e) {
-      console.error("Error loading budgets & actuals:", e);
+      console.error("Error loading budgets:", e);
     } finally {
       setLoading(false);
     }
   };
 
-  useEffect(() => {
-    loadBudgetsAndActuals();
-  }, [orgId, fiscalYear]);
-
-  // Save budget item
-  const handleSaveBudget = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!form.title.trim()) return toast.error("Budget title is required");
-    const num = Number(form.allocatedAmount.replace(/,/g, ""));
-    if (isNaN(num) || num <= 0) return toast.error("Please enter a valid allocation amount");
-
-    const amountInTzs = currencyMode === "USD" ? Math.round(num * USD_TO_TZS) : num;
-
-    let updated: BudgetItem[];
-    if (editingBudget) {
-      updated = budgets.map((b) =>
-        b.id === editingBudget.id
-          ? {
-              ...b,
-              title: form.title.trim(),
-              department: form.department,
-              category: form.category,
-              fiscalYear: form.fiscalYear,
-              periodType: form.periodType,
-              allocatedAmountTzs: amountInTzs,
-              alertThresholdPct: Number(form.alertThresholdPct) || 85,
-              notes: form.notes.trim(),
-              updatedAt: new Date().toISOString(),
-            }
-          : b
-      );
-      toast.success(`Budget "${form.title}" updated successfully`);
-    } else {
-      const newItem: BudgetItem = {
-        id: `budget_${Date.now()}`,
-        title: form.title.trim(),
-        department: form.department,
-        category: form.category,
-        fiscalYear: form.fiscalYear,
-        periodType: form.periodType,
-        allocatedAmountTzs: amountInTzs,
-        alertThresholdPct: Number(form.alertThresholdPct) || 85,
-        notes: form.notes.trim(),
-        updatedAt: new Date().toISOString(),
-      };
-      updated = [newItem, ...budgets];
-      toast.success(`Budget "${form.title}" allocated successfully`);
-    }
-
-    setBudgets(updated);
-    localStorage.setItem(`company_budgets_${orgId}`, JSON.stringify(updated));
-
-    // Try background sync to Supabase table
+  // Load specific daily expenses
+  const loadDailyExpenses = async (dateStr: string) => {
+    if (!organisation?.id) return;
     try {
-      await supabase.from("finance_budgets").upsert({
-        id: editingBudget ? editingBudget.id : undefined,
-        organisation_id: orgId,
-        title: form.title.trim(),
-        department: form.department,
-        category: form.category,
-        fiscal_year: form.fiscalYear,
-        period_type: form.periodType,
-        allocated_amount: amountInTzs,
-        currency: "TZS",
-        alert_threshold_pct: Number(form.alertThresholdPct) || 85,
-        notes: form.notes.trim(),
-        created_by: user?.id,
-      });
-    } catch (e) {}
+      const items: DailyExpenseItem[] = [];
+      let fuelSum = 0;
+      let poshoSum = 0;
+      let tollsSum = 0;
+      let maintSum = 0;
+      let contingencySum = 0;
 
-    setModalOpen(false);
-    setEditingBudget(null);
+      // Fuel Logs for date
+      const { data: fuels } = await (supabase as any)
+        .from("fuel_logs")
+        .select("id, recorded_at, fuel_cost, fuel_litres, station, notes, machine_id, machines:machines(name, plate_number)")
+        .eq("organisation_id", organisation.id)
+        .gte("recorded_at", `${dateStr}T00:00:00`)
+        .lte("recorded_at", `${dateStr}T23:59:59`);
+
+      if (fuels && fuels.length > 0) {
+        fuels.forEach((f: any) => {
+          const cost = Number(f.fuel_cost || 0);
+          fuelSum += cost;
+          items.push({
+            id: f.id,
+            source: "Fuel Log",
+            category: "fuel",
+            title: `Fuel Dispense - ${f.station || "Depot"}`,
+            amount: cost,
+            time: f.recorded_at ? f.recorded_at.slice(11, 16) : "--:--",
+            plateNumber: f.machines?.plate_number || f.machines?.name,
+            notes: f.notes || (f.fuel_litres ? `${f.fuel_litres} Litres` : ""),
+          });
+        });
+      }
+
+      // Trip Expenses for date
+      const { data: tripExps } = await (supabase as any)
+        .from("trip_expenses")
+        .select("id, expense_type, amount, occurred_at, notes, trips:trips(origin, destination)")
+        .eq("organisation_id", organisation.id)
+        .gte("occurred_at", `${dateStr}T00:00:00`)
+        .lte("occurred_at", `${dateStr}T23:59:59`);
+
+      if (tripExps && tripExps.length > 0) {
+        tripExps.forEach((t: any) => {
+          const cost = Number(t.amount || 0);
+          const typeLower = (t.expense_type || "").toLowerCase();
+          let cat = "other";
+          if (typeLower.includes("posho") || typeLower.includes("meal") || typeLower.includes("allowance")) {
+            poshoSum += cost;
+            cat = "posho";
+          } else if (typeLower.includes("toll") || typeLower.includes("gate") || typeLower.includes("corridor")) {
+            tollsSum += cost;
+            cat = "tolls";
+          } else {
+            contingencySum += cost;
+            cat = "contingency";
+          }
+
+          items.push({
+            id: t.id,
+            source: "Trip Expense",
+            category: cat,
+            title: `Trip Expense (${t.expense_type || "Corridor"})`,
+            amount: cost,
+            time: t.occurred_at ? t.occurred_at.slice(11, 16) : "--:--",
+            plateNumber: t.trips ? `${t.trips.origin} → ${t.trips.destination}` : undefined,
+            notes: t.notes || "",
+          });
+        });
+      }
+
+      // Accountant Receipts for date
+      const { data: receipts } = await (supabase as any)
+        .from("accountant_receipts")
+        .select("id, receipt_number, title, category, payee_name, amount, payment_date, notes")
+        .eq("organisation_id", organisation.id)
+        .eq("payment_date", dateStr);
+
+      if (receipts && receipts.length > 0) {
+        receipts.forEach((r: any) => {
+          const cost = Number(r.amount || 0);
+          maintSum += cost;
+          items.push({
+            id: r.id,
+            source: "Workshop / Receipt",
+            category: "maintenance",
+            title: r.title || r.receipt_number || "Workshop Expense",
+            amount: cost,
+            time: "Direct",
+            notes: r.payee_name ? `Payee: ${r.payee_name}` : r.notes || "",
+          });
+        });
+      }
+
+      setDailyExpenses(items);
+      setDailyActuals({
+        fuel: fuelSum,
+        posho: poshoSum,
+        tolls: tollsSum,
+        maintenance: maintSum,
+        contingency: contingencySum,
+        other: 0,
+      });
+    } catch (err) {
+      console.error("Error loading daily expenses:", err);
+    }
   };
 
+  useEffect(() => {
+    loadData();
+  }, [orgId]);
+
+  useEffect(() => {
+    if (activeTab === "daily") {
+      loadDailyExpenses(selectedDate);
+    }
+  }, [selectedDate, activeTab]);
+
+  // Navigate Date
+  const handleDateChange = (daysDelta: number) => {
+    const d = new Date(selectedDate);
+    d.setDate(d.getDate() + daysDelta);
+    setSelectedDate(d.toISOString().slice(0, 10));
+  };
+
+  const isToday = selectedDate === new Date().toISOString().slice(0, 10);
+
+  // Form handling
   const openCreateModal = () => {
     setEditingBudget(null);
     setForm({
       title: "",
       department: DEFAULT_DEPARTMENTS[0],
-      category: "other",
-      fiscalYear,
-      periodType,
+      category: "fuel",
+      periodType: activeTab,
       allocatedAmount: "",
       alertThresholdPct: "85",
       notes: "",
@@ -383,7 +526,6 @@ export default function FinanceBudgeting() {
       title: b.title,
       department: b.department,
       category: b.category,
-      fiscalYear: b.fiscalYear,
       periodType: b.periodType,
       allocatedAmount: String(displayAmount),
       alertThresholdPct: String(b.alertThresholdPct),
@@ -392,43 +534,143 @@ export default function FinanceBudgeting() {
     setModalOpen(true);
   };
 
+  const handleSaveBudget = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!form.title.trim()) return toast.error("Budget title is required");
+    const num = Number(form.allocatedAmount.replace(/,/g, ""));
+    if (isNaN(num) || num <= 0) return toast.error("Please enter a valid amount");
+
+    const amountInTzs = currencyMode === "USD" ? Math.round(num * USD_TO_TZS) : num;
+
+    let updated: BudgetItem[];
+    if (editingBudget) {
+      updated = budgets.map((b) =>
+        b.id === editingBudget.id
+          ? {
+              ...b,
+              title: form.title.trim(),
+              department: form.department,
+              category: form.category,
+              periodType: form.periodType,
+              allocatedAmountTzs: amountInTzs,
+              alertThresholdPct: Number(form.alertThresholdPct) || 85,
+              notes: form.notes.trim(),
+              updatedAt: new Date().toISOString(),
+            }
+          : b
+      );
+      toast.success(`Budget "${form.title}" updated`);
+    } else {
+      const newItem: BudgetItem = {
+        id: `budget_${Date.now()}`,
+        title: form.title.trim(),
+        department: form.department,
+        category: form.category,
+        fiscalYear: 2026,
+        periodType: form.periodType,
+        allocatedAmountTzs: amountInTzs,
+        alertThresholdPct: Number(form.alertThresholdPct) || 85,
+        notes: form.notes.trim(),
+        updatedAt: new Date().toISOString(),
+      };
+      updated = [newItem, ...budgets];
+      toast.success(`Budget "${form.title}" added`);
+    }
+
+    setBudgets(updated);
+    localStorage.setItem(`company_budgets_${orgId}`, JSON.stringify(updated));
+
+    try {
+      await supabase.from("finance_budgets").upsert({
+        id: editingBudget ? editingBudget.id : undefined,
+        organisation_id: orgId,
+        title: form.title.trim(),
+        department: form.department,
+        category: form.category,
+        fiscal_year: 2026,
+        period_type: form.periodType,
+        allocated_amount: amountInTzs,
+        currency: "TZS",
+        alert_threshold_pct: Number(form.alertThresholdPct) || 85,
+        notes: form.notes.trim(),
+        created_by: user?.id,
+      });
+    } catch (e) {}
+
+    setModalOpen(false);
+    setEditingBudget(null);
+  };
+
   const handleDeleteBudget = (id: string, title: string) => {
-    if (!confirm(`Are you sure you want to delete the budget line "${title}"?`)) return;
+    if (!confirm(`Delete budget line "${title}"?`)) return;
     const updated = budgets.filter((b) => b.id !== id);
     setBudgets(updated);
     localStorage.setItem(`company_budgets_${orgId}`, JSON.stringify(updated));
-    toast.success(`Budget line "${title}" deleted`);
+    toast.success(`Budget line "${title}" removed`);
   };
 
-  // Helper to determine actual spend for each budget category
-  const getCategoryActual = (category: string): number => {
-    switch (category) {
-      case "fuel":
-        return actuals.fuel;
-      case "tolls":
-        return actuals.tolls;
-      case "maintenance":
-        return actuals.maintenance;
-      case "posho":
-        return actuals.posho;
-      case "tyres":
-        return actuals.tyres;
-      case "permits":
-        return actuals.permits;
-      case "overhead":
-        return actuals.overhead;
-      case "contingency":
-        return actuals.contingency;
-      default:
-        return Math.round(actuals.overhead * 0.5);
+  // Helper to determine actual spend for each budget item
+  const getItemActualSpend = (b: BudgetItem): number => {
+    if (activeTab === "daily") {
+      switch (b.category) {
+        case "fuel":
+          return dailyActuals.fuel;
+        case "posho":
+          return dailyActuals.posho;
+        case "tolls":
+          return dailyActuals.tolls;
+        case "maintenance":
+          return dailyActuals.maintenance;
+        case "contingency":
+          return dailyActuals.contingency;
+        default:
+          return 0;
+      }
+    } else if (activeTab === "monthly") {
+      switch (b.category) {
+        case "fuel":
+          return Math.round(overallActuals.fuel / 12);
+        case "tolls":
+          return Math.round(overallActuals.tolls / 12);
+        case "maintenance":
+          return Math.round(overallActuals.maintenance / 12);
+        case "posho":
+          return Math.round(overallActuals.posho / 12);
+        case "tyres":
+          return Math.round(overallActuals.tyres / 12);
+        case "permits":
+          return Math.round(overallActuals.permits / 12);
+        case "overhead":
+          return Math.round(overallActuals.overhead / 12);
+        default:
+          return Math.round(overallActuals.contingency / 12);
+      }
+    } else {
+      switch (b.category) {
+        case "fuel":
+          return overallActuals.fuel;
+        case "tolls":
+          return overallActuals.tolls;
+        case "maintenance":
+          return overallActuals.maintenance;
+        case "posho":
+          return overallActuals.posho;
+        case "tyres":
+          return overallActuals.tyres;
+        case "permits":
+          return overallActuals.permits;
+        case "overhead":
+          return overallActuals.overhead;
+        default:
+          return overallActuals.contingency;
+      }
     }
   };
 
-  // Filter budgets
-  const filteredBudgets = useMemo(() => {
+  // Filter budgets for active tab
+  const displayedBudgets = useMemo(() => {
     return budgets.filter((b) => {
-      if (b.fiscalYear !== fiscalYear) return false;
-      if (periodType !== "annual" && b.periodType !== periodType && b.periodType !== "annual") return false;
+      if (b.periodType !== activeTab) return false;
       if (departmentFilter !== "all" && b.department !== departmentFilter) return false;
       if (!search.trim()) return true;
       const q = search.toLowerCase();
@@ -438,58 +680,46 @@ export default function FinanceBudgeting() {
         (b.notes && b.notes.toLowerCase().includes(q))
       );
     });
-  }, [budgets, fiscalYear, periodType, departmentFilter, search]);
+  }, [budgets, activeTab, departmentFilter, search]);
 
-  // Aggregate Executive KPIs
+  // Aggregate KPIs
   const kpiTotals = useMemo(() => {
-    const totalAllocatedTzs = filteredBudgets.reduce((sum, b) => sum + b.allocatedAmountTzs, 0);
-    const totalActualTzs = filteredBudgets.reduce((sum, b) => sum + getCategoryActual(b.category), 0);
-    const varianceTzs = totalAllocatedTzs - totalActualTzs;
-    const burnRatePct = totalAllocatedTzs > 0 ? Math.round((totalActualTzs / totalAllocatedTzs) * 100) : 0;
-
-    const rate = currencyMode === "USD" ? USD_TO_TZS : 1;
-    const allocatedDisplay = Math.round(totalAllocatedTzs / rate);
-    const actualDisplay = Math.round(totalActualTzs / rate);
-    const varianceDisplay = Math.round(varianceTzs / rate);
+    const totalAllocated = displayedBudgets.reduce((sum, b) => sum + b.allocatedAmountTzs, 0);
+    const totalActual = displayedBudgets.reduce((sum, b) => sum + getItemActualSpend(b), 0);
+    const variance = totalAllocated - totalActual;
+    const isOver = variance < 0;
+    const burnPct = totalAllocated > 0 ? Math.round((totalActual / totalAllocated) * 100) : 0;
 
     return {
-      totalAllocatedTzs,
-      totalActualTzs,
-      varianceTzs,
-      burnRatePct,
-      allocatedDisplay,
-      actualDisplay,
-      varianceDisplay,
-      isOverBudget: varianceTzs < 0,
-      isNearLimit: burnRatePct >= 85 && burnRatePct < 100,
+      allocated: totalAllocated,
+      actual: totalActual,
+      variance,
+      isOver,
+      burnPct,
     };
-  }, [filteredBudgets, actuals, currencyMode]);
+  }, [displayedBudgets, dailyActuals, overallActuals, activeTab]);
 
-  // Unique departments for filter pills
-  const departmentsList = useMemo(() => {
-    const set = new Set<string>();
-    budgets.forEach((b) => set.add(b.department));
-    return Array.from(set);
-  }, [budgets]);
-
-  if (loading) return <PageLoader />;
+  if (loading) {
+    return <PageLoader message="Loading budget allocations..." />;
+  }
 
   return (
-    <div className="space-y-6 p-4 sm:p-6 max-w-7xl mx-auto">
+    <div className="space-y-6">
+      {/* Clean Top Header */}
       <FinanceNavHeader
-        title="Company Budgeting & Financial Control"
-        subtitle={`Corporate budget planning, departmental cost-center allocations, real-time expenditure variance, and spending velocity tracking for ${organisation?.name || "the enterprise"}.`}
+        title="Budgeting"
+        subtitle="Manage daily fleet operating allowances, monthly limits, and company expenditure caps."
         actions={
           <div className="flex flex-wrap items-center gap-2">
-            {/* Currency Mode Switcher */}
-            <div className="flex items-center rounded-lg border border-border bg-card p-1 shadow-2xs text-xs">
+            {/* Currency Switcher */}
+            <div className="flex items-center rounded-lg border border-border bg-card p-0.5 text-xs">
               {(["TZS", "USD"] as const).map((curr) => (
                 <button
                   key={curr}
                   type="button"
                   onClick={() => setCurrencyMode(curr)}
                   className={cn(
-                    "px-2.5 py-1 rounded text-xs font-bold transition-all",
+                    "px-2.5 py-1 rounded-md font-bold transition-all text-xs",
                     currencyMode === curr
                       ? "bg-primary text-primary-foreground shadow-xs"
                       : "text-muted-foreground hover:text-foreground"
@@ -504,9 +734,9 @@ export default function FinanceBudgeting() {
               variant="outline"
               size="sm"
               onClick={() => window.print()}
-              className="gap-1.5 text-xs shadow-2xs"
+              className="gap-1.5 text-xs"
             >
-              <Printer className="h-3.5 w-3.5" /> Print Dossier
+              <Printer className="h-3.5 w-3.5" /> Print
             </Button>
 
             <Button onClick={openCreateModal} size="sm" className="gap-1.5 font-bold shadow-xs">
@@ -516,91 +746,130 @@ export default function FinanceBudgeting() {
         }
       />
 
-      {/* Fiscal Period & Controls Bar */}
-      <div className="flex flex-wrap items-center justify-between gap-3 bg-card border border-border p-3.5 rounded-xl shadow-2xs">
-        <div className="flex flex-wrap items-center gap-2.5">
-          <span className="text-xs font-bold text-foreground flex items-center gap-1.5">
-            <Calendar className="h-4 w-4 text-primary" /> Fiscal Period:
-          </span>
+      {/* Primary Period View Switcher */}
+      <div className="flex flex-wrap items-center justify-between gap-3 bg-muted/30 border border-border p-2 rounded-xl">
+        <div className="flex items-center gap-1.5 bg-background border border-border rounded-lg p-1">
+          <button
+            type="button"
+            onClick={() => setActiveTab("daily")}
+            className={cn(
+              "flex items-center gap-1.5 px-3.5 py-1.5 rounded-md text-xs font-bold transition-all",
+              activeTab === "daily"
+                ? "bg-primary text-primary-foreground shadow-xs"
+                : "text-muted-foreground hover:text-foreground"
+            )}
+          >
+            <Clock className="h-3.5 w-3.5" /> Daily Budgeting
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab("monthly")}
+            className={cn(
+              "flex items-center gap-1.5 px-3.5 py-1.5 rounded-md text-xs font-bold transition-all",
+              activeTab === "monthly"
+                ? "bg-primary text-primary-foreground shadow-xs"
+                : "text-muted-foreground hover:text-foreground"
+            )}
+          >
+            <Calendar className="h-3.5 w-3.5" /> Monthly
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab("annual")}
+            className={cn(
+              "flex items-center gap-1.5 px-3.5 py-1.5 rounded-md text-xs font-bold transition-all",
+              activeTab === "annual"
+                ? "bg-primary text-primary-foreground shadow-xs"
+                : "text-muted-foreground hover:text-foreground"
+            )}
+          >
+            <Building2 className="h-3.5 w-3.5" /> Full Year (2026)
+          </button>
+        </div>
 
-          <Select value={String(fiscalYear)} onValueChange={(v) => setFiscalYear(Number(v))}>
-            <SelectTrigger className="h-8 w-28 text-xs font-bold bg-background">
-              <SelectValue placeholder="Year" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="2025">FY 2025</SelectItem>
-              <SelectItem value="2026">FY 2026</SelectItem>
-              <SelectItem value="2027">FY 2027</SelectItem>
-            </SelectContent>
-          </Select>
+        {/* Date Selector for Daily View */}
+        {activeTab === "daily" && (
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="icon"
+              className="h-8 w-8"
+              onClick={() => handleDateChange(-1)}
+              title="Previous Day"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
 
-          <div className="flex items-center rounded-lg bg-muted/60 p-0.5 text-xs">
-            {(
-              [
-                { id: "annual", label: "Full Year" },
-                { id: "q1", label: "Q1" },
-                { id: "q2", label: "Q2" },
-                { id: "q3", label: "Q3" },
-                { id: "q4", label: "Q4" },
-              ] as const
-            ).map((p) => (
-              <button
-                key={p.id}
-                type="button"
-                onClick={() => setPeriodType(p.id)}
-                className={cn(
-                  "px-3 py-1 rounded-md font-semibold text-xs transition-all",
-                  periodType === p.id
-                    ? "bg-background text-foreground shadow-xs font-bold"
-                    : "text-muted-foreground hover:text-foreground"
-                )}
+            <Input
+              type="date"
+              value={selectedDate}
+              onChange={(e) => setSelectedDate(e.target.value)}
+              className="h-8 w-36 text-xs font-bold bg-background"
+            />
+
+            <Button
+              variant="outline"
+              size="icon"
+              className="h-8 w-8"
+              onClick={() => handleDateChange(1)}
+              title="Next Day"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+
+            {!isToday && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-8 text-xs font-bold text-primary"
+                onClick={() => setSelectedDate(new Date().toISOString().slice(0, 10))}
               >
-                {p.label}
-              </button>
-            ))}
+                Today
+              </Button>
+            )}
           </div>
-        </div>
-
-        <div className="text-xs text-muted-foreground font-medium">
-          Exchange Peg: <strong className="text-foreground">1 USD = {USD_TO_TZS.toLocaleString()} TZS</strong>
-        </div>
+        )}
       </div>
 
-      {/* Executive KPI Stat Cards */}
+      {/* 4 Clean Executive KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Total Allocated */}
-        <div className="rounded-xl border border-border bg-card p-4 space-y-2 shadow-2xs">
+        {/* Allocated Budget */}
+        <div className="rounded-xl border border-border bg-card p-4 space-y-1.5 shadow-2xs">
           <div className="flex items-center justify-between text-muted-foreground">
-            <span className="text-xs font-bold uppercase tracking-wider">Total Allocated Budget</span>
+            <span className="text-xs font-semibold uppercase tracking-wider">
+              {activeTab === "daily" ? "Today's Budget Cap" : activeTab === "monthly" ? "Monthly Budget" : "Annual Budget"}
+            </span>
             <PiggyBank className="h-4 w-4 text-primary" />
           </div>
           <div className="text-2xl font-black text-foreground font-mono">
-            {currencyMode === "USD" ? `$${kpiTotals.allocatedDisplay.toLocaleString()}` : `${kpiTotals.allocatedDisplay.toLocaleString()} TZS`}
+            {fmtMoney(kpiTotals.allocated)}
           </div>
-          <div className="text-[11px] text-muted-foreground">
-            Across {filteredBudgets.length} cost centers for FY {fiscalYear}
-          </div>
+          <p className="text-[11px] text-muted-foreground">
+            {activeTab === "daily" ? `Allocated for ${selectedDate}` : `Total approved limit`}
+          </p>
         </div>
 
         {/* Actual Spend */}
-        <div className="rounded-xl border border-border bg-card p-4 space-y-2 shadow-2xs">
+        <div className="rounded-xl border border-border bg-card p-4 space-y-1.5 shadow-2xs">
           <div className="flex items-center justify-between text-muted-foreground">
-            <span className="text-xs font-bold uppercase tracking-wider">Actual Spend to Date</span>
+            <span className="text-xs font-semibold uppercase tracking-wider">
+              {activeTab === "daily" ? "Spent Today" : "Actual Spend"}
+            </span>
             <Wallet className="h-4 w-4 text-amber-500" />
           </div>
           <div className="text-2xl font-black text-foreground font-mono">
-            {currencyMode === "USD" ? `$${kpiTotals.actualDisplay.toLocaleString()}` : `${kpiTotals.actualDisplay.toLocaleString()} TZS`}
+            {fmtMoney(kpiTotals.actual)}
           </div>
-          <div className="text-[11px] text-muted-foreground">
-            Realized from trips, fuel logs &amp; maintenance
-          </div>
+          <p className="text-[11px] text-muted-foreground">
+            {activeTab === "daily" ? `Logged across trips & fuel` : `Recorded expenses to date`}
+          </p>
         </div>
 
         {/* Remaining Variance */}
-        <div className="rounded-xl border border-border bg-card p-4 space-y-2 shadow-2xs">
+        <div className="rounded-xl border border-border bg-card p-4 space-y-1.5 shadow-2xs">
           <div className="flex items-center justify-between text-muted-foreground">
-            <span className="text-xs font-bold uppercase tracking-wider">Remaining Variance</span>
-            {kpiTotals.isOverBudget ? (
+            <span className="text-xs font-semibold uppercase tracking-wider">Remaining Balance</span>
+            {kpiTotals.isOver ? (
               <TrendingDown className="h-4 w-4 text-rose-500" />
             ) : (
               <TrendingUp className="h-4 w-4 text-emerald-500" />
@@ -609,388 +878,371 @@ export default function FinanceBudgeting() {
           <div
             className={cn(
               "text-2xl font-black font-mono",
-              kpiTotals.isOverBudget ? "text-rose-600 dark:text-rose-400" : "text-emerald-600 dark:text-emerald-400"
+              kpiTotals.isOver ? "text-rose-600 dark:text-rose-400" : "text-emerald-600 dark:text-emerald-400"
             )}
           >
-            {kpiTotals.isOverBudget ? "-" : "+"}
-            {currencyMode === "USD"
-              ? `$${Math.abs(kpiTotals.varianceDisplay).toLocaleString()}`
-              : `${Math.abs(kpiTotals.varianceDisplay).toLocaleString()} TZS`}
+            {kpiTotals.isOver ? "-" : "+"}
+            {fmtMoney(Math.abs(kpiTotals.variance))}
           </div>
-          <div className="text-[11px] text-muted-foreground">
-            {kpiTotals.isOverBudget ? "Budget Deficit / Overrun" : "Available operating surplus"}
-          </div>
+          <p className="text-[11px] text-muted-foreground">
+            {kpiTotals.isOver ? "Over budget cap" : "Available operating funds"}
+          </p>
         </div>
 
-        {/* Burn Rate & Velocity */}
-        <div className="rounded-xl border border-border bg-card p-4 space-y-2 shadow-2xs">
+        {/* Status / Burn Rate */}
+        <div className="rounded-xl border border-border bg-card p-4 space-y-1.5 shadow-2xs">
           <div className="flex items-center justify-between text-muted-foreground">
-            <span className="text-xs font-bold uppercase tracking-wider">Burn Rate &amp; Health</span>
-            {kpiTotals.isOverBudget ? (
+            <span className="text-xs font-semibold uppercase tracking-wider">Budget Health</span>
+            {kpiTotals.isOver ? (
               <AlertTriangle className="h-4 w-4 text-rose-500" />
             ) : (
               <CheckCircle2 className="h-4 w-4 text-emerald-500" />
             )}
           </div>
           <div className="flex items-baseline gap-2">
-            <span className="text-2xl font-black text-foreground font-mono">{kpiTotals.burnRatePct}%</span>
+            <span className="text-2xl font-black text-foreground font-mono">{kpiTotals.burnPct}%</span>
             <Badge
               variant="outline"
               className={cn(
                 "text-[10px] font-bold px-2 py-0.5",
-                kpiTotals.isOverBudget
+                kpiTotals.isOver
                   ? "bg-rose-500/10 text-rose-700 dark:text-rose-400 border-rose-500/30"
-                  : kpiTotals.isNearLimit
+                  : kpiTotals.burnPct >= 80
                   ? "bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/30"
                   : "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/30"
               )}
             >
-              {kpiTotals.isOverBudget ? "Over Budget" : kpiTotals.isNearLimit ? "Nearing Cap" : "Healthy Spend"}
+              {kpiTotals.isOver ? "Over Budget" : kpiTotals.burnPct >= 80 ? "Nearing Cap" : "Healthy"}
             </Badge>
           </div>
           <Progress
-            value={Math.min(100, kpiTotals.burnRatePct)}
+            value={Math.min(100, kpiTotals.burnPct)}
             className={cn(
               "h-1.5",
-              kpiTotals.isOverBudget
-                ? "[&>div]:bg-rose-500"
-                : kpiTotals.isNearLimit
-                ? "[&>div]:bg-amber-500"
-                : "[&>div]:bg-emerald-500"
+              kpiTotals.isOver ? "[&>div]:bg-rose-500" : kpiTotals.burnPct >= 80 ? "[&>div]:bg-amber-500" : "[&>div]:bg-emerald-500"
             )}
           />
         </div>
       </div>
 
-      {/* Claude-Style Guidance Callout */}
-      {showHowItWorks && (
-        <div className="rounded-xl border border-amber-500/20 bg-amber-500/[0.04] p-4 relative text-xs">
-          <div className="flex items-start justify-between gap-2">
-            <div className="flex items-center gap-2 font-bold text-foreground">
-              <Info className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0" />
-              <span>How company budgeting protects your freight and operating margins</span>
-            </div>
-            <button
-              type="button"
-              onClick={() => setShowHowItWorks(false)}
-              className="text-[11px] text-muted-foreground hover:text-foreground font-medium"
-            >
-              Dismiss
-            </button>
+      {/* Cost Center Allocations List */}
+      <div className="space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <h2 className="text-base font-bold text-foreground">
+              {activeTab === "daily" ? "Daily Department Allocations" : activeTab === "monthly" ? "Monthly Department Budgets" : "Annual Department Allocations"}
+            </h2>
+            <Badge variant="secondary" className="text-xs font-bold">
+              {displayedBudgets.length}
+            </Badge>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-3 pt-3 border-t border-amber-500/15 text-muted-foreground leading-relaxed">
-            <div>
-              <strong className="text-foreground block mb-0.5">1. Cost Center Segregation</strong>
-              Allocates dedicated operational caps for diesel, transit tolls, workshop repairs, and driver posho so one department cannot unexpectedly exhaust company cash reserves.
-            </div>
-            <div>
-              <strong className="text-foreground block mb-0.5">2. Real-Time Operational Sync</strong>
-              Actual expenditures are automatically pulled from active trip waybills, fuel station logs, and maintenance work orders—giving management instant visibility before overspending occurs.
-            </div>
-            <div>
-              <strong className="text-foreground block mb-0.5">3. Commercial ERP Governance</strong>
-              Compare gross client freight billings against actual departmental consumption to protect the company net profit margin on every logistics corridor.
-            </div>
+          <div className="relative w-full sm:w-60">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+            <Input
+              placeholder="Search category or notes..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="pl-8 h-8 text-xs bg-background"
+            />
           </div>
         </div>
-      )}
 
-      {/* Filter and Search Bar */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap items-center gap-1.5">
-          <span className="text-xs font-semibold text-muted-foreground mr-1">Department:</span>
-          <button
-            type="button"
-            onClick={() => setDepartmentFilter("all")}
-            className={cn(
-              "px-3 py-1 rounded-lg text-xs font-medium transition-all border",
-              departmentFilter === "all"
-                ? "bg-foreground text-background border-foreground font-bold shadow-xs"
-                : "bg-background text-muted-foreground hover:text-foreground border-border"
-            )}
-          >
-            All Cost Centers ({budgets.length})
-          </button>
-          {departmentsList.map((dept) => (
-            <button
-              key={dept}
-              type="button"
-              onClick={() => setDepartmentFilter(dept)}
-              className={cn(
-                "px-3 py-1 rounded-lg text-xs font-medium transition-all border",
-                departmentFilter === dept
-                  ? "bg-foreground text-background border-foreground font-bold shadow-xs"
-                  : "bg-background text-muted-foreground hover:text-foreground border-border"
-              )}
-            >
-              {dept}
-            </button>
-          ))}
-        </div>
-
-        <div className="relative w-full sm:w-64">
-          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-          <Input
-            placeholder="Search budget item or notes..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="pl-8 h-8 text-xs bg-background"
-          />
-        </div>
-      </div>
-
-      {/* Budget Allocation Cards Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {filteredBudgets.map((b) => {
-          const rate = currencyMode === "USD" ? USD_TO_TZS : 1;
-          const allocated = Math.round(b.allocatedAmountTzs / rate);
-          const actualTzs = getCategoryActual(b.category);
-          const actual = Math.round(actualTzs / rate);
-          const remaining = allocated - actual;
-          const pct = allocated > 0 ? Math.round((actual / allocated) * 100) : 0;
-          const isOver = remaining < 0;
-          const isNear = pct >= b.alertThresholdPct && !isOver;
-
-          // Department icon helper
-          const getDeptIcon = (dept: string) => {
-            if (dept.includes("Fuel")) return <Fuel className="h-4 w-4 text-amber-500" />;
-            if (dept.includes("Logistics")) return <Route className="h-4 w-4 text-primary" />;
-            if (dept.includes("Workshop")) return <Wrench className="h-4 w-4 text-emerald-500" />;
-            if (dept.includes("Crew")) return <UserCheck className="h-4 w-4 text-sky-500" />;
-            if (dept.includes("Compliance")) return <ShieldAlert className="h-4 w-4 text-purple-500" />;
-            return <Building2 className="h-4 w-4 text-muted-foreground" />;
-          };
-
-          return (
-            <div
-              key={b.id}
-              className="rounded-2xl border border-border bg-card p-5 space-y-4 shadow-2xs hover:border-primary/40 transition-all flex flex-col justify-between"
-            >
-              <div className="space-y-2">
-                <div className="flex items-start justify-between gap-2">
-                  <div className="flex items-center gap-2">
-                    {getDeptIcon(b.department)}
-                    <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
-                      {b.department}
-                    </span>
-                  </div>
-                  <Badge
-                    variant="outline"
-                    className={cn(
-                      "text-[10px] font-bold px-2 py-0.5",
-                      isOver
-                        ? "bg-rose-500/10 text-rose-700 dark:text-rose-400 border-rose-500/30"
-                        : isNear
-                        ? "bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/30"
-                        : "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/30"
-                    )}
-                  >
-                    {isOver ? `Over by ${pct - 100}%` : `${pct}% Used`}
-                  </Badge>
-                </div>
-
-                <h3 className="text-base font-bold text-foreground leading-snug">{b.title}</h3>
-
-                {b.notes && (
-                  <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed">
-                    {b.notes}
-                  </p>
-                )}
-              </div>
-
-              {/* Progress and Numbers */}
-              <div className="space-y-2.5 pt-2 border-t border-border/60">
-                <div className="flex items-center justify-between text-xs">
-                  <span className="text-muted-foreground">Actual Spent:</span>
-                  <span className="font-bold text-foreground font-mono">
-                    {currencyMode === "USD" ? `$${actual.toLocaleString()}` : `${actual.toLocaleString()} TZS`}
-                  </span>
-                </div>
-
-                <div className="flex items-center justify-between text-xs">
-                  <span className="text-muted-foreground">Budget Cap:</span>
-                  <span className="font-bold text-foreground font-mono">
-                    {currencyMode === "USD" ? `$${allocated.toLocaleString()}` : `${allocated.toLocaleString()} TZS`}
-                  </span>
-                </div>
-
-                <Progress
-                  value={Math.min(100, pct)}
-                  className={cn(
-                    "h-2",
-                    isOver ? "[&>div]:bg-rose-500" : isNear ? "[&>div]:bg-amber-500" : "[&>div]:bg-emerald-500"
-                  )}
-                />
-
-                <div className="flex items-center justify-between text-xs pt-1">
-                  <span className="text-muted-foreground">Remaining:</span>
-                  <span
-                    className={cn(
-                      "font-black font-mono",
-                      isOver ? "text-rose-600 dark:text-rose-400" : "text-emerald-600 dark:text-emerald-400"
-                    )}
-                  >
-                    {isOver ? "-" : "+"}
-                    {currencyMode === "USD"
-                      ? `$${Math.abs(remaining).toLocaleString()}`
-                      : `${Math.abs(remaining).toLocaleString()} TZS`}
-                  </span>
-                </div>
-              </div>
-
-              {/* Card Footer Actions */}
-              <div className="flex items-center justify-end gap-2 pt-2 border-t border-border/40">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => openEditModal(b)}
-                  className="h-8 text-xs font-semibold px-2.5"
-                >
-                  Adjust Allocation
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => handleDeleteBudget(b.id, b.title)}
-                  className="h-8 text-xs text-rose-600 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/20 px-2"
-                >
-                  Remove
-                </Button>
-              </div>
-            </div>
-          );
-        })}
-
-        {filteredBudgets.length === 0 && (
-          <div className="col-span-full py-12 text-center border border-dashed border-border rounded-2xl bg-card/40 space-y-3">
-            <PiggyBank className="h-8 w-8 text-muted-foreground mx-auto" />
-            <div className="text-sm font-bold text-foreground">No budget lines found</div>
-            <p className="text-xs text-muted-foreground max-w-sm mx-auto">
-              Create an operational budget allocation for this department or adjust your search filter.
+        {displayedBudgets.length === 0 ? (
+          <div className="rounded-xl border border-dashed border-border p-8 text-center bg-card">
+            <PiggyBank className="h-8 w-8 mx-auto text-muted-foreground/60 mb-2" />
+            <h3 className="text-sm font-bold text-foreground">No budgets configured for this period</h3>
+            <p className="text-xs text-muted-foreground mt-1 max-w-sm mx-auto">
+              Click the button below to allocate a budget for this period.
             </p>
-            <Button onClick={openCreateModal} size="sm" className="gap-1.5 font-bold">
-              <Plus className="h-4 w-4" /> Add First Budget
+            <Button onClick={openCreateModal} size="sm" className="mt-4 gap-1.5 font-bold">
+              <Plus className="h-4 w-4" /> Add Budget
             </Button>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+            {displayedBudgets.map((b) => {
+              const allocated = b.allocatedAmountTzs;
+              const actual = getItemActualSpend(b);
+              const remaining = allocated - actual;
+              const pct = allocated > 0 ? Math.round((actual / allocated) * 100) : 0;
+              const isOver = remaining < 0;
+
+              return (
+                <div
+                  key={b.id}
+                  className="rounded-xl border border-border bg-card p-4 flex flex-col justify-between space-y-3 shadow-2xs hover:border-primary/40 transition-all"
+                >
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
+                        {b.department}
+                      </span>
+                      <Badge
+                        variant="outline"
+                        className={cn(
+                          "text-[10px] font-bold px-1.5 py-0",
+                          isOver
+                            ? "bg-rose-500/10 text-rose-700 dark:text-rose-400 border-rose-500/30"
+                            : pct >= b.alertThresholdPct
+                            ? "bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/30"
+                            : "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/30"
+                        )}
+                      >
+                        {isOver ? "Over Budget" : `${pct}%`}
+                      </Badge>
+                    </div>
+
+                    <h3 className="text-sm font-bold text-foreground">{b.title}</h3>
+                    {b.notes && (
+                      <p className="text-xs text-muted-foreground line-clamp-1">{b.notes}</p>
+                    )}
+                  </div>
+
+                  <div className="space-y-1.5 pt-2 border-t border-border/60">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-muted-foreground">Spent:</span>
+                      <span className="font-bold font-mono text-foreground">{fmtMoney(actual)}</span>
+                    </div>
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-muted-foreground">Budget Cap:</span>
+                      <span className="font-bold font-mono text-foreground">{fmtMoney(allocated)}</span>
+                    </div>
+
+                    <Progress
+                      value={Math.min(100, pct)}
+                      className={cn(
+                        "h-1.5",
+                        isOver ? "[&>div]:bg-rose-500" : pct >= b.alertThresholdPct ? "[&>div]:bg-amber-500" : "[&>div]:bg-emerald-500"
+                      )}
+                    />
+
+                    <div className="flex items-center justify-between text-xs pt-0.5">
+                      <span className="text-muted-foreground">Remaining:</span>
+                      <span
+                        className={cn(
+                          "font-bold font-mono",
+                          isOver ? "text-rose-600 dark:text-rose-400" : "text-emerald-600 dark:text-emerald-400"
+                        )}
+                      >
+                        {isOver ? "-" : "+"}
+                        {fmtMoney(Math.abs(remaining))}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-end gap-1.5 pt-1 border-t border-border/40">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => openEditModal(b)}
+                      className="h-7 text-xs font-medium px-2"
+                    >
+                      Adjust
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleDeleteBudget(b.id, b.title)}
+                      className="h-7 text-xs font-medium text-rose-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/20 px-2"
+                    >
+                      Delete
+                    </Button>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         )}
       </div>
 
-      {/* Add / Edit Budget Allocation Modal */}
+      {/* In Daily Mode: Today's Actual Expenses Breakdown */}
+      {activeTab === "daily" && (
+        <div className="space-y-3 pt-2">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-base font-bold text-foreground">
+                Actual Expenses for {selectedDate}
+              </h2>
+              <p className="text-xs text-muted-foreground">
+                Live fuel fill-ups, driver posho, toll fees, and workshop vouchers recorded on this date.
+              </p>
+            </div>
+            <span className="text-xs font-bold text-foreground font-mono">
+              Total: {fmtMoney(dailyExpenses.reduce((sum, e) => sum + e.amount, 0))}
+            </span>
+          </div>
+
+          {dailyExpenses.length === 0 ? (
+            <div className="rounded-xl border border-border bg-card p-6 text-center text-xs text-muted-foreground">
+              No expenses recorded for this date yet. Daily operating budget remains fully available.
+            </div>
+          ) : (
+            <div className="rounded-xl border border-border bg-card overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs text-left">
+                  <thead className="bg-muted/50 border-b border-border text-muted-foreground font-bold">
+                    <tr>
+                      <th className="py-2.5 px-3">Type</th>
+                      <th className="py-2.5 px-3">Description</th>
+                      <th className="py-2.5 px-3">Vehicle / Route</th>
+                      <th className="py-2.5 px-3">Time</th>
+                      <th className="py-2.5 px-3 text-right">Amount</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border">
+                    {dailyExpenses.map((exp) => (
+                      <tr key={exp.id} className="hover:bg-muted/30 transition-colors">
+                        <td className="py-2.5 px-3 font-semibold">
+                          <Badge variant="outline" className="text-[10px] font-bold">
+                            {exp.source}
+                          </Badge>
+                        </td>
+                        <td className="py-2.5 px-3">
+                          <span className="font-bold text-foreground">{exp.title}</span>
+                          {exp.notes && (
+                            <span className="block text-[11px] text-muted-foreground">{exp.notes}</span>
+                          )}
+                        </td>
+                        <td className="py-2.5 px-3 text-muted-foreground font-mono">
+                          {exp.plateNumber || "--"}
+                        </td>
+                        <td className="py-2.5 px-3 text-muted-foreground">
+                          {exp.time}
+                        </td>
+                        <td className="py-2.5 px-3 text-right font-bold font-mono text-foreground">
+                          {fmtMoney(exp.amount)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Simple, User-Friendly Budget Modal */}
       <Dialog open={modalOpen} onOpenChange={setModalOpen}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle className="text-lg font-bold text-foreground">
-              {editingBudget ? "Adjust Budget Allocation" : "Allocate New Departmental Budget"}
+            <DialogTitle>
+              {editingBudget ? "Adjust Budget Allocation" : "Allocate New Budget"}
             </DialogTitle>
-            <DialogDescription className="text-xs text-muted-foreground">
-              Define the financial cap, cost center department, and alert notification thresholds for this fiscal period.
+            <DialogDescription>
+              Set spending limits for daily operations or monthly departmental cost centers.
             </DialogDescription>
           </DialogHeader>
 
           <form onSubmit={handleSaveBudget} className="space-y-4 py-2">
             <div className="space-y-1.5">
-              <Label className="text-xs font-semibold">Budget Line Title *</Label>
+              <Label className="text-xs font-bold">Budget Title *</Label>
               <Input
+                placeholder="e.g. Daily Fuel Cap or Monthly Workshop"
                 value={form.title}
                 onChange={(e) => setForm({ ...form, title: e.target.value })}
-                placeholder="e.g. Fuel & Diesel Procurement, Brake Linings Overhaul..."
-                className="h-9 text-xs"
+                className="text-xs"
                 required
               />
             </div>
 
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
-                <Label className="text-xs font-semibold">Department *</Label>
+                <Label className="text-xs font-bold">Budget Period</Label>
                 <Select
-                  value={form.department}
-                  onValueChange={(v) => setForm({ ...form, department: v })}
+                  value={form.periodType}
+                  onValueChange={(v: BudgetPeriod) => setForm({ ...form, periodType: v })}
                 >
-                  <SelectTrigger className="h-9 text-xs">
-                    <SelectValue placeholder="Department" />
+                  <SelectTrigger className="text-xs bg-background">
+                    <SelectValue placeholder="Period" />
                   </SelectTrigger>
                   <SelectContent>
-                    {DEFAULT_DEPARTMENTS.map((d) => (
-                      <SelectItem key={d} value={d} className="text-xs">
-                        {d}
-                      </SelectItem>
-                    ))}
+                    <SelectItem value="daily">Daily Budget</SelectItem>
+                    <SelectItem value="monthly">Monthly Budget</SelectItem>
+                    <SelectItem value="annual">Full Year Budget</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
 
               <div className="space-y-1.5">
-                <Label className="text-xs font-semibold">Category Link</Label>
+                <Label className="text-xs font-bold">Cost Category</Label>
                 <Select
                   value={form.category}
-                  onValueChange={(v) => setForm({ ...form, category: v })}
+                  onValueChange={(v: any) => setForm({ ...form, category: v })}
                 >
-                  <SelectTrigger className="h-9 text-xs">
+                  <SelectTrigger className="text-xs bg-background">
                     <SelectValue placeholder="Category" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="fuel" className="text-xs">Fuel & Energy</SelectItem>
-                    <SelectItem value="tolls" className="text-xs">Statutory Tolls</SelectItem>
-                    <SelectItem value="maintenance" className="text-xs">Maintenance & Parts</SelectItem>
-                    <SelectItem value="posho" className="text-xs">Driver Safari Float</SelectItem>
-                    <SelectItem value="tyres" className="text-xs">Tyres Lifecycle</SelectItem>
-                    <SelectItem value="permits" className="text-xs">Permits & Insurance</SelectItem>
-                    <SelectItem value="overhead" className="text-xs">Facilities & Admin</SelectItem>
-                    <SelectItem value="contingency" className="text-xs">Contingency Reserve</SelectItem>
-                    <SelectItem value="other" className="text-xs">Other / General</SelectItem>
+                    <SelectItem value="fuel">Fuel & Diesel</SelectItem>
+                    <SelectItem value="posho">Driver Posho & Meals</SelectItem>
+                    <SelectItem value="tolls">Tolls & Corridors</SelectItem>
+                    <SelectItem value="maintenance">Workshop & Repairs</SelectItem>
+                    <SelectItem value="tyres">Tyres & Casings</SelectItem>
+                    <SelectItem value="permits">Permits & Compliance</SelectItem>
+                    <SelectItem value="overhead">Depot & Operations</SelectItem>
+                    <SelectItem value="contingency">Incident Contingency</SelectItem>
                   </SelectContent>
                 </Select>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label className="text-xs font-semibold">
-                  Budget Cap ({currencyMode}) *
-                </Label>
-                <Input
-                  type="number"
-                  step="any"
-                  value={form.allocatedAmount}
-                  onChange={(e) => setForm({ ...form, allocatedAmount: e.target.value })}
-                  placeholder={currencyMode === "USD" ? "e.g. 50000" : "e.g. 150000000"}
-                  className="h-9 text-xs font-mono font-bold"
-                  required
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <Label className="text-xs font-semibold">Alert Threshold (%)</Label>
-                <Input
-                  type="number"
-                  min="50"
-                  max="100"
-                  value={form.alertThresholdPct}
-                  onChange={(e) => setForm({ ...form, alertThresholdPct: e.target.value })}
-                  placeholder="85"
-                  className="h-9 text-xs font-mono"
-                />
               </div>
             </div>
 
             <div className="space-y-1.5">
-              <Label className="text-xs font-semibold">Justification / Operational Notes</Label>
-              <Textarea
-                rows={2}
-                value={form.notes}
-                onChange={(e) => setForm({ ...form, notes: e.target.value })}
-                placeholder="Operational purpose, contract references, or justification for this spending limit..."
-                className="text-xs resize-none"
+              <Label className="text-xs font-bold">Department</Label>
+              <Select
+                value={form.department}
+                onValueChange={(v) => setForm({ ...form, department: v })}
+              >
+                <SelectTrigger className="text-xs bg-background">
+                  <SelectValue placeholder="Department" />
+                </SelectTrigger>
+                <SelectContent>
+                  {DEFAULT_DEPARTMENTS.map((d) => (
+                    <SelectItem key={d} value={d}>
+                      {d}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-xs font-bold">
+                Allocated Amount ({currencyMode}) *
+              </Label>
+              <Input
+                type="number"
+                placeholder={currencyMode === "USD" ? "e.g. 500" : "e.g. 1500000"}
+                value={form.allocatedAmount}
+                onChange={(e) => setForm({ ...form, allocatedAmount: e.target.value })}
+                className="text-xs font-mono font-bold"
+                required
               />
             </div>
 
-            <DialogFooter className="gap-2 pt-2">
-              <Button type="button" variant="outline" size="sm" onClick={() => setModalOpen(false)}>
+            <div className="space-y-1.5">
+              <Label className="text-xs font-bold">Notes / Description (Optional)</Label>
+              <Textarea
+                placeholder="Brief purpose of this budget..."
+                value={form.notes}
+                onChange={(e) => setForm({ ...form, notes: e.target.value })}
+                className="text-xs resize-none"
+                rows={2}
+              />
+            </div>
+
+            <DialogFooter className="pt-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setModalOpen(false)}
+              >
                 Cancel
               </Button>
               <Button type="submit" size="sm" className="font-bold">
-                {editingBudget ? "Save Adjustment" : "Allocate Budget"}
+                {editingBudget ? "Save Changes" : "Create Budget"}
               </Button>
             </DialogFooter>
           </form>
