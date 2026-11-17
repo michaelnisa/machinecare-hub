@@ -90,6 +90,7 @@ const MaintenanceKPIs = lazy(() => import("./pages/MaintenanceKPIs"));
 const Utilities = lazy(() => import("./pages/Utilities"));
 const Live = lazy(() => import("./pages/Live"));
 const LiveProduction = lazy(() => import("./pages/LiveProduction"));
+const FactoryFloorLiveTV = lazy(() => import("./pages/production/FactoryFloorLiveTV"));
 const SafetyLiveTV = lazy(() => import("./pages/safety/SafetyLiveTV"));
 const VendorRiskAssessmentPublic = lazy(() => import("./pages/safety/VendorRiskAssessmentPublic"));
 const SafetyDepartmentGateway = lazy(() => import("./pages/safety/SafetyDepartmentGateway"));
@@ -235,6 +236,8 @@ const App = () => (
                 <Route path="/g/:jobId" element={<GarageJobStatusPublic />} />
                 <Route path="/live" element={<Live />} />
                 <Route path="/live/production" element={<LiveProduction />} />
+                <Route path="/factory/live-tv" element={<FactoryFloorLiveTV />} />
+                <Route path="/production/live-tv" element={<FactoryFloorLiveTV />} />
                 <Route path="/safety/live-tv" element={<SafetyLiveTV />} />
                 <Route path="/safety/gateway" element={<SafetyDepartmentGateway />} />
                 <Route path="/safety/gateway/:orgId" element={<SafetyDepartmentGateway />} />

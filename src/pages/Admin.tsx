@@ -61,6 +61,7 @@ import {
   Radio,
   ArrowRightLeft,
   Check,
+  Tv,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useI18n } from "@/i18n/I18nProvider";
@@ -310,6 +311,9 @@ export default function Admin() {
       );
 
       if (orgId === organisation?.id) {
+        if (typeof window !== "undefined") {
+          localStorage.setItem("mc_admin_active_org_id", orgId);
+        }
         await refresh();
       }
 
@@ -354,13 +358,11 @@ export default function Admin() {
 
   // Handle Switching Active Organisation for Platform Admin
   const handleSwitchOrg = async (org: Organisation) => {
-    if (org.id === organisation?.id) {
-      toast.info(isSwahili ? "Tayari upo kwenye akaunti hii" : "Already active in this account");
-      window.location.href = "/dashboard";
-      return;
-    }
     setSwitchingOrgId(org.id);
     try {
+      if (typeof window !== "undefined") {
+        localStorage.setItem("mc_admin_active_org_id", org.id);
+      }
       await switchOrganisation(org.id);
       toast.success(
         isSwahili
@@ -456,6 +458,12 @@ export default function Admin() {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <Button asChild variant="outline" size="sm" className="gap-1.5 border-emerald-500/30 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10 font-medium">
+            <Link to="/factory/live-tv">
+              <Tv className="h-4 w-4" />
+              {isSwahili ? "TV ya Kiwanda" : "Factory Floor Live TV"}
+            </Link>
+          </Button>
           <Button asChild variant="outline" size="sm" className="gap-1.5 border-primary/30 text-primary hover:bg-primary/5">
             <Link to="/blog/manage">
               <BookOpen className="h-4 w-4" />

@@ -89,7 +89,6 @@ const NETWORK_ERROR_REGEX =
  */
 export function isNetworkError(err: unknown): boolean {
   if (typeof navigator !== "undefined" && !navigator.onLine) return true;
-  if (err instanceof TypeError) return true;
   const msg = errorMessage(err, "");
   return NETWORK_ERROR_REGEX.test(msg);
 }

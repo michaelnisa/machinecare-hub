@@ -25,6 +25,7 @@ import {
   ShieldCheck,
   Truck,
   Wrench,
+  Tv,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -197,6 +198,17 @@ export function PlatformAdminOrgSwitcher({ compact = false }: { compact?: boolea
         </DropdownMenuLabel>
         <div className="px-2 pb-1.5 text-[11px] text-muted-foreground">
           Switch active organization to access specific solution suites & live features.
+        </div>
+
+        <DropdownMenuSeparator />
+
+        <div className="px-1 py-1">
+          <DropdownMenuItem asChild className="cursor-pointer gap-2 text-xs font-semibold text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10">
+            <Link to="/factory/live-tv" onClick={() => setOpen(false)}>
+              <Tv className="h-4 w-4" />
+              <span>Factory Floor Live TV</span>
+            </Link>
+          </DropdownMenuItem>
         </div>
 
         <DropdownMenuSeparator />

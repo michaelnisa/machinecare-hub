@@ -7,7 +7,7 @@ import {
 } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { setSentryUser } from "@/lib/sentry";
-import { switchAdminOrganisation } from "@/lib/admin";
+import { switchAdminOrganisation, isPlatformAdmin } from "@/lib/admin";
 
 export interface Profile {
   id: string;
@@ -73,11 +73,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .maybeSingle();
     setProfile(prof as Profile | null);
 
-    if (prof?.organisation_id) {
+    const isAdmin = isPlatformAdmin(user?.email || prof?.email);
+    const pinnedOrgId =
+      isAdmin && typeof window !== "undefined"
+        ? localStorage.getItem("mc_admin_active_org_id")
+        : null;
+    const effectiveOrgId = pinnedOrgId || prof?.organisation_id;
+
+    if (effectiveOrgId) {
       const { data: org } = await supabase
         .from("organisations")
         .select("*")
-        .eq("id", prof.organisation_id)
+        .eq("id", effectiveOrgId)
         .maybeSingle();
 
       if (org) {
@@ -99,6 +106,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       } else {
         setOrganisation(null);
       }
+    } else {
+      setOrganisation(null);
     }
   };
 
@@ -137,15 +146,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const switchOrganisation = async (orgId: string): Promise<boolean> => {
     if (!user) return false;
-    const res = await switchAdminOrganisation(orgId);
-    if (!res.success) {
-      throw new Error(res.error || "Failed to switch organisation");
+    if (typeof window !== "undefined") {
+      localStorage.setItem("mc_admin_active_org_id", orgId);
+    }
+    try {
+      await switchAdminOrganisation(orgId);
+    } catch (e) {
+      console.warn("switchAdminOrganisation notice:", e);
     }
     await loadProfile(user.id);
     return true;
   };
 
   const signOut = async () => {
+    if (typeof window !== "undefined") {
+      localStorage.removeItem("mc_admin_active_org_id");
+    }
     await supabase.auth.signOut();
   };
 

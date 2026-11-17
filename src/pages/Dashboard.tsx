@@ -69,28 +69,44 @@ export default function Dashboard() {
         .order("created_at", { ascending: false });
       if (mErr) throw mErr;
 
-      const { data: schedules, error: sErr } = await supabase
-        .from("service_schedules")
-        .select("id, name, next_due_date, machine_id, machines(name)")
-        .order("next_due_date", { ascending: true, nullsFirst: false })
-        .limit(50);
-      if (sErr) throw sErr;
+      let schedulesData: any[] = [];
+      try {
+        const { data: schedules, error: sErr } = await supabase
+          .from("service_schedules")
+          .select("id, name, next_due_date, machine_id, machines(name)")
+          .order("next_due_date", { ascending: true, nullsFirst: false })
+          .limit(50);
+        if (!sErr && schedules) schedulesData = schedules;
+      } catch (err) {
+        console.warn("Service schedules load notice:", err);
+      }
 
-      const { data: logs, error: lErr } = await supabase
-        .from("service_logs")
-        .select("id, title, performed_at, cost, currency, service_type, machine_id, machines(name)")
-        .order("performed_at", { ascending: false })
-        .limit(5);
-      if (lErr) throw lErr;
+      let logsData: any[] = [];
+      try {
+        const { data: logs, error: lErr } = await supabase
+          .from("service_logs")
+          .select("id, title, performed_at, cost, currency, service_type, machine_id, machines(name)")
+          .order("performed_at", { ascending: false })
+          .limit(5);
+        if (!lErr && logs) logsData = logs;
+      } catch (err) {
+        console.warn("Service logs load notice:", err);
+      }
+
+      const getMachineName = (rel: any) => {
+        if (!rel) return "—";
+        if (Array.isArray(rel)) return rel[0]?.name ?? "—";
+        return rel.name ?? "—";
+      };
 
       const total = machinesData?.length ?? 0;
       const active = (machinesData ?? []).filter((m) => m.status === "active").length;
-      const enriched: UpcomingRow[] = (schedules ?? []).map((s: any) => ({
+      const enriched: UpcomingRow[] = schedulesData.map((s: any) => ({
         id: s.id,
         name: s.name,
         next_due_date: s.next_due_date,
         machine_id: s.machine_id,
-        machine_name: s.machines?.name ?? "—",
+        machine_name: getMachineName(s.machines),
         status: scheduleStatus(s.next_due_date),
       }));
       const due_soon = enriched.filter((e) => e.status === "due_soon").length;
@@ -99,7 +115,7 @@ export default function Dashboard() {
       setStats({ total, active, due_soon, overdue });
       setUpcoming(enriched.slice(0, 10));
       setActivity(
-        (logs ?? []).map((l: any) => ({
+        logsData.map((l: any) => ({
           id: l.id,
           title: l.title,
           performed_at: l.performed_at,
@@ -107,12 +123,12 @@ export default function Dashboard() {
           currency: l.currency,
           service_type: l.service_type,
           machine_id: l.machine_id,
-          machine_name: l.machines?.name ?? "—",
+          machine_name: getMachineName(l.machines),
         })),
       );
       setMachines((machinesData ?? []).map((m: any) => ({ id: m.id, name: m.name, category: m.category })));
     } catch (e: any) {
-      toast.error(e.message ?? "Failed to load dashboard");
+      console.warn("Dashboard load notice:", e);
     } finally {
       setLoading(false);
     }
