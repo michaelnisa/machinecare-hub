@@ -61,7 +61,6 @@ import {
   Radio,
   ArrowRightLeft,
   Check,
-  Tv,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useI18n } from "@/i18n/I18nProvider";
@@ -457,12 +456,6 @@ export default function Admin() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Button asChild variant="outline" size="sm" className="gap-1.5 border-blue-500/30 text-blue-600 dark:text-blue-400 hover:bg-blue-500/10 shadow-2xs font-semibold">
-            <Link to="/factory-tv">
-              <Tv className="h-4 w-4" />
-              {isSwahili ? "Live TV ya Kiwanda" : "Factory Live TV"}
-            </Link>
-          </Button>
           <Button asChild variant="outline" size="sm" className="gap-1.5 border-primary/30 text-primary hover:bg-primary/5">
             <Link to="/blog/manage">
               <BookOpen className="h-4 w-4" />

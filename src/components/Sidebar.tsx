@@ -166,7 +166,7 @@ export function Sidebar() {
         label: "Overview",
         items: [
           { to: "/dashboard", label: t.nav.dashboard, icon: LayoutDashboard },
-          ...(!isLite ? [{ to: "/factory-tv", label: "Shop Floor Live TV", icon: Tv }] : []),
+          ...(!isLite ? [{ to: "/live", label: "Live TV", icon: Tv }] : []),
           { to: "/notifications", label: t.nav.notifications, icon: Bell },
         ],
       },
@@ -217,7 +217,7 @@ export function Sidebar() {
               id: "production",
               label: "Production",
               items: [
-                { to: "/factory-tv", label: "Shop Floor Live TV", icon: Tv },
+                { to: "/live/production", label: "Live TV", icon: Tv },
                 { to: "/production/overview", label: "Production Overview", icon: LayoutDashboard },
                 { to: "/production/planning", label: "Production Planning", icon: CalendarRange },
                 { to: "/production/orders", label: "Production Orders", icon: ClipboardList },
