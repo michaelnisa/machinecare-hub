@@ -1,3 +1,4 @@
+import { WaybillDocumentView, RealisticBarcode } from "@/components/fleet/WaybillDocumentView";
 import { useState, useRef, useEffect, useMemo } from "react";
 import {
   Dialog,
@@ -227,6 +228,17 @@ export function TripReceiptDialog({
     setDownloading(true);
     try {
       const element = sheetRef.current;
+      const prevWidth = element.style.width;
+      const prevMinWidth = element.style.minWidth;
+      const prevMaxWidth = element.style.maxWidth;
+
+      // Force fixed standard A4 document width (800px) so responsive dialog size never warps or wraps boxes
+      element.style.width = "800px";
+      element.style.minWidth = "800px";
+      element.style.maxWidth = "800px";
+
+      await new Promise((resolve) => setTimeout(resolve, 80));
+
       const canvas = await html2canvas(element, {
         scale: 2.5,
         backgroundColor: "#ffffff",
@@ -234,10 +246,13 @@ export function TripReceiptDialog({
         logging: false,
         scrollX: 0,
         scrollY: 0,
-        width: element.scrollWidth || element.offsetWidth,
-        height: element.scrollHeight || element.offsetHeight,
-        windowWidth: element.scrollWidth || 840,
+        width: 800,
+        windowWidth: 800,
       });
+
+      element.style.width = prevWidth;
+      element.style.minWidth = prevMinWidth;
+      element.style.maxWidth = prevMaxWidth;
 
       const imgData = canvas.toDataURL("image/jpeg", 0.98);
       const pdf = new jsPDF({
@@ -256,28 +271,19 @@ export function TripReceiptDialog({
       let imgW = maxW;
       let imgH = (canvas.height * imgW) / canvas.width;
 
-      // Fit to single A4 page if within 35% margin so complete waybill (all boxes + 3 signatures) is on 1 crisp sheet
-      if (imgH > maxH && imgH <= maxH * 1.35) {
+      // Fit to single A4 page with balanced proportions
+      if (imgH > maxH) {
         const factor = maxH / imgH;
         imgH = maxH;
         imgW = imgW * factor;
       }
 
       const posX = margin + (maxW - imgW) / 2;
+      const posY = margin + (maxH - imgH) / 2;
 
-      if (imgH <= maxH) {
-        pdf.addImage(imgData, "JPEG", posX, margin, imgW, imgH, undefined, "FAST");
-      } else {
-        // Multi-page export with proper non-overlapping pagination
-        const totalPages = Math.ceil(imgH / maxH);
-        for (let p = 0; p < totalPages; p++) {
-          if (p > 0) pdf.addPage();
-          const pageOffsetY = margin - p * maxH;
-          pdf.addImage(imgData, "JPEG", posX, pageOffsetY, imgW, imgH, undefined, "FAST");
-        }
-      }
+      pdf.addImage(imgData, "JPEG", posX, posY, imgW, imgH, undefined, "FAST");
 
-      const prefix = docMode === "waybill" ? "WAYBILL" : "INVOICE";
+      const prefix = docMode === "waybill" ? "ROAD-WAYBILL" : "INVOICE";
       const refCode = trip.client_order_no || trip.id?.slice(0, 8) || "TRIP";
       pdf.save(`${prefix}-${refCode}.pdf`);
       toast.success(`${docMode === "waybill" ? "Road Freight Waybill (POD)" : "Commercial Freight Invoice"} PDF downloaded successfully`);
@@ -550,327 +556,18 @@ export function TripReceiptDialog({
             style={{ boxSizing: "border-box" }}
           >
             {docMode === "waybill" ? (
-              /* =========================================================================
-                 AUTHENTIC ROAD FREIGHT WAYBILL & CONSIGNMENT NOTE (P.O.D.)
-                 - NO PRICING / NO TAX / NO BANK WIRE CLUTTER
-                 - PURE LOGISTICS ROAD CONSIGNMENT & PROOF OF DELIVERY
-                 ========================================================================= */
-              <div className="space-y-3.5">
-                {/* Top Solid Accent Line */}
-                <div className="h-1.5 w-full bg-slate-900 rounded-xs" />
-
-                {/* HEADER SECTION: CARRIER BRANDING + TITLE + WAYBILL REF & BARCODE */}
-                <div className="flex items-start justify-between border-b-2 border-slate-900 pb-3 gap-4">
-                  <div className="space-y-1 max-w-[55%]">
-                    <div className="flex items-center gap-2">
-                      {customLogoUrl ? (
-                        <img
-                          src={customLogoUrl}
-                          alt={companyName}
-                          className="h-12 w-auto max-w-[190px] object-contain"
-                        />
-                      ) : (
-                        <div className="flex items-center gap-2.5">
-                          <div className="h-10 w-10 rounded-lg bg-slate-900 flex items-center justify-center text-white shadow-xs">
-                            <Truck className="h-5 w-5 text-emerald-400" />
-                          </div>
-                          <div>
-                            <span className="text-lg font-black tracking-tight text-slate-900 block leading-tight">
-                              {companyName}
-                            </span>
-                            <span className="text-[9px] font-bold uppercase tracking-wider text-slate-600 block">
-                              Cross-Border Heavy Haulage & Bulk Freight Logistics
-                            </span>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                    {customLogoUrl && (
-                      <div className="text-xs font-bold text-slate-900">{companyName}</div>
-                    )}
-                    <div className="text-[11px] text-slate-600 leading-tight pt-0.5 space-y-0.5">
-                      <div className="flex items-center gap-1 font-medium">
-                        <MapPin className="h-3 w-3 text-slate-400 shrink-0" />
-                        <span className="line-clamp-1">{companyAddress}</span>
-                      </div>
-                      <div className="flex items-center gap-3 text-[10px] text-slate-500">
-                        <span>Tel: <strong className="text-slate-700">{companyPhone}</strong></span>
-                        <span>·</span>
-                        <span className="font-mono">{companyTin}</span>
-                        <span>·</span>
-                        <span className="font-medium text-slate-600">LATRA / SADC Permit: <strong className="font-mono text-slate-800">TZ-DAR-8849</strong></span>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="text-right flex flex-col items-end space-y-1">
-                    <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded bg-slate-900 text-white text-[10px] font-black uppercase tracking-wider">
-                      <FileCheck2 className="h-3.5 w-3.5 text-emerald-400" />
-                      <span>ROAD FREIGHT WAYBILL & CONSIGNMENT NOTE</span>
-                    </div>
-                    <div className="text-[9px] font-bold uppercase tracking-wider text-slate-500">
-                      PROOF OF DELIVERY (P.O.D.) · NON-NEGOTIABLE
-                    </div>
-
-                    <div className="font-mono text-2xl font-black text-slate-900 tracking-tight pt-0.5">
-                      {waybillRef}
-                    </div>
-
-                    <BarcodeGraphic code={waybillRef} />
-
-                    <div className="flex items-center gap-2 text-[10px] text-slate-500 pt-0.5">
-                      <span className="flex items-center gap-1">
-                        <Calendar className="h-3 w-3 text-slate-400" />
-                        Date: <strong className="text-slate-700">{formatDate(trip.created_at || new Date().toISOString())}</strong>
-                      </span>
-                      <span>·</span>
-                      <span className="capitalize font-bold text-emerald-800 bg-emerald-100/80 px-2 py-0.5 rounded border border-emerald-300">
-                        {trip.status === "in_progress" ? "In Transit" : trip.status || "Dispatched"}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* 3-BOX CONSIGNMENT ENTITY MATRIX (CONSIGNOR, CARRIER, CONSIGNEE) */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5 text-xs">
-                  {/* BOX 1: CONSIGNOR / SHIPPER */}
-                  <div className="border border-slate-300 rounded-lg overflow-hidden bg-slate-50/40">
-                    <div className="bg-slate-800 text-white px-2.5 py-1 text-[10px] font-black tracking-wider uppercase flex items-center justify-between">
-                      <span>01. Consignor / Shipper</span>
-                      <Building2 className="h-3 w-3 text-slate-300" />
-                    </div>
-                    <div className="p-2.5 space-y-1">
-                      <div className="text-xs font-black text-slate-900 leading-tight">
-                        {trip.client_name || "Commercial Cargo Consignor"}
-                      </div>
-                      <div className="text-[11px] text-slate-600 leading-snug">
-                        <span className="font-semibold text-slate-700">Loading Terminal:</span> {trip.origin || "Origin Depot / Port"}
-                      </div>
-                      {trip.client_order_no && (
-                        <div className="text-[11px] text-slate-600 font-mono">
-                          <span className="font-semibold text-slate-700 font-sans">D.O. / Order Ref:</span> {trip.client_order_no}
-                        </div>
-                      )}
-                      <div className="text-[10px] text-slate-500 pt-1 border-t border-slate-200">
-                        Handover: Loading Bay Dispatch Desk
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* BOX 2: CARRIER & TRANSIT EQUIPMENT */}
-                  <div className="border border-slate-300 rounded-lg overflow-hidden bg-slate-50/40">
-                    <div className="bg-slate-800 text-white px-2.5 py-1 text-[10px] font-black tracking-wider uppercase flex items-center justify-between">
-                      <span>02. Carrier & Vehicle Particulars</span>
-                      <Truck className="h-3 w-3 text-emerald-400" />
-                    </div>
-                    <div className="p-2.5 space-y-1">
-                      <div className="text-xs font-black text-slate-900 leading-tight">
-                        {companyName}
-                      </div>
-                      <div className="text-[11px] text-slate-700 leading-snug font-medium">
-                        Truck: <strong className="font-mono text-slate-900">{machine?.plate_number ? `${machine.name} (${machine.plate_number})` : machine?.name || "Freight Truck"}</strong>
-                        {machine?.trailer_plate && (
-                          <span className="text-slate-700 font-mono block">Trailer: <strong className="text-slate-900">{machine.trailer_plate}</strong></span>
-                        )}
-                      </div>
-                      <div className="text-[11px] text-slate-600">
-                        Driver: <strong className="text-slate-900">{driver?.full_name || "Assigned Driver"}</strong> {driver?.phone ? `(${driver.phone})` : ""}
-                      </div>
-                      <div className="text-[10px] text-slate-500 pt-1 border-t border-slate-200">
-                        Route: <strong className="text-slate-700">{trip.origin || "Origin"}</strong> ➔ <strong className="text-slate-700">{trip.destination || "Destination"}</strong>
-                        {trip.corridor_name && <span className="block truncate text-primary font-medium">Corridor: {trip.corridor_name}</span>}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* BOX 3: CONSIGNEE / RECEIVING POINT */}
-                  <div className="border border-slate-300 rounded-lg overflow-hidden bg-slate-50/40">
-                    <div className="bg-slate-800 text-white px-2.5 py-1 text-[10px] font-black tracking-wider uppercase flex items-center justify-between">
-                      <span>03. Consignee / Delivery Point</span>
-                      <MapPin className="h-3 w-3 text-amber-300" />
-                    </div>
-                    <div className="p-2.5 space-y-1">
-                      <div className="text-xs font-black text-slate-900 leading-tight">
-                        {trip.client_name || "Authorized Consignee"}
-                      </div>
-                      <div className="text-[11px] text-slate-600 leading-snug">
-                        <span className="font-semibold text-slate-700">Offload Facility:</span> {trip.destination || "Destination Terminal"}
-                      </div>
-                      <div className="text-[11px] text-slate-600">
-                        <span className="font-semibold text-slate-700">Delivery Terms:</span> {paymentTerms || "Direct Gate-In & Ullage Inspection"}
-                      </div>
-                      <div className="text-[10px] text-slate-500 pt-1 border-t border-slate-200">
-                        Receipt: Subject to Intact Tamper Seals
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* CARGO MANIFEST & CUSTOMS SECURITY SEALS TABLE */}
-                <div className="border border-slate-300 rounded-lg overflow-hidden">
-                  <div className="bg-slate-100 px-3 py-1.5 border-b border-slate-300 flex items-center justify-between">
-                    <span className="text-[10px] font-black uppercase tracking-wider text-slate-800 flex items-center gap-1.5">
-                      <Package className="h-3.5 w-3.5 text-slate-700" /> Cargo Manifest & Transit Security Seals
-                    </span>
-                    <span className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">
-                      Cross-Border Transit Bond Compliance
-                    </span>
-                  </div>
-
-                  <table className="w-full text-left text-xs">
-                    <thead className="bg-slate-50 text-[10px] uppercase font-bold text-slate-600 border-b border-slate-200">
-                      <tr>
-                        <th className="p-2 text-center w-10">Item</th>
-                        <th className="p-2">Description of Goods & Cargo Particulars</th>
-                        <th className="p-2">Vehicle / Packaging Spec</th>
-                        <th className="p-2 text-center">Declared Quantity</th>
-                        <th className="p-2">Security Transit Seals</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-200">
-                      <tr>
-                        <td className="p-2.5 text-center font-bold text-slate-700 align-top">01</td>
-                        <td className="p-2.5 space-y-0.5 align-top">
-                          <div className="font-bold text-slate-900 text-xs">
-                            {cleanCargo || "Commercial Cargo / General Consignment"}
-                          </div>
-                          <div className="text-[10px] text-slate-500">
-                            Transit: <strong className="text-slate-700">{trip.origin || "Origin Depot"}</strong> to <strong className="text-slate-700">{trip.destination || "Destination Depot"}</strong>
-                            {trip.corridor_name ? ` via ${trip.corridor_name}` : ""}
-                          </div>
-                          {trip.border_post && (
-                            <div className="text-[9px] text-primary font-semibold">
-                              Designated Border Post: {trip.border_post}
-                            </div>
-                          )}
-                        </td>
-                        <td className="p-2.5 text-[11px] text-slate-700 align-top">
-                          <div className="font-semibold text-slate-800">
-                            {machine?.vehicle_type || "Heavy Haulage Semi-Trailer"}
-                          </div>
-                          <div className="text-[10px] text-slate-500">
-                            Plate: <span className="font-mono font-bold text-slate-700">{machine?.plate_number || "T-TRUCK"}</span>
-                            {machine?.trailer_plate && <span className="font-mono text-slate-600 ml-1">/ {machine.trailer_plate}</span>}
-                          </div>
-                        </td>
-                        <td className="p-2.5 text-center font-mono font-bold text-slate-800 text-xs align-top">
-                          1 FTL Consignment
-                          {trip.start_km && (
-                            <div className="text-[9px] text-slate-500 font-normal font-sans">
-                              Dep. Odo: {Number(trip.start_km).toLocaleString()} km
-                            </div>
-                          )}
-                        </td>
-                        <td className="p-2.5 text-[11px] space-y-1 align-top">
-                          <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-slate-900 text-emerald-400 font-mono text-[10px] font-bold">
-                            <ShieldCheck className="h-3 w-3" />
-                            SEAL-{trip.id.slice(0, 4).toUpperCase()}-01 / SEAL-{trip.id.slice(4, 8).toUpperCase()}-02
-                          </div>
-                          <div className="text-[9px] text-slate-500">
-                            Tamper-Evident High-Security Bolt Seals (TRA / SADC Standard)
-                          </div>
-                        </td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-
-                {/* TRANSIT STATUTORY & GPS TELEMATICS NOTICE STRIP */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
-                  <div className="p-2 rounded-lg border border-slate-200 bg-slate-50/70 text-[10px] space-y-0.5">
-                    <span className="font-bold text-slate-800 uppercase flex items-center gap-1">
-                      <Scale className="h-3 w-3 text-slate-600" /> Tanroads & SADC Axle Load Weighbridge Compliance
-                    </span>
-                    <p className="text-slate-600 leading-snug">
-                      Consignment is loaded strictly within statutory Gross Vehicle Weight (GVW) limits. Mandatory axle verification at all designated government weigh stations.
-                    </p>
-                  </div>
-
-                  <div className="p-2 rounded-lg border border-slate-200 bg-slate-50/70 text-[10px] space-y-0.5">
-                    <span className="font-bold text-slate-800 uppercase flex items-center gap-1">
-                      <ShieldCheck className="h-3 w-3 text-emerald-600" /> 24/7 Live GPS Telematics & Geo-fence Monitored
-                    </span>
-                    <p className="text-slate-600 leading-snug">
-                      Asset tracked live via satellite GPS telematics with automated corridor speed limit governing (80 km/h) and real-time seal tampering detection.
-                    </p>
-                  </div>
-                </div>
-
-                {/* THREE-WAY OFFICIAL CUSTODY TRANSFER & SIGNATURE STAMPS */}
-                <div className="grid grid-cols-3 gap-3 pt-1 text-xs">
-                  {/* 01. CONSIGNOR DISPATCH */}
-                  <div className="border border-slate-300 rounded-lg p-2.5 bg-slate-50/60 flex flex-col justify-between h-36">
-                    <div>
-                      <div className="flex items-center justify-between text-[9px] font-black uppercase tracking-wider text-slate-700 pb-1 border-b border-slate-200">
-                        <span>01. Consignor Handover</span>
-                        <span className="text-slate-500 font-bold">STAGE 1</span>
-                      </div>
-                      <p className="text-[9px] text-slate-500 pt-1 leading-snug">
-                        Goods inspected, stowed & sealed in good external order.
-                      </p>
-                    </div>
-                    <div className="space-y-1">
-                      <div className="border-b border-dashed border-slate-400 pb-0.5 text-[9px] text-slate-400 italic">
-                        Loaded By: ________________________
-                      </div>
-                      <div className="flex justify-between items-baseline text-[9px] text-slate-600">
-                        <span className="font-bold">Date: {formatDate(trip.created_at || new Date().toISOString())}</span>
-                        <span className="font-mono text-[8px] text-slate-400">[SHIPPER STAMP]</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* 02. CARRIER / DRIVER ACCEPTANCE */}
-                  <div className="border border-slate-300 rounded-lg p-2.5 bg-slate-50/60 flex flex-col justify-between h-36">
-                    <div>
-                      <div className="flex items-center justify-between text-[9px] font-black uppercase tracking-wider text-slate-700 pb-1 border-b border-slate-200">
-                        <span>02. Carrier Acceptance</span>
-                        <span className="text-primary font-bold">STAGE 2</span>
-                      </div>
-                      <p className="text-[9px] text-slate-500 pt-1 leading-snug">
-                        Intact seals & cargo received for carriage to destination.
-                      </p>
-                    </div>
-                    <div className="space-y-1">
-                      <div className="border-b border-dashed border-slate-400 pb-0.5 text-[9px] text-slate-700 font-semibold truncate">
-                        Driver: {driver?.full_name || "Authorized Fleet Driver"}
-                      </div>
-                      <div className="flex justify-between items-baseline text-[9px] text-slate-600">
-                        <span className="font-mono">Odo: {trip.start_km ? `${Number(trip.start_km).toLocaleString()} km` : "_________ km"}</span>
-                        <span className="font-mono text-[8px] text-slate-400">[CARRIER STAMP]</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* 03. CONSIGNEE PROOF OF DELIVERY (POD) */}
-                  <div className="border-2 border-emerald-600/40 rounded-lg p-2.5 bg-emerald-50/30 flex flex-col justify-between h-36">
-                    <div>
-                      <div className="flex items-center justify-between text-[9px] font-black uppercase tracking-wider text-emerald-900 pb-1 border-b border-emerald-300">
-                        <span>03. Consignee Receipt (P.O.D.)</span>
-                        <span className="text-emerald-700 font-bold">STAGE 3</span>
-                      </div>
-                      <div className="pt-1 flex items-center gap-1.5 text-[9px] font-bold text-emerald-900">
-                        <CheckCircle2 className="h-3 w-3 text-emerald-600 shrink-0" />
-                        <span>Clean Delivery · Seals Intact</span>
-                      </div>
-                    </div>
-                    <div className="space-y-1">
-                      <div className="border-b border-dashed border-slate-400 pb-0.5 text-[9px] text-slate-400 italic">
-                        Received By (Print & Sign): _______________
-                      </div>
-                      <div className="flex justify-between items-baseline text-[9px] text-slate-600">
-                        <span className="font-mono">Date: ___/___/202___</span>
-                        <span className="font-mono text-[8px] text-emerald-700 font-bold">[CONSIGNEE STAMP]</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* SECURITY MICRO-FOOTER */}
-                <div className="pt-2 border-t border-slate-200 text-center text-[8px] text-slate-400 leading-tight">
-                  NON-NEGOTIABLE ROAD CONSIGNMENT NOTE & PROOF OF DELIVERY (P.O.D.). Issued under SADC / EAC Cross-Border Freight Carriage Regulations. Consignee must endorse this document upon receipt. Computer generated copy — Valid without alterations. Ref: {waybillRef}
-                </div>
-              </div>
+              <WaybillDocumentView
+                trip={trip}
+                machine={machine}
+                driver={driver}
+                companyName={companyName}
+                companyPhone={companyPhone}
+                companyAddress={companyAddress}
+                companyTin={companyTin}
+                companyLogo={customLogoUrl}
+                waybillRef={waybillRef}
+                cleanCargo={cleanCargo}
+              />
             ) : (
               /* =========================================================================
                  COMMERCIAL FREIGHT INVOICE
@@ -888,6 +585,7 @@ export function TripReceiptDialog({
                         <img
                           src={customLogoUrl}
                           alt={companyName}
+                          crossOrigin="anonymous"
                           className="h-12 w-auto max-w-[190px] object-contain"
                         />
                       ) : (
@@ -932,7 +630,7 @@ export function TripReceiptDialog({
                       {invoiceRef}
                     </div>
 
-                    <BarcodeGraphic code={invoiceRef} />
+                    <RealisticBarcode code={invoiceRef} />
 
                     <div className="flex items-center gap-2 text-[10px] text-slate-500 pt-0.5">
                       <span className="flex items-center gap-1">
