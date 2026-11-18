@@ -9,6 +9,24 @@ import { useAuth } from "@/contexts/AuthContext";
 
 export type Role = "owner" | "manager" | "accountant" | "engineer" | "technician" | "viewer";
 
+export const FLEET_ROLE_TITLES: Record<Role, string> = {
+  owner: "Fleet Director / GM",
+  manager: "Fleet Operations Manager",
+  accountant: "Fleet Financial Controller",
+  engineer: "Workshop Superintendent",
+  technician: "Fleet Commercial Mechanic",
+  viewer: "Dispatcher / Route Controller",
+};
+
+export const FLEET_ROLE_DESCRIPTIONS: Record<Role, string> = {
+  owner: "Overall fleet governance, capital expenditure sign-offs, and company-wide billing.",
+  manager: "Vehicle allocations, trip dispatch approvals, fleet turnaround times, and driver schedules.",
+  accountant: "Trip safari float advances, fuel card audits, supplier payments, and cost-per-km.",
+  engineer: "Vehicle PM schedules, digital job card technical sign-offs, and spare parts requisitions.",
+  technician: "Commercial truck repairs, component defect resolution, tyre maintenance, and roadside rescue.",
+  viewer: "Live telematics tracking, journey waybill access, and read-only operational visibility.",
+};
+
 const RANK: Record<Role, number> = { owner: 5, manager: 4, accountant: 3, engineer: 3, technician: 2, viewer: 1 };
 
 const ROLE_PERMISSIONS: Record<Role, string[]> = {

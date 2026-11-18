@@ -39,6 +39,7 @@ import {
   LayoutDashboard,
   Receipt,
   MapPin,
+  ShieldCheck,
 } from "lucide-react";
 
 interface CommandPaletteProps {
@@ -267,6 +268,10 @@ export function CommandPalette({ open: extOpen, onOpenChange: setExtOpen }: Comm
               <CommandItem onSelect={() => runCommand(() => navigate("/fleet/trips"))}>
                 <Activity className="mr-2 h-4 w-4" />
                 <span>Active Trips & Dispatches</span>
+              </CommandItem>
+              <CommandItem onSelect={() => runCommand(() => navigate("/fleet/approvals"))}>
+                <ShieldCheck className="mr-2 h-4 w-4 text-primary" />
+                <span>Fleet Approvals &amp; Requisitions</span>
               </CommandItem>
             </>
           )}

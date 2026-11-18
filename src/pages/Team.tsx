@@ -1,7 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useUserRole, type Role } from "@/hooks/useUserRole";
+import { useIndustry } from "@/hooks/useIndustry";
+import { FLEET_ROLE_TITLES, FLEET_ROLE_DESCRIPTIONS } from "@/core/permissions/usePermissions";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -23,24 +25,30 @@ import {
   Clock,
   Send,
   CheckCircle2,
+  Truck,
+  Building2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { formatDate, initials } from "@/lib/format";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 
-const ROLES: Role[] = ["owner", "manager", "engineer", "technician", "viewer"];
+const STANDARD_ROLES: Role[] = ["owner", "manager", "engineer", "technician", "viewer"];
+const FLEET_ROLES: Role[] = ["owner", "manager", "accountant", "engineer", "technician", "viewer"];
 
-const ROLE_DESC: Record<Role, string> = {
+const STANDARD_ROLE_DESC: Record<Role, string> = {
   owner: "Full access incl. billing & member management.",
   manager: "Manage machines, work orders, inventory, and team.",
+  accountant: "Manage financial ledger, customer invoices, and reports.",
   engineer: "Author & approve checklist templates; manage maintenance plans.",
   technician: "Log services, fuel, complete work orders.",
-  viewer: "Read-only access to fleet data.",
+  viewer: "Read-only access to equipment data.",
 };
 
 export default function Team() {
   const { profile } = useAuth();
   const { isManager, isOwner } = useUserRole();
+  const { isFleet, organisation } = useIndustry();
+  const isFleetMode = isFleet || organisation?.industry_profile === "fleet_logistics";
   const [loading, setLoading] = useState(true);
   const [members, setMembers] = useState<any[]>([]);
   const [roles, setRoles] = useState<Record<string, Role[]>>({});
@@ -135,17 +143,38 @@ export default function Team() {
     }
   };
 
+  const availableRoles = isFleetMode ? FLEET_ROLES : STANDARD_ROLES;
+
+  const getRoleTitle = (r: Role) => {
+    if (isFleetMode && FLEET_ROLE_TITLES[r]) return FLEET_ROLE_TITLES[r];
+    return r.charAt(0).toUpperCase() + r.slice(1);
+  };
+
+  const getRoleDesc = (r: Role) => {
+    if (isFleetMode && FLEET_ROLE_DESCRIPTIONS[r]) return FLEET_ROLE_DESCRIPTIONS[r];
+    return STANDARD_ROLE_DESC[r] || "";
+  };
+
   if (loading) return <PageLoader />;
 
   return (
     <div className="space-y-6 animate-fade-in">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">
-            Team & roles
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            Invite mechanics, managers, and viewers to your organisation.
+          <div className="flex items-center gap-2">
+            <h1 className="text-2xl font-semibold tracking-tight">
+              {isFleetMode ? "Fleet Team & Operations Roles" : "Team & roles"}
+            </h1>
+            {isFleetMode && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2.5 py-0.5 text-xs font-semibold text-emerald-700 dark:text-emerald-400 border border-emerald-500/20">
+                <Truck className="h-3 w-3" /> Fleet & Logistics
+              </span>
+            )}
+          </div>
+          <p className="text-sm text-muted-foreground mt-0.5">
+            {isFleetMode
+              ? "Manage transport dispatchers, workshop superintendents, commercial mechanics, tyre specialists, and controllers."
+              : "Invite mechanics, managers, and viewers to your organisation."}
           </p>
         </div>
         {isManager && (
@@ -155,14 +184,14 @@ export default function Team() {
         )}
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        {ROLES.map((r) => (
-          <div key={r} className="rounded-xl border border-border bg-card p-4">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        {availableRoles.map((r) => (
+          <div key={r} className="rounded-xl border border-border bg-card p-4 hover:border-primary/40 transition-colors">
             <div className="flex items-center gap-2">
-              <Shield className="h-4 w-4 text-primary" />
-              <span className="font-semibold capitalize">{r}</span>
+              <Shield className="h-4 w-4 text-primary shrink-0" />
+              <span className="font-semibold text-sm">{getRoleTitle(r)}</span>
             </div>
-            <p className="mt-1 text-xs text-muted-foreground">{ROLE_DESC[r]}</p>
+            <p className="mt-1.5 text-xs text-muted-foreground leading-relaxed">{getRoleDesc(r)}</p>
           </div>
         ))}
       </div>
@@ -294,14 +323,14 @@ export default function Team() {
                         }
                         className="h-8 rounded-md border border-input bg-background px-2 text-xs"
                       >
-                        {ROLES.map((r) => (
+                        {availableRoles.map((r) => (
                           <option key={r} value={r}>
-                            {r}
+                            {getRoleTitle(r)}
                           </option>
                         ))}
                       </select>
                     ) : (
-                      <span className="capitalize">{primary}</span>
+                      <span className="font-medium text-xs">{getRoleTitle(primary)}</span>
                     )}
                   </td>
                   <td className="px-5 py-3 text-muted-foreground text-xs font-mono">
@@ -321,6 +350,7 @@ export default function Team() {
         open={inviteOpen}
         onOpenChange={setInviteOpen}
         onCreated={load}
+        isFleetMode={isFleetMode}
       />
       <ConfirmDialog
         open={!!revokeId}
@@ -339,15 +369,19 @@ function InviteDialog({
   open,
   onOpenChange,
   onCreated,
+  isFleetMode = false,
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
   onCreated: () => void;
+  isFleetMode?: boolean;
 }) {
   const { profile } = useAuth();
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<Role>("technician");
-  const [department, setDepartment] = useState("maintenance");
+  const [department, setDepartment] = useState(
+    isFleetMode ? "Fleet Operations & Dispatch" : "maintenance"
+  );
   const [submitting, setSubmitting] = useState(false);
   const [createdLink, setCreatedLink] = useState<string | null>(null);
   const [emailDispatched, setEmailDispatched] = useState(false);
@@ -356,7 +390,7 @@ function InviteDialog({
   const reset = () => {
     setEmail("");
     setRole("technician");
-    setDepartment("maintenance");
+    setDepartment(isFleetMode ? "Fleet Operations & Dispatch" : "maintenance");
     setCreatedLink(null);
     setEmailDispatched(false);
     setStatusMessage(null);
@@ -514,13 +548,19 @@ function InviteDialog({
                 onChange={(e) => setRole(e.target.value as Role)}
                 className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
               >
-                {ROLES.filter((r) => r !== "owner").map((r) => (
+                {(isFleetMode ? FLEET_ROLES : STANDARD_ROLES).filter((r) => r !== "owner").map((r) => (
                   <option key={r} value={r}>
-                    {r}
+                    {isFleetMode && FLEET_ROLE_TITLES[r]
+                      ? FLEET_ROLE_TITLES[r]
+                      : r.charAt(0).toUpperCase() + r.slice(1)}
                   </option>
                 ))}
               </select>
-              <p className="text-xs text-muted-foreground">{ROLE_DESC[role]}</p>
+              <p className="text-xs text-muted-foreground">
+                {isFleetMode && FLEET_ROLE_DESCRIPTIONS[role]
+                  ? FLEET_ROLE_DESCRIPTIONS[role]
+                  : STANDARD_ROLE_DESC[role]}
+              </p>
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="invite_department">Department</Label>
@@ -530,10 +570,23 @@ function InviteDialog({
                 onChange={(e) => setDepartment(e.target.value)}
                 className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
               >
-                <option value="maintenance">Maintenance & Engineering</option>
-                <option value="safety">Safety & EHS</option>
-                <option value="production">Production & Operations</option>
-                <option value="management">Management & Leadership</option>
+                {isFleetMode ? (
+                  <>
+                    <option value="Fleet Operations & Dispatch">Fleet Operations & Dispatch</option>
+                    <option value="Workshop & Maintenance">Workshop & Maintenance</option>
+                    <option value="Stores & Spare Parts">Stores & Spare Parts</option>
+                    <option value="Procurement & Sourcing">Procurement & Sourcing</option>
+                    <option value="Finance & Trip Billing">Finance & Trip Billing</option>
+                    <option value="Safety & Journey Management">Safety & Journey Management</option>
+                  </>
+                ) : (
+                  <>
+                    <option value="maintenance">Maintenance & Engineering</option>
+                    <option value="safety">Safety & EHS</option>
+                    <option value="production">Production & Operations</option>
+                    <option value="management">Management & Leadership</option>
+                  </>
+                )}
               </select>
             </div>
           </div>
