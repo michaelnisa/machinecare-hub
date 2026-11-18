@@ -676,6 +676,16 @@ export interface FleetDriver {
   assigned_vehicle?: string | null;
   source?: string | null;
   user_notes: string | null;
+  login_pin?: string | null;
+}
+
+export function normalizePhone(p?: string | null): string {
+  if (!p) return "";
+  let digits = p.replace(/\D/g, "");
+  if (digits.startsWith("255") && digits.length === 12) {
+    digits = "0" + digits.slice(3);
+  }
+  return digits;
 }
 
 export function parseDriver(raw: any, index?: number): FleetDriver {
@@ -718,10 +728,19 @@ export function parseDriver(raw: any, index?: number): FleetDriver {
       if (parsed.next_of_kin_photo_url) next_of_kin_photo_url = parsed.next_of_kin_photo_url;
       if (parsed.assigned_vehicle) assigned_vehicle = parsed.assigned_vehicle;
       if (parsed.source) source = parsed.source;
+      if (parsed.login_pin || parsed.pin) login_pin = String(parsed.login_pin || parsed.pin);
       user_notes = parsed.text ?? null;
     } catch {}
   } else if (raw.notes && typeof raw.notes === "string" && !raw.notes.startsWith("{")) {
     user_notes = raw.notes;
+  }
+
+  // If no custom login_pin was configured, default to the last 4 digits of phone
+  if (!login_pin && raw.phone) {
+    const digits = String(raw.phone).replace(/\D/g, "");
+    if (digits.length >= 4) {
+      login_pin = digits.slice(-4);
+    }
   }
 
   // Strip automated telematics import notes so "Imported live from Trakzee" never displays
@@ -767,6 +786,7 @@ export function parseDriver(raw: any, index?: number): FleetDriver {
     assigned_vehicle,
     source,
     user_notes,
+    login_pin: login_pin || "1234",
   };
 }
 
@@ -777,6 +797,7 @@ export function serializeDriverPayload(data: {
   status: string;
   email?: string | null;
   photo_url?: string | null;
+  login_pin?: string | null;
   license_number?: string | null;
   licence_number?: string | null;
   licence_class?: string | null;
@@ -797,6 +818,7 @@ export function serializeDriverPayload(data: {
   const meta = {
     driver_code: code,
     email: data.email ?? null,
+    login_pin: data.login_pin?.trim() || null,
     license_number: data.license_number ?? data.licence_number ?? null,
     licence_class: data.licence_class ?? null,
     licence_expiry: data.licence_expiry ?? null,

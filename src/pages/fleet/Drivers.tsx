@@ -80,6 +80,7 @@ const EMPTY_FORM = {
   full_name: "",
   phone: "",
   email: "",
+  login_pin: "",
   licence_number: "",
   licence_class: "",
   licence_expiry: "",
@@ -463,6 +464,13 @@ export default function Drivers() {
                 </div>
 
                 <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">Portal PIN:</span>
+                  <span className="font-mono text-xs font-bold px-1.5 py-0.5 rounded bg-muted/80 text-foreground border border-border/60">
+                    {d.login_pin || (d.phone ? d.phone.replace(/\D/g, "").slice(-4) : "—")}
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between">
                   <span className="text-muted-foreground">Licence:</span>
                   {d.licence_class ? (
                     <span className="inline-flex items-center gap-1 font-medium text-foreground">
@@ -585,7 +593,12 @@ export default function Drivers() {
                     </td>
                     <td className="px-5 py-3.5 text-muted-foreground">
                       <div className="font-medium text-foreground">{d.phone ?? "—"}</div>
-                      {d.email && <div className="text-xs text-muted-foreground">{d.email}</div>}
+                      <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                        <span className="text-[10px] font-mono font-medium text-muted-foreground bg-muted/60 px-1.5 py-0.5 rounded border border-border/50" title="Driver Portal PIN">
+                          PIN: {d.login_pin || (d.phone ? d.phone.replace(/\D/g, "").slice(-4) : "—")}
+                        </span>
+                        {d.email && <span className="text-xs text-muted-foreground">• {d.email}</span>}
+                      </div>
                     </td>
                     <td className="px-5 py-3.5">
                       {d.licence_class ? (
@@ -722,6 +735,7 @@ function DriverDialog({ open, onOpenChange, driver, onSaved, existingDrivers = [
           full_name: driver.full_name,
           phone: driver.phone ?? "",
           email: driver.email ?? "",
+          login_pin: driver.login_pin ?? "",
           licence_number: driver.licence_number ?? "",
           licence_class: driver.licence_class ?? "",
           licence_expiry: driver.licence_expiry ?? "",
@@ -826,6 +840,7 @@ function DriverDialog({ open, onOpenChange, driver, onSaved, existingDrivers = [
         full_name: form.full_name.trim(),
         phone: form.phone.trim() || null,
         email: form.email.trim() || null,
+        login_pin: form.login_pin.trim() || null,
         licence_number: form.licence_number.trim() || null,
         licence_class: form.licence_class.trim() || null,
         licence_expiry: form.licence_expiry || null,
@@ -960,7 +975,29 @@ function DriverDialog({ open, onOpenChange, driver, onSaved, existingDrivers = [
                 value={form.phone}
                 onChange={(e) => setForm({ ...form, phone: e.target.value })}
                 placeholder="e.g. +255 712 345 678"
+                required
               />
+              <p className="text-[10px] text-muted-foreground">Used for Driver Portal login & QR scan fast check-in</p>
+            </div>
+
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <Label>Driver Portal PIN / Password</Label>
+                {form.phone && !form.login_pin && (
+                  <span className="text-[10px] font-mono text-emerald-600 dark:text-emerald-400 font-semibold">
+                    Default: {form.phone.replace(/\D/g, "").slice(-4) || "1234"}
+                  </span>
+                )}
+              </div>
+              <Input
+                value={form.login_pin}
+                onChange={(e) => setForm({ ...form, login_pin: e.target.value })}
+                placeholder={form.phone ? `Default: ${form.phone.replace(/\D/g, "").slice(-4) || "1234"}` : "4-digit PIN (e.g. 1234)"}
+                className="font-mono tracking-wider"
+              />
+              <p className="text-[10px] text-muted-foreground">
+                Driver logs in using Phone + this PIN. If left blank, defaults to last 4 digits of phone.
+              </p>
             </div>
 
             <div className="space-y-1.5">
@@ -1404,6 +1441,47 @@ function DriverDetailModal({
                 Official personnel ID for Dispatch, Trips, and Equipment Inspection.
               </p>
             </div>
+          </div>
+
+          {/* Driver Portal Sign-In Credentials */}
+          <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <h4 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                <Shield className="h-4 w-4 text-primary" /> Driver Portal Credentials
+              </h4>
+              <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20">
+                /driver login
+              </span>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-3 text-sm">
+              <div className="p-3 rounded-lg border border-border bg-card space-y-1">
+                <span className="text-[11px] text-muted-foreground flex items-center gap-1">
+                  <Phone className="h-3 w-3 text-primary" /> Login Phone
+                </span>
+                <div className="font-semibold text-foreground truncate">
+                  {driver.phone || <span className="italic text-muted-foreground font-normal">Not set</span>}
+                </div>
+              </div>
+
+              <div className="p-3 rounded-lg border border-border bg-card space-y-1">
+                <span className="text-[11px] text-muted-foreground">Driver Code</span>
+                <div className="font-mono font-bold text-foreground">
+                  {driver.driver_code}
+                </div>
+              </div>
+
+              <div className="p-3 rounded-lg border border-border bg-card space-y-1">
+                <span className="text-[11px] text-muted-foreground">Login PIN</span>
+                <div className="font-mono font-bold text-primary text-base">
+                  {driver.login_pin || (driver.phone ? driver.phone.replace(/\D/g, "").slice(-4) : "—")}
+                </div>
+              </div>
+            </div>
+
+            <p className="text-[11px] text-muted-foreground">
+              Driver logs into <strong>/driver</strong> and confirms QR code scans using this Phone Number and PIN.
+            </p>
           </div>
 
           {/* Quick Contact & Communications */}

@@ -28,16 +28,31 @@ import {
   Phone,
   QrCode,
   AlertOctagon,
+  KeyRound,
+  Eye,
+  EyeOff,
+  Users,
 } from "lucide-react";
 import { toast } from "sonner";
+import { Input } from "@/components/ui/input";
 import {
   DriverSignInModal,
   getActiveDriverSession,
   clearActiveDriverSession,
+  validateDriverLogin,
+  saveActiveDriverSession,
   type ActiveDriverSession,
 } from "@/components/fleet/DriverSignInModal";
 import { QuickFuelDialog } from "@/components/QuickFuelDialog";
-import { SAFE_MACHINE_COLUMNS, parseMachine, parseCargoMeta, extractCleanCargo, type FleetVehicle } from "@/lib/fleet-metadata";
+import {
+  SAFE_MACHINE_COLUMNS,
+  SAFE_DRIVER_COLUMNS,
+  parseMachine,
+  parseDriver,
+  parseCargoMeta,
+  extractCleanCargo,
+  type FleetVehicle,
+} from "@/lib/fleet-metadata";
 import { CoverImage } from "@/components/CoverImage";
 
 export default function DriverPortal() {
@@ -59,6 +74,40 @@ export default function DriverPortal() {
   const [fuelDialogOpen, setFuelDialogOpen] = useState(false);
   const [expenseDialogOpen, setExpenseDialogOpen] = useState(false);
   const [expenseDialogType, setExpenseDialogType] = useState<"receipt" | "fine">("receipt");
+
+  // Inline login form state for unauthenticated drivers
+  const [inlinePhone, setInlinePhone] = useState("");
+  const [inlinePin, setInlinePin] = useState("");
+  const [showInlinePin, setShowInlinePin] = useState(false);
+  const [submittingLogin, setSubmittingLogin] = useState(false);
+
+  const handleInlineLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSubmittingLogin(true);
+    try {
+      let q = supabase.from("drivers").select(SAFE_DRIVER_COLUMNS).eq("status", "active");
+      if (organisation?.id) {
+        q = q.eq("organisation_id", organisation.id);
+      }
+      const { data, error } = await q;
+      if (error) throw error;
+      const parsedDrivers = (data || []).map((raw, idx) => parseDriver(raw, idx));
+      const res = validateDriverLogin(parsedDrivers, inlinePhone, inlinePin, isSwahili ? "sw" : "en");
+      if (!res.success || !res.driver) {
+        toast.error(res.error || "Authentication failed");
+        return;
+      }
+      const session = saveActiveDriverSession(res.driver);
+      setActiveDriver(session);
+      toast.success(`${isSwahili ? "Karibu kazini" : "Driver signed in successfully"}, ${res.driver.full_name}!`);
+      setInlinePhone("");
+      setInlinePin("");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to sign in");
+    } finally {
+      setSubmittingLogin(false);
+    }
+  };
 
   const t = {
     portalTitle: isSwahili ? "Tovuti ya Dereva" : "Driver Portal",
@@ -289,23 +338,91 @@ export default function DriverPortal() {
           </div>
         ) : (
           /* Sign In Card for unauthenticated drivers */
-          <div className="rounded-2xl border border-border bg-card p-6 text-center space-y-4 shadow-sm">
-            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10 text-primary">
-              <UserCheck className="h-7 w-7" />
-            </div>
-            <div>
-              <h2 className="text-lg font-bold">{t.welcome}</h2>
-              <p className="text-xs text-muted-foreground mt-1 max-w-sm mx-auto">
-                {t.signInPrompt}
+          <div className="rounded-2xl border border-border bg-card p-5 sm:p-6 space-y-4 shadow-sm">
+            <div className="text-center space-y-1.5">
+              <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary mb-2">
+                <UserCheck className="h-6 w-6" />
+              </div>
+              <h2 className="text-lg font-bold text-foreground">{t.welcome}</h2>
+              <p className="text-xs text-muted-foreground max-w-sm mx-auto">
+                {isSwahili
+                  ? "Weka namba yako ya simu na PIN uliyopewa na meneja kuingia."
+                  : "Enter your registered phone number and PIN to access your truck & trips."}
               </p>
             </div>
+
+            <form onSubmit={handleInlineLogin} className="space-y-3.5 pt-1">
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                  <Phone className="h-3.5 w-3.5 text-primary" />
+                  <span>{isSwahili ? "Namba ya Simu au Driver ID" : "Phone Number or Driver ID"}</span>
+                </label>
+                <Input
+                  type="text"
+                  value={inlinePhone}
+                  onChange={(e) => setInlinePhone(e.target.value)}
+                  placeholder={isSwahili ? "Mfano: 0712 345 678 au DRV-001" : "e.g. 0712 345 678 or DRV-001"}
+                  className="h-11 text-sm bg-muted/30"
+                  required
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-foreground flex items-center justify-between">
+                  <span className="flex items-center gap-1.5">
+                    <KeyRound className="h-3.5 w-3.5 text-primary" />
+                    <span>{isSwahili ? "PIN ya Dereva (Tarakimu 4)" : "Driver PIN (4 digits)"}</span>
+                  </span>
+                  <span className="text-[10px] text-muted-foreground font-normal">
+                    {isSwahili ? "Chaguomsingi: mwisho wa simu" : "Default: last 4 of phone"}
+                  </span>
+                </label>
+                <div className="relative">
+                  <Input
+                    type={showInlinePin ? "text" : "password"}
+                    value={inlinePin}
+                    onChange={(e) => setInlinePin(e.target.value)}
+                    placeholder="••••"
+                    className="h-11 font-mono tracking-widest text-sm bg-muted/30 pr-10"
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowInlinePin(!showInlinePin)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground cursor-pointer"
+                  >
+                    {showInlinePin ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
+              </div>
+
+              <Button
+                type="submit"
+                disabled={submittingLogin}
+                className="w-full h-11 gap-2 text-sm font-semibold shadow-xs cursor-pointer"
+              >
+                <UserCheck className="h-4 w-4" />
+                <span>{submittingLogin ? (isSwahili ? "Inathibitisha..." : "Signing in...") : (isSwahili ? "Ingia Kazini" : "Sign In & Check In")}</span>
+              </Button>
+            </form>
+
+            <div className="relative pt-1 text-center">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-border/60" />
+              </div>
+              <span className="relative bg-card px-2 text-[11px] text-muted-foreground uppercase font-medium">
+                {isSwahili ? "au" : "or"}
+              </span>
+            </div>
+
             <Button
               type="button"
-              className="w-full h-12 gap-2 text-sm font-semibold shadow-xs"
+              variant="outline"
+              className="w-full h-10 gap-2 text-xs font-medium cursor-pointer"
               onClick={() => setDriverModalOpen(true)}
             >
-              <UserCheck className="h-4 w-4" />
-              <span>{t.checkInBtn}</span>
+              <Users className="h-3.5 w-3.5 text-primary" />
+              <span>{isSwahili ? "Tafuta Jina Kwenye Orodha ya Madereva" : "Browse Driver Directory"}</span>
             </Button>
           </div>
         )}
