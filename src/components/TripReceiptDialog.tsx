@@ -44,6 +44,7 @@ import jsPDF from "jspdf";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { PaymentTermsInput } from "@/components/fleet/PaymentTermsInput";
+import { isLogistixwareAccount } from "@/services/customerService";
 
 export interface PaymentAccountSettings {
   bankName: string;
@@ -133,6 +134,8 @@ export function TripReceiptDialog({
     } catch {}
     return DEFAULT_PAYMENT_ACCOUNTS;
   });
+
+  const isLogistix = isLogistixwareAccount(org) || (companyName || "").toLowerCase().includes("logistix");
 
   // Load existing trip data and org details
   useEffect(() => {
@@ -597,14 +600,16 @@ export function TripReceiptDialog({
                             <span className="text-lg font-black tracking-tight text-slate-900 block leading-tight">
                               {companyName}
                             </span>
-                            <span className="text-[9px] font-bold uppercase tracking-wider text-primary block">
-                              Cross-Border Heavy Haulage & Freight Logistics
-                            </span>
+                            {!isLogistix && (
+                              <span className="text-[9px] font-bold uppercase tracking-wider text-primary block">
+                                Cross-Border Heavy Haulage & Freight Logistics
+                              </span>
+                            )}
                           </div>
                         </div>
                       )}
                     </div>
-                    {customLogoUrl && (
+                    {!isLogistix && customLogoUrl && (
                       <div className="text-xs font-bold text-slate-900">{companyName}</div>
                     )}
                     <div className="text-[11px] text-slate-600 leading-tight pt-0.5">
@@ -838,7 +843,7 @@ export function TripReceiptDialog({
                   </div>
                 </div>
 
-                {paymentAccounts.paymentInstructions && (
+                {!isLogistix && paymentAccounts.paymentInstructions && (
                   <div className="text-[11px] text-gray-500 border-t pt-2">
                     <span className="font-bold text-gray-700">Payment Instructions:</span> {paymentAccounts.paymentInstructions}
                   </div>

@@ -53,10 +53,58 @@ import {
   Landmark,
   Smartphone,
   Layers,
+  Mail,
+  Phone,
+  MapPin,
 } from "lucide-react";
 import { toast } from "sonner";
 import { CustomerSelect } from "@/components/fleet/CustomerSelect";
 import { isLogistixwareAccount } from "@/services/customerService";
+
+function renderInvoiceItemDescription(desc: string) {
+  if (desc.includes("[WB-") || desc.includes("Route:") || desc.includes("Truck:")) {
+    const waybillMatch = desc.match(/\[(WB-[^\]]+)\]/);
+    const waybill = waybillMatch ? waybillMatch[1] : null;
+
+    const routeMatch = desc.match(/Route:\s*([^·]+)/);
+    const route = routeMatch ? routeMatch[1].trim() : null;
+
+    const truckMatch = desc.match(/Truck:\s*([^·]+)/);
+    const truck = truckMatch ? truckMatch[1].trim() : null;
+
+    const cargoMatch = desc.match(/Cargo:\s*(.+)$/);
+    const cargo = cargoMatch ? cargoMatch[1].trim() : null;
+
+    return (
+      <div className="space-y-1 py-0.5">
+        <div className="flex items-center gap-2 flex-wrap">
+          {waybill && (
+            <span className="font-mono font-bold text-[10px] bg-slate-900 text-white px-2 py-0.5 rounded shadow-2xs">
+              {waybill}
+            </span>
+          )}
+          {truck && (
+            <span className="font-mono font-semibold text-slate-800 bg-slate-100 border border-slate-200 px-1.5 py-0.5 rounded text-[10.5px]">
+              {truck}
+            </span>
+          )}
+          {cargo && (
+            <span className="text-slate-700 font-medium text-xs">
+              {cargo}
+            </span>
+          )}
+        </div>
+        {route && (
+          <div className="text-[11px] text-slate-500 font-medium">
+            <span className="text-slate-400 font-normal">Route:</span> {route}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  return <span className="font-medium text-slate-900">{desc}</span>;
+}
 
 export default function FinanceInvoices() {
   const { organisation } = useAuth();
@@ -1168,194 +1216,392 @@ export default function FinanceInvoices() {
       />
 
       {/* Printable Invoice Modal */}
-      {printInvoice && (
-        <Dialog open={!!printInvoice} onOpenChange={() => setPrintInvoice(null)}>
-          <DialogContent className="sm:max-w-3xl max-h-[90vh] overflow-y-auto">
-            <div id="printable-invoice" className="p-4 space-y-6 bg-white text-black rounded-lg">
-              {/* Header */}
-              <div className="flex justify-between items-start border-b pb-4">
-                <div className="flex items-center gap-3">
-                  {organisation?.logo_url ? (
-                    <img
-                      src={organisation.logo_url}
-                      alt={organisation?.name || "Company Logo"}
-                      crossOrigin="anonymous"
-                      className="h-14 w-auto max-w-[170px] object-contain rounded"
-                    />
-                  ) : (
-                    <div className="h-12 w-12 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center text-primary font-bold text-xl">
-                      {(organisation?.name || "MC").substring(0, 2).toUpperCase()}
-                    </div>
-                  )}
-                  <div>
-                    <h2 className="text-2xl font-bold tracking-tight text-gray-900">
-                      {organisation?.name || "MachineCare Fleet Hub"}
-                    </h2>
-                    <p className="text-xs text-gray-500">Commercial Freight & Heavy Haulage Fleet</p>
-                    {organisation?.email && <p className="text-[11px] text-gray-400">{organisation.email}</p>}
-                  </div>
-                </div>
-                <div className="text-right flex flex-col items-end space-y-1">
-                  <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded bg-slate-900 text-white text-[9.5px] font-black uppercase tracking-wider">
-                    {printInvoice.notes?.includes("[CONSOLIDATED_TRIPS:") || (printInvoice.items && printInvoice.items.length > 1)
-                      ? "CONSOLIDATED FREIGHT INVOICE"
-                      : "COMMERCIAL FREIGHT INVOICE"}
-                  </div>
-                  <span className="text-xl font-black font-mono text-slate-950">
-                    {printInvoice.invoice_number}
-                  </span>
-                  <RealisticBarcode code={printInvoice.invoice_number} />
-                  <p className="text-[10px] text-gray-500 pt-0.5">
-                    Issued: <strong className="text-gray-800">{formatDate(printInvoice.issued_at)}</strong> · Due: <strong className="text-rose-600">{formatDate(printInvoice.due_date)}</strong>
-                  </p>
-                </div>
-              </div>
+      {printInvoice && (() => {
+        const isLogistix = isLogistixwareAccount(organisation);
+        const isConsolidated =
+          printInvoice.notes?.includes("[CONSOLIDATED_TRIPS:") ||
+          (printInvoice.items && printInvoice.items.length > 1);
+        const cleanNotes = (printInvoice.notes || "")
+          .replace(/\[CONSOLIDATED_TRIPS:[^\]]+\]/g, "")
+          .trim();
 
-              {/* Bill To */}
-              <div className="grid grid-cols-2 gap-4 text-xs">
-                <div>
-                  <span className="font-bold uppercase tracking-wider text-gray-400">Billed To:</span>
-                  <p className="text-sm font-bold text-gray-900 mt-1">{printInvoice.client_name}</p>
-                  {printInvoice.client_email && <p className="text-gray-600">{printInvoice.client_email}</p>}
-                  {printInvoice.client_phone && <p className="text-gray-600">{printInvoice.client_phone}</p>}
-                </div>
-                <div className="text-right">
-                  <span className="font-bold uppercase tracking-wider text-gray-400">Operational Reference:</span>
-                  {printInvoice.machine && (
-                    <p className="text-sm font-semibold text-gray-900 mt-1">
-                      Vehicle: {printInvoice.machine.plate_number || printInvoice.machine.name}
-                    </p>
-                  )}
-                  {printInvoice.trip && (
-                    <p className="text-xs text-gray-600">
-                      Route: {printInvoice.trip.origin || "Origin"} → {printInvoice.trip.destination || "Destination"}
-                    </p>
-                  )}
-                </div>
-              </div>
+        return (
+          <Dialog open={!!printInvoice} onOpenChange={() => setPrintInvoice(null)}>
+            <DialogContent className="sm:max-w-4xl max-h-[92vh] overflow-y-auto p-4 sm:p-6">
+              {/* Isolated Print CSS: When printing, hides EVERYTHING except #printable-invoice */}
+              <style>{`
+                @media print {
+                  body * {
+                    visibility: hidden !important;
+                  }
+                  #printable-invoice,
+                  #printable-invoice * {
+                    visibility: visible !important;
+                  }
+                  #printable-invoice {
+                    position: fixed !important;
+                    left: 0 !important;
+                    top: 0 !important;
+                    width: 100vw !important;
+                    max-width: 100% !important;
+                    height: auto !important;
+                    margin: 0 !important;
+                    padding: 10mm 14mm !important;
+                    box-shadow: none !important;
+                    border: none !important;
+                    background: white !important;
+                    color: #0f172a !important;
+                    z-index: 9999999 !important;
+                  }
+                  @page {
+                    size: A4 portrait;
+                    margin: 6mm;
+                  }
+                }
+              `}</style>
 
-              {/* Items Table */}
-              <table className="w-full text-left text-xs border border-gray-200">
-                <thead className="bg-gray-100 uppercase tracking-wider text-gray-600">
-                  <tr>
-                    <th className="p-2.5">Description</th>
-                    <th className="p-2.5 text-center">Qty</th>
-                    <th className="p-2.5 text-right">Unit Price</th>
-                    <th className="p-2.5 text-right">Total</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-200">
-                  {(printInvoice.items || []).map((it, i) => (
-                    <tr key={i}>
-                      <td className="p-2.5 font-medium">{it.description}</td>
-                      <td className="p-2.5 text-center">{it.quantity}</td>
-                      <td className="p-2.5 text-right">{formatMoney(it.unit_price, printInvoice.currency)}</td>
-                      <td className="p-2.5 text-right font-semibold">
-                        {formatMoney(it.total_amount, printInvoice.currency)}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              <div id="printable-invoice" className="p-6 md:p-8 space-y-6 bg-white text-slate-900 rounded-xl border border-slate-200 shadow-sm print:border-none print:shadow-none print:p-0">
+                {/* Header */}
+                <div className="flex justify-between items-start border-b-2 border-slate-900 pb-5">
+                  <div className="max-w-[55%]">
+                    {isLogistix ? (
+                      <div className="space-y-2">
+                        {organisation?.logo_url ? (
+                          <img
+                            src={organisation.logo_url}
+                            alt="LOGISTIXWARE"
+                            crossOrigin="anonymous"
+                            className="h-16 w-auto max-w-[240px] object-contain"
+                          />
+                        ) : (
+                          <div className="h-12 px-3 rounded-lg bg-slate-950 text-white font-black text-xl tracking-tight flex items-center">
+                            LOGISTIXWARE
+                          </div>
+                        )}
+                        <div className="text-[11px] text-slate-500 leading-snug space-y-0.5">
+                          <div className="flex items-center gap-1.5 font-medium text-slate-600">
+                            <MapPin className="h-3 w-3 text-slate-400 shrink-0" />
+                            <span>{organisation?.address || "Kurasini Industrial Area, Port Access Corridor · Dar es Salaam, Tanzania"}</span>
+                          </div>
+                          <div className="flex items-center gap-2.5 text-[10px] text-slate-500 pt-0.5 flex-wrap">
+                            <span>Tel: <strong className="text-slate-700">{organisation?.phone || "+255 784 000 000"}</strong></span>
+                            <span>·</span>
+                            {organisation?.email && (
+                              <>
+                                <span>Email: <strong className="text-slate-700">{organisation.email}</strong></span>
+                                <span>·</span>
+                              </>
+                            )}
+                            <span>TIN: <strong className="font-mono text-slate-700">148-920-112</strong></span>
+                            <span>·</span>
+                            <span>VRN: <strong className="font-mono text-slate-700">40-029184-Z</strong></span>
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-3">
+                        {organisation?.logo_url ? (
+                          <img
+                            src={organisation.logo_url}
+                            alt={organisation?.name || "Company Logo"}
+                            crossOrigin="anonymous"
+                            className="h-14 w-auto max-w-[170px] object-contain rounded"
+                          />
+                        ) : (
+                          <div className="h-12 w-12 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center text-primary font-bold text-xl">
+                            {(organisation?.name || "MC").substring(0, 2).toUpperCase()}
+                          </div>
+                        )}
+                        <div>
+                          <h2 className="text-2xl font-bold tracking-tight text-gray-900">
+                            {organisation?.name || "MachineCare Fleet Hub"}
+                          </h2>
+                          <p className="text-xs text-gray-500">Commercial Freight &amp; Fleet Operations</p>
+                          {organisation?.email && <p className="text-[11px] text-gray-400">{organisation.email}</p>}
+                        </div>
+                      </div>
+                    )}
+                  </div>
 
-              {/* Totals */}
-              <div className="flex justify-end text-xs">
-                <div className="w-64 space-y-1.5 text-right">
-                  <div className="flex justify-between">
-                    <span className="text-gray-500">Subtotal:</span>
-                    <span className="font-semibold">{formatMoney(printInvoice.subtotal, printInvoice.currency)}</span>
-                  </div>
-                  {printInvoice.tax_amount > 0 && (
-                    <div className="flex justify-between">
-                      <span className="text-gray-500">VAT ({printInvoice.tax_rate_percent}%):</span>
-                      <span className="font-semibold">{formatMoney(printInvoice.tax_amount, printInvoice.currency)}</span>
+                  <div className="text-right flex flex-col items-end space-y-1.5">
+                    <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-950 text-white text-[9.5px] font-black uppercase tracking-wider shadow-xs">
+                      {isConsolidated
+                        ? "CONSOLIDATED FREIGHT INVOICE"
+                        : "COMMERCIAL FREIGHT TAX INVOICE"}
                     </div>
-                  )}
-                  {printInvoice.discount_amount > 0 && (
-                    <div className="flex justify-between text-rose-600">
-                      <span>Discount:</span>
-                      <span>-{formatMoney(printInvoice.discount_amount, printInvoice.currency)}</span>
-                    </div>
-                  )}
-                  <div className="flex justify-between text-sm font-bold border-t pt-2 text-gray-900">
-                    <span>Total Amount:</span>
-                    <span>{formatMoney(printInvoice.total_amount, printInvoice.currency)}</span>
-                  </div>
-                  <div className="flex justify-between text-emerald-600">
-                    <span>Paid to Date:</span>
-                    <span className="font-semibold">{formatMoney(printInvoice.paid_amount, printInvoice.currency)}</span>
-                  </div>
-                  <div className="flex justify-between font-bold text-amber-600 border-t pt-1">
-                    <span>Balance Due:</span>
-                    <span>
-                      {formatMoney(
-                        Math.max(printInvoice.total_amount - (printInvoice.paid_amount || 0), 0),
-                        printInvoice.currency
-                      )}
+                    <span className="text-2xl font-black font-mono text-slate-950 tracking-tight">
+                      {printInvoice.invoice_number}
                     </span>
+                    <RealisticBarcode code={printInvoice.invoice_number} />
+                    <div className="flex items-center gap-3 text-[11px] text-slate-500 pt-1">
+                      <span>
+                        Issued: <strong className="text-slate-800">{formatDate(printInvoice.issued_at)}</strong>
+                      </span>
+                      <span>·</span>
+                      <span>
+                        Due Date: <strong className="text-rose-600 font-bold">{formatDate(printInvoice.due_date)}</strong>
+                      </span>
+                    </div>
                   </div>
                 </div>
+
+                {/* Bill To & Dispatch Reference */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+                  <div className="p-4 rounded-xl bg-slate-50 border border-slate-200/80 space-y-1.5">
+                    <span className="font-bold uppercase tracking-wider text-slate-400 text-[10px] block">
+                      Billed To / Consignee
+                    </span>
+                    <p className="text-base font-bold text-slate-950">{printInvoice.client_name}</p>
+                    {printInvoice.client_email && (
+                      <p className="text-slate-600 flex items-center gap-1.5">
+                        <Mail className="h-3 w-3 text-slate-400 shrink-0" />
+                        {printInvoice.client_email}
+                      </p>
+                    )}
+                    {printInvoice.client_phone && (
+                      <p className="text-slate-600 flex items-center gap-1.5">
+                        <Phone className="h-3 w-3 text-slate-400 shrink-0" />
+                        {printInvoice.client_phone}
+                      </p>
+                    )}
+                    <div className="text-[10px] text-slate-500 pt-1 border-t border-slate-200/60 mt-2">
+                      Commercial Account · Payment Terms: <strong className="text-slate-700">Net 30 Days</strong>
+                    </div>
+                  </div>
+
+                  <div className="p-4 rounded-xl bg-slate-50 border border-slate-200/80 space-y-1.5 text-right">
+                    <span className="font-bold uppercase tracking-wider text-slate-400 text-[10px] block">
+                      Operational Dispatch Reference
+                    </span>
+                    {isConsolidated ? (
+                      <>
+                        <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md bg-primary/10 text-primary font-bold text-xs">
+                          <Layers className="h-3.5 w-3.5" /> Multi-Trip Consignment Schedule
+                        </div>
+                        <p className="text-xs text-slate-600 mt-1">
+                          Consolidated commercial freight master invoice covering{" "}
+                          <strong>{printInvoice.items?.length || 0}</strong> trips.
+                        </p>
+                      </>
+                    ) : (
+                      <>
+                        {printInvoice.machine && (
+                          <p className="text-sm font-semibold text-slate-900 mt-1">
+                            Vehicle Plate: <span className="font-mono font-bold">{printInvoice.machine.plate_number || printInvoice.machine.name}</span>
+                          </p>
+                        )}
+                        {printInvoice.trip && (
+                          <p className="text-xs text-slate-600">
+                            Route: <strong>{printInvoice.trip.origin || "Origin"}</strong> ➔ <strong>{printInvoice.trip.destination || "Destination"}</strong>
+                          </p>
+                        )}
+                      </>
+                    )}
+                    <div className="text-[10px] text-slate-500 pt-1 border-t border-slate-200/60 mt-2">
+                      Billing Currency: <strong className="font-mono text-slate-800">{printInvoice.currency || "TZS"}</strong> · Official Commercial Settlement
+                    </div>
+                  </div>
+                </div>
+
+                {/* Items Table */}
+                <div className="overflow-hidden rounded-xl border border-slate-200 shadow-2xs">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-slate-900 text-white uppercase text-[10px] tracking-wider font-bold">
+                      <tr>
+                        <th className="p-3 w-10 text-center text-slate-400">#</th>
+                        <th className="p-3">Freight Consignment Description &amp; Waybill Schedule</th>
+                        <th className="p-3 text-center w-14">Qty</th>
+                        <th className="p-3 text-right w-32">Rate ({printInvoice.currency || "TZS"})</th>
+                        <th className="p-3 text-right w-36">Total Amount</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-200 bg-white">
+                      {(printInvoice.items || []).map((it, i) => (
+                        <tr key={i} className={i % 2 === 1 ? "bg-slate-50/50" : ""}>
+                          <td className="p-3 text-center font-mono text-slate-400 text-[11px] align-top">{i + 1}</td>
+                          <td className="p-3 align-top">
+                            {renderInvoiceItemDescription(it.description)}
+                          </td>
+                          <td className="p-3 text-center font-mono text-slate-700 align-top">{it.quantity}</td>
+                          <td className="p-3 text-right font-mono text-slate-700 align-top">
+                            {formatMoney(it.unit_price, printInvoice.currency)}
+                          </td>
+                          <td className="p-3 text-right font-mono font-bold text-slate-950 align-top">
+                            {formatMoney(it.total_amount, printInvoice.currency)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Totals Breakdown */}
+                <div className="flex justify-end text-xs">
+                  <div className="w-80 space-y-2 rounded-xl bg-slate-50 p-4 border border-slate-200/80">
+                    <div className="flex justify-between text-slate-600">
+                      <span>Freight Subtotal:</span>
+                      <span className="font-mono font-semibold text-slate-900">
+                        {formatMoney(printInvoice.subtotal, printInvoice.currency)}
+                      </span>
+                    </div>
+                    {printInvoice.tax_amount > 0 ? (
+                      <div className="flex justify-between text-slate-600">
+                        <span>VAT ({printInvoice.tax_rate_percent}%):</span>
+                        <span className="font-mono font-semibold text-slate-900">
+                          {formatMoney(printInvoice.tax_amount, printInvoice.currency)}
+                        </span>
+                      </div>
+                    ) : (
+                      <div className="flex justify-between text-slate-500 text-[11px]">
+                        <span>VAT (0% Cross-Border Transit Exempt):</span>
+                        <span className="font-mono font-semibold">0</span>
+                      </div>
+                    )}
+                    {printInvoice.discount_amount > 0 && (
+                      <div className="flex justify-between text-rose-600">
+                        <span>Discount Applied:</span>
+                        <span className="font-mono font-semibold">
+                          -{formatMoney(printInvoice.discount_amount, printInvoice.currency)}
+                        </span>
+                      </div>
+                    )}
+                    <div className="flex justify-between items-center text-sm font-black text-slate-950 border-t-2 border-slate-900 pt-2">
+                      <span>Total Invoice Due:</span>
+                      <span className="font-mono text-base">
+                        {formatMoney(printInvoice.total_amount, printInvoice.currency)}
+                      </span>
+                    </div>
+                    {(printInvoice.paid_amount || 0) > 0 && (
+                      <div className="flex justify-between text-emerald-600 pt-1 border-t border-slate-200">
+                        <span>Paid to Date:</span>
+                        <span className="font-mono font-semibold">
+                          {formatMoney(printInvoice.paid_amount, printInvoice.currency)}
+                        </span>
+                      </div>
+                    )}
+                    <div className="flex justify-between font-bold text-slate-900 pt-1 border-t border-slate-200">
+                      <span>Outstanding Balance:</span>
+                      <span className="font-mono font-black text-amber-700">
+                        {formatMoney(
+                          Math.max(printInvoice.total_amount - (printInvoice.paid_amount || 0), 0),
+                          printInvoice.currency
+                        )}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Footer Section: Payment Instructions vs Corporate Authorization Stamps */}
+                {!isLogistix && (
+                  <>
+                    {/* Official Settlement & Bank Wire Details for non-Logistix accounts */}
+                    <div className="border-t pt-3 grid grid-cols-1 md:grid-cols-2 gap-3 text-xs bg-slate-50 p-3 rounded-lg border border-slate-200">
+                      <div>
+                        <span className="font-bold uppercase tracking-wider text-slate-700 block mb-1">
+                          Official Settlement &amp; Commercial Wire Accounts
+                        </span>
+                        <p className="text-slate-600">
+                          <span className="font-semibold text-slate-900">Beneficiary:</span>{" "}
+                          {bankSettings?.accountName || organisation?.name || "MachineCare Hub Ltd"}
+                        </p>
+                        <p className="text-slate-600">
+                          <span className="font-semibold text-slate-900">Primary Bank:</span>{" "}
+                          {bankSettings?.bankName || "CRDB Bank / Standard Chartered"}
+                        </p>
+                        <p className="text-slate-600">
+                          <span className="font-semibold text-slate-900">Branch:</span>{" "}
+                          {bankSettings?.branch || "Corporate Branch"}{" "}
+                          {bankSettings?.swiftCode ? ` · SWIFT: ${bankSettings.swiftCode}` : ""}
+                        </p>
+                      </div>
+                      <div>
+                        <span className="font-bold uppercase tracking-wider text-slate-700 block mb-1">
+                          Direct Account Numbers
+                        </span>
+                        <p className="text-slate-600">
+                          <span className="font-semibold text-slate-900">TZS Account:</span>{" "}
+                          <span className="font-mono">{bankSettings?.accountNumberTzs || "0150248839200"}</span>
+                        </p>
+                        <p className="text-slate-600">
+                          <span className="font-semibold text-slate-900">USD Account:</span>{" "}
+                          <span className="font-mono">{bankSettings?.accountNumberUsd || "0250248839201"}</span>
+                        </p>
+                        {bankSettings?.lipaNumber && (
+                          <p className="text-slate-600">
+                            <span className="font-semibold text-slate-900">Merchant / Lipa Namba:</span>{" "}
+                            <span className="font-mono">{bankSettings.lipaNumber}</span>
+                          </p>
+                        )}
+                      </div>
+                    </div>
+
+                    {cleanNotes && (
+                      <div className="border-t pt-3 text-xs text-slate-500">
+                        <span className="font-bold text-slate-700">Remarks / Instructions:</span>
+                        <p className="mt-1 whitespace-pre-line">{cleanNotes}</p>
+                      </div>
+                    )}
+                  </>
+                )}
+
+                {/* Carrier Dispatch & Consignee Receiving Stamps (Corporate Standard) */}
+                <div className="grid grid-cols-2 gap-6 pt-2 text-xs border-t border-slate-200">
+                  <div className="border border-slate-200 rounded-xl p-3.5 bg-slate-50/50 space-y-2">
+                    <div className="flex items-center justify-between text-[9px] font-black uppercase tracking-wider text-slate-500">
+                      <span>01. Carrier Dispatch &amp; Authorization</span>
+                      <span className="text-primary font-bold">OFFICIAL STAMP</span>
+                    </div>
+                    <div className="h-10 border-b border-dashed border-slate-300 flex items-end pb-1">
+                      <span className="text-[10px] text-slate-400 italic font-serif">
+                        Authorized Finance &amp; Fleet Operations Officer
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-baseline text-[9px] text-slate-500">
+                      <span className="font-bold text-slate-800">{organisation?.name || "LOGISTIXWARE"}</span>
+                      <span className="font-mono">Date: {formatDate(printInvoice.issued_at)}</span>
+                    </div>
+                  </div>
+
+                  <div className="border border-slate-200 rounded-xl p-3.5 bg-slate-50/50 space-y-2">
+                    <div className="flex items-center justify-between text-[9px] font-black uppercase tracking-wider text-slate-500">
+                      <span>02. Consignee / Client Acceptance</span>
+                      <span className="text-slate-400 font-bold">CLIENT SIGN-OFF</span>
+                    </div>
+                    <div className="h-10 border-b border-dashed border-slate-300 flex items-end pb-1">
+                      <span className="text-[10px] text-slate-400 italic font-serif">
+                        Accounts Payable &amp; Receiving Officer
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-baseline text-[9px] text-slate-500">
+                      <span className="font-bold text-slate-800 truncate max-w-[150px]">{printInvoice.client_name}</span>
+                      <span className="font-mono">Date: __________________</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="text-center text-[10px] text-slate-400 pt-3 border-t border-slate-100">
+                  Thank you for your business. Generated electronically by MachineCare Enterprise Fleet Operations System.
+                </div>
               </div>
 
-              {/* Official Settlement & Bank Wire Details */}
-              <div className="border-t pt-3 grid grid-cols-1 md:grid-cols-2 gap-3 text-xs bg-gray-50 p-3 rounded-lg border border-gray-200">
-                <div>
-                  <span className="font-bold uppercase tracking-wider text-gray-700 block mb-1">
-                    Official Settlement & Commercial Wire Accounts
-                  </span>
-                  <p className="text-gray-600">
-                    <span className="font-semibold text-gray-900">Beneficiary:</span> {bankSettings?.accountName || organisation?.name || "MachineCare Hub Ltd"}
-                  </p>
-                  <p className="text-gray-600">
-                    <span className="font-semibold text-gray-900">Primary Bank:</span> {bankSettings?.bankName || "CRDB Bank / Standard Chartered"}
-                  </p>
-                  <p className="text-gray-600">
-                    <span className="font-semibold text-gray-900">Branch:</span> {bankSettings?.branch || "Corporate Branch"} {bankSettings?.swiftCode ? ` · SWIFT: ${bankSettings.swiftCode}` : ""}
-                  </p>
-                </div>
-                <div>
-                  <span className="font-bold uppercase tracking-wider text-gray-700 block mb-1">
-                    Direct Account Numbers
-                  </span>
-                  <p className="text-gray-600">
-                    <span className="font-semibold text-gray-900">TZS Account:</span> <span className="font-mono">{bankSettings?.accountNumberTzs || "0150248839200"}</span>
-                  </p>
-                  <p className="text-gray-600">
-                    <span className="font-semibold text-gray-900">USD Account:</span> <span className="font-mono">{bankSettings?.accountNumberUsd || "0250248839201"}</span>
-                  </p>
-                  {bankSettings?.lipaNumber && (
-                    <p className="text-gray-600">
-                      <span className="font-semibold text-gray-900">Merchant / Lipa Namba:</span> <span className="font-mono">{bankSettings.lipaNumber}</span>
-                    </p>
-                  )}
-                </div>
-              </div>
-
-              {printInvoice.notes && (
-                <div className="border-t pt-3 text-xs text-gray-500">
-                  <span className="font-bold text-gray-700">Payment Instructions:</span>
-                  <p className="mt-1 whitespace-pre-line">{printInvoice.notes}</p>
-                </div>
-              )}
-            </div>
-
-            <DialogFooter className="gap-2 pt-2">
-              <Button variant="outline" onClick={() => setPrintInvoice(null)}>
-                Close
-              </Button>
-              <Button
-                onClick={() => {
-                  window.print();
-                }}
-                className="gap-1.5"
-              >
-                <Printer className="h-4 w-4" />
-                Print / Save PDF
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-      )}
+              <DialogFooter className="gap-2 pt-2 print:hidden">
+                <Button variant="outline" onClick={() => setPrintInvoice(null)}>
+                  Close
+                </Button>
+                <Button
+                  onClick={() => {
+                    window.print();
+                  }}
+                  className="gap-1.5 shadow-xs"
+                >
+                  <Printer className="h-4 w-4" />
+                  Print / Save PDF
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        );
+      })()}
     </div>
   );
 }

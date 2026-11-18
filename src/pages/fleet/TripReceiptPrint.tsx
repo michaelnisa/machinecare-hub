@@ -28,6 +28,7 @@ import { DEFAULT_USD_TO_TZS_RATE } from "@/services/crossBorderCorridors";
 import { DEFAULT_PAYMENT_ACCOUNTS, type PaymentAccountSettings } from "@/components/TripReceiptDialog";
 import { parseCargoMeta, extractCleanCargo } from "@/lib/fleet-metadata";
 import { useAuth } from "@/contexts/AuthContext";
+import { isLogistixwareAccount } from "@/services/customerService";
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
 import { toast } from "sonner";
@@ -272,6 +273,7 @@ export default function TripReceiptPrint() {
   const companyAddress = org?.address || authOrg?.address || "Kurasini Depot, Nelson Mandela Road, Dar es Salaam, Tanzania";
   const companyLogo = trip?.custom_logo_url || org?.logo_url || authOrg?.logo_url;
   const companyTin = "TIN: 142-990-811 / VRN: 40-029188";
+  const isLogistix = isLogistixwareAccount(org || authOrg) || (companyName || "").toLowerCase().includes("logistix");
 
   return (
     <div className="min-h-screen bg-muted/40 print:bg-white text-slate-900">
@@ -372,14 +374,16 @@ export default function TripReceiptPrint() {
                           <span className="text-lg font-black tracking-tight text-slate-900 block leading-tight">
                             {companyName}
                           </span>
-                          <span className="text-[9px] font-bold uppercase tracking-wider text-primary block">
-                            Cross-Border Heavy Haulage & Freight Logistics
-                          </span>
+                          {!isLogistix && (
+                            <span className="text-[9px] font-bold uppercase tracking-wider text-primary block">
+                              Cross-Border Heavy Haulage & Freight Logistics
+                            </span>
+                          )}
                         </div>
                       </div>
                     )}
                   </div>
-                  {companyLogo && (
+                  {!isLogistix && companyLogo && (
                     <div className="text-xs font-bold text-slate-900">{companyName}</div>
                   )}
                   <div className="text-[11px] text-slate-600 leading-tight pt-0.5">
@@ -602,7 +606,7 @@ export default function TripReceiptPrint() {
                 </div>
               </div>
 
-              {paymentAccounts.paymentInstructions && (
+              {!isLogistix && paymentAccounts.paymentInstructions && (
                 <div className="text-[11px] text-gray-500 border-t pt-2">
                   <span className="font-bold text-gray-700">Payment Instructions:</span> {paymentAccounts.paymentInstructions}
                 </div>
