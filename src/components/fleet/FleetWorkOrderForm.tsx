@@ -117,6 +117,26 @@ const VEHICLE_WORK_TYPES = [
   },
 ];
 
+export const COMPONENT_SYSTEMS = [
+  "Brake System",
+  "Engine System",
+  "Fuel System",
+  "Suspension System",
+  "Steering System",
+  "Transmission System",
+  "Electrical System",
+  "Electronics System",
+  "Air System",
+  "Body Works",
+  "Accident Repairs",
+];
+
+export const REPAIR_LOCATIONS = [
+  { id: "onsite", label: "Onsite (Company Workshop)" },
+  { id: "offsite", label: "Offsite / Roadside Field Rescue" },
+  { id: "outsourced", label: "Outsourced (Contractors & Dealers)" },
+];
+
 const STANDARD_PM_TASKS = [
   "Engine Oil & Oil Filter Replacement",
   "Primary & Secondary Fuel Filters Replacement",
@@ -211,8 +231,9 @@ export function FleetWorkOrderForm({
   const [selectedTechnicianId, setSelectedTechnicianId] = useState("");
   const [pmTasksList, setPmTasksList] = useState<string[]>([...STANDARD_PM_TASKS]);
   const [newCustomTask, setNewCustomTask] = useState("");
-  const [selectedTasks, setSelectedTasks] = useState<string[]>([...STANDARD_PM_TASKS]);
   const [remarks, setRemarks] = useState("");
+  const [componentSystem, setComponentSystem] = useState<string>("Brake System");
+  const [repairLocation, setRepairLocation] = useState<string>("onsite");
 
   // Outsourcing State
   const [isOutsourced, setIsOutsourced] = useState(false);
@@ -349,6 +370,13 @@ export function FleetWorkOrderForm({
       if (selectedTechnician) {
         fullDescription += `[Assigned Workshop Technician]: ${selectedTechnician.name} (${selectedTechnician.specialization || "Technician"})\n`;
       }
+      if (componentSystem) {
+        fullDescription += `[Component System Classification]: ${componentSystem}\n`;
+      }
+      if (repairLocation) {
+        const locObj = REPAIR_LOCATIONS.find((l) => l.id === repairLocation);
+        fullDescription += `[Repair Location Source]: ${locObj ? locObj.label : repairLocation}\n`;
+      }
 
       // Check if selectedTechnicianId matches a profile user id or a garage_mechanics id
       const matchingProfile = members.find((m) => m.id === selectedTechnicianId);
@@ -365,13 +393,13 @@ export function FleetWorkOrderForm({
         assignee_id: assigneeId,
         due_date: dueDate || null,
         nature_of_problem: defectReport.trim() || null,
-        proposed_remedy: workType === "preventive" ? selectedTasks.join(", ") : null,
+        proposed_remedy: `[COMPONENT:${componentSystem}] [LOCATION:${repairLocation}] ${workType === "preventive" ? selectedTasks.join(", ") : ""}`.trim() || null,
         technician_comment: null,
         remarks: remarks.trim() || null,
-        is_outsourced: !!isOutsourced,
-        vendor_id: isOutsourced && vendorId ? vendorId : null,
-        promised_date: isOutsourced && promisedDate ? promisedDate : null,
-        vendor_cost: isOutsourced && vendorCost ? parseFloat(vendorCost) : null,
+        is_outsourced: isOutsourced || repairLocation === "outsourced",
+        vendor_id: (isOutsourced || repairLocation === "outsourced") && vendorId ? vendorId : null,
+        promised_date: (isOutsourced || repairLocation === "outsourced") && promisedDate ? promisedDate : null,
+        vendor_cost: (isOutsourced || repairLocation === "outsourced") && vendorCost ? parseFloat(vendorCost) : null,
         vendor_currency: "TZS",
         created_by: profile.id,
       };
@@ -559,6 +587,57 @@ export function FleetWorkOrderForm({
                 ))}
               </div>
             )}
+          </div>
+
+          {/* 3b. Component System Classification (Slide 11) & Repair Location (Slide 12) */}
+          <div className="grid gap-4 sm:grid-cols-2 p-3.5 rounded-xl border border-border bg-muted/20">
+            <div className="space-y-1.5">
+              <Label className="text-xs font-semibold flex items-center gap-1.5">
+                <Layers className="h-3.5 w-3.5 text-primary" />
+                Component System Classification *
+              </Label>
+              <Select value={componentSystem} onValueChange={setComponentSystem}>
+                <SelectTrigger className="h-10 bg-background text-xs">
+                  <SelectValue placeholder="Select vehicle component..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {COMPONENT_SYSTEMS.map((sys) => (
+                    <SelectItem key={sys} value={sys}>
+                      {sys}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-[10px] text-muted-foreground">Classified for failure trend analytics</p>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label className="text-xs font-semibold flex items-center gap-1.5">
+                <Building2 className="h-3.5 w-3.5 text-primary" />
+                Repair Location Source *
+              </Label>
+              <Select
+                value={repairLocation}
+                onValueChange={(val) => {
+                  setRepairLocation(val);
+                  if (val === "outsourced") {
+                    setIsOutsourced(true);
+                  }
+                }}
+              >
+                <SelectTrigger className="h-10 bg-background text-xs">
+                  <SelectValue placeholder="Select repair location..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {REPAIR_LOCATIONS.map((loc) => (
+                    <SelectItem key={loc.id} value={loc.id}>
+                      {loc.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-[10px] text-muted-foreground">In-house workshop vs field breakdown vs outsourced</p>
+            </div>
           </div>
 
           {/* 4. Service Odometer & Priority */}
@@ -941,6 +1020,14 @@ export function FleetWorkOrderForm({
                 <span className="capitalize font-bold text-foreground">{priority}</span>
                 <span className="text-muted-foreground">· Target:</span>
                 <span className="font-medium text-foreground">{formatDate(dueDate)}</span>
+              </div>
+              <div className="flex flex-wrap items-center gap-1.5 pt-1.5">
+                <span className="inline-flex items-center gap-1 rounded bg-blue-500/10 px-2 py-0.5 text-[10px] font-semibold text-blue-700 dark:text-blue-400 border border-blue-500/20">
+                  <Layers className="h-3 w-3" /> {componentSystem}
+                </span>
+                <span className="inline-flex items-center gap-1 rounded bg-purple-500/10 px-2 py-0.5 text-[10px] font-semibold text-purple-700 dark:text-purple-400 border border-purple-500/20">
+                  <Building2 className="h-3 w-3" /> {REPAIR_LOCATIONS.find((l) => l.id === repairLocation)?.label || repairLocation}
+                </span>
               </div>
             </div>
 

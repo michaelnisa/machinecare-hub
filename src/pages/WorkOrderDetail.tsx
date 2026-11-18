@@ -7,7 +7,7 @@ import { ArrowLeft, Printer, Receipt, Truck, Wrench, UserCog, CheckCircle2, Gaug
 import { toast } from "sonner";
 import { CreateReceiptModal } from "@/components/accounting/CreateReceiptModal";
 import { StatusPipelineBar, type WoStatus } from "@/components/StatusPipelineBar";
-import { WorkOrderPreview, formatWoNumber } from "@/components/WorkOrderPreview";
+import { WorkOrderPreview, formatWoNumber, getCleanRemarks } from "@/components/WorkOrderPreview";
 import { WorkOrderJobLog } from "@/components/WorkOrderJobLog";
 import { WorkOrderTasks } from "@/components/WorkOrderTasks";
 import { WorkOrderPtwCard } from "@/components/WorkOrderPtwCard";
@@ -17,12 +17,14 @@ import { WorkOrderLotoCard } from "@/components/WorkOrderLotoCard";
 import { WorkOrderMaterialRequestCard } from "@/components/WorkOrderMaterialRequestCard";
 import { formatDate } from "@/lib/format";
 import { useAuth } from "@/contexts/AuthContext";
+import { useIndustry } from "@/hooks/useIndustry";
 import { formatDistanceToNow } from "date-fns";
-import { WorkOrderPreview, formatWoNumber, getCleanRemarks } from "@/components/WorkOrderPreview";
+import { Layers, Building2, MapPin, ShieldCheck } from "lucide-react";
 
 export default function WorkOrderDetail() {
   const { id } = useParams<{ id: string }>();
   const { organisation: authOrg } = useAuth();
+  const { isFleet } = useIndustry();
   const [loading, setLoading] = useState(true);
   const [wo, setWo] = useState<any>(null);
   const [machine, setMachine] = useState<any>(null);
@@ -97,6 +99,22 @@ export default function WorkOrderDetail() {
     return false;
   }, [machine, wo]);
 
+  const isFleetMode = useMemo(() => {
+    return isFleet || authOrg?.industry_profile === "fleet_logistics" || isVehicleWo;
+  }, [isFleet, authOrg, isVehicleWo]);
+
+  const extractedComponent = useMemo(() => {
+    const text = `${wo?.proposed_remedy ?? ""} ${wo?.description ?? ""}`;
+    const match = text.match(/\[COMPONENT:\s*([^\]]+)\]/);
+    return match ? match[1].trim() : null;
+  }, [wo]);
+
+  const extractedLocation = useMemo(() => {
+    const text = `${wo?.proposed_remedy ?? ""} ${wo?.description ?? ""}`;
+    const match = text.match(/\[LOCATION:\s*([^\]]+)\]/);
+    return match ? match[1].trim() : null;
+  }, [wo]);
+
   const hasPermitsOrLoto = useMemo(() => {
     if (!wo) return false;
     return !!(
@@ -145,12 +163,19 @@ export default function WorkOrderDetail() {
 
   return (
     <div className="space-y-5 animate-fade-in">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <Link to="/work-orders" className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground">
-          <ArrowLeft className="h-4 w-4" /> Back to work orders
+          <ArrowLeft className="h-4 w-4" /> {isFleetMode ? "Back to Job Cards" : "Back to work orders"}
         </Link>
-        <div className="flex items-center gap-2">
-          {machine?.category === "Vehicle" && (
+        <div className="flex flex-wrap items-center gap-2">
+          {isFleetMode && (
+            <Button variant="outline" asChild className="border-emerald-500/30 text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/30">
+              <Link to="/fleet/approvals">
+                <ShieldCheck className="mr-2 h-4 w-4 text-emerald-600" /> Fleet Approvals
+              </Link>
+            </Button>
+          )}
+          {(isVehicleWo || isFleetMode) && (
             <Button variant="outline" asChild>
               <Link to={`/work-orders/${id}/print?view=jobcard`}><Printer className="mr-2 h-4 w-4" /> Print as Job Card</Link>
             </Button>
@@ -165,11 +190,42 @@ export default function WorkOrderDetail() {
       </div>
 
       <div>
-        <div className="text-xs uppercase tracking-wide text-muted-foreground">{formatWoNumber(wo.wo_year, wo.wo_number)}</div>
+        <div className="text-xs uppercase tracking-wide font-mono font-semibold text-primary">
+          {isFleetMode
+            ? `Fleet Job Card JC-${wo.wo_year}-${String(wo.wo_number).padStart(4, "0")}`
+            : formatWoNumber(wo.wo_year, wo.wo_number)}
+        </div>
         <h1 className="text-2xl font-semibold tracking-tight">{wo.title}</h1>
-        <div className="mt-1 text-xs text-muted-foreground">
-          {wo.work_type} · created {formatDate(wo.created_at)} {wo.due_date && <>· due {formatDate(wo.due_date)}</>}
-          {fromBreakdown && <> · <span className="text-amber-600">created from a production breakdown log</span></>}
+
+        <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+          {machine && (
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full font-semibold bg-muted text-foreground border border-border">
+              {isFleetMode ? <Truck className="h-3 w-3 text-primary" /> : null}
+              {machine.reg_number || machine.name || machine.code}
+            </span>
+          )}
+          {extractedComponent && (
+            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full font-medium bg-primary/10 text-primary border border-primary/20">
+              <Layers className="h-3 w-3" />
+              {extractedComponent}
+            </span>
+          )}
+          {extractedLocation && (
+            <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full font-medium border ${
+              extractedLocation === "onsite"
+                ? "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800/40"
+                : extractedLocation === "offsite"
+                ? "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800/40"
+                : "bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950/40 dark:text-purple-300 dark:border-purple-800/40"
+            }`}>
+              {extractedLocation === "onsite" ? <Building2 className="h-3 w-3" /> : <MapPin className="h-3 w-3" />}
+              {extractedLocation === "onsite" ? "Onsite Workshop" : extractedLocation === "offsite" ? "Offsite Field Breakdown" : "Outsourced Dealership"}
+            </span>
+          )}
+          <span className="text-muted-foreground">
+            {wo.work_type} · created {formatDate(wo.created_at)} {wo.due_date && <>· due {formatDate(wo.due_date)}</>}
+            {fromBreakdown && <> · <span className="text-amber-600">created from breakdown alert</span></>}
+          </span>
         </div>
       </div>
 

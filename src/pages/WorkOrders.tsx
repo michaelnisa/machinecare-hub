@@ -2,10 +2,11 @@ import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useUserRole } from "@/hooks/useUserRole";
+import { useIndustry } from "@/hooks/useIndustry";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PageLoader, EmptyState } from "@/components/PageLoader";
-import { ClipboardList, Plus, Trash2, Printer, AlertTriangle, ExternalLink, Search } from "lucide-react";
+import { ClipboardList, Plus, Trash2, Printer, AlertTriangle, ExternalLink, Search, Truck, Layers, Building2 } from "lucide-react";
 import { Link, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import { formatDate } from "@/lib/format";
@@ -44,6 +45,9 @@ const STATUS_BADGE: Record<string, string> = {
 export default function WorkOrders() {
   const { profile } = useAuth();
   const { isManager, isTechnician } = useUserRole();
+  const { isFleet, organisation } = useIndustry();
+  const isFleetMode = isFleet || organisation?.industry_profile === "fleet_logistics";
+
   const [params, setParams] = useSearchParams();
   const [loading, setLoading] = useState(true);
   const [orders, setOrders] = useState<any[]>([]);
@@ -53,6 +57,7 @@ export default function WorkOrders() {
   const [machineFilter, setMachineFilter] = useState<string>(params.get("machine") ?? "all");
   const [assigneeFilter, setAssigneeFilter] = useState<string>("all");
   const [typeFilter, setTypeFilter] = useState<string>("all");
+  const [componentFilter, setComponentFilter] = useState<string>("all");
   const [q, setQ] = useState("");
   const [confirm, setConfirm] = useState<string | null>(null);
 
@@ -93,14 +98,18 @@ export default function WorkOrders() {
       if (machineFilter !== "all" && o.machine_id !== machineFilter) return false;
       if (assigneeFilter !== "all" && (o.assignee_id ?? "") !== assigneeFilter) return false;
       if (typeFilter !== "all" && o.work_type !== typeFilter) return false;
+      if (componentFilter !== "all") {
+        const textToSearch = `${o.proposed_remedy ?? ""} ${o.description ?? ""}`.toLowerCase();
+        if (!textToSearch.includes(componentFilter.toLowerCase())) return false;
+      }
       if (ql) {
         const num = formatWoNumber(o.wo_year, o.wo_number).toLowerCase();
-        const hay = `${num} ${o.title ?? ""}`.toLowerCase();
+        const hay = `${num} ${o.title ?? ""} ${o.machine_name ?? ""}`.toLowerCase();
         if (!hay.includes(ql)) return false;
       }
       return true;
     });
-  }, [orders, tab, machineFilter, assigneeFilter, typeFilter, q]);
+  }, [orders, tab, machineFilter, assigneeFilter, typeFilter, componentFilter, q]);
 
   const handleDelete = async () => {
     if (!confirm) return;
@@ -119,12 +128,28 @@ export default function WorkOrders() {
     <div className="space-y-5 animate-fade-in">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Work orders</h1>
-          <p className="text-sm text-muted-foreground">Track jobs from open through to closed.</p>
+          <div className="flex items-center gap-2">
+            <h1 className="text-2xl font-semibold tracking-tight">
+              {isFleetMode ? "Fleet Job Cards & Maintenance" : "Work orders"}
+            </h1>
+            {isFleetMode && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2.5 py-0.5 text-xs font-semibold text-emerald-700 dark:text-emerald-400 border border-emerald-500/20">
+                <Truck className="h-3 w-3" /> Digital Job Cards
+              </span>
+            )}
+          </div>
+          <p className="text-sm text-muted-foreground mt-0.5">
+            {isFleetMode
+              ? "Digital Job Cards tracking heavy commercial servicing, component-based repairs, and breakdown recoveries."
+              : "Track jobs from open through to closed."}
+          </p>
         </div>
         {isTechnician && (
           <Button asChild>
-            <Link to="/work-orders/new"><Plus className="mr-2 h-4 w-4" /> New work order</Link>
+            <Link to="/work-orders/new">
+              <Plus className="mr-2 h-4 w-4" />
+              {isFleetMode ? "New Job Card" : "New work order"}
+            </Link>
           </Button>
         )}
       </div>
@@ -149,69 +174,152 @@ export default function WorkOrders() {
       <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
         <div className="relative">
           <Search className="pointer-events-none absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-          <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search WO# or title…" className="pl-8" />
+          <Input
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder={isFleetMode ? "Search Job Card #, plate, title…" : "Search WO# or title…"}
+            className="pl-8 text-xs"
+          />
         </div>
-        <select value={machineFilter} onChange={(e) => { setMachineFilter(e.target.value); if (e.target.value === "all") setParams({}); }} className="h-10 rounded-md border border-input bg-background px-3 text-sm">
-          <option value="all">All machines</option>
-          {machines.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+        <select
+          value={machineFilter}
+          onChange={(e) => {
+            setMachineFilter(e.target.value);
+            if (e.target.value === "all") setParams({});
+          }}
+          className="h-10 rounded-md border border-input bg-background px-3 text-xs"
+        >
+          <option value="all">{isFleetMode ? "All vehicles & trailers" : "All machines"}</option>
+          {machines.map((m) => (
+            <option key={m.id} value={m.id}>
+              {m.name}
+            </option>
+          ))}
         </select>
-        <select value={assigneeFilter} onChange={(e) => setAssigneeFilter(e.target.value)} className="h-10 rounded-md border border-input bg-background px-3 text-sm">
-          <option value="all">All assignees</option>
+        <select
+          value={assigneeFilter}
+          onChange={(e) => setAssigneeFilter(e.target.value)}
+          className="h-10 rounded-md border border-input bg-background px-3 text-xs"
+        >
+          <option value="all">All assignees / mechanics</option>
           <option value="">Unassigned</option>
-          {members.map((m) => <option key={m.id} value={m.id}>{m.full_name ?? "—"}</option>)}
+          {members.map((m) => (
+            <option key={m.id} value={m.id}>
+              {m.full_name ?? "—"}
+            </option>
+          ))}
         </select>
-        <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)} className="h-10 rounded-md border border-input bg-background px-3 text-sm">
-          <option value="all">All types</option>
-          {WORK_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
-        </select>
+        {isFleetMode ? (
+          <select
+            value={componentFilter}
+            onChange={(e) => setComponentFilter(e.target.value)}
+            className="h-10 rounded-md border border-input bg-background px-3 text-xs"
+          >
+            <option value="all">All Component Systems</option>
+            <option value="Brake System">Brake System</option>
+            <option value="Engine System">Engine System</option>
+            <option value="Fuel System">Fuel System</option>
+            <option value="Suspension System">Suspension System</option>
+            <option value="Steering System">Steering System</option>
+            <option value="Transmission System">Transmission System</option>
+            <option value="Electrical System">Electrical System</option>
+            <option value="Electronics System">Electronics System</option>
+            <option value="Air System">Air System</option>
+            <option value="Body Works">Body Works</option>
+            <option value="Accident Repairs">Accident Repairs</option>
+          </select>
+        ) : (
+          <select
+            value={typeFilter}
+            onChange={(e) => setTypeFilter(e.target.value)}
+            className="h-10 rounded-md border border-input bg-background px-3 text-xs"
+          >
+            <option value="all">All types</option>
+            {WORK_TYPES.map((t) => (
+              <option key={t} value={t}>
+                {t}
+              </option>
+            ))}
+          </select>
+        )}
       </div>
 
       {filtered.length === 0 ? (
-        <EmptyState icon={<ClipboardList className="h-5 w-5" />} title="No work orders" description="Create a work order to assign maintenance jobs." />
+        <EmptyState
+          icon={<ClipboardList className="h-5 w-5" />}
+          title={isFleetMode ? "No Job Cards found" : "No work orders"}
+          description={isFleetMode ? "Create a digital job card to track vehicle repairs." : "Create a work order to assign maintenance jobs."}
+        />
       ) : (
         <div className="space-y-2">
-          {filtered.map((o) => (
-            <Link
-              key={o.id}
-              to={`/work-orders/${o.id}`}
-              className={[
-                "flex items-center gap-4 rounded-lg border border-border border-l-4 bg-card px-4 py-3 transition-colors hover:bg-accent/30",
-                PRIORITY_BORDER[o.priority] ?? "border-l-slate-400",
-              ].join(" ")}
-            >
-              <div className="min-w-[110px] font-mono text-xs text-muted-foreground">{formatWoNumber(o.wo_year, o.wo_number)}</div>
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2">
-                  <span className="truncate font-medium">{o.title}</span>
-                  {o.is_outsourced && <span className="rounded-md bg-purple-100 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-purple-700">Outsourced</span>}
-                  {isOverdue(o) && (
-                    <span className="inline-flex items-center gap-1 rounded-md bg-red-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-red-700">
-                      <AlertTriangle className="h-3 w-3" /> Overdue
-                    </span>
-                  )}
+          {filtered.map((o) => {
+            const compMatch = o.proposed_remedy?.match(/\[COMPONENT:([^\]]+)\]/);
+            const locMatch = o.proposed_remedy?.match(/\[LOCATION:([^\]]+)\]/);
+            const componentTag = compMatch ? compMatch[1] : null;
+            const locationTag = locMatch ? locMatch[1] : o.is_outsourced ? "outsourced" : null;
+            const displayNumber = isFleetMode
+              ? `JC-${o.wo_year}-${String(o.wo_number).padStart(4, "0")}`
+              : formatWoNumber(o.wo_year, o.wo_number);
+
+            return (
+              <Link
+                key={o.id}
+                to={`/work-orders/${o.id}`}
+                className={[
+                  "flex items-center gap-3 rounded-lg border border-border border-l-4 bg-card px-4 py-3 transition-colors hover:bg-accent/30",
+                  PRIORITY_BORDER[o.priority] ?? "border-l-slate-400",
+                ].join(" ")}
+              >
+                <div className="min-w-[120px] font-mono text-xs font-semibold text-foreground">
+                  {displayNumber}
                 </div>
-                <div className="mt-0.5 truncate text-xs text-muted-foreground">
-                  {o.machine_name ?? "—"} · {o.work_type ?? "—"} · {memberName(o.assignee_id)} · due {formatDate(o.due_date)}
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span className="truncate font-medium text-sm">{o.title}</span>
+                    {o.machine_name && (
+                      <span className="inline-flex items-center gap-1 rounded bg-muted/80 px-2 py-0.5 font-mono text-[11px] font-semibold text-foreground border border-border">
+                        <Truck className="h-3 w-3 text-primary" /> {o.machine_name}
+                      </span>
+                    )}
+                    {componentTag && (
+                      <span className="inline-flex items-center gap-1 rounded bg-blue-500/10 px-2 py-0.5 text-[10px] font-semibold text-blue-700 dark:text-blue-400 border border-blue-500/20">
+                        <Layers className="h-2.5 w-2.5" /> {componentTag}
+                      </span>
+                    )}
+                    {locationTag && (
+                      <span className="inline-flex items-center gap-1 rounded bg-purple-500/10 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-purple-700 dark:text-purple-400 border border-purple-500/20">
+                        {locationTag === "outsourced" ? "Outsourced" : locationTag}
+                      </span>
+                    )}
+                    {isOverdue(o) && (
+                      <span className="inline-flex items-center gap-1 rounded-md bg-red-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-red-700">
+                        <AlertTriangle className="h-3 w-3" /> Overdue
+                      </span>
+                    )}
+                  </div>
+                  <div className="mt-1 truncate text-xs text-muted-foreground">
+                    Assigned: {memberName(o.assignee_id)} · Target due {formatDate(o.due_date)}
+                  </div>
                 </div>
-              </div>
-              <span className={`rounded-md px-2 py-0.5 text-[10px] font-medium capitalize ${STATUS_BADGE[o.status] ?? ""}`}>
-                {(o.status ?? "").replace("_", " ")}
-              </span>
-              <Button variant="ghost" size="icon" asChild onClick={(e) => e.stopPropagation()} title="Print">
-                <Link to={`/work-orders/${o.id}/print`} onClick={(e) => e.stopPropagation()}>
-                  <Printer className="h-4 w-4" />
-                </Link>
-              </Button>
-              <Button variant="ghost" size="icon" asChild title="Open">
-                <span><ExternalLink className="h-4 w-4" /></span>
-              </Button>
-              {isManager && (
-                <Button variant="ghost" size="icon" onClick={(e) => { e.preventDefault(); e.stopPropagation(); setConfirm(o.id); }}>
-                  <Trash2 className="h-4 w-4 text-destructive" />
+                <span className={`rounded-md px-2 py-0.5 text-[10px] font-medium capitalize shrink-0 ${STATUS_BADGE[o.status] ?? ""}`}>
+                  {(o.status ?? "").replace("_", " ")}
+                </span>
+                <Button variant="ghost" size="icon" asChild onClick={(e) => e.stopPropagation()} title="Print Job Card">
+                  <Link to={`/work-orders/${o.id}/print`} onClick={(e) => e.stopPropagation()}>
+                    <Printer className="h-4 w-4" />
+                  </Link>
                 </Button>
-              )}
-            </Link>
-          ))}
+                <Button variant="ghost" size="icon" asChild title="Open">
+                  <span><ExternalLink className="h-4 w-4" /></span>
+                </Button>
+                {isManager && (
+                  <Button variant="ghost" size="icon" onClick={(e) => { e.preventDefault(); e.stopPropagation(); setConfirm(o.id); }}>
+                    <Trash2 className="h-4 w-4 text-destructive" />
+                  </Button>
+                )}
+              </Link>
+            );
+          })}
         </div>
       )}
 
