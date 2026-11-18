@@ -131,6 +131,7 @@ const Trips = lazy(() => import("./pages/fleet/Trips"));
 const Tyres = lazy(() => import("./pages/fleet/Tyres"));
 const FleetInspections = lazy(() => import("./pages/fleet/Inspections"));
 const FleetInsights = lazy(() => import("./pages/fleet/FleetInsights"));
+const DriverPortal = lazy(() => import("./pages/fleet/DriverPortal"));
 const GarageCustomers = lazy(() => import("./pages/garage/Customers"));
 const GarageVehicles = lazy(() => import("./pages/garage/Vehicles"));
 const GarageVehicleDetail = lazy(() => import("./pages/garage/VehicleDetail"));
@@ -227,6 +228,7 @@ const App = () => (
                 <Route path="/accept-invite/:token" element={<AcceptInvite />} />
                 <Route path="/m/:id" element={<MobileMachine />} />
                 <Route path="/m/:id/inspect" element={<PreStartInspection />} />
+                <Route path="/driver" element={<DriverPortal />} />
                 <Route path="/work-orders/:id/print" element={<WorkOrderPrint />} />
                 <Route path="/checklist-templates/:id/print" element={<ChecklistTemplatePrint />} />
                 <Route path="/fleet/trips/:id/receipt" element={<TripReceiptPrint />} />

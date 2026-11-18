@@ -5,7 +5,7 @@ import { CoverImage } from "@/components/CoverImage";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { PageLoader } from "@/components/PageLoader";
-import { Wrench, ArrowRight, AlertTriangle, Gauge, Fuel, BookOpen, ClipboardList, LogIn, CheckCircle2, ClipboardCheck, Route, Siren, AlertOctagon, Receipt, DollarSign, ShieldCheck, ChevronDown, Car, Building2, Camera, Plus } from "lucide-react";
+import { Wrench, ArrowRight, AlertTriangle, Gauge, Fuel, BookOpen, ClipboardList, LogIn, CheckCircle2, ClipboardCheck, Route, Siren, AlertOctagon, Receipt, DollarSign, ShieldCheck, ChevronDown, Car, Building2, Camera, Plus, User, UserCheck, LogOut } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -28,6 +28,11 @@ import { toast } from "sonner";
 import { format } from "date-fns";
 import { enqueue, looksOffline } from "@/lib/offlineQueue";
 import { parseCargoMeta } from "@/lib/fleet-metadata";
+import DriverSignInModal, {
+  getActiveDriverSession,
+  clearActiveDriverSession,
+  type ActiveDriverSession,
+} from "@/components/fleet/DriverSignInModal";
 
 const STATUS_COLORS: Record<string, string> = {
   active: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400",
@@ -94,6 +99,12 @@ const T = {
     uploadReceipt: "Upload Receipt",
     addCostFine: "Add Cost / Fine",
     viewExpenses: "View Trip Expenses",
+    activeDriverLabel: "On Duty",
+    whoIsDriving: "Driving this vehicle or trailer?",
+    driverCheckInPrompt: "Tap to identify as active driver",
+    driverSignInBtn: "Driver Check-In",
+    changeDriver: "Change",
+    openDriverPortal: "Driver Portal",
   },
   sw: {
     notFound: "Mashine haijapatikana.",
@@ -152,6 +163,12 @@ const T = {
     uploadReceipt: "Weka Risiti/Stakabadhi",
     addCostFine: "Weka Gharama / Faini",
     viewExpenses: "Tazama Gharama Zote",
+    activeDriverLabel: "Kazini",
+    whoIsDriving: "Je, unaendesha chombo hiki?",
+    driverCheckInPrompt: "Gusa ili kusaini kama dereva",
+    driverSignInBtn: "Saini Dereva",
+    changeDriver: "Badilisha",
+    openDriverPortal: "Tovuti ya Dereva",
   },
 };
 
@@ -175,6 +192,24 @@ export default function MobileMachine() {
   const [expenseDialogOpen, setExpenseDialogOpen] = useState(false);
   const [expensesListOpen, setExpensesListOpen] = useState(false);
   const [expenseDialogType, setExpenseDialogType] = useState<"fine" | "receipt" | "toll" | "parking" | "fuel" | "repair" | "other">("receipt");
+
+  // Active driver fast check-in (localStorage-persisted)
+  const [activeDriver, setActiveDriver] = useState<ActiveDriverSession | null>(() => getActiveDriverSession());
+  const [driverModalOpen, setDriverModalOpen] = useState(false);
+
+  // Asset category check: fleet asset (Vehicle, Trailer, Truck, or with plate number) vs factory plant machine
+  const isFleetAsset = useMemo(() => {
+    if (!machine) return false;
+    const cat = (machine.category || "").toLowerCase();
+    return (
+      cat === "vehicle" ||
+      cat === "trailer" ||
+      cat === "truck" ||
+      Boolean(machine.plate_number) ||
+      Boolean((machine as any).is_trailer) ||
+      organisation?.industry_profile === "fleet_logistics"
+    );
+  }, [machine, organisation]);
 
   // Company branding & photo upload states
   const [companyInfo, setCompanyInfo] = useState<{ name: string; logo_url: string | null }>({
@@ -418,8 +453,11 @@ export default function MobileMachine() {
     if (user && isOwnOrg && profile) {
       setReporterName(profile.full_name ?? "");
       setReporterPhone(profile.phone ?? "");
+    } else if (activeDriver) {
+      if (!reporterName && activeDriver.full_name) setReporterName(activeDriver.full_name);
+      if (!reporterPhone && activeDriver.phone) setReporterPhone(activeDriver.phone);
     }
-  }, [user, isOwnOrg, profile]);
+  }, [user, isOwnOrg, profile, activeDriver]);
 
   const [roadworthiness, setRoadworthiness] = useState<{
     state: "fit" | "due" | "grounded";
@@ -756,15 +794,15 @@ export default function MobileMachine() {
                 {companyInfo.name || organisation?.name || user?.user_metadata?.company_name || "Company"}
               </span>
               <span className="text-[10px] text-muted-foreground uppercase font-semibold tracking-wider block">
-                Fleet Management
+                {isFleetAsset ? "Fleet Management" : "Equipment Hub"}
               </span>
             </div>
           </div>
           <LanguageSwitcher />
         </div>
 
-        {/* Roadworthiness Status Banner (for Vehicles) */}
-        {machine.category === "Vehicle" && (
+        {/* Roadworthiness Status Banner (for Vehicles & Trailers) */}
+        {isFleetAsset && (
           <div
             className={`rounded-2xl border p-4 flex items-center gap-3.5 shadow-sm transition-all ${
               roadworthiness.state === "fit"
@@ -930,7 +968,7 @@ export default function MobileMachine() {
                 <p><span className="text-muted-foreground">Plate:</span> {machine.plate_number}</p>
               )}
               {machine.current_hours != null && (
-                <p className="col-span-2"><span className="text-muted-foreground">{machine.category === "Vehicle" ? "Odometer" : t.hours}:</span> {Number(machine.current_hours).toLocaleString()} {machine.category === "Vehicle" ? "km" : "hrs"}</p>
+                <p className="col-span-2"><span className="text-muted-foreground">{isFleetAsset ? "Odometer" : t.hours}:</span> {Number(machine.current_hours).toLocaleString()} {isFleetAsset ? "km" : "hrs"}</p>
               )}
               {machine.last_service_date && (
                 <p className="col-span-2"><span className="text-muted-foreground">Last service:</span> {format(new Date(machine.last_service_date), "d MMM yyyy")}</p>
@@ -939,9 +977,83 @@ export default function MobileMachine() {
           </div>
         </div>
 
-        {/* Dedicated Driver Mode 4-Tile Hub (for vehicles) */}
-        {machine.category === "Vehicle" ? (
+        {/* Dedicated Driver Mode 4-Tile Hub (for vehicles & trailers) */}
+        {isFleetAsset ? (
           <div className="space-y-3">
+            {/* Fast Driver Check-in Banner */}
+            <div className="rounded-2xl border border-border bg-card p-3 shadow-sm flex items-center justify-between gap-3">
+              {activeDriver ? (
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className="h-9 w-9 rounded-xl bg-emerald-500/15 text-emerald-600 flex items-center justify-center shrink-0">
+                    <UserCheck className="h-5 w-5" />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-xs font-bold text-foreground truncate">{activeDriver.full_name}</span>
+                      <Badge variant="outline" className="text-[9px] px-1 py-0 border-emerald-500/40 text-emerald-600 shrink-0">
+                        {t.activeDriverLabel}
+                      </Badge>
+                    </div>
+                    <p className="text-[11px] text-muted-foreground truncate">
+                      {activeDriver.driver_code ? `Code: ${activeDriver.driver_code}` : activeDriver.phone || "Active Driver"}
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className="h-9 w-9 rounded-xl bg-primary/10 text-primary flex items-center justify-center shrink-0">
+                    <User className="h-5 w-5" />
+                  </div>
+                  <div className="min-w-0">
+                    <span className="text-xs font-semibold text-foreground block truncate">{t.whoIsDriving}</span>
+                    <span className="text-[11px] text-muted-foreground block truncate">{t.driverCheckInPrompt}</span>
+                  </div>
+                </div>
+              )}
+
+              <div className="flex items-center gap-1.5 shrink-0">
+                {activeDriver ? (
+                  <>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setDriverModalOpen(true)}
+                      className="text-xs h-8 px-2.5 text-muted-foreground hover:text-foreground"
+                    >
+                      {t.changeDriver}
+                    </Button>
+                    <Link
+                      to="/driver"
+                      className="inline-flex items-center gap-1 text-xs font-semibold text-primary hover:underline px-2.5 py-1 bg-primary/10 rounded-lg h-8"
+                    >
+                      {t.openDriverPortal}
+                      <ArrowRight className="h-3 w-3" />
+                    </Link>
+                  </>
+                ) : (
+                  <>
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={() => setDriverModalOpen(true)}
+                      className="text-xs h-8 px-3 font-semibold gap-1.5 shadow-sm"
+                    >
+                      <UserCheck className="h-3.5 w-3.5" />
+                      {t.driverSignInBtn}
+                    </Button>
+                    <Link
+                      to="/driver"
+                      className="inline-flex items-center justify-center text-muted-foreground hover:text-foreground h-8 w-8 rounded-lg border border-border"
+                      title={t.openDriverPortal}
+                    >
+                      <ArrowRight className="h-4 w-4" />
+                    </Link>
+                  </>
+                )}
+              </div>
+            </div>
+
             <div className="flex items-center justify-between px-1">
               <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
                 <Route className="h-3.5 w-3.5 text-primary" /> Driver Action Hub
@@ -1047,8 +1159,8 @@ export default function MobileMachine() {
           </Link>
         )}
 
-        {/* Active Trip & Driver Cost Tracking (for vehicles) */}
-        {machine.category === "Vehicle" && (
+        {/* Active Trip & Driver Cost Tracking (for vehicles & trailers) */}
+        {isFleetAsset && (
           <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
             <div className="border-b border-border/60 bg-muted/40 p-4">
               <div className="flex items-center justify-between gap-2">
@@ -1183,7 +1295,7 @@ export default function MobileMachine() {
         {/* Signed-in: role-aware quick actions */}
         {user && isOwnOrg && (
           <>
-            {machine.category === "Vehicle" ? (
+            {isFleetAsset ? (
               <details className="group rounded-2xl border border-border bg-card overflow-hidden">
                 <summary className="cursor-pointer p-4 font-semibold text-xs text-muted-foreground flex items-center justify-between hover:bg-muted/40 transition-colors">
                   <span className="flex items-center gap-2">
@@ -1576,7 +1688,7 @@ export default function MobileMachine() {
       )}
 
       {/* Trip & Fuel Dialogs (mounted whenever machine exists) */}
-      {machine && machine.category === "Vehicle" && (
+      {machine && isFleetAsset && (
         <QuickStartTripDialog
           open={tripOpen}
           onOpenChange={setTripOpen}
@@ -1626,6 +1738,20 @@ export default function MobileMachine() {
           />
         </>
       )}
+
+      {/* Driver Fast Check-in Modal */}
+      <DriverSignInModal
+        open={driverModalOpen}
+        onOpenChange={setDriverModalOpen}
+        organisationId={machine?.organisation_id}
+        currentVehiclePlate={machine?.plate_number}
+        lang={lang}
+        onDriverSelected={(session) => {
+          setActiveDriver(session);
+          if (session.full_name) setReporterName(session.full_name);
+          if (session.phone) setReporterPhone(session.phone);
+        }}
+      />
     </div>
   );
 }
