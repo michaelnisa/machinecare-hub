@@ -38,6 +38,7 @@ import {
   Search,
   LayoutDashboard,
   Receipt,
+  MapPin,
 } from "lucide-react";
 
 interface CommandPaletteProps {
@@ -258,6 +259,10 @@ export function CommandPalette({ open: extOpen, onOpenChange: setExtOpen }: Comm
               <CommandItem onSelect={() => runCommand(() => navigate("/fleet/vehicles"))}>
                 <Truck className="mr-2 h-4 w-4" />
                 <span>Fleet Vehicles</span>
+              </CommandItem>
+              <CommandItem onSelect={() => runCommand(() => navigate("/fleet/live-map"))}>
+                <MapPin className="mr-2 h-4 w-4 text-emerald-500" />
+                <span>Live GPS Fleet Map</span>
               </CommandItem>
               <CommandItem onSelect={() => runCommand(() => navigate("/fleet/trips"))}>
                 <Activity className="mr-2 h-4 w-4" />

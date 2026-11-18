@@ -316,43 +316,56 @@ export default function Vehicles() {
             Manage your fleet of power units, trucks, and independent trailers with axle configurations & fuel capacities.
           </p>
         </div>
-        {canWrite && (
-          <div className="flex items-center gap-2">
-            {isTelematicsEnabled && (
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            variant="outline"
+            asChild
+            className="gap-1.5 text-xs border-emerald-500/30 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-500/10 shadow-sm"
+            title="Open full-screen Live GPS Fleet map"
+          >
+            <Link to="/fleet/live-map">
+              <MapPin className="h-3.5 w-3.5 text-emerald-500 animate-pulse" />
+              Live GPS Fleet
+            </Link>
+          </Button>
+          {canWrite && (
+            <>
+              {isTelematicsEnabled && (
+                <Button
+                  variant="outline"
+                  onClick={() => handleSyncTrakzee(true)}
+                  disabled={syncingTrakzee}
+                  className="gap-1.5 text-xs text-primary border-primary/30 hover:bg-primary/5"
+                  title="Sync live odometer, speed, and GPS location from Trakzee"
+                >
+                  <Radio className={`h-3.5 w-3.5 ${syncingTrakzee ? "animate-pulse text-amber-500" : "text-emerald-500"}`} />
+                  {syncingTrakzee ? "Syncing GPS..." : "Sync GPS"}
+                </Button>
+              )}
+              <Button variant="outline" onClick={() => setImportOpen(true)}>
+                <FileSpreadsheet className="mr-2 h-4 w-4" /> Import Excel / CSV
+              </Button>
               <Button
                 variant="outline"
-                onClick={() => handleSyncTrakzee(true)}
-                disabled={syncingTrakzee}
-                className="gap-1.5 text-xs text-primary border-primary/30 hover:bg-primary/5"
-                title="Sync live odometer, speed, and GPS location from Trakzee"
+                onClick={() => {
+                  setEditing(null);
+                  setInitialCategory("Trailer");
+                  setOpen(true);
+                }}
+                className="border-dashed border-primary/50 text-primary hover:bg-primary/5"
               >
-                <Radio className={`h-3.5 w-3.5 ${syncingTrakzee ? "animate-pulse text-amber-500" : "text-emerald-500"}`} />
-                {syncingTrakzee ? "Syncing GPS..." : "Sync GPS"}
+                <Container className="mr-2 h-4 w-4" /> Add Trailer
               </Button>
-            )}
-            <Button variant="outline" onClick={() => setImportOpen(true)}>
-              <FileSpreadsheet className="mr-2 h-4 w-4" /> Import Excel / CSV
-            </Button>
-            <Button
-              variant="outline"
-              onClick={() => {
+              <Button onClick={() => {
                 setEditing(null);
-                setInitialCategory("Trailer");
+                setInitialCategory("Vehicle");
                 setOpen(true);
-              }}
-              className="border-dashed border-primary/50 text-primary hover:bg-primary/5"
-            >
-              <Container className="mr-2 h-4 w-4" /> Add Trailer
-            </Button>
-            <Button onClick={() => {
-              setEditing(null);
-              setInitialCategory("Vehicle");
-              setOpen(true);
-            }}>
-              <Plus className="mr-2 h-4 w-4" /> {t.fleet.addVehicle}
-            </Button>
-          </div>
-        )}
+              }}>
+                <Plus className="mr-2 h-4 w-4" /> {t.fleet.addVehicle}
+              </Button>
+            </>
+          )}
+        </div>
       </div>
 
       {/* Asset Overview Badges */}

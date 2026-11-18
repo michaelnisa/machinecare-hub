@@ -345,6 +345,7 @@ export function Sidebar() {
         label: "Fleet Operations",
         items: [
           { to: "/fleet/vehicles", label: "Vehicles", icon: Truck },
+          { to: "/fleet/live-map", label: "Live GPS Fleet", icon: MapPin },
           { to: "/fleet/drivers", label: "Drivers", icon: Contact },
           { to: "/fleet/trips", label: "Trips", icon: Route },
           { to: "/fleet/documents", label: "Documents", icon: FileText },
