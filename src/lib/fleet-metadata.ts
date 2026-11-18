@@ -999,6 +999,16 @@ export function parseTrip(raw: any): FleetTrip {
     raw_cargo = null;
   }
 
+  if (client_name) {
+    client_name = client_name.replace(/^[,\s]+|[,\s]+$/g, "").trim() || null;
+  }
+  if (!client_name && raw.purpose && typeof raw.purpose === "string" && raw.purpose.toLowerCase().startsWith("client:")) {
+    client_name = raw.purpose.replace(/^client:\s*/i, "").replace(/^[,\s]+|[,\s]+$/g, "").trim() || null;
+  }
+  if (client_order_number) {
+    client_order_number = client_order_number.replace(/^[,\s]+|[,\s]+$/g, "").trim() || null;
+  }
+
   return {
     ...raw,
     client_name,

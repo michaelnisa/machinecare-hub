@@ -37,8 +37,8 @@ import {
   type ActiveDriverSession,
 } from "@/components/fleet/DriverSignInModal";
 import { QuickFuelDialog } from "@/components/QuickFuelDialog";
-import { TripExpenseDialog } from "@/components/TripExpenseDialog";
-import { SAFE_MACHINE_COLUMNS, parseMachine, type FleetVehicle } from "@/lib/fleet-metadata";
+import { SAFE_MACHINE_COLUMNS, parseMachine, parseCargoMeta, extractCleanCargo, type FleetVehicle } from "@/lib/fleet-metadata";
+import { CoverImage } from "@/components/CoverImage";
 
 export default function DriverPortal() {
   const { user, organisation } = useAuth();
@@ -123,7 +123,21 @@ export default function DriverPortal() {
 
         if (trips && trips.length > 0) {
           const trip = trips[0];
-          setActiveTrip(trip);
+          let parsedCargo: any = null;
+          if (trip.cargo_description) {
+            parsedCargo = parseCargoMeta(trip.cargo_description);
+          }
+          const rawClient = parsedCargo?.client || (trip.purpose?.startsWith("Client:") ? trip.purpose.replace(/^Client:\s*/i, "") : null);
+          const cleanClient = rawClient ? rawClient.replace(/^[,\s]+|[,\s]+$/g, "").trim() : null;
+          const cleanCargo = extractCleanCargo(trip.cargo_description, trip.purpose);
+
+          setActiveTrip({
+            ...trip,
+            client_name: cleanClient,
+            clean_cargo: cleanCargo,
+            origin: trip.origin ? trip.origin.replace(/^[,\s]+|[,\s]+$/g, "").trim() : null,
+            destination: trip.destination ? trip.destination.replace(/^[,\s]+|[,\s]+$/g, "").trim() : null,
+          });
           if (!vehicleData && trip.machines) {
             vehicleData = trip.machines;
           }
@@ -188,22 +202,39 @@ export default function DriverPortal() {
           </div>
         </div>
 
+        {/* Admin context bar (visible when account admin visits driver portal) */}
+        {user && (
+          <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-2.5 px-3 flex items-center justify-between gap-2 text-xs">
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="h-2 w-2 rounded-full bg-amber-500 shrink-0 animate-pulse" />
+              <span className="text-muted-foreground truncate">
+                Admin Mode: <strong className="text-foreground">{user.email}</strong>
+              </span>
+            </div>
+            <Link to="/fleet/vehicles" className="font-semibold text-primary hover:underline shrink-0 text-[11px]">
+              Fleet Admin →
+            </Link>
+          </div>
+        )}
+
         {/* Driver Session Card */}
         {activeDriver ? (
           <div className="rounded-2xl border border-primary/20 bg-primary/5 p-4 shadow-xs">
             <div className="flex items-center justify-between gap-3">
               <div className="flex items-center gap-3 min-w-0">
-                {activeDriver.photo_url ? (
-                  <img
-                    src={activeDriver.photo_url}
+                <div className="relative h-13 w-13 rounded-full overflow-hidden border-2 border-primary/40 bg-muted shadow-sm shrink-0 ring-2 ring-primary/10">
+                  <CoverImage
+                    value={activeDriver.photo_url}
                     alt={activeDriver.full_name}
-                    className="h-12 w-12 rounded-full object-cover border-2 border-primary/30 shrink-0"
+                    className="h-full w-full object-cover object-center"
+                    fallback={
+                      <div className="h-full w-full bg-gradient-to-br from-primary/25 via-primary/15 to-primary/5 text-primary font-bold text-base flex items-center justify-center">
+                        {activeDriver.full_name.slice(0, 2).toUpperCase()}
+                      </div>
+                    }
                   />
-                ) : (
-                  <div className="h-12 w-12 rounded-full bg-primary/20 text-primary font-bold text-base flex items-center justify-center shrink-0 border border-primary/30">
-                    {activeDriver.full_name.slice(0, 2).toUpperCase()}
-                  </div>
-                )}
+                  <span className="absolute bottom-0 right-0 h-3.5 w-3.5 rounded-full bg-emerald-500 border-2 border-background ring-1 ring-emerald-500/40" title="Active on duty" />
+                </div>
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
                     <span className="font-bold text-base text-foreground truncate">
@@ -366,11 +397,19 @@ export default function DriverPortal() {
                       {activeTrip.origin || "Origin"} ➔ {activeTrip.destination || "Destination"}
                     </span>
                   </div>
-                  {activeTrip.cargo_description && (
+                  {activeTrip.client_name && (
+                    <div className="flex items-center justify-between">
+                      <span className="text-muted-foreground">{isSwahili ? "Mteja:" : "Client:"}</span>
+                      <span className="font-semibold text-foreground truncate max-w-[200px]">
+                        {activeTrip.client_name}
+                      </span>
+                    </div>
+                  )}
+                  {activeTrip.clean_cargo && (
                     <div className="flex items-center justify-between">
                       <span className="text-muted-foreground">{t.cargo}:</span>
                       <span className="font-medium text-foreground truncate max-w-[200px]">
-                        {activeTrip.cargo_description}
+                        {activeTrip.clean_cargo}
                       </span>
                     </div>
                   )}

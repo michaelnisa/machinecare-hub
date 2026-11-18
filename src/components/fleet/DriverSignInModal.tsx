@@ -10,9 +10,10 @@ import {
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Search, UserCheck, Shield, Phone, CreditCard, X, Check, LogOut, ArrowRight, Truck } from "lucide-react";
+import { Search, UserCheck, Shield, Phone, CreditCard, X, Check, LogOut, ArrowRight, Truck, User } from "lucide-react";
 import { toast } from "sonner";
 import { SAFE_DRIVER_COLUMNS, parseDriver, type FleetDriver } from "@/lib/fleet-metadata";
+import { CoverImage } from "@/components/CoverImage";
 
 export interface ActiveDriverSession {
   id: string;
@@ -193,17 +194,18 @@ export function DriverSignInModal({
                   }`}
                 >
                   <div className="flex items-center gap-3 min-w-0">
-                    {d.photo_url ? (
-                      <img
-                        src={d.photo_url}
+                    <div className="relative h-11 w-11 rounded-full overflow-hidden border border-border/80 bg-muted shadow-2xs shrink-0 ring-1 ring-border/40">
+                      <CoverImage
+                        value={d.photo_url}
                         alt={d.full_name}
-                        className="h-11 w-11 rounded-full object-cover border border-border shrink-0"
+                        className="h-full w-full object-cover object-center"
+                        fallback={
+                          <div className="h-full w-full bg-gradient-to-br from-primary/20 via-primary/10 to-primary/5 text-primary font-bold text-xs flex items-center justify-center">
+                            {d.full_name.slice(0, 2).toUpperCase()}
+                          </div>
+                        }
                       />
-                    ) : (
-                      <div className="h-11 w-11 rounded-full bg-primary/10 text-primary font-bold text-sm flex items-center justify-center shrink-0 border border-primary/20">
-                        {d.full_name.slice(0, 2).toUpperCase()}
-                      </div>
-                    )}
+                    </div>
                     <div className="min-w-0">
                       <div className="flex items-center gap-2">
                         <span className="font-semibold text-sm text-foreground truncate group-hover:text-primary transition-colors">

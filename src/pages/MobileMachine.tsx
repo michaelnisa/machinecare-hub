@@ -280,7 +280,8 @@ export default function MobileMachine() {
           fuel_used_l,
           cost,
           status,
-          driver:drivers(full_name)
+          cargo_description,
+          driver:drivers(full_name, photo_url)
         `)
         .eq("machine_id", id)
         .eq("status", "in_progress")
@@ -296,15 +297,24 @@ export default function MobileMachine() {
           .eq("trip_id", tripData.id);
 
         let expList = expData || [];
-        if (expList.length === 0 && tripData.cargo_description) {
+        let parsedCargo: any = null;
+        if (tripData.cargo_description) {
           const parsed = parseCargoMeta(tripData.cargo_description);
           if (parsed && Array.isArray(parsed.expenses)) {
             expList = parsed.expenses;
           }
+          parsedCargo = parsed;
         }
         const totalExpenses = expList.reduce((sum: number, e: any) => sum + (Number(e.amount) || 0), 0);
         const totalFines = expList.filter((e: any) => e.expense_type === "fine").reduce((sum: number, e: any) => sum + (Number(e.amount) || 0), 0);
         const totalReceipts = expList.filter((e: any) => e.expense_type !== "fine").reduce((sum: number, e: any) => sum + (Number(e.amount) || 0), 0);
+
+        const rawClient = parsedCargo?.client || (tripData.purpose?.startsWith("Client:") ? tripData.purpose.replace(/^Client:\s*/i, "") : null);
+        const cleanClient = rawClient ? rawClient.replace(/^[,\s]+|[,\s]+$/g, "").trim() : null;
+        const cleanCargo = parsedCargo?.cargo || null;
+        const cleanPurpose = tripData.purpose
+          ? tripData.purpose.replace(/^[,\s]+|[,\s]+$/g, "").trim()
+          : null;
 
         setActiveTrip({
           trip_id: tripData.id,
@@ -312,9 +322,12 @@ export default function MobileMachine() {
           machine_id: tripData.machine_id,
           driver_id: tripData.driver_id,
           driver_name: tripData.driver?.full_name ?? null,
-          purpose: tripData.purpose,
-          origin: tripData.origin,
-          destination: tripData.destination,
+          driver_photo: tripData.driver?.photo_url ?? null,
+          client_name: cleanClient,
+          clean_cargo: cleanCargo,
+          purpose: cleanPurpose,
+          origin: tripData.origin ? tripData.origin.replace(/^[,\s]+|[,\s]+$/g, "").trim() : null,
+          destination: tripData.destination ? tripData.destination.replace(/^[,\s]+|[,\s]+$/g, "").trim() : null,
           start_odo: tripData.start_odo,
           start_at: tripData.start_at,
           fuel_used_l: tripData.fuel_used_l,
@@ -984,8 +997,18 @@ export default function MobileMachine() {
             <div className="rounded-2xl border border-border bg-card p-3 shadow-sm flex items-center justify-between gap-3">
               {activeDriver ? (
                 <div className="flex items-center gap-2.5 min-w-0">
-                  <div className="h-9 w-9 rounded-xl bg-emerald-500/15 text-emerald-600 flex items-center justify-center shrink-0">
-                    <UserCheck className="h-5 w-5" />
+                  <div className="relative h-10 w-10 rounded-full overflow-hidden border border-emerald-500/40 bg-muted shadow-2xs shrink-0 ring-1 ring-emerald-500/20">
+                    <CoverImage
+                      value={activeDriver.photo_url}
+                      alt={activeDriver.full_name}
+                      className="h-full w-full object-cover object-center"
+                      fallback={
+                        <div className="h-full w-full bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 font-bold text-xs flex items-center justify-center">
+                          {activeDriver.full_name.slice(0, 2).toUpperCase()}
+                        </div>
+                      }
+                    />
+                    <span className="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full bg-emerald-500 border border-background" />
                   </div>
                   <div className="min-w-0">
                     <div className="flex items-center gap-1.5">
@@ -1190,7 +1213,23 @@ export default function MobileMachine() {
                       <span className="font-medium">{activeTrip.origin || "—"} → {activeTrip.destination || "—"}</span>
                     </div>
                   )}
-                  {activeTrip.purpose && (
+                  {activeTrip.client_name && (
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-muted-foreground">Client:</span>
+                      <span className="font-semibold text-foreground truncate max-w-[220px]">
+                        {activeTrip.client_name}
+                      </span>
+                    </div>
+                  )}
+                  {activeTrip.clean_cargo && (
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-muted-foreground">Cargo:</span>
+                      <span className="text-foreground truncate max-w-[220px]">
+                        {activeTrip.clean_cargo}
+                      </span>
+                    </div>
+                  )}
+                  {activeTrip.purpose && !activeTrip.purpose.toLowerCase().startsWith("client:") && (
                     <div className="flex items-center justify-between text-xs">
                       <span className="text-muted-foreground">Purpose:</span>
                       <span className="text-foreground">{activeTrip.purpose}</span>
@@ -1199,7 +1238,21 @@ export default function MobileMachine() {
                   {activeTrip.driver_name && (
                     <div className="flex items-center justify-between text-xs">
                       <span className="text-muted-foreground">{t.driver}:</span>
-                      <span className="font-medium text-foreground">{activeTrip.driver_name}</span>
+                      <div className="flex items-center gap-1.5">
+                        <div className="relative h-6 w-6 rounded-full overflow-hidden border border-border/80 bg-muted shrink-0 shadow-2xs">
+                          <CoverImage
+                            value={activeTrip.driver_photo}
+                            alt={activeTrip.driver_name}
+                            className="h-full w-full object-cover object-center"
+                            fallback={
+                              <div className="h-full w-full bg-primary/10 text-primary font-bold text-[9px] flex items-center justify-center">
+                                {activeTrip.driver_name.slice(0, 2).toUpperCase()}
+                              </div>
+                            }
+                          />
+                        </div>
+                        <span className="font-medium text-foreground">{activeTrip.driver_name}</span>
+                      </div>
                     </div>
                   )}
                 </div>

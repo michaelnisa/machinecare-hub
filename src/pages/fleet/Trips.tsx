@@ -209,6 +209,16 @@ function parseTripRecord(raw: any): Trip {
     cargo_description = null;
   }
 
+  if (client_name) {
+    client_name = client_name.replace(/^[,\s]+|[,\s]+$/g, "").trim() || null;
+  }
+  if (!client_name && raw.purpose && typeof raw.purpose === "string" && raw.purpose.toLowerCase().startsWith("client:")) {
+    client_name = raw.purpose.replace(/^client:\s*/i, "").replace(/^[,\s]+|[,\s]+$/g, "").trim() || null;
+  }
+  if (client_order_no) {
+    client_order_no = client_order_no.replace(/^[,\s]+|[,\s]+$/g, "").trim() || null;
+  }
+
   return {
     ...raw,
     client_name,
