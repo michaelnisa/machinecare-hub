@@ -845,10 +845,89 @@ export async function saveDriverPin(
       console.warn("Notice: driver PIN stored locally, Supabase sync status:", updateErr.message);
     }
 
+    try {
+      if (typeof window !== "undefined") {
+        localStorage.removeItem(`fleet_pin_lock_${driverId}`);
+      }
+    } catch {}
+
     return { success: true };
   } catch (err: any) {
     return { success: false, error: err?.message || "Failed to save driver PIN" };
   }
+}
+
+const MAX_FAILED_PIN_ATTEMPTS = 5;
+const PIN_LOCKOUT_DURATION_MS = 5 * 60 * 1000; // 5 minutes
+
+export function checkPinLockout(driverId: string): { isLocked: boolean; remainingMinutes?: number } {
+  try {
+    if (typeof window === "undefined") return { isLocked: false };
+    const raw = localStorage.getItem(`fleet_pin_lock_${driverId}`);
+    if (!raw) return { isLocked: false };
+    const { lockedUntil } = JSON.parse(raw);
+    const now = Date.now();
+    if (lockedUntil && now < lockedUntil) {
+      const remainingMinutes = Math.ceil((lockedUntil - now) / 60000);
+      return { isLocked: true, remainingMinutes };
+    }
+    if (lockedUntil && now >= lockedUntil) {
+      localStorage.removeItem(`fleet_pin_lock_${driverId}`);
+    }
+  } catch {}
+  return { isLocked: false };
+}
+
+export function recordFailedPinAttempt(driverId: string): { isLocked: boolean; remainingAttempts: number; remainingMinutes?: number } {
+  try {
+    if (typeof window === "undefined") return { isLocked: false, remainingAttempts: 3 };
+    const key = `fleet_pin_lock_${driverId}`;
+    const raw = localStorage.getItem(key);
+    let attempts = 0;
+    if (raw) {
+      try { attempts = JSON.parse(raw).attempts || 0; } catch {}
+    }
+    attempts += 1;
+    if (attempts >= MAX_FAILED_PIN_ATTEMPTS) {
+      const lockedUntil = Date.now() + PIN_LOCKOUT_DURATION_MS;
+      localStorage.setItem(key, JSON.stringify({ attempts, lockedUntil }));
+      return { isLocked: true, remainingAttempts: 0, remainingMinutes: 5 };
+    } else {
+      localStorage.setItem(key, JSON.stringify({ attempts }));
+      return { isLocked: false, remainingAttempts: MAX_FAILED_PIN_ATTEMPTS - attempts };
+    }
+  } catch {
+    return { isLocked: false, remainingAttempts: 3 };
+  }
+}
+
+export function clearPinLockout(driverId: string): void {
+  try {
+    if (typeof window !== "undefined") {
+      localStorage.removeItem(`fleet_pin_lock_${driverId}`);
+    }
+  } catch {}
+}
+
+export function verifyDriverIdentitySecret(
+  driver: {
+    driver_code?: string | null;
+    licence_number?: string | null;
+    phone?: string | null;
+  },
+  secretInput: string
+): boolean {
+  if (!secretInput || !secretInput.trim()) return false;
+  const clean = secretInput.trim().toUpperCase().replace(/[\s-]/g, "");
+  const code = (driver.driver_code || "").trim().toUpperCase().replace(/[\s-]/g, "");
+  const lic = (driver.licence_number || "").trim().toUpperCase().replace(/[\s-]/g, "");
+  const phoneDigits = (driver.phone || "").replace(/\D/g, "");
+  const last4 = phoneDigits.slice(-4);
+
+  if (code && clean === code) return true;
+  if (lic && clean === lic) return true;
+  if (last4 && clean === last4) return true;
+  return false;
 }
 
 export function serializeDriverPayload(data: {

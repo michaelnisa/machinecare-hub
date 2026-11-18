@@ -36,6 +36,10 @@ import {
   parseDriver,
   normalizePhone,
   saveDriverPin,
+  checkPinLockout,
+  recordFailedPinAttempt,
+  clearPinLockout,
+  verifyDriverIdentitySecret,
   type FleetDriver,
 } from "@/lib/fleet-metadata";
 import { CoverImage } from "@/components/CoverImage";
@@ -115,15 +119,17 @@ export function findDriverByIdentifier(
 }
 
 /**
- * Validates driver login credentials.
- * If driver has not set a PIN yet, returns needsSetup: true so they can create their own PIN.
+ * Validates driver login credentials with security protections:
+ * - Driver must be in active status
+ * - 5-attempt rate-limiting lockout protection
+ * - Identity verification on initial setup
  */
 export function validateDriverLogin(
   drivers: FleetDriver[],
   identifier: string,
   pin: string,
   lang: "en" | "sw" = "en"
-): { success: boolean; driver?: FleetDriver; error?: string; needsSetup?: boolean } {
+): { success: boolean; driver?: FleetDriver; error?: string; needsSetup?: boolean; isLocked?: boolean } {
   const isSwahili = lang === "sw";
   const cleanId = identifier.trim();
   const cleanPin = pin.trim();
@@ -146,7 +152,31 @@ export function validateDriverLogin(
     };
   }
 
-  // If driver has not created a PIN yet, prompt them to create one
+  // Security Check 1: Inactive or suspended drivers cannot access
+  if (matched.status !== "active") {
+    return {
+      success: false,
+      driver: matched,
+      error: isSwahili
+        ? "Akaunti ya dereva huyu imesimamishwa au haitumiki. Tafadhali wasiliana na ofisi ya fleet."
+        : "Driver account is inactive or suspended. Please contact fleet management.",
+    };
+  }
+
+  // Security Check 2: Lockout rate limiting (5 incorrect attempts = 5 min lock)
+  const lockout = checkPinLockout(matched.id);
+  if (lockout.isLocked) {
+    return {
+      success: false,
+      driver: matched,
+      isLocked: true,
+      error: isSwahili
+        ? `Akaunti imefungwa kwa muda (dakika ${lockout.remainingMinutes || 5}) kwa sababu ya majaribio mengi ya PIN yasiyo sahihi. Unaweza kubonyeza 'Umesahau PIN?' kuthibitisha upya.`
+        : `Account temporarily locked (${lockout.remainingMinutes || 5} min remaining) due to failed attempts. Click 'Forgot PIN?' to verify your ID.`,
+    };
+  }
+
+  // If driver has not created a PIN yet, prompt them to verify identity and create one
   if (!matched.login_pin) {
     return {
       success: false,
@@ -163,15 +193,27 @@ export function validateDriverLogin(
   }
 
   if (cleanPin !== matched.login_pin.trim()) {
+    const failed = recordFailedPinAttempt(matched.id);
+    if (failed.isLocked) {
+      return {
+        success: false,
+        driver: matched,
+        isLocked: true,
+        error: isSwahili
+          ? "Umekosea PIN mara 5. Akaunti imefungwa kwa dakika 5 kwa sababu za kiusalama. Tumia 'Umesahau PIN?' kuthibitisha utambulisho wako."
+          : "Incorrect PIN entered 5 times. Account locked for 5 minutes for security. Use 'Forgot PIN?' to verify your ID.",
+      };
+    }
     return {
       success: false,
       driver: matched,
       error: isSwahili
-        ? "PIN uliyoweka siyo sahihi. Tafadhali jaribu tena au tumia 'Umesahau PIN?'."
-        : "Incorrect PIN. Please try again or click 'Forgot PIN?'.",
+        ? `PIN siyo sahihi. Majaribio yaliyobaki: ${failed.remainingAttempts}. Bonyeza 'Umesahau PIN?' ukisahau.`
+        : `Incorrect PIN. Attempts remaining: ${failed.remainingAttempts}. Click 'Forgot PIN?' if forgotten.`,
     };
   }
 
+  clearPinLockout(matched.id);
   return { success: true, driver: matched };
 }
 
@@ -204,6 +246,8 @@ export function DriverSignInModal({
 
   // Self-Service PIN Creation / Update state
   const [setupDriver, setSetupDriver] = useState<FleetDriver | null>(null);
+  const [setupStep, setSetupStep] = useState<"verify" | "pin">("pin");
+  const [setupSecret, setSetupSecret] = useState("");
   const [newPin, setNewPin] = useState("");
   const [confirmPin, setConfirmPin] = useState("");
   const [showNewPin, setShowNewPin] = useState(false);
@@ -301,6 +345,27 @@ export function DriverSignInModal({
     setDirectoryPin("");
     setNewPin("");
     setConfirmPin("");
+    setSetupSecret("");
+  };
+
+  const handleVerifySetupSecret = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!setupDriver) return;
+    const ok = verifyDriverIdentitySecret(setupDriver, setupSecret);
+    if (!ok) {
+      toast.error(
+        isSwahili
+          ? "Taarifa haikulingana na kumbukumbu. Weka Driver ID yako (mf. DRV-001) au Namba ya Leseni."
+          : "Verification failed. Check your Driver ID (e.g. DRV-001) or Driving Licence number."
+      );
+      return;
+    }
+    setSetupStep("pin");
+    toast.success(
+      isSwahili
+        ? "Utambulisho umethibitishwa! Weka PIN yako mpya ya tarakimu 4 sasa."
+        : "Identity confirmed! Create your new 4-digit PIN now."
+    );
   };
 
   const handlePhonePinSubmit = (e: React.FormEvent) => {
@@ -310,40 +375,40 @@ export function DriverSignInModal({
       toast.error(isSwahili ? "Tafadhali weka namba ya simu au Driver ID." : "Please enter your phone number or Driver ID.");
       return;
     }
-    const matched = findDriverByIdentifier(drivers, cleanId);
-    if (!matched) {
-      toast.error(isSwahili ? "Dereva hajapatikana kwa namba hii ya simu au ID." : "Driver not found for this phone or Driver ID.");
-      return;
-    }
-
-    // If driver has not created a PIN yet -> prompt self-service PIN setup!
-    if (!matched.login_pin) {
-      setSetupDriver(matched);
+    const res = validateDriverLogin(drivers, cleanId, pinInput, lang);
+    if (res.needsSetup && res.driver) {
+      setSetupDriver(res.driver);
+      setSetupStep("verify");
+      setSetupSecret("");
       setNewPin("");
       setConfirmPin("");
       return;
     }
-
-    // Driver already has a PIN
-    if (!pinInput) {
-      toast.error(isSwahili ? "Tafadhali weka PIN yako ya siri." : "Please enter your PIN.");
+    if (!res.success || !res.driver) {
+      toast.error(res.error || "Authentication failed");
       return;
     }
-    if (pinInput.trim() !== matched.login_pin.trim()) {
-      toast.error(isSwahili ? "PIN siyo sahihi. Jaribu tena au bonyeza 'Umesahau PIN?'." : "Incorrect PIN. Try again or click 'Forgot PIN?'.");
-      return;
-    }
-    handleSelect(matched);
+    handleSelect(res.driver);
   };
 
   const handleDirectoryPinSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!pinModalDriver) return;
-    if (directoryPin.trim() !== pinModalDriver.login_pin?.trim()) {
-      toast.error(isSwahili ? "PIN siyo sahihi. Jaribu tena au bonyeza 'Umesahau PIN?'." : "Incorrect PIN. Try again or click 'Forgot PIN?'.");
+    const res = validateDriverLogin(drivers, pinModalDriver.id, directoryPin, lang);
+    if (res.needsSetup && res.driver) {
+      setSetupDriver(res.driver);
+      setSetupStep("verify");
+      setSetupSecret("");
+      setNewPin("");
+      setConfirmPin("");
+      setPinModalDriver(null);
       return;
     }
-    handleSelect(pinModalDriver);
+    if (!res.success || !res.driver) {
+      toast.error(res.error || "Authentication failed");
+      return;
+    }
+    handleSelect(res.driver);
   };
 
   const handleSaveNewPin = async (e: React.FormEvent) => {
@@ -374,17 +439,9 @@ export function DriverSignInModal({
   const handleVerifyForgotSecret = (e: React.FormEvent) => {
     e.preventDefault();
     if (!forgotDriver) return;
-    const cleanSecret = verifySecret.trim().toUpperCase();
-    const dCode = (forgotDriver.driver_code || "").trim().toUpperCase();
-    const dLic = (forgotDriver.licence_number || "").trim().toUpperCase();
-    const dPhone = forgotDriver.phone ? forgotDriver.phone.replace(/\D/g, "") : "";
-    const last4 = dPhone.slice(-4);
+    const ok = verifyDriverIdentitySecret(forgotDriver, verifySecret);
 
-    const matches = (dCode && cleanSecret === dCode) ||
-                    (dLic && cleanSecret === dLic) ||
-                    (last4 && cleanSecret === last4);
-
-    if (!matches) {
+    if (!ok) {
       toast.error(isSwahili ? "Taarifa haikulingana na kumbukumbu za dereva huyu." : "Verification failed. Check Driver ID or licence number.");
       return;
     }
@@ -392,6 +449,7 @@ export function DriverSignInModal({
     setForgotDriver(null);
     setPinModalDriver(null);
     setSetupDriver(target);
+    setSetupStep("pin");
     setNewPin("");
     setConfirmPin("");
     toast.success(isSwahili ? "Utambulisho umethibitishwa! Weka PIN mpya sasa." : "Identity confirmed! Create your new PIN now.");
@@ -450,84 +508,146 @@ export function DriverSignInModal({
 
         {/* SCREEN 1: Driver Self-Service PIN Creation */}
         {setupDriver ? (
-          <form onSubmit={handleSaveNewPin} className="p-5 space-y-4">
-            <div className="flex items-center gap-3 p-3 rounded-xl border border-primary/30 bg-primary/5">
-              <div className="relative h-12 w-12 rounded-full overflow-hidden border border-border bg-muted shrink-0">
-                <CoverImage
-                  value={setupDriver.photo_url}
-                  alt={setupDriver.full_name}
-                  className="h-full w-full object-cover"
-                  fallback={
-                    <div className="h-full w-full bg-primary/20 text-primary font-bold text-sm flex items-center justify-center">
-                      {setupDriver.full_name.slice(0, 2).toUpperCase()}
-                    </div>
-                  }
-                />
-              </div>
-              <div className="min-w-0 flex-1">
-                <div className="font-bold text-sm text-foreground truncate">{setupDriver.full_name}</div>
-                <div className="text-xs text-muted-foreground flex items-center gap-2 mt-0.5">
-                  {setupDriver.phone && <span>{setupDriver.phone}</span>}
-                  <span className="font-mono font-semibold text-primary">{setupDriver.driver_code}</span>
+          setupStep === "verify" ? (
+            /* STEP 1: Verify Driver Identity before setting PIN */
+            <form onSubmit={handleVerifySetupSecret} className="p-5 space-y-4">
+              <div className="flex items-center gap-3 p-3 rounded-xl border border-primary/30 bg-primary/5">
+                <div className="relative h-12 w-12 rounded-full overflow-hidden border border-border bg-muted shrink-0">
+                  <CoverImage
+                    value={setupDriver.photo_url}
+                    alt={setupDriver.full_name}
+                    className="h-full w-full object-cover"
+                    fallback={
+                      <div className="h-full w-full bg-primary/20 text-primary font-bold text-sm flex items-center justify-center">
+                        {setupDriver.full_name.slice(0, 2).toUpperCase()}
+                      </div>
+                    }
+                  />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="font-bold text-sm text-foreground truncate">{setupDriver.full_name}</div>
+                  <div className="text-xs text-muted-foreground mt-0.5">
+                    {setupDriver.phone ?? "Registered Driver"}
+                  </div>
                 </div>
               </div>
-            </div>
 
-            <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
-                <Lock className="h-3.5 w-3.5 text-primary" />
-                <span>{t.newPinLabel}</span>
-              </label>
-              <div className="relative">
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                  <Shield className="h-3.5 w-3.5 text-primary" />
+                  <span>{isSwahili ? "Hatua ya 1: Thibitisha Utambulisho Wako" : "Step 1: Verify Driver Identity"}</span>
+                </label>
                 <Input
-                  type={showNewPin ? "text" : "password"}
-                  value={newPin}
-                  onChange={(e) => setNewPin(e.target.value)}
-                  placeholder="••••"
-                  className="h-11 font-mono tracking-widest text-base text-center bg-muted/30 pr-10"
+                  type="text"
+                  value={setupSecret}
+                  onChange={(e) => setSetupSecret(e.target.value)}
+                  placeholder={isSwahili ? "Driver ID (mf. DRV-001) au Namba ya Leseni" : "Driver ID (e.g. DRV-001) or Licence Number"}
+                  className="h-11 text-sm uppercase font-mono tracking-wider bg-muted/30"
                   autoFocus
                   required
                 />
-                <button
-                  type="button"
-                  onClick={() => setShowNewPin(!showNewPin)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground cursor-pointer"
-                >
-                  {showNewPin ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                </button>
+                <p className="text-[10px] text-muted-foreground leading-normal">
+                  {isSwahili
+                    ? "Weka Driver ID yako iliyo kwenye kitambulisho au Namba ya Leseni kuthibitisha kuwa wewe ni dereva halali."
+                    : "Enter your Driver ID or Driving Licence number to confirm you are the authorized driver."}
+                </p>
               </div>
-            </div>
 
-            <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-foreground">{t.confirmPinLabel}</label>
-              <Input
-                type={showNewPin ? "text" : "password"}
-                value={confirmPin}
-                onChange={(e) => setConfirmPin(e.target.value)}
-                placeholder="••••"
-                className="h-11 font-mono tracking-widest text-base text-center bg-muted/30"
-                required
-              />
-              <p className="text-[10px] text-muted-foreground">
-                {isSwahili ? "Kumbuka PIN hii. Utatumia kila unapoingia kazini au kuanza safari." : "Remember this PIN. You will use it each time you log in."}
-              </p>
-            </div>
+              <div className="flex items-center gap-2 pt-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="flex-1 cursor-pointer"
+                  onClick={() => setSetupDriver(null)}
+                >
+                  {t.back}
+                </Button>
+                <Button type="submit" className="flex-1 gap-2 font-semibold shadow-xs cursor-pointer">
+                  <Check className="h-4 w-4" />
+                  <span>{isSwahili ? "Thibitisha & Endelea" : "Verify & Continue"}</span>
+                </Button>
+              </div>
+            </form>
+          ) : (
+            /* STEP 2: Driver PIN Creation */
+            <form onSubmit={handleSaveNewPin} className="p-5 space-y-4">
+              <div className="flex items-center gap-3 p-3 rounded-xl border border-primary/30 bg-primary/5">
+                <div className="relative h-12 w-12 rounded-full overflow-hidden border border-border bg-muted shrink-0">
+                  <CoverImage
+                    value={setupDriver.photo_url}
+                    alt={setupDriver.full_name}
+                    className="h-full w-full object-cover"
+                    fallback={
+                      <div className="h-full w-full bg-primary/20 text-primary font-bold text-sm flex items-center justify-center">
+                        {setupDriver.full_name.slice(0, 2).toUpperCase()}
+                      </div>
+                    }
+                  />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="font-bold text-sm text-foreground truncate">{setupDriver.full_name}</div>
+                  <div className="text-xs text-muted-foreground flex items-center gap-2 mt-0.5">
+                    {setupDriver.phone && <span>{setupDriver.phone}</span>}
+                  </div>
+                </div>
+              </div>
 
-            <div className="flex items-center gap-2 pt-2">
-              <Button
-                type="button"
-                variant="outline"
-                className="flex-1 cursor-pointer"
-                onClick={() => setSetupDriver(null)}
-              >
-                {t.back}
-              </Button>
-              <Button type="submit" disabled={savingPin} className="flex-1 gap-2 font-semibold shadow-xs cursor-pointer">
-                <Check className="h-4 w-4" />
-                <span>{savingPin ? (isSwahili ? "Inahifadhi..." : "Saving...") : t.savePinBtn}</span>
-              </Button>
-            </div>
-          </form>
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                  <Lock className="h-3.5 w-3.5 text-primary" />
+                  <span>{t.newPinLabel}</span>
+                </label>
+                <div className="relative">
+                  <Input
+                    type={showNewPin ? "text" : "password"}
+                    value={newPin}
+                    onChange={(e) => setNewPin(e.target.value)}
+                    placeholder="••••"
+                    className="h-11 font-mono tracking-widest text-base text-center bg-muted/30 pr-10"
+                    autoFocus
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowNewPin(!showNewPin)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground cursor-pointer"
+                  >
+                    {showNewPin ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  </button>
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-foreground">{t.confirmPinLabel}</label>
+                <Input
+                  type={showNewPin ? "text" : "password"}
+                  value={confirmPin}
+                  onChange={(e) => setConfirmPin(e.target.value)}
+                  placeholder="••••"
+                  className="h-11 font-mono tracking-widest text-base text-center bg-muted/30"
+                  required
+                />
+                <p className="text-[10px] text-muted-foreground">
+                  {isSwahili ? "Kumbuka PIN hii. Utatumia kila unapoingia kazini au kuanza safari." : "Remember this PIN. You will use it each time you log in."}
+                </p>
+              </div>
+
+              <div className="flex items-center gap-2 pt-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="flex-1 cursor-pointer"
+                  onClick={() => setSetupDriver(null)}
+                >
+                  {t.back}
+                </Button>
+                <Button type="submit" disabled={savingPin} className="flex-1 gap-2 font-semibold shadow-xs cursor-pointer">
+                  <Check className="h-4 w-4" />
+                  <span>{savingPin ? (isSwahili ? "Inahifadhi..." : "Saving...") : t.savePinBtn}</span>
+                </Button>
+              </div>
+            </form>
+          )
         ) : forgotDriver ? (
           /* SCREEN 2: Driver Self-Service Forgot PIN Reset */
           <form onSubmit={handleVerifyForgotSecret} className="p-5 space-y-4">
@@ -773,6 +893,8 @@ export function DriverSignInModal({
                       onClick={() => {
                         if (!d.login_pin) {
                           setSetupDriver(d);
+                          setSetupStep("verify");
+                          setSetupSecret("");
                           setNewPin("");
                           setConfirmPin("");
                         } else {

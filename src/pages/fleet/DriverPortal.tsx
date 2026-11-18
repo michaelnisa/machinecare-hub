@@ -63,6 +63,7 @@ import {
   parseCargoMeta,
   extractCleanCargo,
   saveDriverPin,
+  verifyDriverIdentitySecret,
   type FleetVehicle,
   type FleetDriver,
 } from "@/lib/fleet-metadata";
@@ -96,6 +97,8 @@ export default function DriverPortal() {
 
   // Self-Service PIN Creation / Setup state
   const [setupDriver, setSetupDriver] = useState<FleetDriver | null>(null);
+  const [setupStep, setSetupStep] = useState<"verify" | "pin">("pin");
+  const [setupSecret, setSetupSecret] = useState("");
   const [newPin, setNewPin] = useState("");
   const [confirmPin, setConfirmPin] = useState("");
   const [showNewPin, setShowNewPin] = useState(false);
@@ -128,6 +131,8 @@ export default function DriverPortal() {
 
       if (res.needsSetup && res.driver) {
         setSetupDriver(res.driver);
+        setSetupStep("verify");
+        setSetupSecret("");
         setNewPin("");
         setConfirmPin("");
         return;
@@ -177,26 +182,39 @@ export default function DriverPortal() {
     toast.success(isSwahili ? "PIN imehifadhiwa! Karibu kazini." : "PIN created! Welcome on duty.");
   };
 
+  const handleInlineVerifySetupSecret = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!setupDriver) return;
+    const ok = verifyDriverIdentitySecret(setupDriver, setupSecret);
+    if (!ok) {
+      toast.error(
+        isSwahili
+          ? "Taarifa haikulingana na kumbukumbu. Weka Driver ID yako (mf. DRV-001) au Namba ya Leseni."
+          : "Verification failed. Check your Driver ID (e.g. DRV-001) or Driving Licence number."
+      );
+      return;
+    }
+    setSetupStep("pin");
+    toast.success(
+      isSwahili
+        ? "Utambulisho umethibitishwa! Weka PIN yako mpya ya tarakimu 4 sasa."
+        : "Identity confirmed! Create your new 4-digit PIN now."
+    );
+  };
+
   const handleInlineVerifySecret = (e: React.FormEvent) => {
     e.preventDefault();
     if (!forgotDriver) return;
-    const cleanSecret = verifySecret.trim().toUpperCase();
-    const dCode = (forgotDriver.driver_code || "").trim().toUpperCase();
-    const dLic = (forgotDriver.licence_number || "").trim().toUpperCase();
-    const dPhone = forgotDriver.phone ? forgotDriver.phone.replace(/\D/g, "") : "";
-    const last4 = dPhone.slice(-4);
+    const ok = verifyDriverIdentitySecret(forgotDriver, verifySecret);
 
-    const matches = (dCode && cleanSecret === dCode) ||
-                    (dLic && cleanSecret === dLic) ||
-                    (last4 && cleanSecret === last4);
-
-    if (!matches) {
+    if (!ok) {
       toast.error(isSwahili ? "Taarifa haikulingana na kumbukumbu za dereva huyu." : "Verification failed. Check Driver ID or Licence.");
       return;
     }
     const target = forgotDriver;
     setForgotDriver(null);
     setSetupDriver(target);
+    setSetupStep("pin");
     setNewPin("");
     setConfirmPin("");
     toast.success(isSwahili ? "Utambulisho umethibitishwa! Weka PIN mpya sasa." : "Identity confirmed! Create your new PIN now.");
@@ -205,6 +223,14 @@ export default function DriverPortal() {
   const handleChangePin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!activeDriver) return;
+
+    // Security check: if driver has an existing PIN in localStorage, verify current PIN
+    const savedPin = typeof window !== "undefined" ? localStorage.getItem(`fleet_driver_pin_${activeDriver.id}`) : null;
+    if (savedPin && currentPin.trim() !== savedPin.trim()) {
+      toast.error(isSwahili ? "PIN ya sasa uliyoweka siyo sahihi." : "Current PIN is incorrect.");
+      return;
+    }
+
     const p = changeNewPin.trim();
     if (p.length < 4) {
       toast.error(isSwahili ? "PIN mpya lazima iwe angalau tarakimu 4." : "New PIN must be at least 4 digits.");
@@ -469,82 +495,141 @@ export default function DriverPortal() {
             </div>
           </div>
         ) : setupDriver ? (
-          /* Driver First-Time Self-Service PIN Creation */
-          <div className="rounded-2xl border border-primary/30 bg-card p-5 sm:p-6 space-y-4 shadow-sm">
-            <div className="text-center space-y-1.5">
-              <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary mb-2">
-                <Lock className="h-6 w-6" />
+          setupStep === "verify" ? (
+            /* Step 1: Verify Driver Identity before setting PIN */
+            <div className="rounded-2xl border border-primary/30 bg-card p-5 sm:p-6 space-y-4 shadow-sm">
+              <div className="text-center space-y-1.5">
+                <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary mb-2">
+                  <ShieldCheck className="h-6 w-6" />
+                </div>
+                <h2 className="text-lg font-bold text-foreground">
+                  {isSwahili ? "Hatua ya 1: Thibitisha Utambulisho Wako" : "Step 1: Verify Driver Identity"}
+                </h2>
+                <p className="text-xs text-muted-foreground max-w-sm mx-auto">
+                  {isSwahili
+                    ? `Dereva: ${setupDriver.full_name}. Ili kuweka PIN yako kwa usalama, weka Driver ID yako (mf. DRV-001) au Namba ya Leseni.`
+                    : `Driver: ${setupDriver.full_name}. Enter your Driver ID (e.g. DRV-001) or Driving Licence number to verify your identity.`}
+                </p>
               </div>
-              <h2 className="text-lg font-bold text-foreground">
-                {isSwahili ? "Weka PIN Yako ya Siri" : "Create Your Secret PIN"}
-              </h2>
-              <p className="text-xs text-muted-foreground max-w-sm mx-auto">
-                {isSwahili
-                  ? `Karibu, ${setupDriver.full_name}! Hii ni mara yako ya kwanza kuingia. Weka PIN ya tarakimu 4 utakayotumia kila siku kuingia kazini.`
-                  : `Welcome, ${setupDriver.full_name}! Please create your 4-digit secret PIN for everyday login.`}
-              </p>
-            </div>
 
-            <form onSubmit={handleInlineSaveNewPin} className="space-y-3.5 pt-1">
-              <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
-                  <Lock className="h-3.5 w-3.5 text-primary" />
-                  <span>{isSwahili ? "Weka PIN Mpya (Tarakimu 4)" : "Enter New 4-Digit PIN"}</span>
-                </label>
-                <div className="relative">
+              <form onSubmit={handleInlineVerifySetupSecret} className="space-y-3.5 pt-1">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-foreground">
+                    {isSwahili ? "Driver ID au Namba ya Leseni" : "Driver ID or Licence Number"}
+                  </label>
                   <Input
-                    type={showNewPin ? "text" : "password"}
-                    value={newPin}
-                    onChange={(e) => setNewPin(e.target.value)}
-                    placeholder="••••"
-                    className="h-11 font-mono tracking-widest text-base text-center bg-muted/30 pr-10"
+                    type="text"
+                    value={setupSecret}
+                    onChange={(e) => setSetupSecret(e.target.value)}
+                    placeholder={isSwahili ? "Mfano: DRV-001 au namba ya leseni" : "e.g. DRV-001 or licence number"}
+                    className="h-11 text-sm font-mono uppercase bg-muted/30"
                     autoFocus
                     required
                   />
-                  <button
-                    type="button"
-                    onClick={() => setShowNewPin(!showNewPin)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground cursor-pointer"
-                  >
-                    {showNewPin ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                  </button>
+                  <p className="text-[10px] text-muted-foreground">
+                    {isSwahili
+                      ? "Hakikisha unatumia Driver ID yako iliyosajiliwa na ofisi ya fleet."
+                      : "Enter the unique Driver ID or licence number on file with fleet management."}
+                  </p>
                 </div>
+
+                <div className="flex items-center gap-2 pt-1">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="flex-1 cursor-pointer"
+                    onClick={() => setSetupDriver(null)}
+                  >
+                    {isSwahili ? "Rudi" : "Back"}
+                  </Button>
+                  <Button
+                    type="submit"
+                    className="flex-1 gap-2 text-sm font-semibold shadow-xs cursor-pointer"
+                  >
+                    <Check className="h-4 w-4" />
+                    <span>{isSwahili ? "Thibitisha & Endelea" : "Verify & Continue"}</span>
+                  </Button>
+                </div>
+              </form>
+            </div>
+          ) : (
+            /* Step 2: Driver PIN Creation */
+            <div className="rounded-2xl border border-primary/30 bg-card p-5 sm:p-6 space-y-4 shadow-sm">
+              <div className="text-center space-y-1.5">
+                <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary mb-2">
+                  <Lock className="h-6 w-6" />
+                </div>
+                <h2 className="text-lg font-bold text-foreground">
+                  {isSwahili ? "Hatua ya 2: Weka PIN Yako ya Siri" : "Step 2: Create Your Secret PIN"}
+                </h2>
+                <p className="text-xs text-muted-foreground max-w-sm mx-auto">
+                  {isSwahili
+                    ? `Karibu, ${setupDriver.full_name}! Weka PIN ya tarakimu 4 utakayotumia kila siku kuingia kazini.`
+                    : `Welcome, ${setupDriver.full_name}! Please create your 4-digit secret PIN for everyday login.`}
+                </p>
               </div>
 
-              <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-foreground">
-                  {isSwahili ? "Rudia PIN Kuthibitisha" : "Confirm PIN"}
-                </label>
-                <Input
-                  type={showNewPin ? "text" : "password"}
-                  value={confirmPin}
-                  onChange={(e) => setConfirmPin(e.target.value)}
-                  placeholder="••••"
-                  className="h-11 font-mono tracking-widest text-base text-center bg-muted/30"
-                  required
-                />
-              </div>
+              <form onSubmit={handleInlineSaveNewPin} className="space-y-3.5 pt-1">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                    <Lock className="h-3.5 w-3.5 text-primary" />
+                    <span>{isSwahili ? "Weka PIN Mpya (Tarakimu 4)" : "Enter New 4-Digit PIN"}</span>
+                  </label>
+                  <div className="relative">
+                    <Input
+                      type={showNewPin ? "text" : "password"}
+                      value={newPin}
+                      onChange={(e) => setNewPin(e.target.value)}
+                      placeholder="••••"
+                      className="h-11 font-mono tracking-widest text-base text-center bg-muted/30 pr-10"
+                      autoFocus
+                      required
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowNewPin(!showNewPin)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground cursor-pointer"
+                    >
+                      {showNewPin ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
+                  </div>
+                </div>
 
-              <div className="flex items-center gap-2 pt-1">
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="flex-1 cursor-pointer"
-                  onClick={() => setSetupDriver(null)}
-                >
-                  {isSwahili ? "Rudi" : "Back"}
-                </Button>
-                <Button
-                  type="submit"
-                  disabled={savingPin}
-                  className="flex-1 gap-2 text-sm font-semibold shadow-xs cursor-pointer"
-                >
-                  <Check className="h-4 w-4" />
-                  <span>{savingPin ? (isSwahili ? "Inahifadhi..." : "Saving...") : (isSwahili ? "Hifadhi PIN & Ingia" : "Save PIN & Sign In")}</span>
-                </Button>
-              </div>
-            </form>
-          </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-foreground">
+                    {isSwahili ? "Rudia PIN Kuthibitisha" : "Confirm PIN"}
+                  </label>
+                  <Input
+                    type={showNewPin ? "text" : "password"}
+                    value={confirmPin}
+                    onChange={(e) => setConfirmPin(e.target.value)}
+                    placeholder="••••"
+                    className="h-11 font-mono tracking-widest text-base text-center bg-muted/30"
+                    required
+                  />
+                </div>
+
+                <div className="flex items-center gap-2 pt-1">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="flex-1 cursor-pointer"
+                    onClick={() => setSetupDriver(null)}
+                  >
+                    {isSwahili ? "Rudi" : "Back"}
+                  </Button>
+                  <Button
+                    type="submit"
+                    disabled={savingPin}
+                    className="flex-1 gap-2 text-sm font-semibold shadow-xs cursor-pointer"
+                  >
+                    <Check className="h-4 w-4" />
+                    <span>{savingPin ? (isSwahili ? "Inahifadhi..." : "Saving...") : (isSwahili ? "Hifadhi PIN & Ingia" : "Save PIN & Sign In")}</span>
+                  </Button>
+                </div>
+              </form>
+            </div>
+          )
         ) : forgotDriver ? (
           /* Driver Self-Service Forgot PIN Reset */
           <div className="rounded-2xl border border-border bg-card p-5 sm:p-6 space-y-4 shadow-sm">
@@ -994,6 +1079,24 @@ export default function DriverPortal() {
           </DialogHeader>
 
           <form onSubmit={handleChangePin} className="space-y-4 pt-2">
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-foreground">
+                {isSwahili ? "Namba ya Sasa ya PIN" : "Current PIN"}
+              </label>
+              <Input
+                type="password"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                maxLength={6}
+                placeholder="••••"
+                value={currentPin}
+                onChange={(e) => setCurrentPin(e.target.value.replace(/\D/g, ""))}
+                className="font-mono text-center tracking-widest text-lg font-bold h-11"
+                required
+                autoFocus
+              />
+            </div>
+
             <div className="space-y-1.5">
               <label className="text-xs font-semibold text-foreground">
                 {isSwahili ? "Namba Mpya ya PIN (tarakimu 4+)" : "New 4-digit PIN"}
