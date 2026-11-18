@@ -1,4 +1,4 @@
-const CACHE_NAME = "machinecare-shell-v21";
+const CACHE_NAME = "machinecare-shell-v22";
 const PRECACHE_URLS = [
   "/",
   "/index.html",

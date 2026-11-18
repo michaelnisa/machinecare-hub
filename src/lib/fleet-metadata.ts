@@ -6,6 +6,7 @@
 // ─────────────────────────────────────────────────────────────
 
 import type { TruckLayoutConfigId } from "./fleet-constants";
+import { supabase } from "@/integrations/supabase/client";
 
 export const SAFE_MACHINE_COLUMNS =
   "id, name, plate_number, make, model, year, vin, category, fuel_type, tank_capacity_l, current_odometer_km, current_hours, home_depot, cover_image_url, status, notes";
@@ -708,6 +709,14 @@ export function parseDriver(raw: any, index?: number): FleetDriver {
   let source: string | null = raw.source ?? null;
   let user_notes: string | null = null;
 
+  let login_pin: string | null = null;
+  if (typeof window !== "undefined" && raw.id) {
+    try {
+      const cached = localStorage.getItem(`fleet_driver_pin_${raw.id}`);
+      if (cached) login_pin = cached;
+    } catch {}
+  }
+
   if (raw.notes && typeof raw.notes === "string" && raw.notes.startsWith("{") && raw.notes.endsWith("}")) {
     try {
       const parsed = JSON.parse(raw.notes);
@@ -728,19 +737,11 @@ export function parseDriver(raw: any, index?: number): FleetDriver {
       if (parsed.next_of_kin_photo_url) next_of_kin_photo_url = parsed.next_of_kin_photo_url;
       if (parsed.assigned_vehicle) assigned_vehicle = parsed.assigned_vehicle;
       if (parsed.source) source = parsed.source;
-      if (parsed.login_pin || parsed.pin) login_pin = String(parsed.login_pin || parsed.pin);
+      if (parsed.login_pin || parsed.pin) login_pin = String(parsed.login_pin || parsed.pin).trim();
       user_notes = parsed.text ?? null;
     } catch {}
   } else if (raw.notes && typeof raw.notes === "string" && !raw.notes.startsWith("{")) {
     user_notes = raw.notes;
-  }
-
-  // If no custom login_pin was configured, default to the last 4 digits of phone
-  if (!login_pin && raw.phone) {
-    const digits = String(raw.phone).replace(/\D/g, "");
-    if (digits.length >= 4) {
-      login_pin = digits.slice(-4);
-    }
   }
 
   // Strip automated telematics import notes so "Imported live from Trakzee" never displays
@@ -786,8 +787,68 @@ export function parseDriver(raw: any, index?: number): FleetDriver {
     assigned_vehicle,
     source,
     user_notes,
-    login_pin: login_pin || "1234",
+    login_pin: login_pin || null,
   };
+}
+
+/**
+ * Saves or updates a driver's portal login PIN in database metadata.
+ * Also caches in localStorage for instant access on personal mobile devices.
+ */
+export async function saveDriverPin(
+  driverId: string,
+  newPin: string | null
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const cleanPin = newPin ? newPin.trim() : null;
+
+    if (typeof window !== "undefined") {
+      try {
+        if (cleanPin) {
+          localStorage.setItem(`fleet_driver_pin_${driverId}`, cleanPin);
+        } else {
+          localStorage.removeItem(`fleet_driver_pin_${driverId}`);
+        }
+      } catch {}
+    }
+
+    const { data: rawDriver } = await supabase
+      .from("drivers")
+      .select("notes")
+      .eq("id", driverId)
+      .maybeSingle();
+
+    let meta: Record<string, any> = {};
+    if (rawDriver?.notes && typeof rawDriver.notes === "string" && rawDriver.notes.startsWith("{")) {
+      try {
+        meta = JSON.parse(rawDriver.notes);
+      } catch {
+        meta = { text: rawDriver.notes };
+      }
+    } else if (rawDriver?.notes) {
+      meta = { text: rawDriver.notes };
+    }
+
+    if (cleanPin) {
+      meta.login_pin = cleanPin;
+    } else {
+      delete meta.login_pin;
+      delete meta.pin;
+    }
+
+    const { error: updateErr } = await supabase
+      .from("drivers")
+      .update({ notes: JSON.stringify(meta) })
+      .eq("id", driverId);
+
+    if (updateErr) {
+      console.warn("Notice: driver PIN stored locally, Supabase sync status:", updateErr.message);
+    }
+
+    return { success: true };
+  } catch (err: any) {
+    return { success: false, error: err?.message || "Failed to save driver PIN" };
+  }
 }
 
 export function serializeDriverPayload(data: {

@@ -3,6 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useUserRole } from "@/hooks/useUserRole";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -35,6 +36,8 @@ import {
   LayoutGrid,
   List,
   Truck,
+  RotateCcw,
+  KeyRound,
 } from "lucide-react";
 import { toast } from "sonner";
 import { formatDate } from "@/lib/format";
@@ -48,6 +51,7 @@ import {
   serializeDriverPayload,
   generateDriverCode,
   getGuaranteedUniqueDriverCode,
+  saveDriverPin,
   TANZANIA_DRIVING_CLASSES,
   type TanzaniaDrivingClassOption,
   type FleetDriver,
@@ -465,9 +469,16 @@ export default function Drivers() {
 
                 <div className="flex items-center justify-between">
                   <span className="text-muted-foreground">Portal PIN:</span>
-                  <span className="font-mono text-xs font-bold px-1.5 py-0.5 rounded bg-muted/80 text-foreground border border-border/60">
-                    {d.login_pin || (d.phone ? d.phone.replace(/\D/g, "").slice(-4) : "—")}
-                  </span>
+                  {d.login_pin ? (
+                    <span className="inline-flex items-center gap-1 font-mono text-[11px] font-semibold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20" title="PIN has been created by driver">
+                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                      Set
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/20" title="Driver will create PIN on first login">
+                      Pending Setup
+                    </span>
+                  )}
                 </div>
 
                 <div className="flex items-center justify-between">
@@ -594,9 +605,15 @@ export default function Drivers() {
                     <td className="px-5 py-3.5 text-muted-foreground">
                       <div className="font-medium text-foreground">{d.phone ?? "—"}</div>
                       <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
-                        <span className="text-[10px] font-mono font-medium text-muted-foreground bg-muted/60 px-1.5 py-0.5 rounded border border-border/50" title="Driver Portal PIN">
-                          PIN: {d.login_pin || (d.phone ? d.phone.replace(/\D/g, "").slice(-4) : "—")}
-                        </span>
+                        {d.login_pin ? (
+                          <span className="text-[10px] font-semibold text-emerald-700 dark:text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20" title="Driver has configured PIN">
+                            PIN: Set
+                          </span>
+                        ) : (
+                          <span className="text-[10px] font-medium text-amber-700 dark:text-amber-400 bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-500/20" title="Driver will create PIN on first login">
+                            PIN: Pending Setup
+                          </span>
+                        )}
                         {d.email && <span className="text-xs text-muted-foreground">• {d.email}</span>}
                       </div>
                     </td>
@@ -678,6 +695,7 @@ export default function Drivers() {
             setSelectedDriver(null);
             setNokDriver(d);
           }}
+          onUpdated={load}
         />
       )}
 
@@ -980,24 +998,42 @@ function DriverDialog({ open, onOpenChange, driver, onSaved, existingDrivers = [
               <p className="text-[10px] text-muted-foreground">Used for Driver Portal login & QR scan fast check-in</p>
             </div>
 
-            <div className="space-y-1.5">
+            <div className="rounded-lg border border-border/70 bg-muted/30 p-3 space-y-1.5">
               <div className="flex items-center justify-between">
-                <Label>Driver Portal PIN / Password</Label>
-                {form.phone && !form.login_pin && (
-                  <span className="text-[10px] font-mono text-emerald-600 dark:text-emerald-400 font-semibold">
-                    Default: {form.phone.replace(/\D/g, "").slice(-4) || "1234"}
-                  </span>
+                <div className="flex items-center gap-1.5">
+                  <KeyRound className="h-3.5 w-3.5 text-primary" />
+                  <Label className="text-xs font-semibold cursor-default">Portal PIN (Self-Service)</Label>
+                </div>
+                {form.login_pin ? (
+                  <Badge variant="outline" className="bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/20 text-[10px]">
+                    Set by Driver
+                  </Badge>
+                ) : (
+                  <Badge variant="outline" className="bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/20 text-[10px]">
+                    Pending Setup
+                  </Badge>
                 )}
               </div>
-              <Input
-                value={form.login_pin}
-                onChange={(e) => setForm({ ...form, login_pin: e.target.value })}
-                placeholder={form.phone ? `Default: ${form.phone.replace(/\D/g, "").slice(-4) || "1234"}` : "4-digit PIN (e.g. 1234)"}
-                className="font-mono tracking-wider"
-              />
-              <p className="text-[10px] text-muted-foreground">
-                Driver logs in using Phone + this PIN. If left blank, defaults to last 4 digits of phone.
+              <p className="text-[11px] text-muted-foreground leading-normal">
+                Driver creates their own secret 4-digit PIN on first login at <strong>/driver</strong>.
               </p>
+              {form.login_pin && (
+                <div className="pt-1">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 px-1 text-[11px] text-rose-600 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/30 gap-1"
+                    onClick={() => {
+                      setForm({ ...form, login_pin: "" });
+                      toast.info("PIN will be cleared on save. Driver will create a new PIN on next login.");
+                    }}
+                  >
+                    <RotateCcw className="h-3 w-3" />
+                    Reset Driver PIN
+                  </Button>
+                </div>
+              )}
             </div>
 
             <div className="space-y-1.5">
@@ -1371,12 +1407,14 @@ function DriverDetailModal({
   driver,
   onEdit,
   onViewNextOfKin,
+  onUpdated,
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
   driver: Driver;
   onEdit: () => void;
   onViewNextOfKin: () => void;
+  onUpdated?: () => void;
 }) {
   const [copied, setCopied] = useState(false);
 
@@ -1472,16 +1510,49 @@ function DriverDetailModal({
               </div>
 
               <div className="p-3 rounded-lg border border-border bg-card space-y-1">
-                <span className="text-[11px] text-muted-foreground">Login PIN</span>
-                <div className="font-mono font-bold text-primary text-base">
-                  {driver.login_pin || (driver.phone ? driver.phone.replace(/\D/g, "").slice(-4) : "—")}
+                <span className="text-[11px] text-muted-foreground">Portal PIN</span>
+                <div>
+                  {driver.login_pin ? (
+                    <Badge variant="outline" className="bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/20 text-xs font-semibold">
+                      Set by Driver
+                    </Badge>
+                  ) : (
+                    <Badge variant="outline" className="bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/20 text-xs font-semibold">
+                      Pending Setup
+                    </Badge>
+                  )}
                 </div>
               </div>
             </div>
 
-            <p className="text-[11px] text-muted-foreground">
-              Driver logs into <strong>/driver</strong> and confirms QR code scans using this Phone Number and PIN.
-            </p>
+            <div className="flex items-center justify-between text-[11px] text-muted-foreground flex-wrap gap-2 pt-0.5">
+              <span>
+                Drivers set and manage their PIN at <strong>/driver</strong>.
+              </span>
+              {driver.login_pin && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-7 text-xs text-rose-600 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/30 gap-1"
+                  onClick={async () => {
+                    const ok = confirm(`Reset PIN for driver ${driver.full_name}? The driver will create a new PIN upon their next login.`);
+                    if (!ok) return;
+                    const res = await saveDriverPin(driver.id, null);
+                    if (res.success) {
+                      toast.success(`PIN reset for ${driver.full_name}. Next login will prompt for a new PIN.`);
+                      onUpdated?.();
+                      onOpenChange(false);
+                    } else {
+                      toast.error("Failed to reset PIN");
+                    }
+                  }}
+                >
+                  <RotateCcw className="h-3 w-3" />
+                  Reset PIN
+                </Button>
+              )}
+            </div>
           </div>
 
           {/* Quick Contact & Communications */}
