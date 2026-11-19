@@ -2,7 +2,12 @@ import { useEffect, useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
-import { isPlatformAdmin, provisionMachineCareGpsAccount, provisionMachinecareTransportCompany } from "@/lib/admin";
+import {
+  isPlatformAdmin,
+  provisionMachineCareGpsAccount,
+  provisionMachinecareTransportCompany,
+  createFleetOrganization,
+} from "@/lib/admin";
 import { isEnterpriseFleet } from "@/lib/fleetTiers";
 import { isLogistixwareAccount } from "@/services/customerService";
 import {
@@ -13,7 +18,17 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import {
   ArrowRightLeft,
@@ -50,6 +65,13 @@ export function PlatformAdminOrgSwitcher({ compact = false }: { compact?: boolea
   const [switchingId, setSwitchingId] = useState<string | null>(null);
   const [orgs, setOrgs] = useState<OrgItem[]>([]);
   const [provisioning, setProvisioning] = useState(false);
+
+  // New Fleet Account Dialog state
+  const [createFleetOpen, setCreateFleetOpen] = useState(false);
+  const [newFleetName, setNewFleetName] = useState("");
+  const [newFleetTier, setNewFleetTier] = useState<"standard" | "enterprise">("enterprise");
+  const [newFleetSeedDemo, setNewFleetSeedDemo] = useState(true);
+  const [creatingFleet, setCreatingFleet] = useState(false);
 
   const fetchOrgs = async () => {
     if (!isAdmin) return;
@@ -141,6 +163,38 @@ export function PlatformAdminOrgSwitcher({ compact = false }: { compact?: boolea
     }
   };
 
+  const handleCreateCustomFleet = async () => {
+    if (!newFleetName.trim()) {
+      toast.error("Please enter a fleet organization name");
+      return;
+    }
+    setCreatingFleet(true);
+    try {
+      const res = await createFleetOrganization({
+        name: newFleetName.trim(),
+        tier: newFleetTier,
+        seedDemoData: newFleetSeedDemo,
+      });
+
+      if (!res.success) throw new Error(res.error || "Failed to create fleet organization");
+
+      await fetchOrgs();
+      toast.success(`${newFleetName.trim()} (${newFleetTier.toUpperCase()} Fleet) created!`);
+      setCreateFleetOpen(false);
+      setNewFleetName("");
+
+      if (res.orgId) {
+        await switchOrganisation(res.orgId);
+        setOpen(false);
+        window.location.href = "/dashboard";
+      }
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to create fleet account");
+    } finally {
+      setCreatingFleet(false);
+    }
+  };
+
   const getProfileIcon = (profile: string | null) => {
     switch (profile) {
       case "gps_tracking":
@@ -186,7 +240,8 @@ export function PlatformAdminOrgSwitcher({ compact = false }: { compact?: boolea
   );
 
   return (
-    <DropdownMenu open={open} onOpenChange={setOpen}>
+    <>
+      <DropdownMenu open={open} onOpenChange={setOpen}>
       <DropdownMenuTrigger asChild>
         {compact ? (
           <Button
@@ -351,6 +406,18 @@ export function PlatformAdminOrgSwitcher({ compact = false }: { compact?: boolea
         )}
 
         <DropdownMenuSeparator />
+        <DropdownMenuItem
+          onClick={() => {
+            setOpen(false);
+            setCreateFleetOpen(true);
+          }}
+          className="py-2 px-2.5 text-xs text-emerald-700 dark:text-emerald-300 bg-emerald-500/10 hover:bg-emerald-500/20 font-semibold cursor-pointer rounded-lg flex items-center gap-2"
+        >
+          <Plus className="h-4 w-4 text-emerald-600" />
+          <span>+ Create Fleet Account (Standard / Enterprise)</span>
+        </DropdownMenuItem>
+
+        <DropdownMenuSeparator />
         <DropdownMenuItem asChild className="cursor-pointer text-xs py-2 text-primary font-medium">
           <Link to="/admin" className="flex items-center justify-between w-full">
             <span>Manage All Companies in Admin</span>
@@ -359,5 +426,121 @@ export function PlatformAdminOrgSwitcher({ compact = false }: { compact?: boolea
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
+
+    {/* Dedicated Create Fleet Account Dialog (Standard vs Enterprise) */}
+    <Dialog open={createFleetOpen} onOpenChange={setCreateFleetOpen}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Truck className="h-5 w-5 text-primary" />
+            Create Fleet Organisation Account
+          </DialogTitle>
+          <DialogDescription>
+            Configure a new commercial fleet account and select the operational governance tier.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4 py-2 text-sm">
+          <div className="space-y-1.5">
+            <Label htmlFor="fleet-name" className="text-xs font-semibold">
+              Company / Fleet Organisation Name *
+            </Label>
+            <Input
+              id="fleet-name"
+              placeholder="e.g. Mega Beverages, Kilimanjaro Freight, etc."
+              value={newFleetName}
+              onChange={(e) => setNewFleetName(e.target.value)}
+              className="text-sm"
+              autoFocus
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label className="text-xs font-semibold">Fleet Governance Edition *</Label>
+            <div className="grid grid-cols-1 gap-2.5">
+              <div
+                onClick={() => setNewFleetTier("enterprise")}
+                className={cn(
+                  "p-3.5 rounded-xl border text-left cursor-pointer transition-all space-y-1",
+                  newFleetTier === "enterprise"
+                    ? "border-purple-500 bg-purple-500/10 ring-1 ring-purple-500"
+                    : "border-border hover:bg-muted/50"
+                )}
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <ShieldCheck className="h-4 w-4 text-purple-600 dark:text-purple-400" />
+                    <span className="font-semibold text-foreground">Enterprise Fleet Edition</span>
+                  </div>
+                  <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded bg-purple-500/20 text-purple-700 dark:text-purple-300">
+                    Recommended
+                  </span>
+                </div>
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  5-stage approval hierarchy (Supervisor → Fleet Manager → Procurement → Finance → Management), 3-quote tender matrix, vehicle-parts compatibility stores, top-down tire axle matrix, and workshop plant assets.
+                </p>
+              </div>
+
+              <div
+                onClick={() => setNewFleetTier("standard")}
+                className={cn(
+                  "p-3.5 rounded-xl border text-left cursor-pointer transition-all space-y-1",
+                  newFleetTier === "standard"
+                    ? "border-emerald-500 bg-emerald-500/10 ring-1 ring-emerald-500"
+                    : "border-border hover:bg-muted/50"
+                )}
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Truck className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                    <span className="font-semibold text-foreground">Standard Fleet Edition</span>
+                  </div>
+                  <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-700 dark:text-emerald-300">
+                    Lean Operations
+                  </span>
+                </div>
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  Single-stage manager approval, lean digital job cards, standard spare parts catalog, and cash / mobile / bank disbursements.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 pt-1">
+            <input
+              type="checkbox"
+              id="seed-demo"
+              checked={newFleetSeedDemo}
+              onChange={(e) => setNewFleetSeedDemo(e.target.checked)}
+              className="h-4 w-4 rounded border-border text-primary focus:ring-primary cursor-pointer"
+            />
+            <Label htmlFor="seed-demo" className="text-xs text-muted-foreground cursor-pointer">
+              Seed starter vehicles, workshop equipment, and spares catalog for demonstration
+            </Label>
+          </div>
+        </div>
+
+        <DialogFooter className="gap-2 sm:gap-0">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => setCreateFleetOpen(false)}
+            disabled={creatingFleet}
+          >
+            Cancel
+          </Button>
+          <Button
+            type="button"
+            onClick={handleCreateCustomFleet}
+            disabled={creatingFleet || !newFleetName.trim()}
+            className={newFleetTier === "enterprise" ? "bg-purple-600 hover:bg-purple-700 text-white" : ""}
+          >
+            {creatingFleet && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            Create {newFleetTier === "enterprise" ? "Enterprise" : "Standard"} Fleet
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+    </>
   );
 }

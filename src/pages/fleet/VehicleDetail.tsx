@@ -34,6 +34,7 @@ import {
 import { VehicleDialog } from "./Vehicles";
 import { ScheduleFormDialog } from "@/components/ScheduleFormDialog";
 import { computeOdoPmStatus, recordCompletedPmService } from "@/services/fleetPmService";
+import { TireAxleMatrix } from "@/components/fleet/TireAxleMatrix";
 import {
   Truck,
   Container,
@@ -898,11 +899,13 @@ export default function FleetVehicleDetail() {
 
         {/* Tab 2: Axles & Tyres */}
         <TabsContent value="axles" className="space-y-4">
+          <TireAxleMatrix vehicle={vehicle} tyres={tyres} />
+
           <div className="rounded-2xl border border-border bg-card p-5 shadow-2xs">
             <div className="flex flex-wrap items-center justify-between gap-3 pb-4 border-b border-border">
               <div>
                 <h3 className="text-base font-semibold text-foreground flex items-center gap-2">
-                  <Layers className="h-4 w-4 text-primary" /> Fitted Tyres & Axle Layout
+                  <Layers className="h-4 w-4 text-primary" /> Fitted Tyres Registry Table
                 </h3>
                 <p className="text-xs text-muted-foreground mt-0.5">
                   Layout: {axleMatch ? axleMatch.label : vehicle.axle_configuration} ({axleMatch ? axleMatch.description : ""})

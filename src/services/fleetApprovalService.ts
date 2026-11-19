@@ -12,9 +12,22 @@ export type FleetApprovalType =
   | "trip_float"
   | "tyre_replacement"
   | "outsourced_service"
+  | "material_request"
+  | "purchase_requisition"
   | "general_payment";
 
 export type FleetApprovalPriority = "low" | "standard" | "urgent" | "emergency";
+
+export interface VendorQuotation {
+  vendor_name: string;
+  vendor_phone?: string;
+  unit_price: number;
+  total_price: number;
+  delivery_days: number;
+  warranty_months: number;
+  is_selected?: boolean;
+  notes?: string;
+}
 
 export type ApprovalStageId =
   | "supervisor"
@@ -86,6 +99,8 @@ export interface FleetApprovalRequest {
   current_stage: ApprovalStageId | "completed";
   approval_chain: ApprovalChainStep[];
   disbursement_info?: DisbursementInfo;
+  tender_quotes?: VendorQuotation[];
+  selected_tender_vendor?: string;
   created_at: string;
   updated_at: string;
 }
@@ -155,8 +170,13 @@ export function buildApprovalChain(
     },
   ];
 
-  // If spare parts or outsourced service, require Procurement
-  if (type === "spare_parts" || type === "outsourced_service") {
+  // If spare parts, material request, purchase requisition, or outsourced service, require Procurement
+  if (
+    type === "spare_parts" ||
+    type === "material_request" ||
+    type === "purchase_requisition" ||
+    type === "outsourced_service"
+  ) {
     chain.push({
       stage: "procurement",
       stage_label: STAGE_CONFIG.procurement.label,
@@ -291,11 +311,22 @@ export async function reviewFleetApprovalStep(
   decision: "approved" | "rejected" | "info_requested",
   reviewerId: string,
   reviewerName: string,
-  note?: string
+  note?: string,
+  selectedVendor?: string
 ): Promise<FleetApprovalRequest> {
   const requests = await getFleetApprovalRequests(orgId);
   const req = requests.find((r) => r.id === requestId);
   if (!req) throw new Error("Requisition request not found");
+
+  if (selectedVendor) {
+    req.selected_tender_vendor = selectedVendor;
+    if (req.tender_quotes) {
+      req.tender_quotes = req.tender_quotes.map((q) => ({
+        ...q,
+        is_selected: q.vendor_name === selectedVendor,
+      }));
+    }
+  }
 
   const now = new Date().toISOString();
   const stepIdx = req.approval_chain.findIndex((s) => s.stage === stage);

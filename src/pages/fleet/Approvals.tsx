@@ -38,6 +38,8 @@ import {
   ArrowRight,
   CreditCard,
   Building2,
+  Package,
+  FileCheck,
 } from "lucide-react";
 import {
   getFleetApprovalRequests,
@@ -86,6 +88,18 @@ const TYPE_CONFIG: Record<
     icon: Building2,
     color: "text-indigo-600 dark:text-indigo-400",
     bg: "bg-indigo-500/10 border-indigo-500/30",
+  },
+  material_request: {
+    label: "Material Requisition",
+    icon: Package,
+    color: "text-cyan-600 dark:text-cyan-400",
+    bg: "bg-cyan-500/10 border-cyan-500/30",
+  },
+  purchase_requisition: {
+    label: "Purchase Requisition (3-Quote Tender)",
+    icon: FileCheck,
+    color: "text-purple-600 dark:text-purple-400",
+    bg: "bg-purple-500/10 border-purple-500/30",
   },
   general_payment: {
     label: "General Payment",
@@ -157,6 +171,18 @@ export default function FleetApprovals() {
     { name: "", quantity: 1, unit_price: 0 },
   ]);
   const [creating, setCreating] = useState(false);
+
+  // 3-Quote Tender Competitive Bidding State (Mega Beverages Slide 16)
+  const [quote1Vendor, setQuote1Vendor] = useState("");
+  const [quote1Amount, setQuote1Amount] = useState("");
+  const [quote1Days, setQuote1Days] = useState("3");
+  const [quote2Vendor, setQuote2Vendor] = useState("");
+  const [quote2Amount, setQuote2Amount] = useState("");
+  const [quote2Days, setQuote2Days] = useState("5");
+  const [quote3Vendor, setQuote3Vendor] = useState("");
+  const [quote3Amount, setQuote3Amount] = useState("");
+  const [quote3Days, setQuote3Days] = useState("7");
+  const [selectedVendorForApproval, setSelectedVendorForApproval] = useState<string>("");
 
   const orgId = profile?.organisation_id || "";
 
@@ -241,7 +267,8 @@ export default function FleetApprovals() {
         decision,
         profile.id,
         profile.full_name || "Manager",
-        reviewNote.trim() || undefined
+        reviewNote.trim() || undefined,
+        selectedVendorForApproval || undefined
       );
 
       toast.success(
@@ -254,6 +281,7 @@ export default function FleetApprovals() {
 
       setSelectedRequest(updated);
       setReviewNote("");
+      setSelectedVendorForApproval("");
       loadData();
     } catch (e: any) {
       toast.error(e.message || "Failed to submit review");
@@ -312,6 +340,39 @@ export default function FleetApprovals() {
       const chain = buildApprovalChain(reqType, Number(reqAmount), isMultiDepartment);
       const initialStage = chain[0].stage;
 
+      // Construct 3-Quote Tender Matrix (Slide 16)
+      const tenderQuotes: any[] = [];
+      if (quote1Vendor.trim()) {
+        tenderQuotes.push({
+          vendor_name: quote1Vendor.trim(),
+          unit_price: Number(quote1Amount) || Number(reqAmount),
+          total_price: Number(quote1Amount) || Number(reqAmount),
+          delivery_days: Number(quote1Days) || 3,
+          warranty_months: 12,
+          is_selected: true,
+        });
+      }
+      if (quote2Vendor.trim()) {
+        tenderQuotes.push({
+          vendor_name: quote2Vendor.trim(),
+          unit_price: Number(quote2Amount) || 0,
+          total_price: Number(quote2Amount) || 0,
+          delivery_days: Number(quote2Days) || 5,
+          warranty_months: 6,
+          is_selected: false,
+        });
+      }
+      if (quote3Vendor.trim()) {
+        tenderQuotes.push({
+          vendor_name: quote3Vendor.trim(),
+          unit_price: Number(quote3Amount) || 0,
+          total_price: Number(quote3Amount) || 0,
+          delivery_days: Number(quote3Days) || 7,
+          warranty_months: 6,
+          is_selected: false,
+        });
+      }
+
       await createFleetApprovalRequest({
         organisation_id: orgId,
         request_type: reqType,
@@ -335,6 +396,8 @@ export default function FleetApprovals() {
         status: `pending_${initialStage}` as any,
         current_stage: initialStage,
         approval_chain: chain,
+        tender_quotes: tenderQuotes.length > 0 ? tenderQuotes : undefined,
+        selected_tender_vendor: tenderQuotes[0]?.vendor_name,
       });
 
       toast.success("Requisition submitted into approval workflow!");
@@ -348,6 +411,12 @@ export default function FleetApprovals() {
       setReqVendorName("");
       setReqVendorPhone("");
       setReqItems([{ name: "", quantity: 1, unit_price: 0 }]);
+      setQuote1Vendor("");
+      setQuote1Amount("");
+      setQuote2Vendor("");
+      setQuote2Amount("");
+      setQuote3Vendor("");
+      setQuote3Amount("");
       loadData();
     } catch (e: any) {
       toast.error(e.message || "Failed to submit request");
@@ -748,6 +817,90 @@ export default function FleetApprovals() {
                 </div>
               )}
 
+              {/* Procurement 3-Vendor Quotation Tender Matrix (Slide 16) */}
+              {selectedRequest.tender_quotes && selectedRequest.tender_quotes.length > 0 && (
+                <div className="rounded-xl border border-purple-500/30 bg-purple-500/5 p-4 space-y-3">
+                  <div className="flex items-center justify-between border-b border-purple-500/20 pb-2">
+                    <div className="flex items-center gap-2">
+                      <FileCheck className="h-4 w-4 text-purple-600 dark:text-purple-400" />
+                      <span className="text-xs font-bold text-foreground">
+                        Procurement 3-Vendor Tender Evaluation (Slide 16)
+                      </span>
+                    </div>
+                    <span className="rounded-md border border-purple-500/40 px-2 py-0.5 text-[10px] font-mono text-purple-700 dark:text-purple-300">
+                      Competitive Bidding
+                    </span>
+                  </div>
+
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-xs">
+                      <thead className="text-left text-muted-foreground bg-purple-500/10">
+                        <tr>
+                          <th className="p-2 font-medium">Bidding Supplier</th>
+                          <th className="p-2 font-medium text-right">Quoted Price ({selectedRequest.currency})</th>
+                          <th className="p-2 font-medium text-center">Lead Time</th>
+                          <th className="p-2 font-medium text-center">Warranty</th>
+                          <th className="p-2 font-medium text-center">Evaluation</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {selectedRequest.tender_quotes.map((q, qIdx) => {
+                          const isWinning = selectedRequest.selected_tender_vendor
+                            ? selectedRequest.selected_tender_vendor === q.vendor_name
+                            : q.is_selected;
+
+                          return (
+                            <tr
+                              key={qIdx}
+                              className={`border-t border-purple-500/20 ${
+                                isWinning ? "bg-purple-500/15 font-semibold text-foreground" : "text-muted-foreground"
+                              }`}
+                            >
+                              <td className="p-2">
+                                <div className="flex items-center gap-2">
+                                  <span>{q.vendor_name}</span>
+                                  {isWinning && (
+                                    <span className="rounded bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 px-1.5 py-0.2 text-[9px] font-bold uppercase">
+                                      Awarded
+                                    </span>
+                                  )}
+                                </div>
+                              </td>
+                              <td className="p-2 text-right font-mono">
+                                {formatNumber(q.total_price)}
+                              </td>
+                              <td className="p-2 text-center">{q.delivery_days} days</td>
+                              <td className="p-2 text-center">{q.warranty_months} mo</td>
+                              <td className="p-2 text-center">
+                                {canReview && selectedRequest.current_stage === "procurement" ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => setSelectedVendorForApproval(q.vendor_name)}
+                                    className={`text-[10px] rounded px-2 py-0.5 border cursor-pointer font-bold ${
+                                      (selectedVendorForApproval || selectedRequest.selected_tender_vendor) === q.vendor_name
+                                        ? "bg-purple-600 text-white border-purple-600"
+                                        : "bg-background text-foreground border-border hover:bg-muted"
+                                    }`}
+                                  >
+                                    {(selectedVendorForApproval || selectedRequest.selected_tender_vendor) === q.vendor_name
+                                      ? "Selected Bid"
+                                      : "Select Bid"}
+                                  </button>
+                                ) : (
+                                  <span className="text-[10px]">
+                                    {isWinning ? "Selected" : "Alternative"}
+                                  </span>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
               {/* Multi-Department Audit Trail */}
               <div>
                 <Label className="text-xs text-muted-foreground">Approval Stages &amp; Department Sign-Offs</Label>
@@ -959,6 +1112,8 @@ export default function FleetApprovals() {
                     className="mt-1 flex h-9 w-full rounded-md border border-input bg-background px-3 py-1.5 text-xs"
                   >
                     <option value="spare_parts">Spare Parts Requisition</option>
+                    <option value="material_request">Material Requisition</option>
+                    <option value="purchase_requisition">Purchase Requisition (3-Quote Tender)</option>
                     <option value="emergency_breakdown">Emergency Highway Breakdown</option>
                     <option value="trip_float">Trip Safari Float (Fuel &amp; Road Tolls)</option>
                     <option value="tyre_replacement">Tyre Replacement &amp; Fitment</option>
@@ -1151,6 +1306,131 @@ export default function FleetApprovals() {
                   ))}
                 </div>
               </div>
+
+              {/* Procurement 3-Quote Competitive Bidding (Mega Beverages Slide 16) */}
+              {isEnterprise && (
+                <div className="rounded-xl border border-border bg-muted/20 p-3.5 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                      <FileCheck className="h-4 w-4 text-purple-600" />
+                      Procurement 3-Vendor Quotation Tender (Slide 16)
+                    </span>
+                    <span className="text-[10px] text-muted-foreground uppercase font-mono">
+                      Competitive Bidding
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground">
+                    Record 3 vendor bids for transparent procurement governance and finance audit.
+                  </p>
+
+                  <div className="space-y-2.5">
+                    {/* Bid 1 */}
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 p-2 rounded-lg border border-purple-500/20 bg-purple-500/5">
+                      <div>
+                        <Label className="text-[10px] font-bold text-purple-700 dark:text-purple-400">
+                          Vendor 1 (Recommended Bidder) *
+                        </Label>
+                        <Input
+                          placeholder="e.g. Scania Tanzania Ltd"
+                          value={quote1Vendor}
+                          onChange={(e) => setQuote1Vendor(e.target.value)}
+                          className="h-8 text-xs bg-background mt-1"
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-[10px] text-muted-foreground">Quoted Amount (TZS)</Label>
+                        <Input
+                          type="number"
+                          placeholder="e.g. 3850000"
+                          value={quote1Amount}
+                          onChange={(e) => setQuote1Amount(e.target.value)}
+                          className="h-8 text-xs bg-background mt-1"
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-[10px] text-muted-foreground">Delivery Days</Label>
+                        <Input
+                          type="number"
+                          placeholder="e.g. 3"
+                          value={quote1Days}
+                          onChange={(e) => setQuote1Days(e.target.value)}
+                          className="h-8 text-xs bg-background mt-1"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Bid 2 */}
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 p-2 rounded-lg border border-border bg-background">
+                      <div>
+                        <Label className="text-[10px] font-medium text-foreground">
+                          Vendor 2 (Alternative Quote)
+                        </Label>
+                        <Input
+                          placeholder="e.g. Commercial Motors Dar"
+                          value={quote2Vendor}
+                          onChange={(e) => setQuote2Vendor(e.target.value)}
+                          className="h-8 text-xs bg-background mt-1"
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-[10px] text-muted-foreground">Quoted Amount (TZS)</Label>
+                        <Input
+                          type="number"
+                          placeholder="e.g. 4200000"
+                          value={quote2Amount}
+                          onChange={(e) => setQuote2Amount(e.target.value)}
+                          className="h-8 text-xs bg-background mt-1"
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-[10px] text-muted-foreground">Delivery Days</Label>
+                        <Input
+                          type="number"
+                          placeholder="e.g. 5"
+                          value={quote2Days}
+                          onChange={(e) => setQuote2Days(e.target.value)}
+                          className="h-8 text-xs bg-background mt-1"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Bid 3 */}
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 p-2 rounded-lg border border-border bg-background">
+                      <div>
+                        <Label className="text-[10px] font-medium text-foreground">
+                          Vendor 3 (Alternative Quote)
+                        </Label>
+                        <Input
+                          placeholder="e.g. Heavy Diesel Spares Ltd"
+                          value={quote3Vendor}
+                          onChange={(e) => setQuote3Vendor(e.target.value)}
+                          className="h-8 text-xs bg-background mt-1"
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-[10px] text-muted-foreground">Quoted Amount (TZS)</Label>
+                        <Input
+                          type="number"
+                          placeholder="e.g. 4450000"
+                          value={quote3Amount}
+                          onChange={(e) => setQuote3Amount(e.target.value)}
+                          className="h-8 text-xs bg-background mt-1"
+                        />
+                      </div>
+                      <div>
+                        <Label className="text-[10px] text-muted-foreground">Delivery Days</Label>
+                        <Input
+                          type="number"
+                          placeholder="e.g. 7"
+                          value={quote3Days}
+                          onChange={(e) => setQuote3Days(e.target.value)}
+                          className="h-8 text-xs bg-background mt-1"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
 
             <DialogFooter className="mt-3">

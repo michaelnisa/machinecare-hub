@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { PageLoader, EmptyState } from "@/components/PageLoader";
-import { ClipboardCheck, Plus, Loader2, CheckCircle2, XCircle, MinusCircle, AlertTriangle, QrCode } from "lucide-react";
+import { ClipboardCheck, Plus, Loader2, CheckCircle2, XCircle, MinusCircle, AlertTriangle, QrCode, Wrench } from "lucide-react";
 import { Link } from "react-router-dom";
 import { MachineQrDialog } from "@/components/MachineQrDialog";
 import { toast } from "sonner";
@@ -218,9 +218,21 @@ export default function Inspections() {
                     </td>
                     <td className="px-5 py-3 text-muted-foreground">{formatDate(e.performed_at)}</td>
                     <td className="px-5 py-3">
-                      <span className={`rounded-md px-2 py-0.5 text-xs font-medium capitalize ${RESULT_CLASS[e.overall_result ?? "ok"] ?? "bg-muted"}`}>
-                        {(e.overall_result ?? "ok") === "attention" ? "Needs attention" : "OK"}
-                      </span>
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span className={`rounded-md px-2 py-0.5 text-xs font-medium capitalize ${RESULT_CLASS[e.overall_result ?? "ok"] ?? "bg-muted"}`}>
+                          {(e.overall_result ?? "ok") === "attention" ? "Needs attention" : "OK"}
+                        </span>
+                        {(e.overall_result ?? "ok") === "attention" && (
+                          <Link
+                            to={`/work-orders/new?machine=${e.machine_id}`}
+                            className="inline-flex items-center gap-1 rounded bg-red-500/10 hover:bg-red-500/20 px-2 py-0.5 text-[11px] font-semibold text-red-600 dark:text-red-400 transition-colors"
+                            title="Raise Digital Job Card for this inspection defect (Slide 10)"
+                          >
+                            <Wrench className="h-3 w-3" />
+                            Raise Job Card
+                          </Link>
+                        )}
+                      </div>
                     </td>
                     <td className="px-5 py-3 text-right">
                       {vehicleObj && (
