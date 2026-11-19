@@ -495,12 +495,20 @@ export default function FleetApprovals() {
         </div>
       </div>
 
-      {/* Requests Listing */}
       {filteredRequests.length === 0 ? (
         <EmptyState
           icon={<FileText className="h-6 w-6" />}
           title="No approval requisitions found"
-          description="Create a new requisition or adjust your tab filters."
+          description={
+            searchQuery || activeTab !== "all"
+              ? "No requisitions match your current search or tab filter."
+              : "No requisitions have been submitted yet. Submit a requisition for spare parts, highway rescue, tyre replacement, or trip safari float."
+          }
+          action={
+            <Button onClick={() => setCreateModalOpen(true)} className="gap-1.5 text-xs">
+              <Plus className="h-4 w-4" /> New Requisition
+            </Button>
+          }
         />
       ) : (
         <div className="space-y-3">
