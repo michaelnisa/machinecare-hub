@@ -39,6 +39,7 @@ import { formatNumber, formatDate } from "@/lib/format";
 import { isLogistixwareAccount } from "@/services/customerService";
 import { isEnterpriseFleet } from "@/lib/fleetTiers";
 import { getSmartSpares, issuePartToJobCard, type CommercialSparePart } from "@/services/smartPartsService";
+import { isWorkshopAssetCategory } from "@/lib/fleet-metadata";
 
 export interface FleetVehicleOption {
   id: string;
@@ -53,6 +54,7 @@ export interface FleetVehicleOption {
   current_hours?: number | null;
   status?: string;
   assigned_driver?: string | null;
+  notes?: string | null;
 }
 
 const VEHICLE_WORK_TYPES = [
@@ -295,6 +297,10 @@ export function FleetWorkOrderForm({
   const selectedMachine = useMemo(() => {
     return machines.find((m) => m.id === selectedMachineId) || null;
   }, [machines, selectedMachineId]);
+
+  const isWorkshopAsset = useMemo(() => {
+    return isWorkshopAssetCategory(selectedMachine?.category, selectedMachine?.notes);
+  }, [selectedMachine]);
 
   // When selected machine changes, auto-fill odometer
   useEffect(() => {
@@ -764,8 +770,8 @@ export function FleetWorkOrderForm({
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-1.5">
               <Label className="text-xs font-semibold flex items-center justify-between">
-                <span>Odometer at Service (km)</span>
-                <span className="text-[10px] text-muted-foreground">Syncs with vehicle</span>
+                <span>{isWorkshopAsset ? "Operating Hours at Service (hrs)" : "Odometer at Service (km)"}</span>
+                <span className="text-[10px] text-muted-foreground">{isWorkshopAsset ? "Runtime hour meter" : "Syncs with vehicle"}</span>
               </Label>
               <div className="relative">
                 <Gauge className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -773,7 +779,7 @@ export function FleetWorkOrderForm({
                   type="number"
                   value={odometerKm}
                   onChange={(e) => setOdometerKm(e.target.value)}
-                  placeholder="e.g. 184500"
+                  placeholder={isWorkshopAsset ? "e.g. 2450" : "e.g. 184500"}
                   className="pl-9 font-mono"
                 />
               </div>
@@ -1225,7 +1231,7 @@ export function FleetWorkOrderForm({
                       {selectedMachine.plate_number || selectedMachine.name}
                     </span>
                     <span className="text-xs font-mono font-semibold">
-                      {odometerKm ? `${formatNumber(parseFloat(odometerKm))} km` : "No odo"}
+                      {odometerKm ? `${formatNumber(parseFloat(odometerKm))} ${isWorkshopAsset ? "hrs" : "km"}` : "No meter"}
                     </span>
                   </div>
                   <div className="text-xs text-foreground font-medium">

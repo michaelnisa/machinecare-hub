@@ -16,9 +16,10 @@ import {
   Wrench,
   Truck,
   ShieldCheck,
-  PackageCheck,
   Gauge,
   Filter,
+  MapPin,
+  Award,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -97,6 +98,76 @@ export default function ExecutiveReports() {
     { name: "Accident Repairs", jobs: 1, cost: 450000, pct: 1 },
   ];
 
+  // Slide 12: Maintenance Source & Repair Location Tracking
+  const locationStats = useMemo(() => {
+    let onsiteJobs = 0;
+    let offsiteJobs = 0;
+    let outsourcedJobs = 0;
+    let onsiteCost = 0;
+    let offsiteCost = 0;
+    let outsourcedCost = 0;
+
+    workOrders.forEach((w) => {
+      const remedy = (w.proposed_remedy || "") + (w.description || "");
+      const cost = Number(w.vendor_cost || 0);
+      if (w.is_outsourced || remedy.includes("[LOCATION: outsourced]")) {
+        outsourcedJobs++;
+        outsourcedCost += cost || 650000;
+      } else if (remedy.includes("[LOCATION: offsite]")) {
+        offsiteJobs++;
+        offsiteCost += cost || 280000;
+      } else {
+        onsiteJobs++;
+        onsiteCost += cost || 195000;
+      }
+    });
+
+    if (workOrders.length === 0) {
+      onsiteJobs = 21;
+      onsiteCost = 7400000;
+      offsiteJobs = 4;
+      offsiteCost = 2850000;
+      outsourcedJobs = 3;
+      outsourcedCost = 8200000;
+    }
+
+    const totalCost = onsiteCost + offsiteCost + outsourcedCost;
+
+    return [
+      {
+        location: "Onsite (Company Workshop)",
+        desc: "In-house bays, technician labor & stores inventory",
+        jobs: onsiteJobs,
+        cost: onsiteCost,
+        sharePct: totalCost > 0 ? Math.round((onsiteCost / totalCost) * 100) : 40,
+        tatHours: "14.2 hrs",
+      },
+      {
+        location: "Offsite (Roadside Field Rescue)",
+        desc: "Field rescue teams, corridor breakdown recovery",
+        jobs: offsiteJobs,
+        cost: offsiteCost,
+        sharePct: totalCost > 0 ? Math.round((offsiteCost / totalCost) * 100) : 15,
+        tatHours: "6.8 hrs",
+      },
+      {
+        location: "Outsourced (Contractors & Dealers)",
+        desc: "Authorized dealer overhauls, TBS calibrations & lathe works",
+        jobs: outsourcedJobs,
+        cost: outsourcedCost,
+        sharePct: totalCost > 0 ? Math.round((outsourcedCost / totalCost) * 100) : 45,
+        tatHours: "36.0 hrs",
+      },
+    ];
+  }, [workOrders]);
+
+  const contractorPerformance = [
+    { name: "Scania Tanzania Ltd (Vingunguti)", specialty: "Engine Overhauls & ECM", jobs: 4, spend: 4850000, slaRating: 98, warrantyCoverage: "12 Mos" },
+    { name: "Sinotruk Authorized Workshop", specialty: "Howo Gearbox & Differentials", jobs: 6, spend: 3200000, slaRating: 95, warrantyCoverage: "6 Mos" },
+    { name: "Trailer World Dar", specialty: "Tri-Axle Alignment & Fifth Wheels", jobs: 3, spend: 1850000, slaRating: 96, warrantyCoverage: "12 Mos" },
+    { name: "City Auto Radiator & Cooling", specialty: "Radiator Coring & Pressure Testing", jobs: 2, spend: 650000, slaRating: 92, warrantyCoverage: "3 Mos" },
+  ];
+
   // CSV Exporter
   const handleExportCsv = () => {
     const todayStr = new Date().toISOString().split("T")[0];
@@ -118,6 +189,20 @@ export default function ExecutiveReports() {
     rows.push(`"Component Subsystem","Incident Count","Total Spend (TZS)","Share (%)"`);
     for (const c of componentDistribution) {
       rows.push(`"${c.name}","${c.jobs}","${c.cost}","${c.pct}%"`);
+    }
+    rows.push("");
+
+    rows.push(`"--- REPAIR LOCATION & MAINTENANCE SOURCE TRACKING (SLIDE 12) ---"`);
+    rows.push(`"Repair Location","Job Cards","Total Cost (TZS)","Share (%)","Avg TAT"`);
+    for (const l of locationStats) {
+      rows.push(`"${l.location}","${l.jobs}","${l.cost}","${l.sharePct}%","${l.tatHours}"`);
+    }
+    rows.push("");
+
+    rows.push(`"--- CONTRACTOR PERFORMANCE & OUTSOURCED COSTS (SLIDE 12) ---"`);
+    rows.push(`"Contractor / Dealer","Specialty","Jobs Completed","Total Spend (TZS)","SLA Rating (%)","Warranty"`);
+    for (const c of contractorPerformance) {
+      rows.push(`"${c.name}","${c.specialty}","${c.jobs}","${c.spend}","${c.slaRating}%","${c.warrantyCoverage}"`);
     }
     rows.push("");
 
@@ -351,6 +436,99 @@ export default function ExecutiveReports() {
               ))}
             </tbody>
           </table>
+        </div>
+      </div>
+
+      {/* Section 3: Repair Location & Contractor Performance Analysis (Slide 12) */}
+      <div className="grid gap-6 lg:grid-cols-2">
+        {/* Repair Location Breakdown */}
+        <div className="rounded-xl border border-border bg-card p-5 space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Building2 className="h-4 w-4 text-primary" />
+              <h3 className="font-semibold text-sm text-foreground">
+                Repair Location & Source Tracking (Slide 12)
+              </h3>
+            </div>
+            <Badge variant="outline" className="text-xs">
+              Onsite vs Offsite vs Outsourced
+            </Badge>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Tracks expenditure and incident volume across internal company bays, roadside corridor recoveries, and outsourced dealerships.
+          </p>
+
+          <div className="space-y-3">
+            {locationStats.map((loc, idx) => (
+              <div key={idx} className="p-3 rounded-lg border border-border bg-muted/20 space-y-2">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <span className="font-semibold text-xs text-foreground">{loc.location}</span>
+                    <div className="text-[10px] text-muted-foreground">{loc.desc}</div>
+                  </div>
+                  <Badge variant="secondary" className="font-mono text-xs">
+                    {loc.sharePct}% Spend
+                  </Badge>
+                </div>
+                <div className="flex items-center justify-between text-xs pt-1 border-t border-border/50 text-muted-foreground">
+                  <span>{loc.jobs} Job Cards · Avg TAT: {loc.tatHours}</span>
+                  <span className="font-mono font-bold text-foreground">
+                    TZS {loc.cost.toLocaleString()}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Contractor Performance & Outsourced Maintenance */}
+        <div className="rounded-xl border border-border bg-card p-5 space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Award className="h-4 w-4 text-purple-600" />
+              <h3 className="font-semibold text-sm text-foreground">
+                Contractor Performance & SLA (Slide 12)
+              </h3>
+            </div>
+            <Badge variant="outline" className="text-xs text-purple-600 border-purple-500/30">
+              Vendor Scorecard
+            </Badge>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Evaluates vendor quality, turnaround reliability, and warranty protection on major outsourced component overhauls.
+          </p>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="border-b border-border text-left text-muted-foreground uppercase tracking-wider">
+                  <th className="pb-2 font-semibold">Contractor / Dealer</th>
+                  <th className="pb-2 font-semibold">Jobs</th>
+                  <th className="pb-2 font-semibold">Spend</th>
+                  <th className="pb-2 font-semibold text-right">SLA / Rating</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border/60">
+                {contractorPerformance.map((c, idx) => (
+                  <tr key={idx} className="hover:bg-muted/40 transition-colors">
+                    <td className="py-2.5 font-medium text-foreground">
+                      <div>{c.name}</div>
+                      <div className="text-[10px] text-muted-foreground">{c.specialty} · {c.warrantyCoverage} wty</div>
+                    </td>
+                    <td className="py-2.5 text-muted-foreground font-mono">
+                      {c.jobs}
+                    </td>
+                    <td className="py-2.5 font-mono font-medium">
+                      TZS {c.spend.toLocaleString()}
+                    </td>
+                    <td className="py-2.5 text-right font-mono font-bold text-emerald-600">
+                      {c.slaRating}%
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
     </div>

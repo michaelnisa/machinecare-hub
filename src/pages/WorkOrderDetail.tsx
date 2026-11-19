@@ -21,6 +21,7 @@ import { useIndustry } from "@/hooks/useIndustry";
 import { isLogistixwareAccount } from "@/services/customerService";
 import { formatDistanceToNow } from "date-fns";
 import { Layers, Building2, MapPin, ShieldCheck } from "lucide-react";
+import { isWorkshopAssetCategory } from "@/lib/fleet-metadata";
 
 export default function WorkOrderDetail() {
   const { id } = useParams<{ id: string }>();
@@ -90,7 +91,7 @@ export default function WorkOrderDetail() {
   };
 
   const isVehicleWo = useMemo(() => {
-    if (machine?.category === "Vehicle" || machine?.category === "Trailer") return true;
+    if (machine?.category === "Vehicle" || machine?.category === "Trailer" || isWorkshopAssetCategory(machine?.category, machine?.notes)) return true;
     try {
       if (wo?.remarks) {
         const parsed = JSON.parse(wo.remarks);

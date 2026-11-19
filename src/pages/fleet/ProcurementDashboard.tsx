@@ -80,8 +80,12 @@ export default function ProcurementDashboard() {
   }, [smartSpares]);
 
   // Requisition statistics
-  const pendingCount = requisitions.filter((r) => r.status === "pending").length;
-  const approvedCount = requisitions.filter((r) => r.status === "approved").length;
+  const pendingCount = requisitions.filter(
+    (r) => r.status.startsWith("pending") || r.status === "info_requested"
+  ).length;
+  const approvedCount = requisitions.filter(
+    (r) => r.status === "approved" || r.status === "disbursed"
+  ).length;
   const totalRequisitionValue = requisitions.reduce((acc, r) => acc + (r.amount || 0), 0);
 
   if (loading) return <PageLoader />;

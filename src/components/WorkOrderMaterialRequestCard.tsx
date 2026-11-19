@@ -197,12 +197,13 @@ function NewRequestDialog({ open, setOpen, wo, userId, orgId, onSaved }: any) {
     if (open) {
       setRows([{ item_id: "", quantity: "1", reason: "" }]);
       (async () => {
-        const [{ data: i }, { data: l }] = await Promise.all([
+        const [{ data: i }, { data: l }, { data: allL }] = await Promise.all([
           supabase.from("inventory_items").select("id, name, part_number, unit").eq("status", "active").order("name"),
           (supabase as any).from("stock_locations").select("id").eq("is_default", true).maybeSingle(),
+          (supabase as any).from("stock_locations").select("id").order("created_at").limit(1),
         ]);
         setItems(i ?? []);
-        setDefaultLocationId(l?.id ?? "");
+        setDefaultLocationId(l?.id ?? allL?.[0]?.id ?? "");
       })();
     }
   }, [open]);

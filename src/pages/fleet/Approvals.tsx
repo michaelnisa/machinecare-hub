@@ -220,7 +220,7 @@ export default function FleetApprovals() {
         getFleetApprovalRequests(orgId, isMultiDepartment),
         (supabase as any)
           .from("machines")
-          .select("id, name, serial_number, model")
+          .select("id, name, plate_number, serial_number, model, category, notes")
           .eq("organisation_id", orgId)
           .order("name"),
       ]);
@@ -402,7 +402,8 @@ export default function FleetApprovals() {
       const matchedVeh = vehicles.find(
         (v) =>
           (v.plate_number && v.plate_number.toLowerCase() === reqVehiclePlate.trim().toLowerCase()) ||
-          (v.name && v.name.toLowerCase() === reqVehiclePlate.trim().toLowerCase())
+          (v.name && v.name.toLowerCase() === reqVehiclePlate.trim().toLowerCase()) ||
+          (v.serial_number && v.serial_number.toLowerCase() === reqVehiclePlate.trim().toLowerCase())
       );
 
       await createFleetApprovalRequest({
@@ -1175,14 +1176,25 @@ export default function FleetApprovals() {
 
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <div>
-                  <Label htmlFor="req_vehicle">Assigned Vehicle / Trailer Plate</Label>
+                  <Label htmlFor="req_vehicle">Assigned Vehicle Plate / Asset Tag</Label>
                   <Input
                     id="req_vehicle"
+                    list="asset_plates_list"
                     value={reqVehiclePlate}
                     onChange={(e) => setReqVehiclePlate(e.target.value)}
-                    placeholder="e.g. T 412 DFB or Trailer TR-09"
+                    placeholder="e.g. T 412 DFB or GEN-01 (or select)"
                     className="mt-1 text-xs"
                   />
+                  <datalist id="asset_plates_list">
+                    {vehicles.map((v) => (
+                      <option
+                        key={v.id}
+                        value={v.plate_number || v.name}
+                      >
+                        {v.name} {v.category ? `(${v.category})` : ""} {v.serial_number ? `· S/N: ${v.serial_number}` : ""}
+                      </option>
+                    ))}
+                  </datalist>
                 </div>
 
                 <div className="grid grid-cols-2 gap-2">

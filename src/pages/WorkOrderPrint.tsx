@@ -5,10 +5,11 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { PageLoader } from "@/components/PageLoader";
 import { Printer, ArrowLeft, Download } from "lucide-react";
-import { formatDate } from "@/lib/format";
+import { formatDate, formatNumber, formatMoney } from "@/lib/format";
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
 import { toast } from "sonner";
+import { isWorkshopAssetCategory } from "@/lib/fleet-metadata";
 
 function formatWoNumber(year: number | null | undefined, n: number | null | undefined) {
   if (!n) return "—";
@@ -64,13 +65,47 @@ export default function WorkOrderPrint() {
       if (!id) return;
       const { data: wo } = await supabase.from("work_orders").select("*").eq("id", id).maybeSingle();
       if (!wo) { setLoading(false); return; }
-      const [{ data: machine }, { data: org }, { data: assignee }, { data: vendor }, { data: createdBy }] = await Promise.all([
-        supabase.from("machines").select("id,name,make,model,year,serial_number,registration_number,current_hours,category,plate_number,current_odometer_km,home_depot").eq("id", wo.machine_id).maybeSingle(),
+      const [
+        { data: machine },
+        { data: org },
+        { data: assignee },
+        { data: vendor },
+        { data: createdBy },
+        { data: mReqs },
+      ] = await Promise.all([
+        supabase
+          .from("machines")
+          .select("id,name,make,model,year,serial_number,registration_number,current_hours,category,plate_number,current_odometer_km,home_depot,notes")
+          .eq("id", wo.machine_id)
+          .maybeSingle(),
         supabase.from("organisations").select("id,name,logo_url").eq("id", wo.organisation_id).maybeSingle(),
         wo.assignee_id ? supabase.from("profiles").select("id,full_name").eq("id", wo.assignee_id).maybeSingle() : Promise.resolve({ data: null }),
         wo.vendor_id ? supabase.from("vendors").select("id,name,phone,email,category").eq("id", wo.vendor_id).maybeSingle() : Promise.resolve({ data: null }),
         wo.created_by ? supabase.from("profiles").select("id,full_name").eq("id", wo.created_by).maybeSingle() : Promise.resolve({ data: null }),
+        (supabase as any)
+          .from("material_requests")
+          .select("id, status, material_request_items(id, quantity_issued, quantity_requested, inventory_items(name, part_number, unit, unit_cost))")
+          .eq("work_order_id", wo.id),
       ]);
+
+      const parts: any[] = [];
+      (mReqs ?? []).forEach((mr: any) => {
+        (mr.material_request_items ?? []).forEach((it: any) => {
+          if (it.inventory_items) {
+            const qty = Number(it.quantity_issued > 0 ? it.quantity_issued : it.quantity_requested) || 0;
+            const cost = Number(it.inventory_items.unit_cost || 0);
+            parts.push({
+              name: it.inventory_items.name,
+              part_number: it.inventory_items.part_number,
+              quantity: qty,
+              unit: it.inventory_items.unit,
+              unit_cost: cost,
+              total: qty * cost,
+            });
+          }
+        });
+      });
+
       let driver: { full_name: string } | null = null;
       if (machine?.category === "Vehicle") {
         const { data: trip } = await supabase
@@ -86,7 +121,7 @@ export default function WorkOrderPrint() {
           driver = dr;
         }
       }
-      setData({ wo, machine, org, assignee, vendor, createdBy, driver });
+      setData({ wo, machine, org, assignee, vendor, createdBy, driver, parts });
       setLoading(false);
     })();
   }, [id]);
@@ -102,9 +137,11 @@ export default function WorkOrderPrint() {
     );
   }
 
-  const { wo, machine, org, assignee, vendor, createdBy, driver } = data;
+  const { wo, machine, org, assignee, vendor, createdBy, driver, parts } = data;
   const priorityLabel = wo.priority?.toUpperCase();
   const isVehicle = machine?.category === "Vehicle";
+  const isWorkshopAsset = isWorkshopAssetCategory(machine?.category, machine?.notes);
+  const isVehicleOrAsset = isVehicle || isWorkshopAsset || machine?.category === "Trailer";
 
   return (
     <div className="min-h-screen bg-muted/40 print:bg-white">
@@ -114,7 +151,7 @@ export default function WorkOrderPrint() {
           <ArrowLeft className="h-4 w-4" /> Back
         </Link>
         <div className="flex items-center gap-2">
-          {isVehicle && (
+          {isVehicleOrAsset && (
             <Button
               variant="ghost"
               onClick={() => setSearchParams(isJobCard ? {} : { view: "jobcard" })}
@@ -163,15 +200,22 @@ export default function WorkOrderPrint() {
 
         {/* Parties grid */}
         <div className="mt-5 grid grid-cols-2 gap-4">
-          <Box title={isVehicle ? "Vehicle" : "Machine"}>
+          <Box title={isVehicle ? "Vehicle" : isWorkshopAsset ? "Plant & Equipment" : "Machine"}>
             <div className="font-semibold">{machine?.name ?? "—"}</div>
             <div className="text-xs text-slate-600">{[machine?.make, machine?.model, machine?.year].filter(Boolean).join(" · ")}</div>
             {isVehicle ? (
               <>
                 {machine?.plate_number && <Row label="Plate" value={machine.plate_number} />}
-                {machine?.current_odometer_km != null && <Row label="Odometer" value={`${machine.current_odometer_km} km`} />}
+                {machine?.current_odometer_km != null && <Row label="Odometer" value={`${formatNumber(machine.current_odometer_km)} km`} />}
                 {machine?.home_depot && <Row label="Depot" value={machine.home_depot} />}
                 {driver?.full_name && <Row label="Driver" value={driver.full_name} />}
+              </>
+            ) : isWorkshopAsset ? (
+              <>
+                {machine?.serial_number && <Row label="Serial No" value={machine.serial_number} />}
+                {machine?.category && <Row label="Asset Type" value={machine.category} />}
+                {machine?.current_hours != null && <Row label="Operating Hours" value={`${formatNumber(machine.current_hours)} hrs`} />}
+                {machine?.home_depot && <Row label="Plant Bay" value={machine.home_depot} />}
               </>
             ) : (
               <>
@@ -246,15 +290,38 @@ export default function WorkOrderPrint() {
               </tr>
             </thead>
             <tbody>
-              {[0,1,2,3,4].map((i) => (
-                <tr key={i}>
-                  <td className="border border-slate-300 px-2 py-2">&nbsp;</td>
-                  <td className="border border-slate-300 px-2 py-2"></td>
-                  <td className="border border-slate-300 px-2 py-2"></td>
-                  <td className="border border-slate-300 px-2 py-2"></td>
-                  <td className="border border-slate-300 px-2 py-2"></td>
-                </tr>
-              ))}
+              {parts && parts.length > 0 ? (
+                <>
+                  {parts.map((p: any, idx: number) => (
+                    <tr key={idx}>
+                      <td className="border border-slate-300 px-2 py-1.5 font-medium">{p.name}</td>
+                      <td className="border border-slate-300 px-2 py-1.5 text-slate-600 font-mono">{p.part_number || "—"}</td>
+                      <td className="border border-slate-300 px-2 py-1.5 text-right font-mono">{formatNumber(p.quantity)} {p.unit || ""}</td>
+                      <td className="border border-slate-300 px-2 py-1.5 text-right font-mono">{p.unit_cost ? formatMoney(p.unit_cost) : "—"}</td>
+                      <td className="border border-slate-300 px-2 py-1.5 text-right font-mono font-semibold">{p.total ? formatMoney(p.total) : "—"}</td>
+                    </tr>
+                  ))}
+                  {Array.from({ length: Math.max(0, 3 - parts.length) }).map((_, i) => (
+                    <tr key={`pad-${i}`}>
+                      <td className="border border-slate-300 px-2 py-2 text-slate-300">&nbsp;</td>
+                      <td className="border border-slate-300 px-2 py-2"></td>
+                      <td className="border border-slate-300 px-2 py-2"></td>
+                      <td className="border border-slate-300 px-2 py-2"></td>
+                      <td className="border border-slate-300 px-2 py-2"></td>
+                    </tr>
+                  ))}
+                </>
+              ) : (
+                [0, 1, 2, 3].map((i) => (
+                  <tr key={i}>
+                    <td className="border border-slate-300 px-2 py-2 text-slate-300">&nbsp;</td>
+                    <td className="border border-slate-300 px-2 py-2"></td>
+                    <td className="border border-slate-300 px-2 py-2"></td>
+                    <td className="border border-slate-300 px-2 py-2"></td>
+                    <td className="border border-slate-300 px-2 py-2"></td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </section>

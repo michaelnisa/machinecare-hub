@@ -253,7 +253,9 @@ export default function PMSchedules() {
     const title = `PM: ${s.name} · ${s.machines?.plate_number || s.machines?.name}`;
     const desc = s._odoStatus
       ? `Automated PM work order triggered by live odometer.\nCurrent: ${s._odoStatus.currentOdo.toLocaleString()} km (Target: ${s._odoStatus.nextDueOdo.toLocaleString()} km).\n${s.instructions || ""}`
-      : `Scheduled ${s.service_type} service${s.next_due_date ? ` (due ${s.next_due_date})` : ""}.`;
+      : s.next_due_hours
+      ? `Automated PM work order triggered by runtime hours meter.\nCurrent: ${s.machines?.current_hours != null ? s.machines.current_hours.toLocaleString() : "—"} hrs (Target: ${s.next_due_hours.toLocaleString()} hrs).\nScheduled ${s.service_type} service${s.next_due_date ? ` (due ${s.next_due_date})` : ""}.\n${s.instructions || ""}`
+      : `Scheduled ${s.service_type} service${s.next_due_date ? ` (due ${s.next_due_date})` : ""}.\n${s.instructions || ""}`;
 
     const { error } = await supabase.from("work_orders").insert({
       organisation_id: profile.organisation_id,
