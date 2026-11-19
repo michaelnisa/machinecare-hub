@@ -4,6 +4,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useIndustry } from "@/hooks/useIndustry";
 import { useUserRole } from "@/hooks/useUserRole";
 import { isPlatformAdmin } from "@/lib/admin";
+import { isEnterpriseFleet } from "@/lib/fleetTiers";
 import { isLogistixwareAccount } from "@/services/customerService";
 import {
   LayoutDashboard,
@@ -414,6 +415,104 @@ export function Sidebar() {
     [t, isAdmin, inventoryNavGroup, fleetFinanceNavGroup, isLogistix],
   );
 
+  // Enterprise Fleet 6-Department Architecture (Mega Beverages Blueprint)
+  const enterpriseFleetGroups: NavGroup[] = useMemo(
+    () => [
+      {
+        id: "dept-fleet-ops",
+        label: "Fleet Operations",
+        items: [
+          { to: "/dashboard", label: "Fleet Cockpit", icon: LayoutDashboard },
+          { to: "/fleet/vehicles", label: "Fleet Registry", icon: Truck },
+          { to: "/fleet/live-map", label: "Live Telematics & GPS", icon: MapPin },
+          { to: "/fleet/drivers", label: "Driver Management", icon: Contact },
+          { to: "/fleet/trips", label: "Trips & Dispatch", icon: Route },
+          { to: "/fuel", label: "Fuel & Bowser Logs", icon: Fuel },
+          { to: "/fleet/inspections", label: "Pre-Trip Inspections", icon: CheckCircle2 },
+          { to: "/fleet/documents", label: "Fleet Compliance & Docs", icon: FileText },
+        ],
+      },
+      {
+        id: "dept-workshop",
+        label: "Workshop Department",
+        items: [
+          { to: "/fleet/workshop", label: "Workshop Cockpit", icon: Wrench },
+          { to: "/work-orders", label: "Job Cards & Repairs", icon: ClipboardList },
+          { to: "/maintenance/schedules", label: "Preventive Schedules", icon: ClipboardCheck },
+          { to: "/maintenance/calendar", label: "Maintenance Calendar", icon: Calendar },
+          { to: "/fault-reports", label: "Defects & Fault Reports", icon: AlertTriangle },
+          { to: "/fleet/tyres", label: "Tyre & Axle Matrix", icon: CircleDot },
+          { to: "/fleet/vehicles?tab=plant", label: "Plant & Auxiliary Assets", icon: Factory },
+          { to: "/fleet/technicians", label: "Technicians & Rosters", icon: UserCog },
+          { to: "/checklist-templates", label: "Inspection Checklists", icon: ClipboardCheck },
+        ],
+      },
+      {
+        id: "dept-stores",
+        label: "Stores & Spares",
+        items: [
+          { to: "/inventory", label: "Stores Overview", icon: Warehouse },
+          { to: "/inventory/items", label: "Spare Parts Catalog", icon: Boxes },
+          { to: "/inventory/stock", label: "Stock Levels & Bins", icon: Package },
+          { to: "/inventory/requests", label: "Material Issue Slips", icon: ClipboardList },
+          { to: "/inventory/locations", label: "Depot Warehouses", icon: MapPin },
+          { to: "/inventory/reorder", label: "Min/Max Replenishment", icon: TrendingUp },
+          { to: "/inventory/stock-counts", label: "Physical Stock Audits", icon: ClipboardCheck },
+          { to: "/inventory/history", label: "Stock Movement Ledger", icon: History },
+        ],
+      },
+      {
+        id: "dept-procurement",
+        label: "Procurement Department",
+        items: [
+          { to: "/fleet/procurement", label: "Procurement Cockpit", icon: ShoppingCart },
+          { to: "/inventory/purchase-requests", label: "Purchase Requisitions", icon: FileText },
+          { to: "/inventory/purchase-orders", label: "Purchase Orders (POs)", icon: ClipboardList },
+          { to: "/fleet/approvals", label: "Multi-Stage Approvals", icon: ShieldCheck },
+          { to: "/inventory/suppliers", label: "Supplier Directory", icon: Building2 },
+          { to: "/vendors", label: "Vendor SLA & Ratings", icon: Target },
+        ],
+      },
+      {
+        id: "dept-finance",
+        label: "Finance & Accounts",
+        items: [
+          { to: "/finance", label: "Financial Cockpit", icon: LayoutDashboard },
+          { to: "/finance/expenses", label: "Expense Vouchers", icon: Receipt },
+          { to: "/finance/fuel", label: "Fuel Reconciliation", icon: Fuel },
+          { to: "/finance/vehicle-profitability", label: "Chassis Profit & Loss", icon: TrendingUp },
+          { to: "/finance/budgeting", label: "Fleet & Depots Budget", icon: PiggyBank },
+          { to: "/finance/suppliers", label: "Supplier AP & Bills", icon: Building2 },
+          { to: "/finance/invoices", label: "Customer Billing & AR", icon: FileText },
+          { to: "/finance/reports", label: "Cost & Audit Statements", icon: BarChart3 },
+        ],
+      },
+      {
+        id: "dept-management",
+        label: "Management & Approvals",
+        items: [
+          { to: "/dashboard", label: "Executive Cockpit", icon: LayoutDashboard },
+          { to: "/fleet/approvals", label: "Executive Approvals", icon: ShieldCheck },
+          { to: "/fleet/reports", label: "Executive Reporting Center", icon: FileBarChart },
+          { to: "/fleet/insights", label: "KPIs & Telematics Trends", icon: Gauge },
+          { to: "/live", label: "Depot Command Live TV", icon: Tv },
+        ],
+      },
+      {
+        id: "system",
+        label: "System & Governance",
+        items: [
+          ...(isAdmin ? [{ to: "/blog/manage", label: "Daily Blog", icon: BookOpen }] : []),
+          { to: "/team", label: "Staff & User Roles", icon: Users },
+          { to: "/integrations", label: "Integrations & APIs", icon: Layers },
+          { to: "/settings", label: "System Settings", icon: Settings },
+          ...(isAdmin ? [{ to: "/admin", label: "Admin Portal", icon: ShieldAlert }] : []),
+        ],
+      },
+    ],
+    [isAdmin],
+  );
+
   // Workshop/Garage nav — a fully separate product experience from
   // Industrial and Fleet (garage_workshop.md section 5), not a relabelled
   // subset. Pages not yet built (later phases) route to a shared
@@ -649,8 +748,12 @@ export function Sidebar() {
     ) {
       return gpsTrackingGroups;
     }
+
+    const isEnterprise = isEnterpriseFleet(organisation);
+    const activeFleetGroups = isEnterprise ? enterpriseFleetGroups : fleetGroups;
+
     if (organisation?.industry_profile === "fleet_logistics" || isFleet) {
-      return fleetGroups;
+      return activeFleetGroups;
     }
     if (organisation?.industry_profile === "garage" || isGarage) {
       return garageGroups;
@@ -681,7 +784,7 @@ export function Sidebar() {
         !enabledMods.includes("production") &&
         !enabledMods.includes("maintenance")
       ) {
-        return fleetGroups;
+        return activeFleetGroups;
       }
 
       // 3.5 Standalone GPS Tracking & Telematics Suite
@@ -853,22 +956,23 @@ export function Sidebar() {
     return isMixed
       ? [
           ...manufacturingGroups.filter((g) => g.id !== "system"),
-          ...fleetGroups.filter((g) => g.id !== "system"),
+          ...activeFleetGroups.filter((g) => g.id !== "system"),
           ...garageGroups,
         ]
       : isFleet
-      ? fleetGroups
+      ? activeFleetGroups
       : isGarage
       ? garageGroups
       : manufacturingGroups;
   }, [
     isSafetyDept,
-    organisation?.enabled_modules,
+    organisation,
     isMixed,
     isFleet,
     isGarage,
     manufacturingGroups,
     fleetGroups,
+    enterpriseFleetGroups,
     garageGroups,
     safetyDeptGroups,
     iotGroups,
@@ -940,6 +1044,14 @@ export function Sidebar() {
                 return <div className="text-[11px] font-semibold uppercase tracking-wider text-sky-500 truncate">GPS Tracking</div>;
               }
               if (isFleet || organisation?.industry_profile === "fleet_logistics") {
+                if (isEnterpriseFleet(organisation)) {
+                  return (
+                    <div className="flex items-center gap-1.5 truncate">
+                      <span className="text-[11px] font-semibold uppercase tracking-wider text-primary truncate">Fleet & Logistics</span>
+                      <span className="inline-flex items-center rounded px-1 py-0.2 text-[9px] font-bold uppercase tracking-wider bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30">Enterprise</span>
+                    </div>
+                  );
+                }
                 return <div className="text-[11px] font-semibold uppercase tracking-wider text-primary truncate">Fleet & Logistics</div>;
               }
               if (isGarage || organisation?.industry_profile === "garage") {
