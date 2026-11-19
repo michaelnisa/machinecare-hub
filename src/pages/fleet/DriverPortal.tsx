@@ -55,6 +55,7 @@ import {
   type ActiveDriverSession,
 } from "@/components/fleet/DriverSignInModal";
 import { QuickFuelDialog } from "@/components/QuickFuelDialog";
+import { DriverComplaintModal } from "@/components/fleet/DriverComplaintModal";
 import {
   SAFE_MACHINE_COLUMNS,
   SAFE_DRIVER_COLUMNS,
@@ -88,6 +89,7 @@ export default function DriverPortal() {
   const [fuelDialogOpen, setFuelDialogOpen] = useState(false);
   const [expenseDialogOpen, setExpenseDialogOpen] = useState(false);
   const [expenseDialogType, setExpenseDialogType] = useState<"receipt" | "fine">("receipt");
+  const [complaintDialogOpen, setComplaintDialogOpen] = useState(false);
 
   // Inline login form state for unauthenticated drivers
   const [inlinePhone, setInlinePhone] = useState("");
@@ -976,23 +978,57 @@ export default function DriverPortal() {
                       <span className="text-[10px] text-muted-foreground">Walkaround checklist</span>
                     </Button>
                   )}
+                  {/* Slide 10: Driver Complaints & Breakdown Action */}
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="col-span-2 h-14 flex items-center justify-between p-3 border-rose-500/30 bg-rose-500/5 hover:bg-rose-500/10 text-rose-700 dark:text-rose-400"
+                    onClick={() => setComplaintDialogOpen(true)}
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <div className="p-1.5 rounded-lg bg-rose-500/10">
+                        <AlertOctagon className="h-5 w-5 text-rose-600 dark:text-rose-400" />
+                      </div>
+                      <div className="text-left">
+                        <span className="font-bold text-xs block text-foreground">
+                          {isSwahili ? "Ripoti Hitilafu au Uharibifu (Breakdown)" : "Report Breakdown / Vehicle Defect"}
+                        </span>
+                        <span className="text-[10px] text-muted-foreground">
+                          {isSwahili ? "Slide 10: Tuma taarifa ya ufundi na picha mara moja" : "Slide 10: Defects, abnormal conditions & breakdown rescue"}
+                        </span>
+                      </div>
+                    </div>
+                    <ArrowRight className="h-4 w-4 text-muted-foreground" />
+                  </Button>
                 </div>
               </div>
             ) : (
-              <div className="p-4 rounded-xl bg-muted/30 text-center space-y-2">
+              <div className="p-4 rounded-xl bg-muted/30 text-center space-y-3">
                 <p className="text-xs text-muted-foreground">{t.noTrip}</p>
-                {assignedVehicle && (
+                <div className="flex flex-wrap items-center justify-center gap-2">
+                  {assignedVehicle && (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="gap-1.5 text-xs"
+                      onClick={() => navigate(`/m/${assignedVehicle.id}`)}
+                    >
+                      <Truck className="h-3.5 w-3.5 text-primary" />
+                      <span>{t.scanQr}</span>
+                    </Button>
+                  )}
                   <Button
                     type="button"
                     size="sm"
                     variant="outline"
-                    className="gap-1.5 text-xs"
-                    onClick={() => navigate(`/m/${assignedVehicle.id}`)}
+                    className="gap-1.5 text-xs border-rose-500/30 text-rose-700 dark:text-rose-400 bg-rose-500/5 hover:bg-rose-500/10"
+                    onClick={() => setComplaintDialogOpen(true)}
                   >
-                    <Truck className="h-3.5 w-3.5 text-primary" />
-                    <span>{t.scanQr}</span>
+                    <AlertOctagon className="h-3.5 w-3.5 text-rose-600" />
+                    <span>{isSwahili ? "Ripoti Hitilafu" : "Report Breakdown / Defect"}</span>
                   </Button>
-                )}
+                </div>
               </div>
             )}
           </div>
@@ -1035,6 +1071,19 @@ export default function DriverPortal() {
           setActiveDriver(session);
         }}
         lang={lang as any}
+      />
+
+      {/* Slide 10: Driver Complaint & Breakdown Modal */}
+      <DriverComplaintModal
+        open={complaintDialogOpen}
+        onOpenChange={setComplaintDialogOpen}
+        vehicles={assignedVehicle ? [{ id: assignedVehicle.id, name: assignedVehicle.name, plate_number: assignedVehicle.plate_number }] : []}
+        defaultVehicleId={assignedVehicle?.id}
+        defaultReporterName={activeDriver?.name || activeDriver?.full_name || ""}
+        defaultReporterPhone={activeDriver?.phone_number || ""}
+        onCreated={() => {
+          toast.success(isSwahili ? "Taarifa ya hitilafu imetumwa kwa karakana" : "Complaint & breakdown report dispatched to workshop");
+        }}
       />
 
       {/* Fuel Log Dialog */}

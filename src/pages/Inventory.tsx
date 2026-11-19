@@ -27,12 +27,14 @@ import {
   FileSpreadsheet,
   Download,
   Camera,
+  Zap,
 } from "lucide-react";
 import { toast } from "sonner";
 import { formatMoney, formatNumber } from "@/lib/format";
 import { setItemStockCount, exportInventoryToExcel } from "@/lib/stock-helpers";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { BulkImporterModal } from "@/components/BulkImporterModal";
+import { SmartPartsFinderModal } from "@/components/fleet/SmartPartsFinderModal";
 import { CoverImage } from "@/components/CoverImage";
 
 const CATEGORIES = [
@@ -84,6 +86,7 @@ export default function Inventory() {
   const [confirm, setConfirm] = useState<string | null>(null);
   const [machinesFor, setMachinesFor] = useState<any>(null);
   const [importOpen, setImportOpen] = useState(false);
+  const [smartPartsOpen, setSmartPartsOpen] = useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -168,6 +171,14 @@ export default function Inventory() {
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          <Button
+            variant="outline"
+            className="border-amber-500/30 bg-amber-500/5 hover:bg-amber-500/10 text-amber-700 dark:text-amber-400 font-semibold text-xs"
+            onClick={() => setSmartPartsOpen(true)}
+            title="Identify compatible spare parts by vehicle model (Slide 14)"
+          >
+            <Zap className="mr-1.5 h-3.5 w-3.5 text-amber-500" /> Smart Parts Finder (Slide 14)
+          </Button>
           <Button
             variant="outline"
             onClick={() => exportInventoryToExcel(filtered, available, "workshop_inventory.xlsx")}
@@ -400,6 +411,10 @@ export default function Inventory() {
         open={importOpen}
         onOpenChange={setImportOpen}
         onImported={load}
+      />
+      <SmartPartsFinderModal
+        open={smartPartsOpen}
+        onOpenChange={setSmartPartsOpen}
       />
     </div>
   );
