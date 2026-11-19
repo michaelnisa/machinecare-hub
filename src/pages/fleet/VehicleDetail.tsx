@@ -39,6 +39,15 @@ import { computeOdoPmStatus, recordCompletedPmService } from "@/services/fleetPm
 import { TireAxleMatrix } from "@/components/fleet/TireAxleMatrix";
 import { getPartsIssuanceHistory, type PartIssuanceRecord } from "@/services/smartPartsService";
 import { getFleetApprovalRequests, type FleetApprovalRequest } from "@/services/fleetApprovalService";
+import { DriverComplaintModal } from "@/components/fleet/DriverComplaintModal";
+import { SmartPartsFinderModal } from "@/components/fleet/SmartPartsFinderModal";
+import {
+  getDriverComplaints,
+  detectRecurringFailures,
+  convertComplaintToWorkOrder,
+  type DriverComplaintRecord,
+  type RecurringFailureAlert,
+} from "@/services/complaintsService";
 import {
   Truck,
   Container,
@@ -78,6 +87,10 @@ import {
   Boxes,
   Factory,
   Cog,
+  ArrowRight,
+  Video,
+  FileCheck,
+  Sparkles,
 } from "lucide-react";
 
 type Trip = {
@@ -145,7 +158,7 @@ type VehicleDoc = {
 export default function FleetVehicleDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { profile, organisation } = useAuth();
+  const { profile, organisation, user } = useAuth();
   const { canWrite, isManager } = useUserRole();
 
   const [loading, setLoading] = useState(true);
@@ -174,6 +187,10 @@ export default function FleetVehicleDetail() {
   const [vendors, setVendors] = useState<Array<{ id: string; name: string; specialization?: string | null }>>([]);
   const [sparesHistory, setSparesHistory] = useState<PartIssuanceRecord[]>([]);
   const [vehicleApprovals, setVehicleApprovals] = useState<FleetApprovalRequest[]>([]);
+  const [complaints, setComplaints] = useState<DriverComplaintRecord[]>([]);
+  const [complaintModalOpen, setComplaintModalOpen] = useState(false);
+  const [smartPartsModalOpen, setSmartPartsModalOpen] = useState(false);
+  const [convertingComplaintId, setConvertingComplaintId] = useState<string | null>(null);
   const [editOpen, setEditOpen] = useState(false);
   const [qrOpen, setQrOpen] = useState(false);
 
@@ -284,13 +301,14 @@ export default function FleetVehicleDetail() {
       setOdoValue(parsedVehicle.current_odometer_km != null ? String(parsedVehicle.current_odometer_km) : "");
       setHoursValue(parsedVehicle.current_hours != null ? String(parsedVehicle.current_hours) : "");
 
-      // Cross-Department Sync: Load Stores Spares Issuance & Financial Approvals
+      // Cross-Department Sync: Load Stores Spares Issuance, Financial Approvals & Complaints
       const orgId = organisation?.id || profile?.organisation_id || "";
       if (orgId) {
         try {
-          const [spares, appReqs] = await Promise.all([
+          const [spares, appReqs, compList] = await Promise.all([
             getPartsIssuanceHistory(orgId, parsedVehicle.plate_number || parsedVehicle.name),
             getFleetApprovalRequests(orgId),
+            getDriverComplaints(orgId, targetMachineId),
           ]);
           setSparesHistory(spares);
           setVehicleApprovals(
@@ -298,6 +316,13 @@ export default function FleetVehicleDetail() {
               (a) =>
                 a.vehicle_id === targetMachineId ||
                 (parsedVehicle.plate_number && a.vehicle_plate && a.vehicle_plate.toLowerCase() === parsedVehicle.plate_number.toLowerCase())
+            )
+          );
+          setComplaints(
+            (compList || []).filter(
+              (c) =>
+                c.machine_id === targetMachineId ||
+                (parsedVehicle.plate_number && c.vehicle_plate && c.vehicle_plate.toLowerCase() === parsedVehicle.plate_number.toLowerCase())
             )
           );
         } catch (_err) {
@@ -354,6 +379,104 @@ export default function FleetVehicleDetail() {
       isSoon: days >= 0 && days <= 30,
     };
   }, [documents]);
+
+  // Slide 11: Recurring Component Failures Radar (>= 2 incidents on same subsystem within 90 days)
+  const vehicleRecurringAlerts = useMemo(() => {
+    if (!complaints.length && !workOrders.length) return [];
+    const allAlerts = detectRecurringFailures(complaints, workOrders);
+    return allAlerts.filter(
+      (a) =>
+        a.machine_id === vehicle?.id ||
+        (vehicle?.plate_number && a.vehicle_plate && a.vehicle_plate.toLowerCase() === vehicle.plate_number.toLowerCase())
+    );
+  }, [complaints, workOrders, vehicle]);
+
+  // Slide 20: Asset & Vehicle OEM Warranty Status Radar
+  const vehicleWarranty = useMemo(() => {
+    if (!vehicle) return null;
+    const warrantyRegistry = [
+      {
+        unit: "T 412 DFB",
+        name: "Scania R500 Prime Mover",
+        category: "Road Commercial Tractor",
+        provider: "Scania Tanzania Ltd (Vingunguti)",
+        startDate: "2024-11-20",
+        expiryDate: "2026-11-20",
+        coverage: "Drivetrain, Engine Block & Opticruise Transmission",
+      },
+      {
+        unit: "T 884 DHE",
+        name: "Sinotruk Howo 371 6x4 Tipper",
+        category: "Road Commercial Hauler",
+        provider: "Sinotruk Authorized Tanzania Depot",
+        startDate: "2025-06-15",
+        expiryDate: "2027-06-15",
+        coverage: "Chassis Frame, Axles & WD615 Engine",
+      },
+      {
+        unit: "GEN-01",
+        name: "Cummins 500kVA Standby Generator",
+        category: "Workshop Plant (Slide 19)",
+        provider: "Cummins Tanzania Ltd",
+        startDate: "2024-03-01",
+        expiryDate: "2026-03-01",
+        coverage: "Alternator, ECM & Fuel Injection Pump",
+      },
+      {
+        unit: "COMP-02",
+        name: "Atlas Copco GA-75 Air Compressor",
+        category: "Workshop Plant (Slide 19)",
+        provider: "Atlas Copco Eastern Africa",
+        startDate: "2024-08-10",
+        expiryDate: "2026-08-10",
+        coverage: "Air End Screw Element & Cooler Pack",
+      },
+      {
+        unit: "FL-03",
+        name: "Toyota 3.0T Diesel Forklift",
+        category: "Warehouse Logistics Plant",
+        provider: "Toyota Industrial Equipment East Africa",
+        startDate: "2025-01-10",
+        expiryDate: "2027-01-10",
+        coverage: "Hydraulic Mast, Drive Axle & Transmission",
+      },
+    ];
+
+    const match = warrantyRegistry.find(
+      (w) =>
+        (vehicle.plate_number && w.unit.toLowerCase() === vehicle.plate_number.toLowerCase()) ||
+        (vehicle.vehicle_code && w.unit.toLowerCase() === vehicle.vehicle_code.toLowerCase()) ||
+        (vehicle.name && w.name.toLowerCase().includes(vehicle.name.toLowerCase()))
+    );
+
+    if (match) {
+      const now = new Date();
+      const expiry = new Date(match.expiryDate);
+      const daysLeft = Math.ceil((expiry.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+      return {
+        ...match,
+        daysRemaining: daysLeft,
+        status: daysLeft < 0 ? "expired" : daysLeft <= 30 ? "expiring_soon" : "active",
+      };
+    }
+    return null;
+  }, [vehicle]);
+
+  const handleConvertComplaint = async (c: DriverComplaintRecord) => {
+    const orgId = organisation?.id || profile?.organisation_id || "";
+    if (!orgId) return;
+    setConvertingComplaintId(c.id);
+    try {
+      const res = await convertComplaintToWorkOrder(orgId, c.id, user?.id);
+      toast.success(`Digital Job Card #${res.woNumber} raised for ${c.vehicle_plate}!`);
+      await load();
+      navigate(`/work-orders/${res.workOrderId}`);
+    } catch (err: any) {
+      toast.error(err.message || "Failed to raise job card");
+    } finally {
+      setConvertingComplaintId(null);
+    }
+  };
 
   const saveOdometer = async () => {
     if (!vehicle || !profile) return;
@@ -959,6 +1082,9 @@ export default function FleetVehicleDetail() {
           )}
           <TabsTrigger value="maintenance" className="gap-1.5">
             <Wrench className="h-3.5 w-3.5" /> Maintenance & PM ({schedules.length})
+          </TabsTrigger>
+          <TabsTrigger value="complaints" className="gap-1.5">
+            <AlertTriangle className="h-3.5 w-3.5 text-amber-500" /> Complaints & Defect Radar ({complaints.length})
           </TabsTrigger>
           <TabsTrigger value="documents" className="gap-1.5">
             <Shield className="h-3.5 w-3.5" /> {isWsAsset ? "Certificates & Docs" : "Documents"} ({documents.length})
@@ -1908,6 +2034,395 @@ export default function FleetVehicleDetail() {
             )}
           </div>
         </TabsContent>
+
+        {/* Tab 6: Complaints & Defect Radar (Mega Beverages Slides 10, 11, 14 & 20) */}
+        <TabsContent value="complaints" className="space-y-4">
+          {/* Header Action Banner */}
+          <div className="rounded-2xl border border-border bg-card p-5 shadow-2xs">
+            <div className="flex flex-wrap items-center justify-between gap-3 pb-4 border-b border-border">
+              <div>
+                <h3 className="text-base font-semibold text-foreground flex items-center gap-2">
+                  <AlertTriangle className="h-4 w-4 text-amber-500" /> Driver Complaints, Defect Radar & Spares Compatibility
+                </h3>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Mega Beverages Slides 10, 11, 14 & 20: Defect reporting, 11-subsystem failure detection, stores compatibility, and warranty protection.
+                </p>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setSmartPartsModalOpen(true)}
+                  className="gap-1.5 border-primary/30 text-primary hover:bg-primary/5 text-xs font-semibold"
+                >
+                  <Zap className="h-3.5 w-3.5 text-amber-500 fill-amber-500" /> Compatible Spare Parts (Slide 14)
+                </Button>
+                {canWrite && (
+                  <Button
+                    size="sm"
+                    onClick={() => setComplaintModalOpen(true)}
+                    className="gap-1.5 text-xs font-semibold shadow-2xs"
+                  >
+                    <Plus className="h-3.5 w-3.5" /> Report Defect / Breakdown (Slide 10)
+                  </Button>
+                )}
+              </div>
+            </div>
+
+            {/* Slide 11: Recurring Component Failures Radar */}
+            <div className="mt-4 space-y-3">
+              {vehicleRecurringAlerts.length > 0 ? (
+                <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-4 space-y-3">
+                  <div className="flex items-center gap-2">
+                    <AlertTriangle className="h-4 w-4 text-destructive shrink-0 animate-bounce" />
+                    <div>
+                      <h4 className="text-xs font-bold text-destructive">
+                        Slide 11: Recurring Component Failures Detected ({vehicleRecurringAlerts.length})
+                      </h4>
+                      <p className="text-[11px] text-muted-foreground">
+                        Identifies chronic breakdown trends (≥2 incidents on identical subsystem within 90 days).
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
+                    {vehicleRecurringAlerts.map((alert, idx) => (
+                      <div
+                        key={idx}
+                        className="p-3.5 rounded-lg border border-destructive/20 bg-card shadow-2xs space-y-2"
+                      >
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold text-destructive px-2 py-0.5 rounded bg-destructive/10 border border-destructive/20">
+                            {alert.subsystem}
+                          </span>
+                          <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded bg-red-100 text-red-800 dark:bg-red-950/60 dark:text-red-300">
+                            {alert.risk_level.toUpperCase()} RISK · {alert.incident_count} Incidents
+                          </span>
+                        </div>
+                        <p className="text-xs text-foreground font-medium">
+                          {alert.recommendation}
+                        </p>
+                        <div className="text-[10px] text-muted-foreground flex items-center justify-between pt-1 border-t border-border/60">
+                          <span>
+                            {formatDate(alert.first_incident_at)} → {formatDate(alert.last_incident_at)}
+                          </span>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-6 text-[11px] text-primary font-semibold gap-1 hover:bg-primary/10 px-2"
+                            asChild
+                          >
+                            <Link
+                              to={`/work-orders/new?machine=${vehicle.id}&subsystem=${encodeURIComponent(alert.subsystem)}&priority=urgent&reason=${encodeURIComponent(`Chronic ${alert.subsystem} repeat failure (${alert.incident_count}x in 90 days). ${alert.recommendation}`)}`}
+                            >
+                              Raise Priority WO <ArrowRight className="h-3 w-3" />
+                            </Link>
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-3.5 flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <CheckCircle2 className="h-5 w-5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                    <div>
+                      <div className="text-xs font-bold text-foreground">
+                        Slide 11: Normal Subsystem Health (Zero Repeat Failures)
+                      </div>
+                      <div className="text-[11px] text-muted-foreground">
+                        All 11 vehicle subsystems are operating within normal reliability thresholds with no repeat breakdowns in the last 90 days.
+                      </div>
+                    </div>
+                  </div>
+                  <span className="rounded bg-emerald-500/10 px-2.5 py-1 text-[11px] font-bold text-emerald-700 dark:text-emerald-300 border border-emerald-500/20">
+                    Reliability Optimal
+                  </span>
+                </div>
+              )}
+
+              {/* Slide 20: Asset & Vehicle OEM Warranty Status */}
+              {vehicleWarranty ? (
+                <div className="rounded-xl border border-border bg-card p-4 shadow-2xs space-y-2.5">
+                  <div className="flex items-center justify-between pb-2 border-b border-border/80">
+                    <div className="flex items-center gap-2">
+                      <ShieldCheck className="h-4 w-4 text-primary" />
+                      <h4 className="text-xs font-bold text-foreground">
+                        Slide 20: OEM Dealer Warranty Coverage
+                      </h4>
+                    </div>
+                    {vehicleWarranty.status === "expired" ? (
+                      <span className="rounded bg-destructive/10 px-2 py-0.5 text-[10px] font-bold text-destructive border border-destructive/20">
+                        Warranty Expired
+                      </span>
+                    ) : vehicleWarranty.status === "expiring_soon" ? (
+                      <span className="rounded bg-amber-500/10 px-2 py-0.5 text-[10px] font-bold text-amber-700 dark:text-amber-400 border border-amber-500/30 animate-pulse">
+                        Expiring Soon ({vehicleWarranty.daysRemaining}d remaining)
+                      </span>
+                    ) : (
+                      <span className="rounded bg-emerald-500/10 px-2 py-0.5 text-[10px] font-bold text-emerald-700 dark:text-emerald-400 border border-emerald-500/20">
+                        Active OEM Coverage ({vehicleWarranty.daysRemaining}d remaining)
+                      </span>
+                    )}
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 text-xs">
+                    <div className="p-2.5 rounded-lg border border-border/60 bg-muted/20">
+                      <div className="text-[10px] text-muted-foreground uppercase font-bold">OEM Provider</div>
+                      <div className="font-semibold text-foreground mt-0.5">{vehicleWarranty.provider}</div>
+                    </div>
+                    <div className="p-2.5 rounded-lg border border-border/60 bg-muted/20">
+                      <div className="text-[10px] text-muted-foreground uppercase font-bold">Covered Assemblies</div>
+                      <div className="font-semibold text-foreground mt-0.5">{vehicleWarranty.coverage}</div>
+                    </div>
+                    <div className="p-2.5 rounded-lg border border-border/60 bg-muted/20">
+                      <div className="text-[10px] text-muted-foreground uppercase font-bold">Coverage Period</div>
+                      <div className="font-semibold text-foreground mt-0.5">
+                        {formatDate(vehicleWarranty.startDate)} → {formatDate(vehicleWarranty.expiryDate)}
+                      </div>
+                    </div>
+                  </div>
+                  {vehicleWarranty.status === "expiring_soon" && (
+                    <div className="text-[11px] text-amber-800 dark:text-amber-300 bg-amber-500/10 border border-amber-500/20 p-2 rounded flex items-center gap-2">
+                      <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-600" />
+                      <span>
+                        <strong>Action Needed:</strong> Drivetrain coverage expires within 30 days. Report any engine or gearbox abnormalities for dealer claim before expiration.
+                      </span>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="rounded-xl border border-border/60 bg-muted/10 p-3 flex items-center justify-between text-xs">
+                  <div className="flex items-center gap-2 text-muted-foreground">
+                    <ShieldCheck className="h-4 w-4 text-primary" />
+                    <span>Slide 20: Standard OEM 24-Month / 200,000 km Commercial Policy. Verify dealer coverage before raising local store parts requests.</span>
+                  </div>
+                  <Button size="sm" variant="ghost" onClick={() => setDocModalOpen(true)} className="h-6 text-[11px] text-primary">
+                    + Attach Warranty Policy
+                  </Button>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Slide 10: Driver Complaints & Workshop Inspection Triage */}
+          <div className="rounded-2xl border border-border bg-card p-5 shadow-2xs space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-border">
+              <div>
+                <h4 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                  <FileText className="h-4 w-4 text-primary" /> Slide 10: Driver Complaints & Inspection Reports ({complaints.length})
+                </h4>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Workshop triage, root-cause defect analysis, recommendations, and evidence attachments
+                </p>
+              </div>
+
+              {canWrite && (
+                <Button size="sm" variant="outline" onClick={() => setComplaintModalOpen(true)} className="gap-1.5 text-xs">
+                  <Plus className="h-3.5 w-3.5" /> Log Complaint
+                </Button>
+              )}
+            </div>
+
+            {complaints.length === 0 ? (
+              <div className="text-center py-10 space-y-3">
+                <CheckCircle2 className="h-8 w-8 text-emerald-500 mx-auto" />
+                <p className="text-sm font-medium text-foreground">No Driver Complaints or Abnormal Defects Logged</p>
+                <p className="text-xs text-muted-foreground max-w-md mx-auto">
+                  Drivers and workshop inspectors can report abnormal noises, vibration, leaks, or breakdown corridor locations directly.
+                </p>
+                {canWrite && (
+                  <Button size="sm" onClick={() => setComplaintModalOpen(true)} className="mt-2">
+                    Report Defect / Condition
+                  </Button>
+                )}
+              </div>
+            ) : (
+              <div className="space-y-3.5">
+                {complaints.map((c) => (
+                  <div
+                    key={c.id}
+                    className="p-4 rounded-xl border border-border bg-card shadow-2xs space-y-3 hover:border-primary/40 transition-colors"
+                  >
+                    <div className="flex flex-wrap items-start justify-between gap-2">
+                      <div className="space-y-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span
+                            className={`rounded px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
+                              c.complaint_type === "breakdown_report"
+                                ? "bg-red-500/10 text-red-700 dark:text-red-400 border border-red-500/20"
+                                : c.complaint_type === "abnormal_condition"
+                                ? "bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/20"
+                                : "bg-blue-500/10 text-blue-700 dark:text-blue-400 border border-blue-500/20"
+                            }`}
+                          >
+                            {c.complaint_type.replace(/_/g, " ")}
+                          </span>
+
+                          <span className="rounded bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary border border-primary/20">
+                            {c.subsystem}
+                          </span>
+
+                          <span
+                            className={`rounded px-2 py-0.5 text-[10px] font-bold ${
+                              c.severity === "critical_breakdown"
+                                ? "bg-red-500/10 text-red-600"
+                                : c.severity === "major"
+                                ? "bg-amber-500/10 text-amber-600"
+                                : "bg-slate-500/10 text-slate-600"
+                            }`}
+                          >
+                            {c.severity.replace(/_/g, " ").toUpperCase()}
+                          </span>
+                        </div>
+
+                        <h5 className="text-sm font-semibold text-foreground pt-1">{c.title}</h5>
+                      </div>
+
+                      <div className="text-right">
+                        <span
+                          className={`rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
+                            c.status === "converted_to_wo"
+                              ? "bg-emerald-500/10 text-emerald-700 border border-emerald-500/20"
+                              : c.status === "under_inspection"
+                              ? "bg-blue-500/10 text-blue-700 border border-blue-500/20"
+                              : c.status === "dismissed"
+                              ? "bg-slate-500/10 text-slate-600"
+                              : "bg-amber-500/10 text-amber-700 border border-amber-500/20"
+                          }`}
+                        >
+                          {c.status.replace(/_/g, " ")}
+                        </span>
+                        <div className="text-[10px] text-muted-foreground mt-1">
+                          {formatDate(c.created_at)}
+                        </div>
+                      </div>
+                    </div>
+
+                    <p className="text-xs text-muted-foreground leading-relaxed">
+                      {c.description}
+                    </p>
+
+                    {/* Symptoms Tags */}
+                    {c.abnormal_symptoms && c.abnormal_symptoms.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5 pt-1">
+                        {c.abnormal_symptoms.map((symptom, sIdx) => (
+                          <span
+                            key={sIdx}
+                            className="rounded-md bg-muted px-2 py-0.5 text-[10px] text-foreground font-medium border border-border/80"
+                          >
+                            ⚠️ {symptom}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Location & Reporter Info */}
+                    <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-muted-foreground pt-2 border-t border-border/50">
+                      <div className="flex flex-wrap items-center gap-3">
+                        {c.gps_location && (
+                          <span className="flex items-center gap-1 font-mono">
+                            <Navigation className="h-3 w-3 text-primary" /> {c.gps_location}
+                          </span>
+                        )}
+                        {c.odometer_km != null && (
+                          <span className="flex items-center gap-1 font-mono">
+                            <Gauge className="h-3 w-3 text-primary" /> {c.odometer_km.toLocaleString()} km
+                          </span>
+                        )}
+                        <span className="flex items-center gap-1">
+                          <User className="h-3 w-3" /> {c.reporter_name} ({c.reporter_type.replace(/_/g, " ")}) · {c.reporter_phone}
+                        </span>
+                      </div>
+
+                      {/* Attachments pills */}
+                      {c.attachments && c.attachments.length > 0 && (
+                        <div className="flex items-center gap-1.5">
+                          {c.attachments.map((att, aIdx) => (
+                            <span
+                              key={aIdx}
+                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-muted text-[10px] text-foreground border border-border"
+                              title={att.name}
+                            >
+                              {att.file_type === "photo" ? (
+                                <FileText className="h-2.5 w-2.5 text-blue-500" />
+                              ) : att.file_type === "video" ? (
+                                <Video className="h-2.5 w-2.5 text-purple-500" />
+                              ) : (
+                                <FileCheck className="h-2.5 w-2.5 text-emerald-500" />
+                              )}
+                              <span className="truncate max-w-[90px]">{att.name}</span>
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Workshop Findings Section */}
+                    {c.findings && (
+                      <div className="rounded-lg border border-border/80 bg-muted/20 p-3 space-y-1.5 text-xs">
+                        <div className="font-semibold text-foreground flex items-center justify-between">
+                          <span className="flex items-center gap-1.5 text-primary">
+                            <Wrench className="h-3.5 w-3.5" /> Workshop Inspection Findings & Defect Analysis
+                          </span>
+                          {c.findings.inspector_name && (
+                            <span className="text-[10px] text-muted-foreground font-normal">
+                              Triage By: {c.findings.inspector_name} {c.findings.inspected_at && `· ${formatDate(c.findings.inspected_at)}`}
+                            </span>
+                          )}
+                        </div>
+                        {c.findings.inspection_result && (
+                          <div>
+                            <span className="font-medium text-foreground">Findings: </span>
+                            <span className="text-muted-foreground">{c.findings.inspection_result}</span>
+                          </div>
+                        )}
+                        {c.findings.defect_analysis && (
+                          <div>
+                            <span className="font-medium text-amber-700 dark:text-amber-400">Root Cause Analysis: </span>
+                            <span className="text-muted-foreground">{c.findings.defect_analysis}</span>
+                          </div>
+                        )}
+                        {c.findings.recommendations && (
+                          <div>
+                            <span className="font-medium text-emerald-700 dark:text-emerald-400">Preventive Recommendations: </span>
+                            <span className="text-muted-foreground">{c.findings.recommendations}</span>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Convert to Job Card Footer */}
+                    <div className="flex items-center justify-end gap-2 pt-1">
+                      {c.work_order_id ? (
+                        <Button size="sm" variant="outline" asChild className="h-7 text-xs gap-1.5">
+                          <Link to={`/work-orders/${c.work_order_id}`}>
+                            <Wrench className="h-3.5 w-3.5 text-primary" /> View Digital Job Card
+                          </Link>
+                        </Button>
+                      ) : (
+                        <Button
+                          size="sm"
+                          onClick={() => handleConvertComplaint(c)}
+                          disabled={convertingComplaintId === c.id}
+                          className="h-7 text-xs font-semibold gap-1.5"
+                        >
+                          {convertingComplaintId === c.id ? (
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                          ) : (
+                            <Wrench className="h-3 w-3" />
+                          )}
+                          Raise Digital Job Card
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </TabsContent>
       </Tabs>
 
       {/* Edit Vehicle Dialog */}
@@ -2143,6 +2658,42 @@ export default function FleetVehicleDetail() {
         machines={vehicle ? [vehicle] : []}
         schedule={editingSchedule}
         onSaved={load}
+      />
+
+      {/* Driver Complaint & Inspection Modal (Slide 10) */}
+      <DriverComplaintModal
+        open={complaintModalOpen}
+        onOpenChange={setComplaintModalOpen}
+        organisationId={organisation?.id || profile?.organisation_id || ""}
+        defaultVehicleId={vehicle?.id}
+        defaultVehiclePlate={vehicle?.plate_number || undefined}
+        defaultVehicleName={vehicle?.name}
+        defaultReporterName={profile?.full_name || undefined}
+        defaultReporterPhone={profile?.phone || undefined}
+        vehicles={
+          vehicle
+            ? [
+                {
+                  id: vehicle.id,
+                  name: vehicle.name,
+                  plate_number: vehicle.plate_number,
+                  current_odometer_km: vehicle.current_odometer_km,
+                  current_hours: vehicle.current_hours,
+                },
+              ]
+            : []
+        }
+        onComplaintSubmitted={(_c) => {
+          load();
+        }}
+      />
+
+      {/* Smart Parts Finder Modal (Slide 14) */}
+      <SmartPartsFinderModal
+        open={smartPartsModalOpen}
+        onOpenChange={setSmartPartsModalOpen}
+        initialVehicleModel={vehicle?.model || vehicle?.make || vehicle?.name}
+        vehiclePlate={vehicle?.plate_number || vehicle?.name}
       />
     </div>
   );

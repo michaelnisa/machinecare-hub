@@ -5,15 +5,16 @@ import { useUserRole } from "@/hooks/useUserRole";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Loader2, Package, Plus, Trash2, CheckCircle2, XCircle, Printer } from "lucide-react";
+import { Loader2, Package, Plus, Trash2, CheckCircle2, XCircle, Printer, Zap } from "lucide-react";
 import { toast } from "sonner";
 import { formatNumber } from "@/lib/format";
 import { IssueConfirmDialog } from "@/components/IssueConfirmDialog";
 import { Link } from "react-router-dom";
+import { SmartPartsFinderModal } from "@/components/fleet/SmartPartsFinderModal";
 
 interface Props {
   wo: any;
+  machine?: any;
   onSaved: () => void;
 }
 
@@ -36,14 +37,17 @@ const ITEM_STATUS_CLASS: Record<string, string> = {
   closed: "bg-slate-100 text-slate-600",
 };
 
-export function WorkOrderMaterialRequestCard({ wo, onSaved }: Props) {
+export function WorkOrderMaterialRequestCard({ wo, machine, onSaved }: Props) {
   const { profile } = useAuth();
   const { isManager } = useUserRole();
   const [requests, setRequests] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
+  const [smartPartsOpen, setSmartPartsOpen] = useState(false);
   const [reviewing, setReviewing] = useState<string | null>(null);
   const [issueTarget, setIssueTarget] = useState<{ requestItemId: string; itemName: string; unit: string | null; remaining: number } | null>(null);
+
+  const targetMachine = machine || wo.machine;
 
   const load = async () => {
     setLoading(true);
@@ -100,13 +104,23 @@ export function WorkOrderMaterialRequestCard({ wo, onSaved }: Props) {
 
   return (
     <div className="rounded-xl border border-border bg-card p-4">
-      <div className="mb-3 flex items-center justify-between gap-2">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2 text-sm font-medium">
-          <Package className="h-4 w-4 text-primary" /> Material requests
+          <Package className="h-4 w-4 text-primary" /> Material requests & parts issuance
         </div>
-        <Button size="sm" variant="outline" onClick={() => setOpen(true)}>
-          <Plus className="mr-1.5 h-3.5 w-3.5" /> Request parts
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => setSmartPartsOpen(true)}
+            className="gap-1.5 border-primary/30 text-primary hover:bg-primary/5 text-xs font-semibold"
+          >
+            <Zap className="h-3.5 w-3.5 text-amber-500 fill-amber-500" /> Smart Spares (Slide 14)
+          </Button>
+          <Button size="sm" variant="outline" onClick={() => setOpen(true)} className="text-xs">
+            <Plus className="mr-1.5 h-3.5 w-3.5" /> Request parts
+          </Button>
+        </div>
       </div>
 
       {requests.length === 0 ? (
@@ -182,6 +196,17 @@ export function WorkOrderMaterialRequestCard({ wo, onSaved }: Props) {
         unit={issueTarget?.unit}
         remaining={issueTarget?.remaining ?? 0}
         onConfirm={async (qty) => { if (issueTarget) await issue(issueTarget.requestItemId, qty); }}
+      />
+      <SmartPartsFinderModal
+        open={smartPartsOpen}
+        onOpenChange={setSmartPartsOpen}
+        initialVehicleModel={targetMachine?.model || targetMachine?.make || targetMachine?.name}
+        vehiclePlate={targetMachine?.plate_number || targetMachine?.name}
+        jobCardNumber={wo?.wo_number ? `JC-${wo.wo_year || new Date().getFullYear()}-${String(wo.wo_number).padStart(4, "0")}` : undefined}
+        onSelectPart={(_part) => {
+          load();
+          onSaved();
+        }}
       />
     </div>
   );

@@ -311,7 +311,7 @@ export default function WorkOrderDetail() {
         </>
       )}
 
-      <WorkOrderMaterialRequestCard wo={wo} onSaved={load} />
+      <WorkOrderMaterialRequestCard wo={wo} machine={machine} onSaved={load} />
       <WorkOrderCloseApprovalCard wo={wo} onSaved={load} />
 
       <div className="grid gap-5 lg:grid-cols-3">

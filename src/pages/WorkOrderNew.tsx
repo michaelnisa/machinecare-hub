@@ -51,7 +51,7 @@ export default function WorkOrderNew() {
   const preselectReason = searchParams.get("reason") || searchParams.get("defect");
   const preselectTitle = searchParams.get("title");
   const preselectPriority = searchParams.get("priority");
-  const preselectComponent = searchParams.get("component");
+  const preselectComponent = searchParams.get("component") || searchParams.get("subsystem");
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [formMode, setFormMode] = useState<"fleet" | "manufacturing">("manufacturing");
