@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, Navigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useUserRole } from "@/hooks/useUserRole";
 import { useIndustry } from "@/hooks/useIndustry";
+import { isLogistixwareAccount } from "@/services/customerService";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -116,6 +117,11 @@ export default function FleetApprovals() {
   const { profile } = useAuth();
   const { isManager, isOwner, role } = useUserRole();
   const { organisation } = useIndustry();
+  const isLogistix = isLogistixwareAccount(organisation);
+
+  if (isLogistix) {
+    return <Navigate to="/fleet/vehicles" replace />;
+  }
 
   const [loading, setLoading] = useState(true);
   const [requests, setRequests] = useState<FleetApprovalRequest[]>([]);

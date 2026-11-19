@@ -148,10 +148,10 @@ export function deleteCustomCustomer(id: string): void {
  * Checks if an organization is Logistixware.
  */
 export function isLogistixwareAccount(org?: { id?: string | null; name?: string | null } | null): boolean {
-  if (!org) return true; // Default to true so features are accessible
+  if (!org) return false;
   if (org.id === "df6b0c4b-e56b-4694-838a-0381eb480043") return true;
   const name = (org.name || "").toLowerCase();
-  return name.includes("logistix") || name.includes("logistics ware") || name.includes("fleet") || name.includes("hub");
+  return name.includes("logistix") || name.includes("logistics ware") || name.includes("logistixware");
 }
 
 /**

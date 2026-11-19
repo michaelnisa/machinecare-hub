@@ -4,6 +4,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useUserRole, type Role } from "@/hooks/useUserRole";
 import { useIndustry } from "@/hooks/useIndustry";
 import { FLEET_ROLE_TITLES, FLEET_ROLE_DESCRIPTIONS } from "@/core/permissions/usePermissions";
+import { isLogistixwareAccount } from "@/services/customerService";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -48,7 +49,8 @@ export default function Team() {
   const { profile } = useAuth();
   const { isManager, isOwner } = useUserRole();
   const { isFleet, organisation } = useIndustry();
-  const isFleetMode = isFleet || organisation?.industry_profile === "fleet_logistics";
+  const isLogistix = isLogistixwareAccount(organisation);
+  const isFleetMode = (isFleet || organisation?.industry_profile === "fleet_logistics") && !isLogistix;
   const [loading, setLoading] = useState(true);
   const [members, setMembers] = useState<any[]>([]);
   const [roles, setRoles] = useState<Record<string, Role[]>>({});

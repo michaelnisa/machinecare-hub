@@ -18,6 +18,7 @@ import { WorkOrderMaterialRequestCard } from "@/components/WorkOrderMaterialRequ
 import { formatDate } from "@/lib/format";
 import { useAuth } from "@/contexts/AuthContext";
 import { useIndustry } from "@/hooks/useIndustry";
+import { isLogistixwareAccount } from "@/services/customerService";
 import { formatDistanceToNow } from "date-fns";
 import { Layers, Building2, MapPin, ShieldCheck } from "lucide-react";
 
@@ -103,6 +104,14 @@ export default function WorkOrderDetail() {
     return isFleet || authOrg?.industry_profile === "fleet_logistics" || isVehicleWo;
   }, [isFleet, authOrg, isVehicleWo]);
 
+  const isLogistix = useMemo(() => {
+    return isLogistixwareAccount(authOrg || org);
+  }, [authOrg, org]);
+
+  const isDigitalJobCardMode = useMemo(() => {
+    return isFleetMode && !isLogistix;
+  }, [isFleetMode, isLogistix]);
+
   const extractedComponent = useMemo(() => {
     const text = `${wo?.proposed_remedy ?? ""} ${wo?.description ?? ""}`;
     const match = text.match(/\[COMPONENT:\s*([^\]]+)\]/);
@@ -165,17 +174,17 @@ export default function WorkOrderDetail() {
     <div className="space-y-5 animate-fade-in">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <Link to="/work-orders" className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground">
-          <ArrowLeft className="h-4 w-4" /> {isFleetMode ? "Back to Job Cards" : "Back to work orders"}
+          <ArrowLeft className="h-4 w-4" /> {isDigitalJobCardMode ? "Back to Job Cards" : "Back to work orders"}
         </Link>
         <div className="flex flex-wrap items-center gap-2">
-          {isFleetMode && (
+          {isDigitalJobCardMode && (
             <Button variant="outline" asChild className="border-emerald-500/30 text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/30">
               <Link to="/fleet/approvals">
                 <ShieldCheck className="mr-2 h-4 w-4 text-emerald-600" /> Fleet Approvals
               </Link>
             </Button>
           )}
-          {(isVehicleWo || isFleetMode) && (
+          {(isVehicleWo || isDigitalJobCardMode) && (
             <Button variant="outline" asChild>
               <Link to={`/work-orders/${id}/print?view=jobcard`}><Printer className="mr-2 h-4 w-4" /> Print as Job Card</Link>
             </Button>
@@ -191,7 +200,7 @@ export default function WorkOrderDetail() {
 
       <div>
         <div className="text-xs uppercase tracking-wide font-mono font-semibold text-primary">
-          {isFleetMode
+          {isDigitalJobCardMode
             ? `Fleet Job Card JC-${wo.wo_year}-${String(wo.wo_number).padStart(4, "0")}`
             : formatWoNumber(wo.wo_year, wo.wo_number)}
         </div>
@@ -200,17 +209,17 @@ export default function WorkOrderDetail() {
         <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
           {machine && (
             <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full font-semibold bg-muted text-foreground border border-border">
-              {isFleetMode ? <Truck className="h-3 w-3 text-primary" /> : null}
+              {isFleet ? <Truck className="h-3 w-3 text-primary" /> : null}
               {machine.reg_number || machine.name || machine.code}
             </span>
           )}
-          {extractedComponent && (
+          {isDigitalJobCardMode && extractedComponent && (
             <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full font-medium bg-primary/10 text-primary border border-primary/20">
               <Layers className="h-3 w-3" />
               {extractedComponent}
             </span>
           )}
-          {extractedLocation && (
+          {isDigitalJobCardMode && extractedLocation && (
             <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full font-medium border ${
               extractedLocation === "onsite"
                 ? "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800/40"

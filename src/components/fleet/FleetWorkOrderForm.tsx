@@ -34,6 +34,7 @@ import { toast } from "sonner";
 import { formatWoNumber } from "@/components/WorkOrderPreview";
 import { TechnicianDialog, type WorkshopTechnician } from "@/pages/fleet/Technicians";
 import { formatNumber, formatDate } from "@/lib/format";
+import { isLogistixwareAccount } from "@/services/customerService";
 
 export interface FleetVehicleOption {
   id: string;
@@ -213,6 +214,7 @@ export function FleetWorkOrderForm({
 }) {
   const { profile, user, organisation } = useAuth();
   const navigate = useNavigate();
+  const isLogistix = isLogistixwareAccount(organisation);
 
   const [submitting, setSubmitting] = useState(false);
   const [technicians, setTechnicians] = useState<WorkshopTechnician[]>([]);
@@ -370,10 +372,10 @@ export function FleetWorkOrderForm({
       if (selectedTechnician) {
         fullDescription += `[Assigned Workshop Technician]: ${selectedTechnician.name} (${selectedTechnician.specialization || "Technician"})\n`;
       }
-      if (componentSystem) {
+      if (!isLogistix && componentSystem) {
         fullDescription += `[Component System Classification]: ${componentSystem}\n`;
       }
-      if (repairLocation) {
+      if (!isLogistix && repairLocation) {
         const locObj = REPAIR_LOCATIONS.find((l) => l.id === repairLocation);
         fullDescription += `[Repair Location Source]: ${locObj ? locObj.label : repairLocation}\n`;
       }
@@ -381,6 +383,12 @@ export function FleetWorkOrderForm({
       // Check if selectedTechnicianId matches a profile user id or a garage_mechanics id
       const matchingProfile = members.find((m) => m.id === selectedTechnicianId);
       const assigneeId = matchingProfile ? matchingProfile.id : null;
+
+      const remedyText = !isLogistix
+        ? `[COMPONENT:${componentSystem}] [LOCATION:${repairLocation}] ${workType === "preventive" ? selectedTasks.join(", ") : ""}`.trim()
+        : (workType === "preventive" ? selectedTasks.join(", ") : "").trim();
+
+      const outsourcedFlag = isOutsourced || (!isLogistix && repairLocation === "outsourced");
 
       const payload: any = {
         organisation_id: profile.organisation_id,
@@ -393,13 +401,13 @@ export function FleetWorkOrderForm({
         assignee_id: assigneeId,
         due_date: dueDate || null,
         nature_of_problem: defectReport.trim() || null,
-        proposed_remedy: `[COMPONENT:${componentSystem}] [LOCATION:${repairLocation}] ${workType === "preventive" ? selectedTasks.join(", ") : ""}`.trim() || null,
+        proposed_remedy: remedyText || null,
         technician_comment: null,
         remarks: remarks.trim() || null,
-        is_outsourced: isOutsourced || repairLocation === "outsourced",
-        vendor_id: (isOutsourced || repairLocation === "outsourced") && vendorId ? vendorId : null,
-        promised_date: (isOutsourced || repairLocation === "outsourced") && promisedDate ? promisedDate : null,
-        vendor_cost: (isOutsourced || repairLocation === "outsourced") && vendorCost ? parseFloat(vendorCost) : null,
+        is_outsourced: outsourcedFlag,
+        vendor_id: outsourcedFlag && vendorId ? vendorId : null,
+        promised_date: outsourcedFlag && promisedDate ? promisedDate : null,
+        vendor_cost: outsourcedFlag && vendorCost ? parseFloat(vendorCost) : null,
         vendor_currency: "TZS",
         created_by: profile.id,
       };
@@ -589,56 +597,58 @@ export function FleetWorkOrderForm({
             )}
           </div>
 
-          {/* 3b. Component System Classification (Slide 11) & Repair Location (Slide 12) */}
-          <div className="grid gap-4 sm:grid-cols-2 p-3.5 rounded-xl border border-border bg-muted/20">
-            <div className="space-y-1.5">
-              <Label className="text-xs font-semibold flex items-center gap-1.5">
-                <Layers className="h-3.5 w-3.5 text-primary" />
-                Component System Classification *
-              </Label>
-              <Select value={componentSystem} onValueChange={setComponentSystem}>
-                <SelectTrigger className="h-10 bg-background text-xs">
-                  <SelectValue placeholder="Select vehicle component..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {COMPONENT_SYSTEMS.map((sys) => (
-                    <SelectItem key={sys} value={sys}>
-                      {sys}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <p className="text-[10px] text-muted-foreground">Classified for failure trend analytics</p>
-            </div>
+          {/* 3b. Component System Classification (Slide 11) & Repair Location (Slide 12) - Enterprise / Mega only */}
+          {!isLogistix && (
+            <div className="grid gap-4 sm:grid-cols-2 p-3.5 rounded-xl border border-border bg-muted/20">
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold flex items-center gap-1.5">
+                  <Layers className="h-3.5 w-3.5 text-primary" />
+                  Component System Classification *
+                </Label>
+                <Select value={componentSystem} onValueChange={setComponentSystem}>
+                  <SelectTrigger className="h-10 bg-background text-xs">
+                    <SelectValue placeholder="Select vehicle component..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {COMPONENT_SYSTEMS.map((sys) => (
+                      <SelectItem key={sys} value={sys}>
+                        {sys}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-[10px] text-muted-foreground">Classified for failure trend analytics</p>
+              </div>
 
-            <div className="space-y-1.5">
-              <Label className="text-xs font-semibold flex items-center gap-1.5">
-                <Building2 className="h-3.5 w-3.5 text-primary" />
-                Repair Location Source *
-              </Label>
-              <Select
-                value={repairLocation}
-                onValueChange={(val) => {
-                  setRepairLocation(val);
-                  if (val === "outsourced") {
-                    setIsOutsourced(true);
-                  }
-                }}
-              >
-                <SelectTrigger className="h-10 bg-background text-xs">
-                  <SelectValue placeholder="Select repair location..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {REPAIR_LOCATIONS.map((loc) => (
-                    <SelectItem key={loc.id} value={loc.id}>
-                      {loc.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <p className="text-[10px] text-muted-foreground">In-house workshop vs field breakdown vs outsourced</p>
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold flex items-center gap-1.5">
+                  <Building2 className="h-3.5 w-3.5 text-primary" />
+                  Repair Location Source *
+                </Label>
+                <Select
+                  value={repairLocation}
+                  onValueChange={(val) => {
+                    setRepairLocation(val);
+                    if (val === "outsourced") {
+                      setIsOutsourced(true);
+                    }
+                  }}
+                >
+                  <SelectTrigger className="h-10 bg-background text-xs">
+                    <SelectValue placeholder="Select repair location..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {REPAIR_LOCATIONS.map((loc) => (
+                      <SelectItem key={loc.id} value={loc.id}>
+                        {loc.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-[10px] text-muted-foreground">In-house workshop vs field breakdown vs outsourced</p>
+              </div>
             </div>
-          </div>
+          )}
 
           {/* 4. Service Odometer & Priority */}
           <div className="grid gap-4 sm:grid-cols-2">
@@ -1021,14 +1031,16 @@ export function FleetWorkOrderForm({
                 <span className="text-muted-foreground">· Target:</span>
                 <span className="font-medium text-foreground">{formatDate(dueDate)}</span>
               </div>
-              <div className="flex flex-wrap items-center gap-1.5 pt-1.5">
-                <span className="inline-flex items-center gap-1 rounded bg-blue-500/10 px-2 py-0.5 text-[10px] font-semibold text-blue-700 dark:text-blue-400 border border-blue-500/20">
-                  <Layers className="h-3 w-3" /> {componentSystem}
-                </span>
-                <span className="inline-flex items-center gap-1 rounded bg-purple-500/10 px-2 py-0.5 text-[10px] font-semibold text-purple-700 dark:text-purple-400 border border-purple-500/20">
-                  <Building2 className="h-3 w-3" /> {REPAIR_LOCATIONS.find((l) => l.id === repairLocation)?.label || repairLocation}
-                </span>
-              </div>
+              {!isLogistix && (
+                <div className="flex flex-wrap items-center gap-1.5 pt-1.5">
+                  <span className="inline-flex items-center gap-1 rounded bg-blue-500/10 px-2 py-0.5 text-[10px] font-semibold text-blue-700 dark:text-blue-400 border border-blue-500/20">
+                    <Layers className="h-3 w-3" /> {componentSystem}
+                  </span>
+                  <span className="inline-flex items-center gap-1 rounded bg-purple-500/10 px-2 py-0.5 text-[10px] font-semibold text-purple-700 dark:text-purple-400 border border-purple-500/20">
+                    <Building2 className="h-3 w-3" /> {REPAIR_LOCATIONS.find((l) => l.id === repairLocation)?.label || repairLocation}
+                  </span>
+                </div>
+              )}
             </div>
 
             {/* Technician */}

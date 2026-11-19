@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/command";
 import { useAuth } from "@/contexts/AuthContext";
 import { useFeatureFlags } from "@/platform/feature_flags/useFeatureFlags";
+import { isLogistixwareAccount } from "@/services/customerService";
 import { supabase } from "@/integrations/supabase/client";
 import {
   Wrench,
@@ -56,6 +57,7 @@ export function CommandPalette({ open: extOpen, onOpenChange: setExtOpen }: Comm
   const navigate = useNavigate();
   const { organisation } = useAuth();
   const { isFeatureEnabled } = useFeatureFlags();
+  const isLogistix = isLogistixwareAccount(organisation);
 
   const [query, setQuery] = useState("");
   const [searchResults, setSearchResults] = useState<{
@@ -269,10 +271,12 @@ export function CommandPalette({ open: extOpen, onOpenChange: setExtOpen }: Comm
                 <Activity className="mr-2 h-4 w-4" />
                 <span>Active Trips & Dispatches</span>
               </CommandItem>
-              <CommandItem onSelect={() => runCommand(() => navigate("/fleet/approvals"))}>
-                <ShieldCheck className="mr-2 h-4 w-4 text-primary" />
-                <span>Fleet Approvals &amp; Requisitions</span>
-              </CommandItem>
+              {!isLogistix && (
+                <CommandItem onSelect={() => runCommand(() => navigate("/fleet/approvals"))}>
+                  <ShieldCheck className="mr-2 h-4 w-4 text-primary" />
+                  <span>Fleet Approvals &amp; Requisitions</span>
+                </CommandItem>
+              )}
             </>
           )}
           {isFeatureEnabled("workshop") && (

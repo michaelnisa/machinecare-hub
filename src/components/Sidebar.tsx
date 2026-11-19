@@ -4,6 +4,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useIndustry } from "@/hooks/useIndustry";
 import { useUserRole } from "@/hooks/useUserRole";
 import { isPlatformAdmin } from "@/lib/admin";
+import { isLogistixwareAccount } from "@/services/customerService";
 import {
   LayoutDashboard,
   Wrench,
@@ -84,6 +85,7 @@ export function Sidebar() {
 
   const isAdmin = isPlatformAdmin(user?.email || profile?.email);
   const isLite = (organisation?.plan ?? "standard") === "lite";
+  const isLogistix = isLogistixwareAccount(organisation);
   const companyDisplayName =
     (organisation?.name && organisation.name !== "MachineCare" && organisation.name !== "My Company")
       ? organisation.name
@@ -349,7 +351,9 @@ export function Sidebar() {
           { to: "/fleet/live-map", label: "Live GPS Fleet", icon: MapPin },
           { to: "/fleet/drivers", label: "Drivers", icon: Contact },
           { to: "/fleet/trips", label: "Trips", icon: Route },
-          { to: "/fleet/approvals", label: "Approvals", icon: ShieldCheck },
+          ...(!isLogistix
+            ? [{ to: "/fleet/approvals", label: "Approvals", icon: ShieldCheck }]
+            : []),
           { to: "/fleet/documents", label: "Documents", icon: FileText },
           { to: "/fleet/tyres", label: "Tyres", icon: CircleDot },
           { to: "/fuel", label: t.nav.fuel, icon: Fuel },
@@ -360,7 +364,11 @@ export function Sidebar() {
         id: "maintenance",
         label: "Maintenance",
         items: [
-          { to: "/work-orders", label: "Job Cards", icon: ClipboardList },
+          {
+            to: "/work-orders",
+            label: isLogistix ? t.nav.workOrders : "Job Cards",
+            icon: ClipboardList,
+          },
           { to: "/fleet/technicians", label: "Technicians", icon: UserCog },
           { to: "/fault-reports", label: "Fault reports", icon: AlertTriangle },
           { to: "/maintenance/calendar", label: "Maintenance Calendar", icon: Calendar },
@@ -405,7 +413,7 @@ export function Sidebar() {
         ],
       },
     ],
-    [t, isAdmin, inventoryNavGroup, fleetFinanceNavGroup],
+    [t, isAdmin, inventoryNavGroup, fleetFinanceNavGroup, isLogistix],
   );
 
   // Workshop/Garage nav — a fully separate product experience from

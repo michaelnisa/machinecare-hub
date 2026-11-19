@@ -12,6 +12,7 @@ import { toast } from "sonner";
 import { formatDate } from "@/lib/format";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { formatWoNumber } from "@/components/WorkOrderPreview";
+import { isLogistixwareAccount } from "@/services/customerService";
 
 const STATUS_TABS = [
   { value: "all", label: "All" },
@@ -46,7 +47,8 @@ export default function WorkOrders() {
   const { profile } = useAuth();
   const { isManager, isTechnician } = useUserRole();
   const { isFleet, organisation } = useIndustry();
-  const isFleetMode = isFleet || organisation?.industry_profile === "fleet_logistics";
+  const isLogistix = isLogistixwareAccount(organisation);
+  const isDigitalJobCardMode = (isFleet || organisation?.industry_profile === "fleet_logistics") && !isLogistix;
 
   const [params, setParams] = useSearchParams();
   const [loading, setLoading] = useState(true);
@@ -130,16 +132,16 @@ export default function WorkOrders() {
         <div>
           <div className="flex items-center gap-2">
             <h1 className="text-2xl font-semibold tracking-tight">
-              {isFleetMode ? "Fleet Job Cards & Maintenance" : "Work orders"}
+              {isDigitalJobCardMode ? "Fleet Job Cards & Maintenance" : "Work orders"}
             </h1>
-            {isFleetMode && (
+            {isDigitalJobCardMode && (
               <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2.5 py-0.5 text-xs font-semibold text-emerald-700 dark:text-emerald-400 border border-emerald-500/20">
                 <Truck className="h-3 w-3" /> Digital Job Cards
               </span>
             )}
           </div>
           <p className="text-sm text-muted-foreground mt-0.5">
-            {isFleetMode
+            {isDigitalJobCardMode
               ? "Digital Job Cards tracking heavy commercial servicing, component-based repairs, and breakdown recoveries."
               : "Track jobs from open through to closed."}
           </p>
@@ -148,7 +150,7 @@ export default function WorkOrders() {
           <Button asChild>
             <Link to="/work-orders/new">
               <Plus className="mr-2 h-4 w-4" />
-              {isFleetMode ? "New Job Card" : "New work order"}
+              {isDigitalJobCardMode ? "New Job Card" : "New work order"}
             </Link>
           </Button>
         )}
@@ -177,7 +179,7 @@ export default function WorkOrders() {
           <Input
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder={isFleetMode ? "Search Job Card #, plate, title…" : "Search WO# or title…"}
+            placeholder={isDigitalJobCardMode ? "Search Job Card #, plate, title…" : "Search WO# or title…"}
             className="pl-8 text-xs"
           />
         </div>
@@ -189,7 +191,7 @@ export default function WorkOrders() {
           }}
           className="h-10 rounded-md border border-input bg-background px-3 text-xs"
         >
-          <option value="all">{isFleetMode ? "All vehicles & trailers" : "All machines"}</option>
+          <option value="all">{isDigitalJobCardMode ? "All vehicles & trailers" : isFleet ? "All vehicles" : "All machines"}</option>
           {machines.map((m) => (
             <option key={m.id} value={m.id}>
               {m.name}
@@ -209,7 +211,7 @@ export default function WorkOrders() {
             </option>
           ))}
         </select>
-        {isFleetMode ? (
+        {isDigitalJobCardMode ? (
           <select
             value={componentFilter}
             onChange={(e) => setComponentFilter(e.target.value)}
@@ -247,17 +249,17 @@ export default function WorkOrders() {
       {filtered.length === 0 ? (
         <EmptyState
           icon={<ClipboardList className="h-5 w-5" />}
-          title={isFleetMode ? "No Job Cards found" : "No work orders"}
-          description={isFleetMode ? "Create a digital job card to track vehicle repairs." : "Create a work order to assign maintenance jobs."}
+          title={isDigitalJobCardMode ? "No Job Cards found" : "No work orders"}
+          description={isDigitalJobCardMode ? "Create a digital job card to track vehicle repairs." : "Create a work order to assign maintenance jobs."}
         />
       ) : (
         <div className="space-y-2">
           {filtered.map((o) => {
             const compMatch = o.proposed_remedy?.match(/\[COMPONENT:([^\]]+)\]/);
             const locMatch = o.proposed_remedy?.match(/\[LOCATION:([^\]]+)\]/);
-            const componentTag = compMatch ? compMatch[1] : null;
-            const locationTag = locMatch ? locMatch[1] : o.is_outsourced ? "outsourced" : null;
-            const displayNumber = isFleetMode
+            const componentTag = isDigitalJobCardMode && compMatch ? compMatch[1] : null;
+            const locationTag = isDigitalJobCardMode && locMatch ? locMatch[1] : o.is_outsourced ? "outsourced" : null;
+            const displayNumber = isDigitalJobCardMode
               ? `JC-${o.wo_year}-${String(o.wo_number).padStart(4, "0")}`
               : formatWoNumber(o.wo_year, o.wo_number);
 
@@ -304,7 +306,7 @@ export default function WorkOrders() {
                 <span className={`rounded-md px-2 py-0.5 text-[10px] font-medium capitalize shrink-0 ${STATUS_BADGE[o.status] ?? ""}`}>
                   {(o.status ?? "").replace("_", " ")}
                 </span>
-                <Button variant="ghost" size="icon" asChild onClick={(e) => e.stopPropagation()} title="Print Job Card">
+                <Button variant="ghost" size="icon" asChild onClick={(e) => e.stopPropagation()} title={isDigitalJobCardMode ? "Print Job Card" : "Print"}>
                   <Link to={`/work-orders/${o.id}/print`} onClick={(e) => e.stopPropagation()}>
                     <Printer className="h-4 w-4" />
                   </Link>
