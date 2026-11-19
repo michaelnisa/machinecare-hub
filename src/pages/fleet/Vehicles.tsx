@@ -416,10 +416,10 @@ export default function Vehicles() {
                   setInitialCategory("Generator");
                   setOpen(true);
                 }}
-                className="gap-1.5 text-xs text-amber-700 dark:text-amber-400 border-amber-500/40 hover:bg-amber-500/10 shadow-2xs font-medium"
+                className="gap-1.5 text-xs text-emerald-700 dark:text-emerald-400 border-emerald-500/40 hover:bg-emerald-500/10 shadow-2xs font-medium"
                 title="Register Non-Vehicle Workshop Assets (Generators, Compressors, Pumps, Lifts - Slide 19)"
               >
-                <Wrench className="h-3.5 w-3.5 text-amber-600" /> + Add Plant / Equipment
+                <Wrench className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" /> + Add Plant / Equipment
               </Button>
               <Button
                 variant="outline"
@@ -464,12 +464,12 @@ export default function Vehicles() {
           <p className="text-[11px] text-muted-foreground mt-0.5">Tri-axle & tandem semi-trailers</p>
         </div>
 
-        <div className="rounded-xl border border-border bg-card p-3.5 shadow-sm">
+        <div className="rounded-xl border border-emerald-500/20 bg-card p-3.5 shadow-sm">
           <div className="flex items-center justify-between text-xs font-medium text-muted-foreground">
             <span>Workshop & Plant Assets</span>
-            <Wrench className="h-4 w-4 text-amber-600" />
+            <Wrench className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
           </div>
-          <div className="mt-2 text-2xl font-bold tracking-tight text-amber-600 dark:text-amber-400">
+          <div className="mt-2 text-2xl font-bold tracking-tight text-emerald-600 dark:text-emerald-400">
             {workshopAssets.length}
           </div>
           <p className="text-[11px] text-muted-foreground mt-0.5">Generators, pumps, compressors & lifts</p>
@@ -624,15 +624,15 @@ export default function Vehicles() {
                           fallback={
                             isWsAsset ? (
                               m.category === "Generator" ? (
-                                <Zap className="h-6 w-6 text-amber-500" />
+                                <Zap className="h-6 w-6 text-emerald-500" />
                               ) : m.category === "Compressor" ? (
-                                <Wind className="h-6 w-6 text-blue-500" />
+                                <Wind className="h-6 w-6 text-sky-500" />
                               ) : m.category === "Pump" ? (
                                 <Droplets className="h-6 w-6 text-cyan-500" />
                               ) : m.category === "Forklift" ? (
-                                <Boxes className="h-6 w-6 text-orange-500" />
+                                <Boxes className="h-6 w-6 text-emerald-600" />
                               ) : (
-                                <Wrench className="h-6 w-6 text-amber-500" />
+                                <Wrench className="h-6 w-6 text-emerald-500" />
                               )
                             ) : isTrailer ? (
                               <Container className="h-6 w-6 text-emerald-600" />
@@ -679,7 +679,7 @@ export default function Vehicles() {
                     <div className="space-y-1.5 text-xs text-muted-foreground pt-2 border-t border-border/60">
                       <div className="flex items-center justify-between">
                         <span className="text-muted-foreground">Asset Category:</span>
-                        <span className="font-semibold text-amber-700 dark:text-amber-400">{m.category || "Workshop Asset"}</span>
+                        <span className="font-semibold text-emerald-700 dark:text-emerald-400">{m.category || "Workshop Asset"}</span>
                       </div>
                       <div className="flex items-center justify-between">
                         <span className="text-muted-foreground">Serial Number:</span>
@@ -951,15 +951,15 @@ export default function Vehicles() {
                               fallback={
                                 isWsAsset ? (
                                   m.category === "Generator" ? (
-                                    <Zap className="h-4 w-4 text-amber-500" />
+                                    <Zap className="h-4 w-4 text-emerald-500" />
                                   ) : m.category === "Compressor" ? (
-                                    <Wind className="h-4 w-4 text-blue-500" />
+                                    <Wind className="h-4 w-4 text-sky-500" />
                                   ) : m.category === "Pump" ? (
                                     <Droplets className="h-4 w-4 text-cyan-500" />
                                   ) : m.category === "Forklift" ? (
-                                    <Boxes className="h-4 w-4 text-orange-500" />
+                                    <Boxes className="h-4 w-4 text-emerald-600" />
                                   ) : (
-                                    <Wrench className="h-4 w-4 text-amber-500" />
+                                    <Wrench className="h-4 w-4 text-emerald-500" />
                                   )
                                 ) : isTrailer ? (
                                   <Container className="h-4 w-4 text-emerald-600" />
@@ -1582,7 +1582,7 @@ export function VehicleDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             {isWsAsset ? (
-              <Wrench className="h-5 w-5 text-amber-600" />
+              <Wrench className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
             ) : isTrailer ? (
               <Container className="h-5 w-5 text-emerald-600" />
             ) : (
@@ -1645,8 +1645,8 @@ export function VehicleDialog({
                   variant={form.asset_kind === "workshop_asset" ? "default" : "outline"}
                   className={`flex items-center justify-center gap-2 cursor-pointer h-10 text-xs font-medium ${
                     form.asset_kind === "workshop_asset"
-                      ? "bg-amber-600 hover:bg-amber-700 text-white"
-                      : "border-amber-500/40 text-amber-700 dark:text-amber-400"
+                      ? "bg-emerald-600 hover:bg-emerald-700 text-white"
+                      : "border-emerald-500/40 text-emerald-700 dark:text-emerald-400"
                   }`}
                   onClick={() => {
                     const currentNum = form.vehicle_code.match(/\d+$/)?.[0] ?? String((existingCount ?? 0) + 1).padStart(3, "0");
@@ -1684,7 +1684,7 @@ export function VehicleDialog({
                       className="h-full w-full object-cover"
                       fallback={
                         isWsAsset ? (
-                          <Wrench className="h-5 w-5 text-amber-600" />
+                          <Wrench className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
                         ) : isTrailer ? (
                           <Container className="h-5 w-5 text-emerald-600" />
                         ) : (
@@ -1711,10 +1711,10 @@ export function VehicleDialog({
             {isWsAsset ? (
               <>
                 {/* Equipment Subtype Selector */}
-                <div className="space-y-1.5 sm:col-span-2 rounded-lg border border-amber-500/30 bg-amber-500/5 p-3">
+                <div className="space-y-1.5 sm:col-span-2 rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-3">
                   <div className="flex items-center justify-between mb-1.5">
-                    <Label className="text-xs font-semibold text-amber-800 dark:text-amber-400 flex items-center gap-1.5">
-                      <Wrench className="h-4 w-4 text-amber-600" /> Plant Equipment Subtype (Slide 19) *
+                    <Label className="text-xs font-semibold text-emerald-800 dark:text-emerald-400 flex items-center gap-1.5">
+                      <Wrench className="h-4 w-4 text-emerald-600 dark:text-emerald-400" /> Plant Equipment Subtype (Slide 19) *
                     </Label>
                     <span className="text-[11px] text-muted-foreground">Stationary & workshop asset registration</span>
                   </div>
@@ -1733,14 +1733,14 @@ export function VehicleDialog({
                       }));
                     }}
                   >
-                    <SelectTrigger className="border-amber-500/40 bg-background"><SelectValue /></SelectTrigger>
+                    <SelectTrigger className="border-emerald-500/40 bg-background"><SelectValue /></SelectTrigger>
                     <SelectContent>
                       {WORKSHOP_ASSET_TYPES.map((w) => {
                         const Icon = w.icon;
                         return (
                           <SelectItem key={w.value} value={w.value}>
                             <div className="flex items-center gap-2 py-0.5">
-                              <Icon className="h-4 w-4 text-amber-600" />
+                              <Icon className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
                               <span className="font-medium text-xs">{w.label}</span>
                             </div>
                           </SelectItem>
@@ -1772,7 +1772,7 @@ export function VehicleDialog({
                             const nextCode = generateVehicleCode(form.category, undefined, (existingCount ?? 0) + Math.floor(1 + Math.random() * 20));
                             setForm((prev) => ({ ...prev, vehicle_code: nextCode }));
                           }}
-                          className="text-[10px] text-amber-700 dark:text-amber-400 hover:underline flex items-center gap-0.5 cursor-pointer font-medium"
+                          className="text-[10px] text-emerald-700 dark:text-emerald-400 hover:underline flex items-center gap-0.5 cursor-pointer font-medium"
                           title="Generate next ID"
                         >
                           <RefreshCw className="h-2.5 w-2.5" /> Auto-Gen
@@ -1933,11 +1933,11 @@ export function VehicleDialog({
                 </div>
 
                 {/* Automated PM Trigger (Hours based for stationary plant) */}
-                <div className="sm:col-span-2 rounded-xl border border-amber-500/30 bg-amber-500/5 p-4 space-y-3">
+                <div className="sm:col-span-2 rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-4 space-y-3">
                   <div className="flex items-center justify-between">
                     <div className="space-y-0.5">
                       <div className="flex items-center gap-2">
-                        <Wrench className="h-4 w-4 text-amber-600" />
+                        <Wrench className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
                         <Label className="text-sm font-semibold cursor-pointer" htmlFor="auto-pm-switch">
                           Automated Runtime PM Trigger
                         </Label>
@@ -1954,7 +1954,7 @@ export function VehicleDialog({
                   </div>
 
                   {form.auto_pm_enabled && (
-                    <div className="space-y-1.5 pt-2 border-t border-amber-500/20">
+                    <div className="space-y-1.5 pt-2 border-t border-emerald-500/20">
                       <Label className="text-xs font-medium">Service Trigger Every (Operating Hours)</Label>
                       <Input
                         type="number"

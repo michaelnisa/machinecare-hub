@@ -12,6 +12,7 @@ import { isPlatformAdmin } from "@/lib/admin";
 import { CommandPalette } from "@/components/CommandPalette";
 import { TechnicianQrModal } from "@/components/TechnicianQrModal";
 import { PlatformAdminOrgSwitcher } from "@/components/admin/PlatformAdminOrgSwitcher";
+import { isEnterpriseFleet } from "@/lib/fleetTiers";
 
 export default function AppLayout() {
   const { user, loading, organisation } = useAuth();
@@ -75,7 +76,24 @@ export default function AppLayout() {
                 className="h-6 w-6 rounded object-contain border border-border bg-background p-0.5 shrink-0"
               />
             ) : null}
-            <span className="font-semibold text-sm truncate">{companyDisplayName}</span>
+            <span className="font-semibold text-sm truncate">
+              {companyDisplayName.includes("Enterprise") ? (
+                companyDisplayName.split(/(Enterprise)/gi).map((part, i) =>
+                  part.toLowerCase() === "enterprise" ? (
+                    <span key={i} className="text-emerald-600 dark:text-emerald-400 font-extrabold">{part}</span>
+                  ) : (
+                    part
+                  )
+                )
+              ) : (
+                companyDisplayName
+              )}
+            </span>
+            {isEnterpriseFleet(organisation) && (
+              <span className="shrink-0 inline-flex items-center rounded px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30">
+                Enterprise
+              </span>
+            )}
           </div>
           <div className="ml-auto flex items-center gap-1">
             <Button variant="ghost" size="icon" onClick={() => setCommandOpen(true)} title="Search">
@@ -125,8 +143,23 @@ export default function AppLayout() {
                   </div>
                 )}
                 <span className="text-xs font-semibold text-foreground truncate max-w-[160px]" title={companyDisplayName}>
-                  {companyDisplayName}
+                  {companyDisplayName.includes("Enterprise") ? (
+                    companyDisplayName.split(/(Enterprise)/gi).map((part, i) =>
+                      part.toLowerCase() === "enterprise" ? (
+                        <span key={i} className="text-emerald-600 dark:text-emerald-400 font-extrabold">{part}</span>
+                      ) : (
+                        part
+                      )
+                    )
+                  ) : (
+                    companyDisplayName
+                  )}
                 </span>
+                {isEnterpriseFleet(organisation) && (
+                  <span className="shrink-0 inline-flex items-center rounded px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30">
+                    Enterprise
+                  </span>
+                )}
               </div>
             )}
 

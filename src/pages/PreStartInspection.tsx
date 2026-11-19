@@ -33,6 +33,20 @@ const DEFAULT_FLEET_CHECKLIST: InspectionItem[] = [
   { item_id: "item-safety", item_text: "Seatbelt, Fire Extinguisher & Warning Triangles", item_sort_order: 6, item_severity: "critical" },
 ];
 
+export function mapItemToSubsystem(text: string, id: string): string {
+  const lower = (text + " " + id).toLowerCase();
+  if (lower.includes("brake") || lower.includes("retarder") || lower.includes("abs")) return "Brake System";
+  if (lower.includes("tyre") || lower.includes("tire") || lower.includes("wheel") || lower.includes("suspension") || lower.includes("spring") || lower.includes("shock")) return "Suspension System";
+  if (lower.includes("oil") || lower.includes("engine") || lower.includes("coolant") || lower.includes("belt") || lower.includes("filter") || lower.includes("fluid")) return "Engine System";
+  if (lower.includes("fuel") || lower.includes("tank") || lower.includes("diesel") || lower.includes("injector")) return "Fuel System";
+  if (lower.includes("light") || lower.includes("lamp") || lower.includes("battery") || lower.includes("alternator") || lower.includes("wiring") || lower.includes("fuse")) return "Electrical System";
+  if (lower.includes("steer") || lower.includes("kingpin") || lower.includes("tie rod")) return "Steering System";
+  if (lower.includes("air") || lower.includes("compressor") || lower.includes("pneumatic") || lower.includes("valve") || lower.includes("gladhand")) return "Air System";
+  if (lower.includes("gear") || lower.includes("clutch") || lower.includes("transmission") || lower.includes("diff")) return "Transmission System";
+  if (lower.includes("sensor") || lower.includes("ecu") || lower.includes("ecm") || lower.includes("electronic") || lower.includes("dash")) return "Electronics System";
+  return "Body Works";
+}
+
 type Driver = { id: string; full_name: string };
 
 type Result = "ok" | "not_ok" | "not_relevant";
@@ -242,20 +256,74 @@ export default function PreStartInspection() {
       const { error: respErr } = await supabase.from("checklist_execution_responses").insert(responseRows);
       if (respErr) throw respErr;
 
-      // ── Create a fault report for each "Not OK" item ─────────────────────
+      // ── Create a structured defect report for each "Not OK" item (Slide 10 & 11) ─────────────
       if (notOkItems.length > 0) {
-        const faultRows = notOkItems.map((it) => ({
-          organisation_id: machine.organisation_id,
-          machine_id: machine.id,
-          reporter_name: driverName,
-          reporter_phone: "",
-          description: responses[it.item_id]?.comment
-            ? `Pre-start inspection defect: ${it.item_text}. Notes: ${responses[it.item_id].comment}`
-            : `Pre-start inspection defect: ${it.item_text}`,
-          severity: it.item_severity === "critical" ? "critical" : it.item_severity === "major" ? "medium" : "low",
-          status: "open",
-          source_execution_id: executionId,
-        }));
+        const localComplaintsKey = `mc_driver_complaints_v1_${machine.organisation_id}`;
+        let localExistingComplaints: any[] = [];
+        try {
+          const raw = localStorage.getItem(localComplaintsKey);
+          if (raw) localExistingComplaints = JSON.parse(raw);
+        } catch {}
+
+        const now = new Date().toISOString();
+        const faultRows = notOkItems.map((it) => {
+          const subsystem = mapItemToSubsystem(it.item_text, it.item_id);
+          const driverComment = responses[it.item_id]?.comment || "";
+          const cleanDesc = driverComment
+            ? `Pre-trip walkaround defect: ${it.item_text}. Driver notes: ${driverComment}`
+            : `Pre-trip walkaround defect: ${it.item_text}`;
+          const isCritical = it.item_severity === "critical";
+
+          const meta = {
+            complaint_type: isCritical ? "breakdown_report" : "reported_defect",
+            subsystem,
+            title: `Pre-Start Defect: ${it.item_text}`,
+            clean_description: cleanDesc,
+            abnormal_symptoms: [`Inspection Failed: ${it.item_text}`],
+            reporter_type: "driver",
+            source_execution_id: executionId,
+          };
+
+          // Also construct local complaint object for instant hydration in Workshop & Vehicles
+          const complaintRecord = {
+            id: `comp-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+            organisation_id: machine.organisation_id,
+            machine_id: machine.id,
+            vehicle_plate: machine.plate_number || machine.name,
+            vehicle_name: machine.name,
+            complaint_type: meta.complaint_type,
+            subsystem,
+            title: meta.title,
+            description: cleanDesc,
+            abnormal_symptoms: meta.abnormal_symptoms,
+            reporter_type: "driver",
+            reporter_name: driverName,
+            reporter_phone: "",
+            severity: isCritical ? "critical_breakdown" : it.item_severity === "major" ? "major" : "minor",
+            status: "open",
+            attachments: [],
+            created_at: now,
+            updated_at: now,
+          };
+          localExistingComplaints.unshift(complaintRecord);
+
+          return {
+            organisation_id: machine.organisation_id,
+            machine_id: machine.id,
+            reporter_name: driverName,
+            reporter_phone: "",
+            description: `${cleanDesc}\n${JSON.stringify(meta)}`,
+            severity: isCritical ? "critical" : it.item_severity === "major" ? "medium" : "low",
+            status: "open",
+            source_execution_id: executionId,
+          };
+        });
+
+        // Save to local storage for immediate zero-latency visibility in Workshop & Vehicle views
+        try {
+          localStorage.setItem(localComplaintsKey, JSON.stringify(localExistingComplaints.slice(0, 50)));
+        } catch {}
+
         // Non-fatal: inspection already saved even if fault report insert fails
         await supabase.from("fault_reports").insert(faultRows);
       }
@@ -468,21 +536,50 @@ export default function PreStartInspection() {
         )}
 
         {step === "done" && (
-          <div className="rounded-2xl border border-border bg-card p-6 text-center">
-            <CheckCircle2 className="mx-auto mb-3 h-10 w-10 text-emerald-500" />
-            <p className="font-medium">{savedOffline ? "Saved on this device" : "Inspection submitted"}</p>
-            {savedOffline ? (
-              <p className="mt-1 text-sm text-muted-foreground">
-                No connection right now — this will submit automatically once you're back online. You can leave this page.
-              </p>
-            ) : notOkItems.length > 0 ? (
-              <p className="mt-1 text-sm text-muted-foreground">
-                {notOkItems.length} fault report{notOkItems.length === 1 ? "" : "s"} sent to the maintenance team.
-              </p>
-            ) : (
-              <p className="mt-1 text-sm text-muted-foreground">Everything checked out OK. Safe travels.</p>
+          <div className="rounded-2xl border border-border bg-card p-6 text-center space-y-4">
+            <CheckCircle2 className="mx-auto h-10 w-10 text-emerald-500" />
+            <div>
+              <p className="font-semibold text-lg">{savedOffline ? "Saved on this device" : "Inspection submitted"}</p>
+              {savedOffline ? (
+                <p className="mt-1 text-sm text-muted-foreground">
+                  No connection right now — this will submit automatically once you're back online. You can leave this page.
+                </p>
+              ) : notOkItems.length > 0 ? (
+                <p className="mt-1 text-sm text-muted-foreground">
+                  {notOkItems.length} defect{notOkItems.length === 1 ? "" : "s"} classified and dispatched to Workshop Triage Queue:
+                </p>
+              ) : (
+                <p className="mt-1 text-sm text-muted-foreground">Everything checked out OK. Vehicle is roadworthy.</p>
+              )}
+            </div>
+
+            {notOkItems.length > 0 && (
+              <div className="rounded-xl border border-red-500/20 bg-red-500/5 p-3.5 text-left space-y-2">
+                <div className="text-xs font-semibold text-red-700 dark:text-red-400 flex items-center justify-between">
+                  <span>Logged Defect Records</span>
+                  <span>Mega Beverages Subsystem</span>
+                </div>
+                <div className="space-y-1.5">
+                  {notOkItems.map((it) => (
+                    <div key={it.item_id} className="text-xs flex items-center justify-between py-1 border-t border-red-500/10">
+                      <span className="font-medium text-foreground">• {it.item_text}</span>
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-background border font-semibold text-foreground">
+                        {mapItemToSubsystem(it.item_text, it.item_id)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
             )}
-            <Link to={`/m/${machine.id}`} className="mt-4 inline-block text-primary hover:underline">Back to vehicle</Link>
+
+            <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
+              <Button asChild variant="default" className="h-10 text-xs">
+                <Link to={`/fleet/vehicles/${machine.id}`}>View Vehicle in Fleet Hub</Link>
+              </Button>
+              <Button asChild variant="outline" className="h-10 text-xs">
+                <Link to={`/m/${machine.id}`}>Back to Asset Card</Link>
+              </Button>
+            </div>
           </div>
         )}
       </div>

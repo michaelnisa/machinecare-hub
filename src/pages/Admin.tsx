@@ -66,6 +66,7 @@ import {
 import { toast } from "sonner";
 import { useI18n } from "@/i18n/I18nProvider";
 import { isPlatformAdmin, PLATFORM_ADMIN_EMAILS, provisionMachineCareGpsAccount } from "@/lib/admin";
+import { isEnterpriseFleet } from "@/lib/fleetTiers";
 import { Link, useNavigate } from "react-router-dom";
 
 interface OnboardingRequest {
@@ -786,8 +787,20 @@ export default function Admin() {
                         </div>
                         <div>
                           <CardTitle className="text-base flex items-center gap-1.5 flex-wrap">
-                            <span>{org.name}</span>
-                            {org.plan === "enterprise" ? (
+                            <span>
+                              {org.name.includes("Enterprise") ? (
+                                org.name.split(/(Enterprise)/gi).map((part: string, i: number) =>
+                                  part.toLowerCase() === "enterprise" ? (
+                                    <span key={i} className="text-emerald-600 dark:text-emerald-400 font-extrabold">{part}</span>
+                                  ) : (
+                                    part
+                                  )
+                                )
+                              ) : (
+                                org.name
+                              )}
+                            </span>
+                            {org.plan === "enterprise" || isEnterpriseFleet(org) ? (
                               <Badge variant="outline" className="text-[10px] font-bold bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30 gap-1 px-1.5 py-0">
                                 Enterprise
                               </Badge>

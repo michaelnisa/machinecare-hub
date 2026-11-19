@@ -736,12 +736,12 @@ export default function FleetDashboard() {
                 {companyDisplayName ? `${companyDisplayName} — ${t.fleet.dashboardTitle}` : t.fleet.dashboardTitle}
               </h1>
               {isEnterprise ? (
-                <span className="inline-flex items-center gap-1 rounded-full border border-purple-500/30 bg-purple-500/10 px-2.5 py-0.5 text-xs font-semibold text-purple-600 dark:text-purple-400">
+                <span className="inline-flex items-center gap-1 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-0.5 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
                   <ShieldCheck className="h-3.5 w-3.5" />
                   Enterprise Fleet
                 </span>
               ) : (
-                <span className="inline-flex items-center gap-1 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-0.5 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
+                <span className="inline-flex items-center gap-1 rounded-full border border-slate-500/30 bg-slate-500/10 px-2.5 py-0.5 text-xs font-semibold text-slate-600 dark:text-slate-400">
                   Standard Fleet
                 </span>
               )}
@@ -758,7 +758,7 @@ export default function FleetDashboard() {
               variant="outline"
               size="sm"
               onClick={() => setDossierModalOpen(true)}
-              className="gap-2 border-purple-500/30 text-purple-600 dark:text-purple-400 hover:bg-purple-500/10"
+              className="gap-2 border-emerald-500/30 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10"
             >
               <Download className="h-4 w-4" />
               Executive Dossier
@@ -812,7 +812,7 @@ export default function FleetDashboard() {
         <div className="space-y-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <ShieldCheck className="h-4 w-4 text-purple-500" />
+              <ShieldCheck className="h-4 w-4 text-emerald-500" />
               <span className="text-sm font-semibold tracking-tight text-foreground">
                 Enterprise Governance & Commercial Fleet Dashboard
               </span>

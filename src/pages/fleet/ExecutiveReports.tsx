@@ -50,6 +50,7 @@ import {
   clearLocalComplaints,
   type DriverComplaintRecord,
 } from "@/services/complaintsService";
+import { isEnterpriseFleet } from "@/lib/fleetTiers";
 import { toast } from "sonner";
 
 export default function ExecutiveReports() {
@@ -457,16 +458,21 @@ export default function ExecutiveReports() {
               <FileBarChart className="h-5 w-5" />
             </div>
             <div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <h1 className="text-2xl font-bold tracking-tight text-foreground">
                   Executive Reports & Cost Management
                 </h1>
                 <Badge className="bg-blue-500/15 text-blue-700 dark:text-blue-300 border-blue-500/30">
                   Slides 11, 12, 15, 17, 20, 21, 22, 23
                 </Badge>
+                {isEnterpriseFleet(organisation) && (
+                  <Badge variant="outline" className="text-[10px] font-bold bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30 gap-1 px-2 py-0.5">
+                    Enterprise
+                  </Badge>
+                )}
               </div>
               <p className="text-xs text-muted-foreground mt-0.5">
-                Integrated dossier: Cost-per-Kilometer (CPK), 11-subsystem repairs, stores consumption, technician issuance & warranty radar.
+                {companyDisplayName} · Cost-per-Kilometer (CPK), 11-subsystem repairs, stores consumption, technician issuance & warranty radar.
               </p>
             </div>
           </div>

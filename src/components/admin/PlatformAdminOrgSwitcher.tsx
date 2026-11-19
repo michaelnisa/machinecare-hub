@@ -264,6 +264,11 @@ export function PlatformAdminOrgSwitcher({ compact = false }: { compact?: boolea
             <span className="font-bold text-foreground truncate max-w-[120px]">
               {organisation?.name || "Select Account"}
             </span>
+            {isEnterpriseFleet(organisation) && (
+              <span className="shrink-0 text-[9px] px-1 py-0.5 rounded bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 font-bold border border-emerald-500/30">
+                Enterprise
+              </span>
+            )}
             <ArrowRightLeft className="h-3 w-3 text-muted-foreground ml-0.5 opacity-70" />
           </Button>
         )}
@@ -337,12 +342,12 @@ export function PlatformAdminOrgSwitcher({ compact = false }: { compact?: boolea
                           </span>
                         )}
                         {isEnterpriseFleet(org) && (
-                          <span className="text-[9px] px-1 rounded bg-purple-500/15 text-purple-700 dark:text-purple-300 font-bold border border-purple-500/30">
+                          <span className="text-[9px] px-1 rounded bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 font-bold border border-emerald-500/30">
                             ENTERPRISE
                           </span>
                         )}
                         {isLogistixwareAccount(org) && (
-                          <span className="text-[9px] px-1 rounded bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 font-bold border border-emerald-500/30">
+                          <span className="text-[9px] px-1 rounded bg-slate-500/15 text-slate-700 dark:text-slate-300 font-bold border border-slate-500/30">
                             STANDARD
                           </span>
                         )}
@@ -463,16 +468,16 @@ export function PlatformAdminOrgSwitcher({ compact = false }: { compact?: boolea
                 className={cn(
                   "p-3.5 rounded-xl border text-left cursor-pointer transition-all space-y-1",
                   newFleetTier === "enterprise"
-                    ? "border-purple-500 bg-purple-500/10 ring-1 ring-purple-500"
+                    ? "border-emerald-500 bg-emerald-500/10 ring-1 ring-emerald-500"
                     : "border-border hover:bg-muted/50"
                 )}
               >
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <ShieldCheck className="h-4 w-4 text-purple-600 dark:text-purple-400" />
+                    <ShieldCheck className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
                     <span className="font-semibold text-foreground">Enterprise Fleet Edition</span>
                   </div>
-                  <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded bg-purple-500/20 text-purple-700 dark:text-purple-300">
+                  <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-700 dark:text-emerald-300">
                     Recommended
                   </span>
                 </div>
@@ -486,16 +491,16 @@ export function PlatformAdminOrgSwitcher({ compact = false }: { compact?: boolea
                 className={cn(
                   "p-3.5 rounded-xl border text-left cursor-pointer transition-all space-y-1",
                   newFleetTier === "standard"
-                    ? "border-emerald-500 bg-emerald-500/10 ring-1 ring-emerald-500"
+                    ? "border-slate-500 bg-slate-500/10 ring-1 ring-slate-500"
                     : "border-border hover:bg-muted/50"
                 )}
               >
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <Truck className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                    <Truck className="h-4 w-4 text-slate-600 dark:text-slate-400" />
                     <span className="font-semibold text-foreground">Standard Fleet Edition</span>
                   </div>
-                  <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-700 dark:text-emerald-300">
+                  <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded bg-slate-500/20 text-slate-700 dark:text-slate-300">
                     Lean Operations
                   </span>
                 </div>

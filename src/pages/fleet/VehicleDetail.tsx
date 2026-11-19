@@ -614,17 +614,17 @@ export default function FleetVehicleDetail() {
               fallback={
                 isWsAsset ? (
                   vehicle.category === "Generator" ? (
-                    <Zap className="h-8 w-8 text-amber-500" />
+                    <Zap className="h-8 w-8 text-emerald-500" />
                   ) : vehicle.category === "Compressor" ? (
-                    <Wind className="h-8 w-8 text-blue-500" />
+                    <Wind className="h-8 w-8 text-sky-500" />
                   ) : vehicle.category === "Pump" ? (
                     <Droplets className="h-8 w-8 text-cyan-500" />
                   ) : vehicle.category === "Forklift" ? (
-                    <Boxes className="h-8 w-8 text-orange-500" />
+                    <Boxes className="h-8 w-8 text-emerald-600" />
                   ) : vehicle.category === "Boiler" ? (
                     <Factory className="h-8 w-8 text-rose-500" />
                   ) : (
-                    <Wrench className="h-8 w-8 text-amber-600" />
+                    <Wrench className="h-8 w-8 text-emerald-600" />
                   )
                 ) : isTrailer ? (
                   <Container className="h-8 w-8 text-emerald-600" />
@@ -1100,7 +1100,7 @@ export default function FleetVehicleDetail() {
               <div className="p-5 rounded-2xl border border-border bg-card shadow-2xs space-y-4">
                 <div className="flex items-center justify-between pb-3 border-b border-border/80">
                   <h3 className="font-semibold text-base text-foreground flex items-center gap-2">
-                    <Wrench className="h-4 w-4 text-amber-600" /> Plant Equipment Identification
+                    <Wrench className="h-4 w-4 text-emerald-600 dark:text-emerald-400" /> Plant Equipment Identification
                   </h3>
                   <span className="text-xs font-mono font-bold bg-muted px-2 py-0.5 rounded text-foreground border">
                     {vehicle.vehicle_code}
@@ -1115,7 +1115,7 @@ export default function FleetVehicleDetail() {
 
                   <div className="flex items-center justify-between py-1 border-b border-border/40">
                     <span className="text-muted-foreground">Equipment Category:</span>
-                    <span className="font-semibold text-amber-700 dark:text-amber-400">{vehicle.category || "Workshop Asset"}</span>
+                    <span className="font-semibold text-emerald-700 dark:text-emerald-400">{vehicle.category || "Workshop Asset"}</span>
                   </div>
 
                   <div className="flex items-center justify-between py-1 border-b border-border/40">

@@ -1027,9 +1027,21 @@ export function Sidebar() {
           )}
           <div className="min-w-0">
             <div className="flex items-center gap-1.5 text-base font-bold leading-tight tracking-tight text-sidebar-foreground truncate group-hover:text-primary transition-colors" title={companyDisplayName}>
-              <span className="truncate">{companyDisplayName}</span>
+              <span className="truncate">
+                {companyDisplayName.includes("Enterprise") ? (
+                  companyDisplayName.split(/(Enterprise)/gi).map((part, i) =>
+                    part.toLowerCase() === "enterprise" ? (
+                      <span key={i} className="text-emerald-600 dark:text-emerald-400 font-extrabold">{part}</span>
+                    ) : (
+                      part
+                    )
+                  )
+                ) : (
+                  companyDisplayName
+                )}
+              </span>
               {isEnterpriseFleet(organisation) && (
-                <span className="shrink-0 inline-flex items-center rounded px-1.5 py-0.2 text-[9px] font-bold uppercase tracking-wider bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30">
+                <span className="shrink-0 inline-flex items-center rounded px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30">
                   Enterprise
                 </span>
               )}
@@ -1053,7 +1065,7 @@ export function Sidebar() {
                   return (
                     <div className="flex items-center gap-1.5 truncate">
                       <span className="text-[11px] font-semibold uppercase tracking-wider text-primary truncate">Fleet & Logistics</span>
-                      <span className="inline-flex items-center rounded px-1.5 py-0.2 text-[9px] font-bold uppercase tracking-wider bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30">Enterprise</span>
+                      <span className="inline-flex items-center rounded px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30">Enterprise</span>
                     </div>
                   );
                 }
@@ -1077,7 +1089,7 @@ export function Sidebar() {
                   return <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground truncate">IoT & Telemetry</div>;
                 }
                 if (organisation.plan === "enterprise" || enabledMods.length >= 7) {
-                  return <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground truncate">Enterprise</div>;
+                  return <div className="text-[11px] font-semibold uppercase tracking-wider text-emerald-600 dark:text-emerald-400 truncate">Enterprise</div>;
                 }
                 if (enabledMods.includes("production") && !enabledMods.includes("maintenance")) {
                   return <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground truncate">Production</div>;

@@ -521,7 +521,7 @@ export default function Signup() {
                               <span className="font-semibold text-xs text-foreground flex items-center gap-1.5">
                                 <ShieldCheck className="h-3.5 w-3.5 text-emerald-600" /> Enterprise Fleet
                               </span>
-                              <span className="text-[9px] uppercase font-bold px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-700 dark:text-emerald-300">
+                              <span className="text-[9px] uppercase font-bold px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-700 dark:text-emerald-300">
                                 Recommended
                               </span>
                             </div>
