@@ -29,12 +29,16 @@ import {
   Sparkles,
   Info,
   X,
+  PackageCheck,
+  Package,
 } from "lucide-react";
 import { toast } from "sonner";
 import { formatWoNumber } from "@/components/WorkOrderPreview";
 import { TechnicianDialog, type WorkshopTechnician } from "@/pages/fleet/Technicians";
 import { formatNumber, formatDate } from "@/lib/format";
 import { isLogistixwareAccount } from "@/services/customerService";
+import { isEnterpriseFleet } from "@/lib/fleetTiers";
+import { getSmartSpares, issuePartToJobCard, type CommercialSparePart } from "@/services/smartPartsService";
 
 export interface FleetVehicleOption {
   id: string;
@@ -341,6 +345,70 @@ export function FleetWorkOrderForm({
     setSelectedTasks((prev) => prev.filter((t) => t !== taskToRemove));
   };
 
+  // Enterprise Smart Stores & Compatible Spares State (Slide 15)
+  const isEnterprise = isEnterpriseFleet(organisation);
+  const [compatibleSpares, setCompatibleSpares] = useState<CommercialSparePart[]>([]);
+  const [selectedSpares, setSelectedSpares] = useState<{ partId: string; quantity: number }[]>([]);
+  const [spareFilter, setSpareFilter] = useState("");
+
+  useEffect(() => {
+    if (!isEnterprise || !selectedMachine) {
+      setCompatibleSpares([]);
+      setSelectedSpares([]);
+      return;
+    }
+    const orgId = organisation?.id || profile?.organisation_id;
+    if (!orgId) return;
+    const vehicleQuery = `${selectedMachine.make || ""} ${selectedMachine.model || ""}`.trim();
+    getSmartSpares(orgId, vehicleQuery).then((spares) => {
+      setCompatibleSpares(spares);
+    });
+  }, [isEnterprise, selectedMachine, organisation?.id, profile?.organisation_id]);
+
+  const handleToggleSpare = (partId: string) => {
+    setSelectedSpares((prev) => {
+      const exists = prev.find((p) => p.partId === partId);
+      if (exists) {
+        return prev.filter((p) => p.partId !== partId);
+      } else {
+        return [...prev, { partId, quantity: 1 }];
+      }
+    });
+  };
+
+  const handleUpdateSpareQty = (partId: string, delta: number) => {
+    setSelectedSpares((prev) => {
+      return prev
+        .map((p) => {
+          if (p.partId === partId) {
+            const newQty = Math.max(1, p.quantity + delta);
+            return { ...p, quantity: newQty };
+          }
+          return p;
+        })
+        .filter((p) => p.quantity > 0);
+    });
+  };
+
+  const filteredCompatibleSpares = useMemo(() => {
+    if (!spareFilter.trim()) return compatibleSpares;
+    const q = spareFilter.toLowerCase();
+    return compatibleSpares.filter(
+      (s) =>
+        s.name.toLowerCase().includes(q) ||
+        s.part_number.toLowerCase().includes(q) ||
+        s.system_category.toLowerCase().includes(q) ||
+        s.bin_location.toLowerCase().includes(q)
+    );
+  }, [compatibleSpares, spareFilter]);
+
+  const totalSparesCost = useMemo(() => {
+    return selectedSpares.reduce((sum, item) => {
+      const part = compatibleSpares.find((p) => p.id === item.partId);
+      return sum + (part ? part.unit_price_tzs * item.quantity : 0);
+    }, 0);
+  }, [selectedSpares, compatibleSpares]);
+
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!profile) return;
@@ -380,6 +448,17 @@ export function FleetWorkOrderForm({
         fullDescription += `[Repair Location Source]: ${locObj ? locObj.label : repairLocation}\n`;
       }
 
+      if (isEnterprise && selectedSpares.length > 0) {
+        fullDescription += `\n[Requisitioned Workshop Stores Spares]:\n`;
+        for (const item of selectedSpares) {
+          const part = compatibleSpares.find((p) => p.id === item.partId);
+          if (part) {
+            fullDescription += `• ${part.part_number} - ${part.name} (Qty: ${item.quantity}) [Bin: ${part.bin_location}] @ TZS ${part.unit_price_tzs.toLocaleString()}\n`;
+          }
+        }
+        fullDescription += `Total Spares Value: TZS ${totalSparesCost.toLocaleString()}\n`;
+      }
+
       // Check if selectedTechnicianId matches a profile user id or a garage_mechanics id
       const matchingProfile = members.find((m) => m.id === selectedTechnicianId);
       const assigneeId = matchingProfile ? matchingProfile.id : null;
@@ -416,6 +495,32 @@ export function FleetWorkOrderForm({
         .single();
 
       if (insertErr || !inserted) throw insertErr || new Error("Failed to create work order");
+
+      // Auto-issue parts from smart stores with audit trail (Slide 15)
+      if (isEnterprise && selectedSpares.length > 0) {
+        for (const item of selectedSpares) {
+          const part = compatibleSpares.find((p) => p.id === item.partId);
+          if (part) {
+            try {
+              await issuePartToJobCard(profile.organisation_id, {
+                organisation_id: profile.organisation_id,
+                part_id: part.id,
+                part_number: part.part_number,
+                part_name: part.name,
+                job_card_number: formatWoNumber(inserted.wo_year, inserted.wo_number),
+                vehicle_plate: selectedMachine?.plate_number || selectedMachine?.name || "Vehicle",
+                technician_name: selectedTechnician?.name || profile.full_name || "Mechanic",
+                quantity: item.quantity,
+                unit_price: part.unit_price_tzs,
+                total_cost: part.unit_price_tzs * item.quantity,
+                issued_by: profile.id,
+              });
+            } catch (_e) {
+              // Non-blocking for spares issuance
+            }
+          }
+        }
+      }
 
       // Update vehicle odometer in machines if modern and greater
       if (numOdo != null && !Number.isNaN(numOdo) && numOdo > 0) {
@@ -848,6 +953,119 @@ export function FleetWorkOrderForm({
             </div>
           )}
 
+          {/* Enterprise Stores & Smart Parts Requisition (Slide 15) */}
+          {isEnterprise && selectedMachine && (
+            <div className="rounded-xl border border-border bg-card p-4 space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/80 pb-2.5">
+                <div className="flex items-center gap-2">
+                  <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-purple-500/10 text-purple-600 dark:text-purple-400">
+                    <PackageCheck className="h-4 w-4" />
+                  </div>
+                  <div>
+                    <h3 className="text-xs font-semibold text-foreground">
+                      Workshop Stores & Smart Parts Requisition (Slide 15)
+                    </h3>
+                    <p className="text-[11px] text-muted-foreground">
+                      Compatible parts for {selectedMachine.make || ""} {selectedMachine.model || "Vehicle"}. Stock decrements upon creation.
+                    </p>
+                  </div>
+                </div>
+                {selectedSpares.length > 0 && (
+                  <Badge variant="outline" className="text-xs font-mono border-purple-500/30 text-purple-600 dark:text-purple-400">
+                    {selectedSpares.length} {selectedSpares.length === 1 ? "part" : "parts"} · TZS {totalSparesCost.toLocaleString()}
+                  </Badge>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <Input
+                  placeholder="Search compatible parts by name, OEM part #, or bin location..."
+                  value={spareFilter}
+                  onChange={(e) => setSpareFilter(e.target.value)}
+                  className="h-8 text-xs"
+                />
+
+                {filteredCompatibleSpares.length === 0 ? (
+                  <div className="py-3 text-center text-xs text-muted-foreground">
+                    No compatible spare parts catalogued for this vehicle model yet.
+                  </div>
+                ) : (
+                  <div className="max-h-56 overflow-y-auto space-y-1.5 pr-1">
+                    {filteredCompatibleSpares.map((sp) => {
+                      const selectedItem = selectedSpares.find((s) => s.partId === sp.id);
+                      const isSelected = Boolean(selectedItem);
+                      const isLowStock = sp.stock_quantity <= sp.min_reorder_level;
+
+                      return (
+                        <div
+                          key={sp.id}
+                          className={`flex items-center justify-between p-2 rounded-lg border text-xs transition-colors ${
+                            isSelected
+                              ? "border-purple-500/40 bg-purple-500/5"
+                              : "border-border hover:bg-muted/40"
+                          }`}
+                        >
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <Checkbox
+                              checked={isSelected}
+                              onCheckedChange={() => handleToggleSpare(sp.id)}
+                              id={`part-${sp.id}`}
+                            />
+                            <div className="min-w-0">
+                              <label
+                                htmlFor={`part-${sp.id}`}
+                                className="font-medium text-foreground cursor-pointer block truncate"
+                              >
+                                {sp.name}
+                              </label>
+                              <div className="flex flex-wrap items-center gap-2 text-[10px] text-muted-foreground">
+                                <span className="font-mono">{sp.part_number}</span>
+                                <span>•</span>
+                                <span className="font-mono text-primary">Bin: {sp.bin_location}</span>
+                                <span>•</span>
+                                <span className={isLowStock ? "text-amber-600 font-semibold" : ""}>
+                                  Stock: {sp.stock_quantity}
+                                </span>
+                                <span>•</span>
+                                <span>TZS {sp.unit_price_tzs.toLocaleString()}</span>
+                              </div>
+                            </div>
+                          </div>
+
+                          {isSelected && selectedItem && (
+                            <div className="flex items-center gap-1.5 shrink-0 pl-2">
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                className="h-6 w-6 p-0"
+                                onClick={() => handleUpdateSpareQty(sp.id, -1)}
+                              >
+                                -
+                              </Button>
+                              <span className="font-mono font-semibold text-xs min-w-[20px] text-center">
+                                {selectedItem.quantity}
+                              </span>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                className="h-6 w-6 p-0"
+                                onClick={() => handleUpdateSpareQty(sp.id, 1)}
+                              >
+                                +
+                              </Button>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* 7. Driver Complaint / Defect Notes */}
           <div className="space-y-1.5">
             <Label className="text-xs font-semibold">
@@ -1064,6 +1282,37 @@ export function FleetWorkOrderForm({
                       <span className="truncate">{t}</span>
                     </div>
                   ))}
+                </div>
+              </div>
+            )}
+
+            {/* Requisitioned Stores Spares Preview (Slide 15) */}
+            {isEnterprise && selectedSpares.length > 0 && (
+              <div className="space-y-1.5 border-t border-border pt-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-semibold text-muted-foreground uppercase">
+                    Stores Spares ({selectedSpares.length})
+                  </span>
+                  <span className="text-xs font-mono font-bold text-foreground">
+                    TZS {totalSparesCost.toLocaleString()}
+                  </span>
+                </div>
+                <div className="max-h-40 overflow-y-auto space-y-1 pr-1 text-[11px] text-muted-foreground">
+                  {selectedSpares.map((item) => {
+                    const sp = compatibleSpares.find((p) => p.id === item.partId);
+                    if (!sp) return null;
+                    return (
+                      <div key={item.partId} className="flex items-center justify-between text-xs py-0.5">
+                        <div className="truncate mr-2">
+                          <span className="font-medium text-foreground">{sp.name}</span>
+                          <span className="text-[10px] text-muted-foreground ml-1">({sp.bin_location})</span>
+                        </div>
+                        <span className="font-mono shrink-0">
+                          {item.quantity} × {formatNumber(sp.unit_price_tzs)}
+                        </span>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             )}

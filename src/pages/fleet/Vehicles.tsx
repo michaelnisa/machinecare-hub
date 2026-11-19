@@ -55,6 +55,7 @@ import {
   TANZANIA_COMMERCIAL_MAKES,
 } from "@/lib/fleet-metadata";
 import type { TruckLayoutConfigId } from "@/lib/fleet-constants";
+import { isEnterpriseFleet } from "@/lib/fleetTiers";
 
 type Trip = {
   machine_id: string;
@@ -132,7 +133,7 @@ export default function Vehicles() {
   const [docs, setDocs] = useState<VehicleDoc[]>([]);
   const [drivers, setDrivers] = useState<Driver[]>([]);
   const [search, setSearch] = useState("");
-  const [assetTab, setAssetTab] = useState<"all" | "vehicles" | "trailers">("all");
+  const [assetTab, setAssetTab] = useState<"all" | "vehicles" | "trailers" | "workshop_assets">("all");
   const [status, setStatus] = useState<string>("all");
   const [searchParams, setSearchParams] = useSearchParams();
   const initialView = searchParams.get("view") === "live" ? "live" : searchParams.get("view") === "table" ? "table" : "cards";
@@ -215,9 +216,22 @@ export default function Vehicles() {
 
   const driverMap = useMemo(() => new Map(drivers.map((d) => [d.id, d.full_name])), [drivers]);
 
+  const isEnterprise = isEnterpriseFleet(organisation);
+
+  // Workshop non-vehicle assets (Generators, Compressors, Pumps, Lifts - Slide 19)
+  const workshopAssets = useMemo(
+    () => machines.filter((m) => m.category === "Workshop Equipment" || (m.notes && m.notes.includes("[workshop_asset]"))),
+    [machines]
+  );
   // Trailers registered in fleet
-  const fleetTrailers = useMemo(() => machines.filter((m) => m.is_trailer || m.category === "Trailer"), [machines]);
-  const powerUnits = useMemo(() => machines.filter((m) => !m.is_trailer && m.category !== "Trailer"), [machines]);
+  const fleetTrailers = useMemo(
+    () => machines.filter((m) => (m.is_trailer || m.category === "Trailer") && m.category !== "Workshop Equipment" && !(m.notes && m.notes.includes("[workshop_asset]"))),
+    [machines]
+  );
+  const powerUnits = useMemo(
+    () => machines.filter((m) => !m.is_trailer && m.category !== "Trailer" && m.category !== "Workshop Equipment" && !(m.notes && m.notes.includes("[workshop_asset]"))),
+    [machines]
+  );
 
   // Current driver per vehicle: prioritizes telematics driver name from Trakzee, else assigned driver, else active trip driver
   const currentDriver = useMemo(() => {
@@ -279,8 +293,13 @@ export default function Vehicles() {
 
   const filtered = useMemo(() => {
     return machines.filter((m) => {
-      if (assetTab === "vehicles" && (m.is_trailer || m.category === "Trailer")) return false;
-      if (assetTab === "trailers" && !m.is_trailer && m.category !== "Trailer") return false;
+      const isWsAsset = m.category === "Workshop Equipment" || (m.notes && m.notes.includes("[workshop_asset]"));
+      const isTrl = (m.is_trailer || m.category === "Trailer") && !isWsAsset;
+      const isTruck = !isTrl && !isWsAsset;
+
+      if (assetTab === "vehicles" && !isTruck) return false;
+      if (assetTab === "trailers" && !isTrl) return false;
+      if (assetTab === "workshop_assets" && !isWsAsset) return false;
       if (status !== "all") {
         if (status === "active") {
           if (m.status !== "active" && m.status !== "operational") return false;
@@ -422,6 +441,11 @@ export default function Vehicles() {
             <TabsTrigger value="trailers" className="flex items-center gap-1.5">
               <Container className="h-3.5 w-3.5" /> Trailers ({fleetTrailers.length})
             </TabsTrigger>
+            {isEnterprise && (
+              <TabsTrigger value="workshop_assets" className="flex items-center gap-1.5 text-amber-700 dark:text-amber-400 font-semibold">
+                <Wrench className="h-3.5 w-3.5 text-amber-600" /> Workshop Plant ({workshopAssets.length})
+              </TabsTrigger>
+            )}
           </TabsList>
         </Tabs>
 
@@ -504,7 +528,8 @@ export default function Vehicles() {
       ) : viewMode === "cards" ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {filtered.map((m) => {
-            const isTrailer = m.is_trailer || m.category === "Trailer";
+            const isWsAsset = m.category === "Workshop Equipment" || (m.notes && m.notes.includes("[workshop_asset]"));
+            const isTrailer = !isWsAsset && (m.is_trailer || m.category === "Trailer");
             const driver = currentDriver.get(m.id);
             const axleMatch = AXLE_CONFIG_OPTIONS.find((a) => a.value === m.axle_configuration);
             const totalTank = m.total_tank_capacity_l ?? m.tank_capacity_l;
@@ -526,7 +551,15 @@ export default function Vehicles() {
                           value={m.cover_image_url}
                           alt={m.name}
                           className="h-full w-full object-cover"
-                          fallback={isTrailer ? <Container className="h-6 w-6 text-emerald-600" /> : <Truck className="h-6 w-6 text-muted-foreground" />}
+                          fallback={
+                            isWsAsset ? (
+                              <Wrench className="h-6 w-6 text-amber-500" />
+                            ) : isTrailer ? (
+                              <Container className="h-6 w-6 text-emerald-600" />
+                            ) : (
+                              <Truck className="h-6 w-6 text-muted-foreground" />
+                            )
+                          }
                         />
                       </Link>
                       <div>
@@ -541,7 +574,11 @@ export default function Vehicles() {
                             <span className="text-[9px] uppercase font-sans text-muted-foreground">ID</span>
                             <span>{m.vehicle_code}</span>
                           </div>
-                          {isTrailer ? (
+                          {isWsAsset ? (
+                            <span className="rounded bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700 dark:text-amber-400 border border-amber-500/20 flex items-center gap-1">
+                              <Wrench className="h-2.5 w-2.5" /> Workshop Plant
+                            </span>
+                          ) : isTrailer ? (
                             <span className="rounded bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-600 border border-emerald-500/20">
                               Trailer
                             </span>
@@ -558,44 +595,61 @@ export default function Vehicles() {
                   </div>
 
                   {/* Quick Specifications */}
-                  <div className="space-y-1.5 text-xs text-muted-foreground pt-2 border-t border-border/60">
-                    <div className="flex items-center justify-between">
-                      <span className="text-muted-foreground">Plate Number:</span>
-                      <span className="font-semibold text-foreground font-mono">{m.plate_number || "—"}</span>
-                    </div>
-
-                    <div className="flex items-center justify-between">
-                      <span className="text-muted-foreground">Axle & Layout:</span>
-                      <span className="font-medium text-foreground text-right truncate max-w-[200px]" title={axleMatch?.label}>
-                        {axleMatch ? axleMatch.label.split("(")[0].trim() : m.axle_configuration || "6x4"}
-                      </span>
-                    </div>
-
-                    {!isTrailer && (
+                  {isWsAsset ? (
+                    <div className="space-y-1.5 text-xs text-muted-foreground pt-2 border-t border-border/60">
                       <div className="flex items-center justify-between">
-                        <span className="text-muted-foreground">Hitched Unit:</span>
-                        {m.has_trailer && m.trailer_plate ? (
-                          <span className="font-medium text-primary flex items-center gap-1">
-                            <Link2 className="h-3 w-3" /> {m.trailer_plate}
-                          </span>
-                        ) : (
-                          <span className="italic text-muted-foreground">Solo</span>
-                        )}
+                        <span className="text-muted-foreground">Serial Number:</span>
+                        <span className="font-semibold text-foreground font-mono">{m.serial_number || "—"}</span>
                       </div>
-                    )}
-
-                    <div className="flex items-center justify-between">
-                      <span className="text-muted-foreground">Driver:</span>
-                      <span className="font-medium text-foreground">{driver?.name ?? "Unassigned"}</span>
-                    </div>
-
-                    {totalTank != null && totalTank > 0 && (
                       <div className="flex items-center justify-between">
-                        <span className="text-muted-foreground">Tank Capacity:</span>
-                        <span className="font-medium text-foreground">{formatNumber(totalTank)} L</span>
+                        <span className="text-muted-foreground">Plant Unit Type:</span>
+                        <span className="font-medium text-foreground">{m.type || "Workshop Asset"}</span>
                       </div>
-                    )}
-                  </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-muted-foreground">Category:</span>
+                        <span className="font-semibold text-amber-600 dark:text-amber-400">Fixed Workshop Equipment</span>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="space-y-1.5 text-xs text-muted-foreground pt-2 border-t border-border/60">
+                      <div className="flex items-center justify-between">
+                        <span className="text-muted-foreground">Plate Number:</span>
+                        <span className="font-semibold text-foreground font-mono">{m.plate_number || "—"}</span>
+                      </div>
+
+                      <div className="flex items-center justify-between">
+                        <span className="text-muted-foreground">Axle & Layout:</span>
+                        <span className="font-medium text-foreground text-right truncate max-w-[200px]" title={axleMatch?.label}>
+                          {axleMatch ? axleMatch.label.split("(")[0].trim() : m.axle_configuration || "6x4"}
+                        </span>
+                      </div>
+
+                      {!isTrailer && (
+                        <div className="flex items-center justify-between">
+                          <span className="text-muted-foreground">Hitched Unit:</span>
+                          {m.has_trailer && m.trailer_plate ? (
+                            <span className="font-medium text-primary flex items-center gap-1">
+                              <Link2 className="h-3 w-3" /> {m.trailer_plate}
+                            </span>
+                          ) : (
+                            <span className="italic text-muted-foreground">Solo</span>
+                          )}
+                        </div>
+                      )}
+
+                      <div className="flex items-center justify-between">
+                        <span className="text-muted-foreground">Driver:</span>
+                        <span className="font-medium text-foreground">{driver?.name ?? "Unassigned"}</span>
+                      </div>
+
+                      {totalTank != null && totalTank > 0 && (
+                        <div className="flex items-center justify-between">
+                          <span className="text-muted-foreground">Tank Capacity:</span>
+                          <span className="font-medium text-foreground">{formatNumber(totalTank)} L</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 {/* Card Footer Actions */}
@@ -781,7 +835,8 @@ export default function Vehicles() {
               </thead>
               <tbody>
                 {filtered.map((m) => {
-                  const isTrailer = m.is_trailer || m.category === "Trailer";
+                  const isWsAsset = m.category === "Workshop Equipment" || (m.notes && m.notes.includes("[workshop_asset]"));
+                  const isTrailer = !isWsAsset && (m.is_trailer || m.category === "Trailer");
                   const driver = currentDriver.get(m.id);
                   const nextDue = nextDueByMachine.get(m.id) ?? null;
                   const nextDocExpiry = nextDocExpiryByMachine.get(m.id) ?? null;
@@ -799,7 +854,15 @@ export default function Vehicles() {
                               value={m.cover_image_url}
                               alt={m.name}
                               className="h-full w-full object-cover"
-                              fallback={isTrailer ? <Container className="h-4 w-4 text-emerald-600" /> : <Truck className="h-4 w-4 text-muted-foreground" />}
+                              fallback={
+                                isWsAsset ? (
+                                  <Wrench className="h-4 w-4 text-amber-500" />
+                                ) : isTrailer ? (
+                                  <Container className="h-4 w-4 text-emerald-600" />
+                                ) : (
+                                  <Truck className="h-4 w-4 text-muted-foreground" />
+                                )
+                              }
                             />
                           </div>
                           <div>
@@ -811,7 +874,11 @@ export default function Vehicles() {
                                 <span className="text-[9px] uppercase font-sans text-muted-foreground">ID</span>
                                 <span>{m.vehicle_code}</span>
                               </span>
-                              {isTrailer ? (
+                              {isWsAsset ? (
+                                <span className="rounded bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700 dark:text-amber-400 border border-amber-500/20">
+                                  Workshop Plant
+                                </span>
+                              ) : isTrailer ? (
                                 <span className="rounded bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-600 border border-emerald-500/20">
                                   Trailer
                                 </span>

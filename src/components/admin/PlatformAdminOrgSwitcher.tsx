@@ -2,7 +2,9 @@ import { useEffect, useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
-import { isPlatformAdmin, provisionMachineCareGpsAccount } from "@/lib/admin";
+import { isPlatformAdmin, provisionMachineCareGpsAccount, provisionMachinecareTransportCompany } from "@/lib/admin";
+import { isEnterpriseFleet } from "@/lib/fleetTiers";
+import { isLogistixwareAccount } from "@/services/customerService";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -117,6 +119,28 @@ export function PlatformAdminOrgSwitcher({ compact = false }: { compact?: boolea
     }
   };
 
+  const handleProvisionTransport = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setProvisioning(true);
+    try {
+      const res = await provisionMachinecareTransportCompany();
+      if (!res.success) throw new Error(res.error || "Failed to provision Transport Company");
+
+      await fetchOrgs();
+      toast.success("Machinecare Transport Company (Enterprise Fleet) provisioned!");
+
+      if (res.orgId) {
+        await switchOrganisation(res.orgId);
+        setOpen(false);
+        window.location.href = "/dashboard";
+      }
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to provision Transport Company");
+    } finally {
+      setProvisioning(false);
+    }
+  };
+
   const getProfileIcon = (profile: string | null) => {
     switch (profile) {
       case "gps_tracking":
@@ -155,6 +179,10 @@ export function PlatformAdminOrgSwitcher({ compact = false }: { compact?: boolea
         o.industry_profile !== "fleet_logistics" &&
         o.industry_profile !== "garage" &&
         o.industry_profile !== "mixed")
+  );
+
+  const hasTransportOrg = orgs.some((o) =>
+    o.name?.toLowerCase().includes("machinecare transport")
   );
 
   return (
@@ -253,6 +281,16 @@ export function PlatformAdminOrgSwitcher({ compact = false }: { compact?: boolea
                             GPS
                           </span>
                         )}
+                        {isEnterpriseFleet(org) && (
+                          <span className="text-[9px] px-1 rounded bg-purple-500/15 text-purple-700 dark:text-purple-300 font-bold border border-purple-500/30">
+                            ENTERPRISE
+                          </span>
+                        )}
+                        {isLogistixwareAccount(org) && (
+                          <span className="text-[9px] px-1 rounded bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 font-bold border border-emerald-500/30">
+                            STANDARD
+                          </span>
+                        )}
                       </div>
                       <div className="text-[10px] text-muted-foreground capitalize">
                         {isGps ? "GPS Tracking" : getProfileLabel(org.industry_profile)}
@@ -274,6 +312,24 @@ export function PlatformAdminOrgSwitcher({ compact = false }: { compact?: boolea
               );
             })}
           </div>
+        )}
+
+        {!hasTransportOrg && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              disabled={provisioning}
+              onClick={handleProvisionTransport}
+              className="py-2 px-2.5 text-xs text-purple-700 dark:text-purple-300 bg-purple-500/10 hover:bg-purple-500/20 font-semibold cursor-pointer rounded-lg flex items-center gap-2"
+            >
+              {provisioning ? (
+                <Loader2 className="h-4 w-4 animate-spin text-purple-600" />
+              ) : (
+                <Plus className="h-4 w-4 text-purple-600" />
+              )}
+              <span>+ Provision Machinecare Transport (Enterprise)</span>
+            </DropdownMenuItem>
+          </>
         )}
 
         {!hasGpsOrg && (

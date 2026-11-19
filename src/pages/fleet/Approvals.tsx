@@ -51,6 +51,7 @@ import {
   type FleetApprovalPriority,
   type ApprovalStageId,
 } from "@/services/fleetApprovalService";
+import { isEnterpriseFleet } from "@/lib/fleetTiers";
 
 const TYPE_CONFIG: Record<
   FleetApprovalType,
@@ -117,8 +118,8 @@ export default function FleetApprovals() {
   const { profile } = useAuth();
   const { isManager, isOwner, role } = useUserRole();
   const { organisation } = useIndustry();
-  const isLogistix = isLogistixwareAccount(organisation);
-  const isMultiDepartment = !isLogistix;
+  const isEnterprise = isEnterpriseFleet(organisation);
+  const isMultiDepartment = isEnterprise;
 
   const [loading, setLoading] = useState(true);
   const [requests, setRequests] = useState<FleetApprovalRequest[]>([]);

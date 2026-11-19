@@ -313,3 +313,161 @@ export async function provisionMachineCareGpsAccount(): Promise<{ success: boole
     return { success: false, error: err?.message || "Unknown error" };
   }
 }
+
+/**
+ * Idempotently provision the Machinecare Transport Company (Enterprise Fleet Edition).
+ * Seeds enterprise commercial vehicles and workshop fixed assets (Slide 19).
+ */
+export async function provisionMachinecareTransportCompany(): Promise<{
+  success: boolean;
+  orgId?: string;
+  isNew?: boolean;
+  error?: string;
+}> {
+  try {
+    // 1. Check if already existing
+    const { data: existingOrg } = await supabase
+      .from("organisations")
+      .select("id, name, industry_profile, industry, plan")
+      .ilike("name", "%Machinecare Transport%")
+      .limit(1)
+      .maybeSingle();
+
+    if (existingOrg) {
+      if (existingOrg.plan !== "enterprise") {
+        await supabase
+          .from("organisations")
+          .update({ plan: "enterprise" } as any)
+          .eq("id", existingOrg.id);
+      }
+      return { success: true, orgId: existingOrg.id, isNew: false };
+    }
+
+    // 2. Insert new Machinecare Transport Company organisation
+    const { data: newOrg, error: orgErr } = await supabase
+      .from("organisations")
+      .insert({
+        name: "Machinecare Transport Company",
+        industry_profile: "fleet_logistics",
+        industry: "transport",
+        plan: "enterprise",
+        enabled_modules: ["fleet", "maintenance", "inventory"],
+      } as any)
+      .select("id")
+      .single();
+
+    if (orgErr || !newOrg) {
+      return {
+        success: false,
+        error: orgErr?.message || "Failed to create Machinecare Transport Company",
+      };
+    }
+
+    const orgId = newOrg.id;
+    const nowIso = new Date().toISOString();
+
+    // 3. Seed Enterprise Commercial Haulage Fleet
+    await supabase.from("machines").insert([
+      {
+        organisation_id: orgId,
+        name: "Scania R500 6x4 Prime Mover",
+        plate_number: "T 842 DKL",
+        category: "Vehicle",
+        type: "Truck",
+        status: "operational",
+        current_odometer_km: 412500,
+        telematics_latitude: -6.7924,
+        telematics_longitude: 39.2083,
+        telematics_speed: 68,
+        telematics_ignition: true,
+        telematics_battery_volt: 24.6,
+        telematics_last_at: nowIso,
+        notes: "Heavy haulage prime mover assigned to Lusaka transit corridor",
+      },
+      {
+        organisation_id: orgId,
+        name: "Sinotruk Howo 371 Tipper",
+        plate_number: "T 412 DFB",
+        category: "Vehicle",
+        type: "Truck",
+        status: "operational",
+        current_odometer_km: 268400,
+        telematics_latitude: -6.8222,
+        telematics_longitude: 37.6612,
+        telematics_speed: 0,
+        telematics_ignition: false,
+        telematics_battery_volt: 24.1,
+        telematics_last_at: nowIso,
+        notes: "Regional distribution bulk tipper",
+      },
+      {
+        organisation_id: orgId,
+        name: "Mercedes-Benz Actros 3340 Tanker",
+        plate_number: "T 619 DSE",
+        category: "Vehicle",
+        type: "Truck",
+        status: "operational",
+        current_odometer_km: 389200,
+        telematics_latitude: -3.3869,
+        telematics_longitude: 36.6830,
+        telematics_speed: 0,
+        telematics_ignition: true,
+        telematics_battery_volt: 24.2,
+        telematics_last_at: nowIso,
+        notes: "Transit fuel and liquid cargo tanker",
+      },
+      {
+        organisation_id: orgId,
+        name: "Tri-Axle Skeletal Container Trailer",
+        plate_number: "TZ 9012",
+        category: "Vehicle",
+        type: "Trailer",
+        status: "operational",
+        current_odometer_km: 195000,
+        notes: "40ft intermodal container chassis",
+      },
+      // 4. Seed Workshop Fixed Assets (Mega Beverages Slide 19)
+      {
+        organisation_id: orgId,
+        name: "Atlas Copco GA37 VSD+ Industrial Air Compressor",
+        serial_number: "AC-GA37-2024-09",
+        category: "Workshop Equipment",
+        type: "Compressor",
+        status: "operational",
+        notes: "[workshop_asset] Workshop pneumatic line master compressor (Bay 01-04)",
+      },
+      {
+        organisation_id: orgId,
+        name: "Caterpillar 250kVA Standby Diesel Generator",
+        serial_number: "CAT-C9-250-881",
+        category: "Workshop Equipment",
+        type: "Generator",
+        status: "operational",
+        notes: "[workshop_asset] Workshop and yard backup electrical power unit",
+      },
+      {
+        organisation_id: orgId,
+        name: "Ravaglioli 24-Ton Heavy Vehicle 4-Post Lift",
+        serial_number: "RAV-HV24-002",
+        category: "Workshop Equipment",
+        type: "Pneumatics/Lift",
+        status: "operational",
+        notes: "[workshop_asset] Heavy truck inspection and overhaul rack (Heavy Bay 02)",
+      },
+      {
+        organisation_id: orgId,
+        name: "Kärcher HDS 1000 De High-Pressure Fleet Washer",
+        serial_number: "KRC-HDS-9912",
+        category: "Workshop Equipment",
+        type: "Wash System",
+        status: "operational",
+        notes: "[workshop_asset] Steam cleaning washbay unit for chassis degreasing",
+      },
+    ] as any);
+
+    return { success: true, orgId, isNew: true };
+  } catch (err: any) {
+    console.error("provisionMachinecareTransportCompany error:", err);
+    return { success: false, error: err?.message || "Unknown error" };
+  }
+}
