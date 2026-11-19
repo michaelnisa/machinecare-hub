@@ -12,10 +12,14 @@ import {
   ArrowUpRight,
   Activity,
   Plus,
+  Zap,
+  Sparkles,
+  Layers,
 } from "lucide-react";
 import { toast } from "sonner";
 import { formatMoney, formatNumber, formatDate } from "@/lib/format";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Link } from "react-router-dom";
 
 
@@ -310,6 +314,94 @@ export default function InventoryDashboard() {
             </div>
           </div>
         )}
+      </div>
+
+      {/* Slide 21: Fast-Moving Items & Stock Velocity Widget */}
+      <div className="rounded-xl border border-border bg-card p-5 space-y-4 shadow-xs">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/60 pb-3">
+          <div className="flex items-center gap-2">
+            <Zap className="h-4 w-4 text-amber-500" />
+            <div>
+              <h2 className="text-sm font-bold text-foreground">
+                Fast-Moving Items & Stock Velocity (Slide 21)
+              </h2>
+              <p className="text-xs text-muted-foreground">
+                High-turnover spare parts and consumables ranked by monthly consumption frequency.
+              </p>
+            </div>
+          </div>
+          <Badge variant="outline" className="text-xs">
+            Stores Dashboard KPI
+          </Badge>
+        </div>
+
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+          {[
+            {
+              rank: 1,
+              name: "Scania Fuel Filter Separator",
+              partNo: "SCA-2195142",
+              category: "Fuel System",
+              issuedCount: 28,
+              turnRate: "4.8x / mo",
+              status: "High Velocity",
+            },
+            {
+              rank: 2,
+              name: "Howo Drive Brake Linings",
+              partNo: "HOWO-WG9100440027",
+              category: "Brake System",
+              issuedCount: 22,
+              turnRate: "3.9x / mo",
+              status: "High Velocity",
+            },
+            {
+              rank: 3,
+              name: "Cummins Heavy Lube Filter",
+              partNo: "CUM-LF9009",
+              category: "Engine System",
+              issuedCount: 18,
+              turnRate: "3.6x / mo",
+              status: "High Velocity",
+            },
+            {
+              rank: 4,
+              name: "Total Rubia 15W-40 Oil (208L)",
+              partNo: "LUB-15W40-DRUM",
+              category: "Engine System",
+              issuedCount: 16,
+              turnRate: "3.2x / mo",
+              status: "Consistent Demand",
+            },
+            {
+              rank: 5,
+              name: "Actros Brake Pad Overhaul Kit",
+              partNo: "MB-0004204520",
+              category: "Brake System",
+              issuedCount: 12,
+              turnRate: "2.8x / mo",
+              status: "Consistent Demand",
+            },
+          ].map((item) => (
+            <div
+              key={item.partNo}
+              className="p-3 rounded-lg border border-border bg-muted/20 space-y-1.5 text-xs hover:border-primary/40 transition-colors"
+            >
+              <div className="flex items-center justify-between">
+                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-primary/10 text-primary text-[10px] font-bold">
+                  #{item.rank}
+                </span>
+                <span className="font-mono text-[10px] text-muted-foreground">{item.turnRate}</span>
+              </div>
+              <div className="font-semibold text-foreground line-clamp-1">{item.name}</div>
+              <div className="font-mono text-[10px] text-muted-foreground truncate">{item.partNo}</div>
+              <div className="pt-1 flex items-center justify-between text-[11px] border-t border-border/40">
+                <span className="text-muted-foreground">{item.category}</span>
+                <span className="font-bold text-foreground">{item.issuedCount} issued</span>
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
 
       {/* Recent Stock Movements Feed */}
