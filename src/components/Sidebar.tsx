@@ -423,7 +423,7 @@ export function Sidebar() {
         label: "Fleet Operations",
         items: [
           { to: "/dashboard", label: "Fleet Cockpit", icon: LayoutDashboard },
-          { to: "/fleet/vehicles", label: "Fleet Registry", icon: Truck },
+          { to: "/fleet/vehicles", label: "Vehicles & Assets", icon: Truck },
           { to: "/fleet/live-map", label: "Live Telematics & GPS", icon: MapPin },
           { to: "/fleet/drivers", label: "Driver Management", icon: Contact },
           { to: "/fleet/trips", label: "Trips & Dispatch", icon: Route },

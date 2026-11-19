@@ -38,7 +38,7 @@ export default function InventoryHistory() {
     let query = (supabase as any)
       .from("stock_transactions")
       .select(
-        "*, inventory_items(name, part_number, unit), stock_locations(name), machines(name), work_orders(wo_number), profiles(full_name)",
+        "*, inventory_items(name, part_number, unit), stock_locations!location_id(name), machines(name), work_orders(wo_number), profiles(full_name)",
       )
       .order("created_at", { ascending: false })
       .limit(500);

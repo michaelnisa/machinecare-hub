@@ -9,7 +9,40 @@ import type { TruckLayoutConfigId } from "./fleet-constants";
 import { supabase } from "@/integrations/supabase/client";
 
 export const SAFE_MACHINE_COLUMNS =
-  "id, name, plate_number, make, model, year, vin, category, fuel_type, tank_capacity_l, current_odometer_km, current_hours, home_depot, cover_image_url, status, notes";
+  "id, name, plate_number, make, model, year, vin, category, fuel_type, tank_capacity_l, current_odometer_km, current_hours, home_depot, cover_image_url, status, notes, serial_number, purchase_date";
+
+export const FLEET_AND_ASSET_CATEGORIES = [
+  "Vehicle",
+  "Trailer",
+  "Generator",
+  "Compressor",
+  "Pump",
+  "Forklift",
+  "Workshop Equipment",
+  "Boiler",
+  "Plant",
+  "Asset",
+  "Auxiliary Plant",
+] as const;
+
+export function isWorkshopAssetCategory(category?: string | null, notes?: string | null): boolean {
+  if (!category && !notes) return false;
+  const cat = String(category || "").toLowerCase();
+  const n = String(notes || "").toLowerCase();
+  return (
+    cat === "workshop equipment" ||
+    cat === "generator" ||
+    cat === "compressor" ||
+    cat === "pump" ||
+    cat === "forklift" ||
+    cat === "boiler" ||
+    cat === "plant" ||
+    cat === "auxiliary plant" ||
+    cat === "asset" ||
+    n.includes("[workshop_asset]") ||
+    n.includes('"is_workshop_asset":true')
+  );
+}
 
 export const SAFE_DRIVER_COLUMNS =
   "id, full_name, phone, status, notes, photo_url";
@@ -32,7 +65,7 @@ export const AXLE_CONFIG_OPTIONS: { value: TruckLayoutConfigId; label: string; d
 
 export interface FleetVehicle {
   id: string;
-  vehicle_code: string; // Unique Fleet ID (e.g. TRK-001 or TRL-001)
+  vehicle_code: string; // Unique Fleet ID (e.g. TRK-001, TRL-001, GEN-001)
   name: string;
   plate_number: string | null;
   make: string | null;
@@ -48,6 +81,15 @@ export interface FleetVehicle {
   cover_image_url: string | null;
   status: string;
   notes: string | null;
+
+  // Slide 19 Workshop & Stationary Asset Attributes
+  is_workshop_asset?: boolean;
+  asset_type?: string | null; // 'generator' | 'compressor' | 'pump' | 'forklift' | 'workshop_equipment' | 'boiler' | 'plant' | 'other'
+  serial_number?: string | null;
+  rated_power_capacity?: string | null; // e.g. "250 kVA", "15 Bar", "500 LPM", "3.0 Ton"
+  purchase_date?: string | null;
+  purchase_cost?: number | null;
+  installation_bay?: string | null;
 
   // Live Telematics & GPS data
   telematics_imei?: string | null;
@@ -179,8 +221,16 @@ export function cleanDriverName(
 }
 
 export function generateVehicleCode(category: "Vehicle" | "Trailer" | string = "Vehicle", seed?: string, index?: number): string {
-  const isTrailer = String(category).toLowerCase().includes("trailer");
-  const prefix = isTrailer ? "TRL" : "TRK";
+  const cat = String(category).toLowerCase();
+  let prefix = "TRK";
+  if (cat.includes("trailer")) prefix = "TRL";
+  else if (cat.includes("generator")) prefix = "GEN";
+  else if (cat.includes("compressor")) prefix = "CMP";
+  else if (cat.includes("pump")) prefix = "PMP";
+  else if (cat.includes("forklift")) prefix = "FLK";
+  else if (cat.includes("equipment") || cat.includes("workshop")) prefix = "WKS";
+  else if (cat.includes("boiler") || cat.includes("plant")) prefix = "PLT";
+  else if (cat.includes("asset")) prefix = "AST";
 
   if (typeof index === "number" && index >= 0) {
     return `${prefix}-${String(index + 1).padStart(3, "0")}`;
@@ -199,7 +249,16 @@ export function generateVehicleCode(category: "Vehicle" | "Trailer" | string = "
 }
 
 export function parseMachine(raw: any, index?: number): FleetVehicle {
-  let vehicle_type = "rigid_truck";
+  const isWsAsset = isWorkshopAssetCategory(raw.category, raw.notes);
+  let is_workshop_asset = isWsAsset;
+  let asset_type = isWsAsset ? String(raw.category || "other").toLowerCase().replace(/\s+/g, "_") : null;
+  let serial_number: string | null = raw.serial_number ?? null;
+  let rated_power_capacity: string | null = null;
+  let purchase_date: string | null = raw.purchase_date ?? null;
+  let purchase_cost: number | null = null;
+  let installation_bay: string | null = raw.home_depot ?? null;
+
+  let vehicle_type = isWsAsset ? "plant_asset" : "rigid_truck";
   let axle_configuration = "6x4";
   let is_trailer = raw.category === "Trailer";
   let linked_trailer_id: string | null = null;
@@ -247,6 +306,13 @@ export function parseMachine(raw: any, index?: number): FleetVehicle {
       if (parsed.auto_pm_enabled != null) auto_pm_enabled = Boolean(parsed.auto_pm_enabled);
       if (parsed.auto_pm_hours_interval != null) auto_pm_hours_interval = Number(parsed.auto_pm_hours_interval);
       if (parsed.auto_pm_km_interval != null) auto_pm_km_interval = Number(parsed.auto_pm_km_interval);
+      if (parsed.is_workshop_asset != null) is_workshop_asset = Boolean(parsed.is_workshop_asset);
+      if (parsed.asset_type != null) asset_type = parsed.asset_type;
+      if (parsed.serial_number != null && !serial_number) serial_number = parsed.serial_number;
+      if (parsed.rated_power_capacity != null) rated_power_capacity = parsed.rated_power_capacity;
+      if (parsed.purchase_date != null && !purchase_date) purchase_date = parsed.purchase_date;
+      if (parsed.purchase_cost != null) purchase_cost = Number(parsed.purchase_cost);
+      if (parsed.installation_bay != null) installation_bay = parsed.installation_bay;
       user_notes = parsed.text ?? null;
 
       // Extract telematics from structured notes JSON
@@ -343,6 +409,13 @@ export function parseMachine(raw: any, index?: number): FleetVehicle {
     has_trailer,
     trailer_plate: linked_trailer_plate,
     trailer_make_model: linked_trailer_name,
+    is_workshop_asset,
+    asset_type,
+    serial_number,
+    rated_power_capacity,
+    purchase_date,
+    purchase_cost,
+    installation_bay,
     telematics_imei,
     telematics_speed,
     telematics_ignition,
@@ -394,6 +467,15 @@ export function serializeMachinePayload(data: {
   auto_pm_hours_interval?: number | null;
   auto_pm_km_interval?: number | null;
   user_notes?: string | null;
+
+  // Slide 19 Workshop Asset attributes
+  is_workshop_asset?: boolean;
+  asset_type?: string | null;
+  serial_number?: string | null;
+  rated_power_capacity?: string | null;
+  purchase_date?: string | null;
+  purchase_cost?: number | null;
+  installation_bay?: string | null;
 }) {
   const cleanImei = data.telematics_imei ? data.telematics_imei.trim() : null;
 
@@ -411,6 +493,13 @@ export function serializeMachinePayload(data: {
     auto_pm_enabled: data.auto_pm_enabled ?? false,
     auto_pm_hours_interval: data.auto_pm_hours_interval ?? null,
     auto_pm_km_interval: data.auto_pm_km_interval ?? null,
+    is_workshop_asset: data.is_workshop_asset ?? false,
+    asset_type: data.asset_type ?? null,
+    serial_number: data.serial_number ?? null,
+    rated_power_capacity: data.rated_power_capacity ?? null,
+    purchase_date: data.purchase_date ?? null,
+    purchase_cost: data.purchase_cost ?? null,
+    installation_bay: data.installation_bay ?? null,
     text: data.user_notes ?? "",
   };
 
@@ -436,9 +525,11 @@ export function serializeMachinePayload(data: {
     tank_capacity_l: data.total_tank_capacity_l ?? data.head_tank_capacity_l ?? data.tank_capacity_l,
     current_odometer_km: data.current_odometer_km,
     current_hours: data.current_hours ?? null,
-    home_depot: data.home_depot,
+    home_depot: data.installation_bay || data.home_depot,
     status: data.status,
     cover_image_url: data.cover_image_url,
+    serial_number: data.serial_number ?? null,
+    purchase_date: data.purchase_date ?? null,
     notes: JSON.stringify(meta),
   };
 

@@ -37,6 +37,13 @@ import {
   Eye,
   Radio,
   MapPin,
+  Zap,
+  Wind,
+  Droplets,
+  Boxes,
+  Factory,
+  Cog,
+  Gauge,
 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
@@ -46,6 +53,8 @@ import { BulkImporterModal } from "@/components/BulkImporterModal";
 import { syncTrakzeeFleet } from "@/services/trakzeeService";
 import {
   SAFE_MACHINE_COLUMNS,
+  FLEET_AND_ASSET_CATEGORIES,
+  isWorkshopAssetCategory,
   parseMachine,
   serializeMachinePayload,
   generateVehicleCode,
@@ -90,11 +99,37 @@ const VEHICLE_TYPES = [
   { value: "other", label: "Other" },
 ];
 
+export const WORKSHOP_ASSET_TYPES = [
+  { value: "Generator", label: "Generator (Standby Genset / Diesel Generator)", defaultCode: "GEN", defaultHours: "250", icon: Zap },
+  { value: "Compressor", label: "Air Compressor (Rotary Screw / Piston / Workshop)", defaultCode: "CMP", defaultHours: "250", icon: Wind },
+  { value: "Pump", label: "Industrial Pump (Water / Fuel Transfer / Chemical)", defaultCode: "PMP", defaultHours: "250", icon: Droplets },
+  { value: "Forklift", label: "Forklift / Material Handling (Diesel / Electric)", defaultCode: "FLK", defaultHours: "250", icon: Boxes },
+  { value: "Workshop Equipment", label: "Workshop Equipment (Vehicle Lifts, Tire Changers, Scanners)", defaultCode: "WKS", defaultHours: "500", icon: Wrench },
+  { value: "Boiler", label: "Steam Boiler / Heating Plant", defaultCode: "PLT", defaultHours: "500", icon: Factory },
+  { value: "Auxiliary Plant", label: "Auxiliary Plant Equipment & Bottling Machinery", defaultCode: "PLT", defaultHours: "500", icon: Cog },
+];
+
+export const ASSET_POWER_SOURCES = [
+  { value: "diesel", label: "Diesel Engine" },
+  { value: "electric_3p", label: "3-Phase Electric (400V / 415V)" },
+  { value: "electric_1p", label: "Single Phase Electric (220V / 240V)" },
+  { value: "petrol", label: "Petrol Engine" },
+  { value: "hydraulic", label: "Hydraulic Power Pack" },
+  { value: "pneumatic", label: "Pneumatic / Air-Powered" },
+  { value: "solar_hybrid", label: "Solar / Battery Hybrid" },
+];
+
 const EMPTY_FORM = {
-  category: "Vehicle" as "Vehicle" | "Trailer",
+  category: "Vehicle" as string,
+  asset_kind: "vehicle" as "vehicle" | "trailer" | "workshop_asset",
+  asset_type: "Generator",
   vehicle_code: "",
   name: "",
   plate_number: "",
+  serial_number: "",
+  rated_power_capacity: "",
+  purchase_date: "",
+  purchase_cost: "",
   make: "",
   model: "",
   year: "",
@@ -133,14 +168,20 @@ export default function Vehicles() {
   const [docs, setDocs] = useState<VehicleDoc[]>([]);
   const [drivers, setDrivers] = useState<Driver[]>([]);
   const [search, setSearch] = useState("");
-  const [assetTab, setAssetTab] = useState<"all" | "vehicles" | "trailers" | "workshop_assets">("all");
-  const [status, setStatus] = useState<string>("all");
   const [searchParams, setSearchParams] = useSearchParams();
+  const [assetTab, setAssetTab] = useState<"all" | "vehicles" | "trailers" | "workshop_assets">(() => {
+    const tabP = searchParams.get("tab");
+    if (tabP === "plant" || tabP === "workshop" || tabP === "workshop_assets") return "workshop_assets";
+    if (tabP === "trailers" || tabP === "trailer") return "trailers";
+    if (tabP === "vehicles" || tabP === "trucks") return "vehicles";
+    return "all";
+  });
+  const [status, setStatus] = useState<string>("all");
   const initialView = searchParams.get("view") === "live" ? "live" : searchParams.get("view") === "table" ? "table" : "cards";
   const [viewMode, setViewMode] = useState<"table" | "cards" | "live">(initialView);
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<FleetVehicle | null>(null);
-  const [initialCategory, setInitialCategory] = useState<"Vehicle" | "Trailer">("Vehicle");
+  const [initialCategory, setInitialCategory] = useState<string>("Vehicle");
   const [qrOpen, setQrOpen] = useState(false);
   const [qrMachine, setQrMachine] = useState<FleetVehicle | null>(null);
   const [importOpen, setImportOpen] = useState(false);
@@ -189,7 +230,7 @@ export default function Vehicles() {
       supabase
         .from("machines")
         .select(SAFE_MACHINE_COLUMNS)
-        .in("category", ["Vehicle", "Trailer"])
+        .in("category", FLEET_AND_ASSET_CATEGORIES as any)
         .order("name"),
       supabase.from("trips").select("machine_id, driver_id, status, start_at").order("start_at", { ascending: false }),
       supabase.from("service_schedules").select("machine_id, next_due_date").order("next_due_date", { nullsFirst: false }),
@@ -220,16 +261,16 @@ export default function Vehicles() {
 
   // Workshop non-vehicle assets (Generators, Compressors, Pumps, Lifts - Slide 19)
   const workshopAssets = useMemo(
-    () => machines.filter((m) => m.category === "Workshop Equipment" || (m.notes && m.notes.includes("[workshop_asset]"))),
+    () => machines.filter((m) => m.is_workshop_asset || isWorkshopAssetCategory(m.category, m.notes)),
     [machines]
   );
   // Trailers registered in fleet
   const fleetTrailers = useMemo(
-    () => machines.filter((m) => (m.is_trailer || m.category === "Trailer") && m.category !== "Workshop Equipment" && !(m.notes && m.notes.includes("[workshop_asset]"))),
+    () => machines.filter((m) => (m.is_trailer || m.category === "Trailer") && !m.is_workshop_asset && !isWorkshopAssetCategory(m.category, m.notes)),
     [machines]
   );
   const powerUnits = useMemo(
-    () => machines.filter((m) => !m.is_trailer && m.category !== "Trailer" && m.category !== "Workshop Equipment" && !(m.notes && m.notes.includes("[workshop_asset]"))),
+    () => machines.filter((m) => !m.is_trailer && m.category !== "Trailer" && !m.is_workshop_asset && !isWorkshopAssetCategory(m.category, m.notes)),
     [machines]
   );
 
@@ -293,7 +334,7 @@ export default function Vehicles() {
 
   const filtered = useMemo(() => {
     return machines.filter((m) => {
-      const isWsAsset = m.category === "Workshop Equipment" || (m.notes && m.notes.includes("[workshop_asset]"));
+      const isWsAsset = m.is_workshop_asset || isWorkshopAssetCategory(m.category, m.notes);
       const isTrl = (m.is_trailer || m.category === "Trailer") && !isWsAsset;
       const isTruck = !isTrl && !isWsAsset;
 
@@ -313,9 +354,13 @@ export default function Vehicles() {
           !m.name.toLowerCase().includes(q) &&
           !(m.vehicle_code ?? "").toLowerCase().includes(q) &&
           !(m.plate_number ?? "").toLowerCase().includes(q) &&
+          !(m.serial_number ?? "").toLowerCase().includes(q) &&
           !(m.trailer_plate ?? "").toLowerCase().includes(q) &&
           !(m.make ?? "").toLowerCase().includes(q) &&
           !(m.model ?? "").toLowerCase().includes(q) &&
+          !(m.category ?? "").toLowerCase().includes(q) &&
+          !(m.rated_power_capacity ?? "").toLowerCase().includes(q) &&
+          !(m.home_depot ?? "").toLowerCase().includes(q) &&
           !(m.axle_configuration ?? "").toLowerCase().includes(q)
         ) return false;
       }
@@ -330,9 +375,9 @@ export default function Vehicles() {
       {/* Page Header */}
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">{t.fleet.vehiclesTitle}</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">Vehicles & Assets</h1>
           <p className="text-sm text-muted-foreground">
-            Manage your fleet of power units, trucks, and independent trailers with axle configurations & fuel capacities.
+            Complete registry of commercial fleet vehicles, trailers, and stationary workshop assets (Slide 19).
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -368,6 +413,18 @@ export default function Vehicles() {
                 variant="outline"
                 onClick={() => {
                   setEditing(null);
+                  setInitialCategory("Generator");
+                  setOpen(true);
+                }}
+                className="gap-1.5 text-xs text-amber-700 dark:text-amber-400 border-amber-500/40 hover:bg-amber-500/10 shadow-2xs font-medium"
+                title="Register Non-Vehicle Workshop Assets (Generators, Compressors, Pumps, Lifts - Slide 19)"
+              >
+                <Wrench className="h-3.5 w-3.5 text-amber-600" /> + Add Plant / Equipment
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setEditing(null);
                   setInitialCategory("Trailer");
                   setOpen(true);
                 }}
@@ -380,7 +437,7 @@ export default function Vehicles() {
                 setInitialCategory("Vehicle");
                 setOpen(true);
               }}>
-                <Plus className="mr-2 h-4 w-4" /> {t.fleet.addVehicle}
+                <Plus className="mr-2 h-4 w-4" /> + Register Vehicle / Asset
               </Button>
             </>
           )}
@@ -409,18 +466,18 @@ export default function Vehicles() {
 
         <div className="rounded-xl border border-border bg-card p-3.5 shadow-sm">
           <div className="flex items-center justify-between text-xs font-medium text-muted-foreground">
-            <span>Hitched Units</span>
-            <Link2 className="h-4 w-4 text-blue-600" />
+            <span>Workshop & Plant Assets</span>
+            <Wrench className="h-4 w-4 text-amber-600" />
           </div>
-          <div className="mt-2 text-2xl font-bold tracking-tight text-foreground">
-            {powerUnits.filter((p) => p.has_trailer).length}
+          <div className="mt-2 text-2xl font-bold tracking-tight text-amber-600 dark:text-amber-400">
+            {workshopAssets.length}
           </div>
-          <p className="text-[11px] text-muted-foreground mt-0.5">Trucks with trailers attached</p>
+          <p className="text-[11px] text-muted-foreground mt-0.5">Generators, pumps, compressors & lifts</p>
         </div>
 
         <div className="rounded-xl border border-border bg-card p-3.5 shadow-sm">
           <div className="flex items-center justify-between text-xs font-medium text-muted-foreground">
-            <span>Active in Fleet</span>
+            <span>Active & Operational</span>
             <span className="h-2 w-2 rounded-full bg-emerald-500 inline-block animate-pulse" />
           </div>
           <div className="mt-2 text-2xl font-bold tracking-tight text-foreground">
@@ -432,7 +489,18 @@ export default function Vehicles() {
 
       {/* Tabs and Filters */}
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <Tabs value={assetTab} onValueChange={(v) => setAssetTab(v as any)} className="w-auto">
+        <Tabs
+          value={assetTab}
+          onValueChange={(v) => {
+            const nextTab = v as any;
+            setAssetTab(nextTab);
+            const newParams = new URLSearchParams(searchParams);
+            if (nextTab === "all") newParams.delete("tab");
+            else newParams.set("tab", nextTab);
+            setSearchParams(newParams, { replace: true });
+          }}
+          className="w-auto"
+        >
           <TabsList>
             <TabsTrigger value="all">All Assets ({machines.length})</TabsTrigger>
             <TabsTrigger value="vehicles" className="flex items-center gap-1.5">
@@ -441,18 +509,16 @@ export default function Vehicles() {
             <TabsTrigger value="trailers" className="flex items-center gap-1.5">
               <Container className="h-3.5 w-3.5" /> Trailers ({fleetTrailers.length})
             </TabsTrigger>
-            {isEnterprise && (
-              <TabsTrigger value="workshop_assets" className="flex items-center gap-1.5 text-amber-700 dark:text-amber-400 font-semibold">
-                <Wrench className="h-3.5 w-3.5 text-amber-600" /> Workshop Plant ({workshopAssets.length})
-              </TabsTrigger>
-            )}
+            <TabsTrigger value="workshop_assets" className="flex items-center gap-1.5 text-amber-700 dark:text-amber-400 font-semibold">
+              <Wrench className="h-3.5 w-3.5 text-amber-600" /> Workshop Plant ({workshopAssets.length})
+            </TabsTrigger>
           </TabsList>
         </Tabs>
 
         <div className="flex flex-wrap items-center gap-2">
           <div className="relative flex-1 min-w-[200px] max-w-sm">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search ID, plate, name, axle..." className="pl-9 h-9 text-sm" />
+            <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search ID, tag, S/N, plate, make..." className="pl-9 h-9 text-sm" />
           </div>
           <select
             value={status}
@@ -460,9 +526,13 @@ export default function Vehicles() {
             className="h-9 rounded-md border border-input bg-background px-3 text-sm"
           >
             <option value="all">{t.fleet.allStatuses}</option>
-            <option value="active">Active</option>
+            <option value="active">Active / Operational</option>
+            <option value="workshop">In Workshop</option>
             <option value="under_maintenance">Under maintenance</option>
+            <option value="breakdown">Breakdown</option>
+            <option value="out_of_service">Out of service</option>
             <option value="retired">Retired</option>
+            <option value="disposed">Disposed</option>
           </select>
           <div className="flex items-center rounded-lg border border-border bg-muted/40 p-0.5">
             <Button
@@ -528,7 +598,7 @@ export default function Vehicles() {
       ) : viewMode === "cards" ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {filtered.map((m) => {
-            const isWsAsset = m.category === "Workshop Equipment" || (m.notes && m.notes.includes("[workshop_asset]"));
+            const isWsAsset = m.is_workshop_asset || isWorkshopAssetCategory(m.category, m.notes);
             const isTrailer = !isWsAsset && (m.is_trailer || m.category === "Trailer");
             const driver = currentDriver.get(m.id);
             const axleMatch = AXLE_CONFIG_OPTIONS.find((a) => a.value === m.axle_configuration);
@@ -553,7 +623,17 @@ export default function Vehicles() {
                           className="h-full w-full object-cover"
                           fallback={
                             isWsAsset ? (
-                              <Wrench className="h-6 w-6 text-amber-500" />
+                              m.category === "Generator" ? (
+                                <Zap className="h-6 w-6 text-amber-500" />
+                              ) : m.category === "Compressor" ? (
+                                <Wind className="h-6 w-6 text-blue-500" />
+                              ) : m.category === "Pump" ? (
+                                <Droplets className="h-6 w-6 text-cyan-500" />
+                              ) : m.category === "Forklift" ? (
+                                <Boxes className="h-6 w-6 text-orange-500" />
+                              ) : (
+                                <Wrench className="h-6 w-6 text-amber-500" />
+                              )
                             ) : isTrailer ? (
                               <Container className="h-6 w-6 text-emerald-600" />
                             ) : (
@@ -576,7 +656,7 @@ export default function Vehicles() {
                           </div>
                           {isWsAsset ? (
                             <span className="rounded bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700 dark:text-amber-400 border border-amber-500/20 flex items-center gap-1">
-                              <Wrench className="h-2.5 w-2.5" /> Workshop Plant
+                              <Wrench className="h-2.5 w-2.5" /> {m.category || "Workshop Asset"}
                             </span>
                           ) : isTrailer ? (
                             <span className="rounded bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-600 border border-emerald-500/20">
@@ -598,16 +678,30 @@ export default function Vehicles() {
                   {isWsAsset ? (
                     <div className="space-y-1.5 text-xs text-muted-foreground pt-2 border-t border-border/60">
                       <div className="flex items-center justify-between">
+                        <span className="text-muted-foreground">Asset Category:</span>
+                        <span className="font-semibold text-amber-700 dark:text-amber-400">{m.category || "Workshop Asset"}</span>
+                      </div>
+                      <div className="flex items-center justify-between">
                         <span className="text-muted-foreground">Serial Number:</span>
                         <span className="font-semibold text-foreground font-mono">{m.serial_number || "—"}</span>
                       </div>
+                      {m.rated_power_capacity && (
+                        <div className="flex items-center justify-between">
+                          <span className="text-muted-foreground">Rated Power/Cap:</span>
+                          <span className="font-medium text-foreground">{m.rated_power_capacity}</span>
+                        </div>
+                      )}
                       <div className="flex items-center justify-between">
-                        <span className="text-muted-foreground">Plant Unit Type:</span>
-                        <span className="font-medium text-foreground">{m.type || "Workshop Asset"}</span>
+                        <span className="text-muted-foreground flex items-center gap-1">
+                          <Clock className="h-3 w-3 text-primary" /> Operating Hours:
+                        </span>
+                        <span className="font-semibold text-foreground">
+                          {m.current_hours != null ? `${formatNumber(m.current_hours)} hrs` : "0 hrs"}
+                        </span>
                       </div>
                       <div className="flex items-center justify-between">
-                        <span className="text-muted-foreground">Category:</span>
-                        <span className="font-semibold text-amber-600 dark:text-amber-400">Fixed Workshop Equipment</span>
+                        <span className="text-muted-foreground">Location / Bay:</span>
+                        <span className="font-medium text-foreground">{m.home_depot || "Main Workshop"}</span>
                       </div>
                     </div>
                   ) : (
@@ -813,29 +907,29 @@ export default function Vehicles() {
       ) : (
         <div className="overflow-hidden rounded-xl border border-border bg-card">
           <div className="border-b border-border px-5 py-3 text-sm font-medium flex items-center justify-between">
-            <span>Fleet Registry ({filtered.length})</span>
-            <span className="text-xs text-muted-foreground">Vehicles & Independent Trailers</span>
+            <span>Vehicles & Assets ({filtered.length})</span>
+            <span className="text-xs text-muted-foreground">Power Units, Independent Trailers & Workshop Plant</span>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full min-w-[1200px] text-sm">
               <thead className="text-left text-xs uppercase tracking-wide text-muted-foreground bg-muted/20">
                 <tr>
                   <th className="px-5 py-3 font-medium">Asset & Classification</th>
-                  <th className="px-5 py-3 font-medium">Plate & Hitched Unit</th>
-                  <th className="px-5 py-3 font-medium">Axle Configuration</th>
-                  <th className="px-5 py-3 font-medium">Tank (Head / Trailer / Total)</th>
+                  <th className="px-5 py-3 font-medium">Plate / Asset Tag & S/N</th>
+                  <th className="px-5 py-3 font-medium">Axles / Rated Capacity</th>
+                  <th className="px-5 py-3 font-medium">Fuel Tank (Day/Head/Trl)</th>
                   <th className="px-5 py-3 font-medium">{t.fleet.colDriver}</th>
-                  <th className="px-5 py-3 font-medium">{t.fleet.colOdometer}</th>
+                  <th className="px-5 py-3 font-medium">Runtime / Odometer</th>
                   <th className="px-5 py-3 font-medium">{t.fleet.colNextService}</th>
                   <th className="px-5 py-3 font-medium">{t.fleet.colDocs}</th>
-                  <th className="px-5 py-3 font-medium">{t.fleet.colDepot}</th>
+                  <th className="px-5 py-3 font-medium">Location / Depot</th>
                   <th className="px-5 py-3 font-medium">{t.fleet.colStatus}</th>
                   <th className="px-5 py-3"></th>
                 </tr>
               </thead>
               <tbody>
                 {filtered.map((m) => {
-                  const isWsAsset = m.category === "Workshop Equipment" || (m.notes && m.notes.includes("[workshop_asset]"));
+                  const isWsAsset = m.is_workshop_asset || isWorkshopAssetCategory(m.category, m.notes);
                   const isTrailer = !isWsAsset && (m.is_trailer || m.category === "Trailer");
                   const driver = currentDriver.get(m.id);
                   const nextDue = nextDueByMachine.get(m.id) ?? null;
@@ -856,7 +950,17 @@ export default function Vehicles() {
                               className="h-full w-full object-cover"
                               fallback={
                                 isWsAsset ? (
-                                  <Wrench className="h-4 w-4 text-amber-500" />
+                                  m.category === "Generator" ? (
+                                    <Zap className="h-4 w-4 text-amber-500" />
+                                  ) : m.category === "Compressor" ? (
+                                    <Wind className="h-4 w-4 text-blue-500" />
+                                  ) : m.category === "Pump" ? (
+                                    <Droplets className="h-4 w-4 text-cyan-500" />
+                                  ) : m.category === "Forklift" ? (
+                                    <Boxes className="h-4 w-4 text-orange-500" />
+                                  ) : (
+                                    <Wrench className="h-4 w-4 text-amber-500" />
+                                  )
                                 ) : isTrailer ? (
                                   <Container className="h-4 w-4 text-emerald-600" />
                                 ) : (
@@ -876,7 +980,7 @@ export default function Vehicles() {
                               </span>
                               {isWsAsset ? (
                                 <span className="rounded bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700 dark:text-amber-400 border border-amber-500/20">
-                                  Workshop Plant
+                                  {m.category || "Workshop Plant"}
                                 </span>
                               ) : isTrailer ? (
                                 <span className="rounded bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-600 border border-emerald-500/20">
@@ -889,10 +993,15 @@ export default function Vehicles() {
                               )}
                             </div>
                             <div className="text-xs text-muted-foreground flex items-center gap-1.5 flex-wrap mt-0.5">
-                              {[m.make, m.model, m.year].filter(Boolean).join(" · ") || (isTrailer ? "Semi-Trailer" : "Vehicle")}
-                              {!isTrailer && m.vehicle_type && (
+                              {[m.make, m.model, m.year].filter(Boolean).join(" · ") || (isWsAsset ? "Workshop Equipment" : isTrailer ? "Semi-Trailer" : "Vehicle")}
+                              {!isTrailer && !isWsAsset && m.vehicle_type && (
                                 <span className="rounded bg-muted px-1.5 py-0.2 text-[10px] font-medium capitalize text-muted-foreground border">
                                   {m.vehicle_type.replace("_", " ")}
+                                </span>
+                              )}
+                              {isWsAsset && m.serial_number && (
+                                <span className="font-mono text-[10px] text-muted-foreground">
+                                  S/N: {m.serial_number}
                                 </span>
                               )}
                             </div>
@@ -900,30 +1009,48 @@ export default function Vehicles() {
                         </div>
                       </td>
 
-                      {/* Plate & Hitched Unit */}
+                      {/* Plate & Hitched Unit / S/N */}
                       <td className="px-5 py-3">
-                        <div className="font-semibold text-foreground">{m.plate_number ?? "—"}</div>
-                        {isTrailer ? (
-                          <div className="text-[11px] text-muted-foreground">Independent asset</div>
-                        ) : m.has_trailer && m.trailer_plate ? (
-                          <div className="mt-0.5 inline-flex items-center gap-1">
-                            <span className="rounded bg-primary/10 px-1.5 py-0.5 text-[11px] font-semibold text-primary border border-primary/20 flex items-center gap-1">
-                              <Link2 className="h-3 w-3" /> Trailer: {m.trailer_plate}
-                            </span>
+                        {isWsAsset ? (
+                          <div>
+                            <div className="font-semibold text-foreground font-mono">{m.plate_number || m.vehicle_code}</div>
+                            <div className="text-[11px] text-muted-foreground">{m.home_depot || "Main Workshop"}</div>
                           </div>
                         ) : (
-                          <span className="text-[11px] text-muted-foreground italic">No trailer (Solo)</span>
+                          <>
+                            <div className="font-semibold text-foreground">{m.plate_number ?? "—"}</div>
+                            {isTrailer ? (
+                              <div className="text-[11px] text-muted-foreground">Independent asset</div>
+                            ) : m.has_trailer && m.trailer_plate ? (
+                              <div className="mt-0.5 inline-flex items-center gap-1">
+                                <span className="rounded bg-primary/10 px-1.5 py-0.5 text-[11px] font-semibold text-primary border border-primary/20 flex items-center gap-1">
+                                  <Link2 className="h-3 w-3" /> Trailer: {m.trailer_plate}
+                                </span>
+                              </div>
+                            ) : (
+                              <span className="text-[11px] text-muted-foreground italic">No trailer (Solo)</span>
+                            )}
+                          </>
                         )}
                       </td>
 
-                      {/* Axle Configuration */}
+                      {/* Axle Configuration / Rated Power */}
                       <td className="px-5 py-3">
-                        <div className="font-medium text-foreground">
-                          {axleMatch ? axleMatch.label : m.axle_configuration || "6x4"}
-                        </div>
-                        <div className="text-[11px] text-muted-foreground">
-                          {axleMatch ? `${axleMatch.tyreCount} tyre positions` : "Standard configuration"}
-                        </div>
+                        {isWsAsset ? (
+                          <div>
+                            <div className="font-medium text-foreground">{m.rated_power_capacity || "Stationary Unit"}</div>
+                            <div className="text-[11px] text-muted-foreground capitalize">Power: {m.fuel_type?.replace(/_/g, " ") || "Electric / Diesel"}</div>
+                          </div>
+                        ) : (
+                          <>
+                            <div className="font-medium text-foreground">
+                              {axleMatch ? axleMatch.label : m.axle_configuration || "6x4"}
+                            </div>
+                            <div className="text-[11px] text-muted-foreground">
+                              {axleMatch ? `${axleMatch.tyreCount} tyre positions` : "Standard configuration"}
+                            </div>
+                          </>
+                        )}
                       </td>
 
                       {/* Tank Capacity (Head / Trailer / Total) */}
@@ -933,9 +1060,9 @@ export default function Vehicles() {
                             <div className="font-medium text-foreground flex items-center gap-1">
                               <Fuel className="h-3.5 w-3.5 text-primary" />
                               <span>{formatNumber(totalTank)} L</span>
-                              <span className="text-[10px] text-muted-foreground font-normal">Total</span>
+                              <span className="text-[10px] text-muted-foreground font-normal">{isWsAsset ? "Day Tank" : "Total"}</span>
                             </div>
-                            {hasMultiTank && (m.head_tank_capacity_l != null || m.trailer_tank_capacity_l != null) && (
+                            {!isWsAsset && hasMultiTank && (m.head_tank_capacity_l != null || m.trailer_tank_capacity_l != null) && (
                               <div className="text-[11px] text-muted-foreground mt-0.5">
                                 Head: {m.head_tank_capacity_l != null ? `${formatNumber(m.head_tank_capacity_l)}L` : "—"} · Trl: {m.trailer_tank_capacity_l != null ? `${formatNumber(m.trailer_tank_capacity_l)}L` : "—"}
                               </div>
@@ -948,7 +1075,9 @@ export default function Vehicles() {
 
                       {/* Driver */}
                       <td className="px-5 py-3 text-muted-foreground">
-                        {isTrailer ? (
+                        {isWsAsset ? (
+                          <span className="text-xs text-muted-foreground font-medium">Workshop Plant</span>
+                        ) : isTrailer ? (
                           <span className="text-xs text-muted-foreground italic">Towed unit</span>
                         ) : driver ? (
                           <>
@@ -960,9 +1089,18 @@ export default function Vehicles() {
                         )}
                       </td>
 
-                      {/* Odometer */}
+                      {/* Odometer / Operating Hours */}
                       <td className="px-5 py-3 text-muted-foreground">
-                        {m.current_odometer_km != null ? `${formatNumber(m.current_odometer_km)} km` : "—"}
+                        {isWsAsset ? (
+                          <div className="flex items-center gap-1 font-medium text-foreground">
+                            <Clock className="h-3.5 w-3.5 text-primary" />
+                            <span>{m.current_hours != null ? `${formatNumber(m.current_hours)} hrs` : "0 hrs"}</span>
+                          </div>
+                        ) : m.current_odometer_km != null ? (
+                          `${formatNumber(m.current_odometer_km)} km`
+                        ) : (
+                          "—"
+                        )}
                       </td>
 
                       {/* Next Service */}
@@ -1089,7 +1227,7 @@ export function VehicleDialog({
   open: boolean;
   onOpenChange: (v: boolean) => void;
   machine: FleetVehicle | null;
-  initialCategory?: "Vehicle" | "Trailer";
+  initialCategory?: string;
   availableTrailers: FleetVehicle[];
   existingCount?: number;
   onSaved: (createdRecord?: any) => void;
@@ -1105,7 +1243,8 @@ export function VehicleDialog({
   useEffect(() => {
     if (open) {
       if (machine) {
-        const isTrailer = machine.is_trailer || machine.category === "Trailer";
+        const isWsAsset = machine.is_workshop_asset || isWorkshopAssetCategory(machine.category, machine.notes);
+        const isTrailer = !isWsAsset && (machine.is_trailer || machine.category === "Trailer");
         let trailerMode: "none" | "fleet" | "manual" = "none";
         if (machine.linked_trailer_id) {
           trailerMode = "fleet";
@@ -1120,16 +1259,22 @@ export function VehicleDialog({
         setCustomMake(!isInList && Boolean(existingMake));
 
         setForm({
-          category: (machine.category === "Trailer" ? "Trailer" : "Vehicle") as "Vehicle" | "Trailer",
+          category: machine.category || (isWsAsset ? "Generator" : isTrailer ? "Trailer" : "Vehicle"),
+          asset_kind: isWsAsset ? "workshop_asset" : isTrailer ? "trailer" : "vehicle",
+          asset_type: isWsAsset ? (machine.category || "Generator") : "Generator",
           vehicle_code: machine.vehicle_code || generateVehicleCode(machine.category, undefined, existingCount ?? 0),
           name: machine.name,
           plate_number: machine.plate_number ?? "",
+          serial_number: machine.serial_number ?? "",
+          rated_power_capacity: machine.rated_power_capacity ?? "",
+          purchase_date: machine.purchase_date ?? "",
+          purchase_cost: machine.purchase_cost != null ? String(machine.purchase_cost) : "",
           make: machine.make ?? "",
           model: machine.model ?? "",
           year: machine.year != null ? String(machine.year) : "",
           vin: machine.vin ?? "",
           fuel_type: machine.fuel_type ?? "diesel",
-          vehicle_type: machine.vehicle_type || (isTrailer ? "trailer" : "truck"),
+          vehicle_type: machine.vehicle_type || (isWsAsset ? "plant_asset" : isTrailer ? "trailer" : "truck"),
           axle_configuration: (machine.axle_configuration || (isTrailer ? "trailer_tri" : "6x4")) as TruckLayoutConfigId,
           is_trailer: isTrailer,
           trailer_mode: trailerMode,
@@ -1145,21 +1290,30 @@ export function VehicleDialog({
           auto_pm_enabled: Boolean(machine.auto_pm_enabled),
           auto_pm_hours_interval: machine.auto_pm_hours_interval != null ? String(machine.auto_pm_hours_interval) : "250",
           auto_pm_km_interval: machine.auto_pm_km_interval != null ? String(machine.auto_pm_km_interval) : "10000",
-          home_depot: machine.home_depot ?? "",
+          home_depot: machine.installation_bay || machine.home_depot || "",
           status: machine.status,
           user_notes: machine.user_notes ?? "",
           telematics_imei: machine.telematics_imei ?? "",
         });
       } else {
-        const isTrailer = initialCategory === "Trailer";
+        const isWs = isWorkshopAssetCategory(initialCategory) || initialCategory === "workshop_asset";
+        const isTrailer = !isWs && initialCategory === "Trailer";
+        const categoryName = isWs ? (WORKSHOP_ASSET_TYPES.some((w) => w.value === initialCategory) ? initialCategory : "Generator") : isTrailer ? "Trailer" : "Vehicle";
+        const initialAssetType = isWs ? categoryName : "Generator";
+        const matchedAssetType = WORKSHOP_ASSET_TYPES.find((w) => w.value === initialAssetType);
+
         setCustomMake(false);
         setForm({
           ...EMPTY_FORM,
-          category: initialCategory,
-          vehicle_code: generateVehicleCode(initialCategory, undefined, existingCount ?? 0),
+          category: categoryName,
+          asset_kind: isWs ? "workshop_asset" : isTrailer ? "trailer" : "vehicle",
+          asset_type: initialAssetType,
+          vehicle_code: generateVehicleCode(categoryName, undefined, existingCount ?? 0),
           is_trailer: isTrailer,
-          vehicle_type: isTrailer ? "trailer" : "truck",
+          vehicle_type: isWs ? "plant_asset" : isTrailer ? "trailer" : "truck",
           axle_configuration: isTrailer ? "trailer_tri" : "6x4",
+          auto_pm_enabled: isWs ? true : false,
+          auto_pm_hours_interval: matchedAssetType?.defaultHours || "250",
         });
       }
       setPhotoFile(null);
@@ -1254,10 +1408,15 @@ export function VehicleDialog({
     }));
   };
 
+  const isWsAsset = form.asset_kind === "workshop_asset" || isWorkshopAssetCategory(form.category);
+  const isTrailer = !isWsAsset && (form.asset_kind === "trailer" || form.is_trailer || form.category === "Trailer");
+
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!profile) return;
-    if (!form.name.trim()) return toast.error(form.is_trailer ? "Trailer name is required" : "Vehicle name is required");
+    if (!form.name.trim()) {
+      return toast.error(isWsAsset ? "Plant / Equipment asset name is required" : isTrailer ? "Trailer name is required" : "Vehicle name is required");
+    }
     setSubmitting(true);
 
     try {
@@ -1272,10 +1431,9 @@ export function VehicleDialog({
         coverUrl = path;
       }
 
-      const isTrailer = form.is_trailer || form.category === "Trailer";
-      const hasTrailerHitch = !isTrailer && form.trailer_mode !== "none";
+      const hasTrailerHitch = !isWsAsset && !isTrailer && form.trailer_mode !== "none";
 
-      const headCap = isTrailer
+      const headCap = (isWsAsset || isTrailer)
         ? null
         : form.head_tank_capacity_l ? Number(form.head_tank_capacity_l) : null;
 
@@ -1283,7 +1441,9 @@ export function VehicleDialog({
         ? (form.total_tank_capacity_l ? Number(form.total_tank_capacity_l) : null)
         : (hasTrailerHitch && form.trailer_tank_capacity_l ? Number(form.trailer_tank_capacity_l) : null);
 
-      const totalCap = isTrailer
+      const totalCap = isWsAsset
+        ? (form.tank_capacity_l ? Number(form.tank_capacity_l) : null)
+        : isTrailer
         ? trailerCap
         : (form.total_tank_capacity_l ? Number(form.total_tank_capacity_l) : ((headCap || 0) + (trailerCap || 0) || null));
 
@@ -1291,20 +1451,20 @@ export function VehicleDialog({
       const safePayload = serializeMachinePayload({
         vehicle_code: form.vehicle_code.trim() || null,
         name: form.name.trim(),
-        plate_number: form.plate_number.trim() || null,
+        plate_number: isWsAsset ? (form.plate_number.trim() || form.vehicle_code.trim() || null) : (form.plate_number.trim() || null),
         make: form.make.trim() || null,
         model: form.model.trim() || null,
         year: form.year ? Number(form.year) : null,
-        vin: form.vin.trim() || null,
+        vin: isWsAsset ? (form.serial_number.trim() || form.vin.trim() || null) : (form.vin.trim() || null),
         category: form.category,
         fuel_type: isTrailer ? null : (form.fuel_type || null),
         tank_capacity_l: totalCap ?? headCap,
-        current_odometer_km: form.current_odometer_km ? Number(form.current_odometer_km) : null,
+        current_odometer_km: isWsAsset ? null : (form.current_odometer_km ? Number(form.current_odometer_km) : null),
         current_hours: form.current_hours ? Number(form.current_hours) : null,
         home_depot: form.home_depot.trim() || null,
         status: form.status,
         cover_image_url: coverUrl,
-        vehicle_type: isTrailer ? "trailer" : form.vehicle_type,
+        vehicle_type: isWsAsset ? "plant_asset" : isTrailer ? "trailer" : form.vehicle_type,
         axle_configuration: form.axle_configuration,
         is_trailer: isTrailer,
         linked_trailer_id: hasTrailerHitch && form.trailer_mode === "fleet" ? form.linked_trailer_id : null,
@@ -1315,10 +1475,19 @@ export function VehicleDialog({
         total_tank_capacity_l: totalCap,
         auto_pm_enabled: form.auto_pm_enabled,
         auto_pm_hours_interval: form.auto_pm_hours_interval ? Number(form.auto_pm_hours_interval) : null,
-        auto_pm_km_interval: form.auto_pm_km_interval ? Number(form.auto_pm_km_interval) : null,
+        auto_pm_km_interval: isWsAsset ? null : (form.auto_pm_km_interval ? Number(form.auto_pm_km_interval) : null),
         user_notes: form.user_notes.trim() || null,
         telematics_imei: form.telematics_imei.trim() || null,
         existing_telematics: (machine as any)?.telematics_obj ?? undefined,
+
+        // Workshop Asset details
+        is_workshop_asset: isWsAsset,
+        asset_type: isWsAsset ? (form.category.toLowerCase().replace(/\s+/g, "_")) : null,
+        serial_number: form.serial_number.trim() || null,
+        rated_power_capacity: form.rated_power_capacity.trim() || null,
+        purchase_date: form.purchase_date.trim() || null,
+        purchase_cost: form.purchase_cost ? Number(form.purchase_cost) : null,
+        installation_bay: form.home_depot.trim() || null,
       });
 
       let savedMachineId = machine?.id;
@@ -1351,14 +1520,18 @@ export function VehicleDialog({
           .eq("name", "Automated PM Interval Service")
           .limit(1);
 
+        const pmInstructions = isWsAsset
+          ? `Automated PM alert for ${form.name}: triggered every ${intervalHours} operating runtime hours. Inspect filters, engine oil/coolant, electrical connections, drive belts, and safety cutouts.`
+          : `Automated PM alert: triggered after ${intervalHours} operating hours or scheduled interval. Inspect fluids, filters, and safety systems.`;
+
         if (existingSchedules && existingSchedules.length > 0) {
           await supabase.from("service_schedules").update({
             interval_hours: intervalHours,
             next_due_hours: nextDueHours,
+            instructions: pmInstructions,
             status: "active",
           }).eq("id", existingSchedules[0].id);
         } else {
-          // Calculate calendar due date estimate (e.g., 90 days out if no date given)
           const estDate = new Date();
           estDate.setDate(estDate.getDate() + 90);
           await supabase.from("service_schedules").insert({
@@ -1371,7 +1544,7 @@ export function VehicleDialog({
             interval_days: 90,
             next_due_date: estDate.toISOString().slice(0, 10),
             status: "active",
-            instructions: `Automated PM alert: triggered after ${intervalHours} operating hours or scheduled interval. Inspect fluids, filters, and safety systems.`,
+            instructions: pmInstructions,
           });
         }
       }
@@ -1383,12 +1556,16 @@ export function VehicleDialog({
           machine_id: machine.id,
           from_status: machine.status,
           to_status: form.status,
-          reason: "Updated via fleet asset form",
+          reason: "Updated via vehicle & asset form",
           changed_by: user?.id ?? null,
         });
       }
 
-      toast.success(machine ? (isTrailer ? "Trailer updated" : "Vehicle updated") : (isTrailer ? "Trailer registered" : "Vehicle registered"));
+      toast.success(
+        machine
+          ? (isWsAsset ? "Plant / Equipment asset updated" : isTrailer ? "Trailer updated" : "Vehicle updated")
+          : (isWsAsset ? "Plant / Equipment asset registered" : isTrailer ? "Trailer registered" : "Vehicle registered")
+      );
       onOpenChange(false);
       onSaved(createdRecord);
     } catch (err) {
@@ -1399,15 +1576,21 @@ export function VehicleDialog({
     }
   };
 
-  const isTrailer = form.is_trailer || form.category === "Trailer";
-
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            {isTrailer ? <Container className="h-5 w-5 text-emerald-600" /> : <Truck className="h-5 w-5 text-primary" />}
-            {machine ? (isTrailer ? "Edit Independent Trailer" : "Edit Vehicle") : (isTrailer ? "Add Independent Trailer" : "Add Vehicle")}
+            {isWsAsset ? (
+              <Wrench className="h-5 w-5 text-amber-600" />
+            ) : isTrailer ? (
+              <Container className="h-5 w-5 text-emerald-600" />
+            ) : (
+              <Truck className="h-5 w-5 text-primary" />
+            )}
+            {machine
+              ? (isWsAsset ? "Edit Plant / Equipment Asset" : isTrailer ? "Edit Independent Trailer" : "Edit Vehicle")
+              : (isWsAsset ? "Register Plant / Equipment Asset" : isTrailer ? "Add Independent Trailer" : "Add Vehicle")}
           </DialogTitle>
         </DialogHeader>
 
@@ -1416,18 +1599,19 @@ export function VehicleDialog({
           {!machine && (
             <div className="rounded-xl border border-border bg-muted/40 p-3">
               <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground block mb-2">
-                Asset Classification
+                Asset Classification & Registry Type
               </Label>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                 <Button
                   type="button"
-                  variant={form.category === "Vehicle" ? "default" : "outline"}
-                  className="flex items-center justify-center gap-2 cursor-pointer"
+                  variant={form.asset_kind === "vehicle" ? "default" : "outline"}
+                  className="flex items-center justify-center gap-2 cursor-pointer h-10 text-xs font-medium"
                   onClick={() => {
                     const currentNum = form.vehicle_code.match(/\d+$/)?.[0] ?? String((existingCount ?? 0) + 1).padStart(3, "0");
                     setForm((prev) => ({
                       ...prev,
                       category: "Vehicle",
+                      asset_kind: "vehicle",
                       vehicle_code: `TRK-${currentNum.padStart(3, "0")}`,
                       is_trailer: false,
                       vehicle_type: "truck",
@@ -1439,13 +1623,14 @@ export function VehicleDialog({
                 </Button>
                 <Button
                   type="button"
-                  variant={form.category === "Trailer" ? "default" : "outline"}
-                  className="flex items-center justify-center gap-2 cursor-pointer"
+                  variant={form.asset_kind === "trailer" ? "default" : "outline"}
+                  className="flex items-center justify-center gap-2 cursor-pointer h-10 text-xs font-medium"
                   onClick={() => {
                     const currentNum = form.vehicle_code.match(/\d+$/)?.[0] ?? String((existingCount ?? 0) + 1).padStart(3, "0");
                     setForm((prev) => ({
                       ...prev,
                       category: "Trailer",
+                      asset_kind: "trailer",
                       vehicle_code: `TRL-${currentNum.padStart(3, "0")}`,
                       is_trailer: true,
                       vehicle_type: "trailer",
@@ -1455,6 +1640,31 @@ export function VehicleDialog({
                 >
                   <Container className="h-4 w-4" /> Independent Trailer
                 </Button>
+                <Button
+                  type="button"
+                  variant={form.asset_kind === "workshop_asset" ? "default" : "outline"}
+                  className={`flex items-center justify-center gap-2 cursor-pointer h-10 text-xs font-medium ${
+                    form.asset_kind === "workshop_asset"
+                      ? "bg-amber-600 hover:bg-amber-700 text-white"
+                      : "border-amber-500/40 text-amber-700 dark:text-amber-400"
+                  }`}
+                  onClick={() => {
+                    const currentNum = form.vehicle_code.match(/\d+$/)?.[0] ?? String((existingCount ?? 0) + 1).padStart(3, "0");
+                    setForm((prev) => ({
+                      ...prev,
+                      category: "Generator",
+                      asset_kind: "workshop_asset",
+                      asset_type: "Generator",
+                      vehicle_code: `GEN-${currentNum.padStart(3, "0")}`,
+                      is_trailer: false,
+                      vehicle_type: "plant_asset",
+                      auto_pm_enabled: true,
+                      auto_pm_hours_interval: "250",
+                    }));
+                  }}
+                >
+                  <Wrench className="h-4 w-4" /> Workshop & Plant (Slide 19)
+                </Button>
               </div>
             </div>
           )}
@@ -1462,7 +1672,7 @@ export function VehicleDialog({
           <div className="grid gap-4 sm:grid-cols-2">
             {/* Photo Upload */}
             <div className="space-y-1.5 sm:col-span-2">
-              <Label>{isTrailer ? "Trailer Photo" : "Vehicle Photo"}</Label>
+              <Label>{isWsAsset ? "Asset Photo" : isTrailer ? "Trailer Photo" : "Vehicle Photo"}</Label>
               <div className="flex items-center gap-4">
                 <div className="flex h-16 w-24 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-border bg-muted">
                   {photoPreview ? (
@@ -1472,7 +1682,15 @@ export function VehicleDialog({
                       value={machine?.cover_image_url}
                       alt={form.name || "Asset"}
                       className="h-full w-full object-cover"
-                      fallback={isTrailer ? <Container className="h-5 w-5 text-emerald-600" /> : <Truck className="h-5 w-5 text-muted-foreground" />}
+                      fallback={
+                        isWsAsset ? (
+                          <Wrench className="h-5 w-5 text-amber-600" />
+                        ) : isTrailer ? (
+                          <Container className="h-5 w-5 text-emerald-600" />
+                        ) : (
+                          <Truck className="h-5 w-5 text-muted-foreground" />
+                        )
+                      }
                     />
                   )}
                 </div>
@@ -1489,471 +1707,741 @@ export function VehicleDialog({
               </div>
             </div>
 
-            {/* Name & Asset ID / Code */}
-            <div className="space-y-1.5 sm:col-span-2">
-              <div className="grid gap-4 sm:grid-cols-3">
+            {/* WORKSHOP & PLANT ASSET FORM (SLIDE 19) */}
+            {isWsAsset ? (
+              <>
+                {/* Equipment Subtype Selector */}
+                <div className="space-y-1.5 sm:col-span-2 rounded-lg border border-amber-500/30 bg-amber-500/5 p-3">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <Label className="text-xs font-semibold text-amber-800 dark:text-amber-400 flex items-center gap-1.5">
+                      <Wrench className="h-4 w-4 text-amber-600" /> Plant Equipment Subtype (Slide 19) *
+                    </Label>
+                    <span className="text-[11px] text-muted-foreground">Stationary & workshop asset registration</span>
+                  </div>
+                  <Select
+                    value={form.category}
+                    onValueChange={(val) => {
+                      const typeMatch = WORKSHOP_ASSET_TYPES.find((w) => w.value === val);
+                      const prefix = typeMatch?.defaultCode || "AST";
+                      const currentNum = form.vehicle_code.match(/\d+$/)?.[0] ?? String((existingCount ?? 0) + 1).padStart(3, "0");
+                      setForm((prev) => ({
+                        ...prev,
+                        category: val,
+                        asset_type: val,
+                        vehicle_code: `${prefix}-${currentNum.padStart(3, "0")}`,
+                        auto_pm_hours_interval: typeMatch?.defaultHours || "250",
+                      }));
+                    }}
+                  >
+                    <SelectTrigger className="border-amber-500/40 bg-background"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {WORKSHOP_ASSET_TYPES.map((w) => {
+                        const Icon = w.icon;
+                        return (
+                          <SelectItem key={w.value} value={w.value}>
+                            <div className="flex items-center gap-2 py-0.5">
+                              <Icon className="h-4 w-4 text-amber-600" />
+                              <span className="font-medium text-xs">{w.label}</span>
+                            </div>
+                          </SelectItem>
+                        );
+                      })}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Name & Asset Tag / Code */}
                 <div className="space-y-1.5 sm:col-span-2">
-                  <Label>{isTrailer ? "Trailer Name / Unit ID *" : "Vehicle Name *"}</Label>
+                  <div className="grid gap-4 sm:grid-cols-3">
+                    <div className="space-y-1.5 sm:col-span-2">
+                      <Label>Plant / Equipment Name *</Label>
+                      <Input
+                        value={form.name}
+                        onChange={(e) => setForm({ ...form, name: e.target.value })}
+                        placeholder="e.g. Caterpillar 500kVA Standby Generator #1"
+                        maxLength={100}
+                        required
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <Label className="text-xs font-semibold">Asset Tag / Code *</Label>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const nextCode = generateVehicleCode(form.category, undefined, (existingCount ?? 0) + Math.floor(1 + Math.random() * 20));
+                            setForm((prev) => ({ ...prev, vehicle_code: nextCode }));
+                          }}
+                          className="text-[10px] text-amber-700 dark:text-amber-400 hover:underline flex items-center gap-0.5 cursor-pointer font-medium"
+                          title="Generate next ID"
+                        >
+                          <RefreshCw className="h-2.5 w-2.5" /> Auto-Gen
+                        </button>
+                      </div>
+                      <Input
+                        value={form.vehicle_code}
+                        onChange={(e) => setForm({ ...form, vehicle_code: e.target.value.toUpperCase() })}
+                        placeholder="GEN-001"
+                        className="font-mono font-bold text-foreground tracking-wider uppercase h-10"
+                        required
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Serial Number & Make / Manufacturer */}
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <Label>Serial Number / Nameplate S/N</Label>
+                    <span className="text-[10px] text-muted-foreground">Manufacturer tag</span>
+                  </div>
                   <Input
-                    value={form.name}
-                    onChange={(e) => setForm({ ...form, name: e.target.value })}
-                    placeholder={isTrailer ? "e.g. Tanker Semi-Trailer #01 (BPW)" : "e.g. Scania R500 Prime Mover"}
-                    maxLength={100}
-                    required
+                    value={form.serial_number}
+                    onChange={(e) => setForm({ ...form, serial_number: e.target.value })}
+                    placeholder="e.g. CAT-C15-89421A"
+                    className="font-mono text-xs"
                   />
                 </div>
 
                 <div className="space-y-1.5">
-                  <div className="flex items-center justify-between">
-                    <Label className="text-xs font-semibold">{isTrailer ? "Trailer ID / Code *" : "Asset ID / Code *"}</Label>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const nextCode = generateVehicleCode(
-                          form.category,
-                          undefined,
-                          (existingCount ?? 0) + Math.floor(1 + Math.random() * 20)
-                        );
-                        setForm((prev) => ({ ...prev, vehicle_code: nextCode }));
-                      }}
-                      className="text-[10px] text-primary hover:underline flex items-center gap-0.5 cursor-pointer font-medium"
-                      title="Generate next ID"
-                    >
-                      <RefreshCw className="h-2.5 w-2.5" /> Auto-Gen
-                    </button>
-                  </div>
-                  <Input
-                    value={form.vehicle_code}
-                    onChange={(e) => setForm({ ...form, vehicle_code: e.target.value.toUpperCase() })}
-                    placeholder={isTrailer ? "TRL-001" : "TRK-001"}
-                    className="font-mono font-bold text-foreground tracking-wider uppercase h-10"
-                    required
-                  />
-                  <p className="text-[10px] text-muted-foreground">{isTrailer ? "e.g. TRL-001, TRL-012" : "e.g. TRK-001, FLT-042"}</p>
-                </div>
-              </div>
-            </div>
-
-            {/* Vehicle Type (Only for power units) */}
-            {!isTrailer && (
-              <div className="space-y-1.5">
-                <Label>Vehicle Type</Label>
-                <Select
-                  value={form.vehicle_type}
-                  onValueChange={(v) => {
-                    let defaultAxle: TruckLayoutConfigId = "6x4";
-                    if (v === "rigid") defaultAxle = "4x2";
-                    else if (v === "rigid_trailer") defaultAxle = "4x2_trailer";
-                    else if (v === "van_pickup") defaultAxle = "4_wheel";
-                    else if (v === "prime_mover" || v === "tanker" || v === "truck") defaultAxle = "6x4";
-
-                    setForm((prev) => ({
-                      ...prev,
-                      vehicle_type: v,
-                      axle_configuration: defaultAxle,
-                    }));
-                  }}
-                >
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {VEHICLE_TYPES.filter((vt) => vt.value !== "trailer").map((vt) => (
-                      <SelectItem key={vt.value} value={vt.value}>{vt.label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
-
-            {/* Plate Number */}
-            <div className="space-y-1.5">
-              <Label>{isTrailer ? "Trailer Plate Number *" : "Plate Number"}</Label>
-              <Input
-                value={form.plate_number}
-                onChange={(e) => setForm({ ...form, plate_number: e.target.value })}
-                placeholder={isTrailer ? "e.g. T 892 DFE" : "e.g. T 123 ABC"}
-              />
-            </div>
-
-            {/* Axle Configuration (Key feature for tyre management) */}
-            <div className="space-y-1.5 sm:col-span-2">
-              <div className="flex items-center justify-between">
-                <Label className="text-primary font-semibold flex items-center gap-1.5">
-                  <Layers className="h-4 w-4" /> Axle & Tyre Configuration *
-                </Label>
-                <span className="text-[11px] text-muted-foreground">Auto-binds tyre positions in Tyre Management</span>
-              </div>
-              <Select
-                value={form.axle_configuration}
-                onValueChange={(v) => setForm({ ...form, axle_configuration: v as TruckLayoutConfigId })}
-              >
-                <SelectTrigger className="border-primary/40"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {AXLE_CONFIG_OPTIONS.filter((opt) => {
-                    if (isTrailer) return opt.value.startsWith("trailer");
-                    return !opt.value.startsWith("trailer");
-                  }).map((opt) => (
-                    <SelectItem key={opt.value} value={opt.value}>
-                      <div className="flex flex-col text-left py-0.5">
-                        <span className="font-medium">{opt.label}</span>
-                        <span className="text-[11px] text-muted-foreground">{opt.description}</span>
-                      </div>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* Status */}
-            <div className="space-y-1.5">
-              <Label>Status</Label>
-              <Select value={form.status} onValueChange={(v) => setForm({ ...form, status: v })}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="active">Active</SelectItem>
-                  <SelectItem value="under_maintenance">Under maintenance</SelectItem>
-                  <SelectItem value="retired">Retired</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* Make */}
-            <div className="space-y-1.5">
-              <div className="flex items-center justify-between">
-                <Label>Make *</Label>
-                {form.make && (
-                  <span className="text-[10px] font-mono text-primary font-medium">
-                    {form.make}
-                  </span>
-                )}
-              </div>
-              <Select
-                value={
-                  customMake
-                    ? "OTHER"
-                    : (relevantMakes.some(
-                        (m) => m.name.toLowerCase() === (form.make || "").trim().toLowerCase()
-                      )
-                        ? relevantMakes.find(
-                            (m) => m.name.toLowerCase() === (form.make || "").trim().toLowerCase()
-                          )!.name
-                        : (form.make ? "OTHER" : ""))
-                }
-                onValueChange={(val) => {
-                  if (val === "OTHER") {
-                    setCustomMake(true);
-                  } else {
-                    setCustomMake(false);
-                    setForm({ ...form, make: val });
-                  }
-                }}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder={isTrailer ? "Select Trailer Make..." : "Select Truck / Bus Make..."} />
-                </SelectTrigger>
-                <SelectContent className="max-h-72">
-                  <div className="px-2 py-1.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
-                    {isTrailer
-                      ? "Common Trailer Makes (Tanzania)"
-                      : (form.vehicle_type === "bus"
-                          ? "Common Bus Makes (Tanzania)"
-                          : "Common Truck Makes (Tanzania)")}
-                  </div>
-                  {relevantMakes.map((m) => (
-                    <SelectItem key={m.name} value={m.name}>
-                      <div className="flex items-center justify-between gap-3 w-full py-0.5">
-                        <span className="font-medium text-xs">{m.name}</span>
-                        <span className="text-[10px] text-muted-foreground">({m.category})</span>
-                      </div>
-                    </SelectItem>
-                  ))}
-                  <SelectItem value="OTHER">
-                    <span className="font-semibold text-primary text-xs">Other / Custom Make...</span>
-                  </SelectItem>
-                </SelectContent>
-              </Select>
-
-              {customMake && (
-                <div className="space-y-1 mt-1.5">
+                  <Label>Make / Manufacturer</Label>
                   <Input
                     value={form.make}
                     onChange={(e) => setForm({ ...form, make: e.target.value })}
-                    placeholder="Enter custom make (e.g. Kenworth, Peterbilt, Sinotruk Sitrak)"
-                    className="text-xs"
-                    autoFocus
+                    placeholder="e.g. Caterpillar, Atlas Copco, Ingersoll Rand"
                   />
-                  <p className="text-[10px] text-muted-foreground">Type custom or unlisted vehicle make</p>
                 </div>
-              )}
-            </div>
 
-            {/* Model */}
-            <div className="space-y-1.5">
-              <Label>Model</Label>
-              <Input
-                value={form.model}
-                onChange={(e) => setForm({ ...form, model: e.target.value })}
-                placeholder={isTrailer ? "e.g. 40,000L Fuel Tanker / Flatbed 40ft" : "e.g. R500 / Actros 3340"}
-              />
-            </div>
+                {/* Model & Year */}
+                <div className="space-y-1.5">
+                  <Label>Model / Specification</Label>
+                  <Input
+                    value={form.model}
+                    onChange={(e) => setForm({ ...form, model: e.target.value })}
+                    placeholder="e.g. C15 Acert / GA37 VSD / 8FGCU25"
+                  />
+                </div>
 
-            {/* Year */}
-            <div className="space-y-1.5">
-              <Label>Year</Label>
-              <Input type="number" value={form.year} onChange={(e) => setForm({ ...form, year: e.target.value })} placeholder="e.g. 2022" />
-            </div>
+                <div className="space-y-1.5">
+                  <Label>Year of Manufacture</Label>
+                  <Input
+                    type="number"
+                    value={form.year}
+                    onChange={(e) => setForm({ ...form, year: e.target.value })}
+                    placeholder="e.g. 2021"
+                  />
+                </div>
 
-            {/* VIN / Chassis */}
-            <div className="space-y-1.5">
-              <Label>VIN / Chassis Number</Label>
-              <Input value={form.vin} onChange={(e) => setForm({ ...form, vin: e.target.value })} />
-            </div>
+                {/* Power Source & Rated Power / Capacity */}
+                <div className="space-y-1.5">
+                  <Label>Power Source / Prime Mover</Label>
+                  <Select value={form.fuel_type} onValueChange={(v) => setForm({ ...form, fuel_type: v })}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {ASSET_POWER_SOURCES.map((ps) => (
+                        <SelectItem key={ps.value} value={ps.value}>{ps.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
 
-            {/* GPS Telematics Tracker IMEI */}
-            <div className="space-y-1.5">
-              <Label className="flex items-center gap-1.5">
-                <Radio className="h-3.5 w-3.5 text-primary" /> GPS Tracker IMEI
-              </Label>
-              <Input
-                value={form.telematics_imei}
-                onChange={(e) => setForm({ ...form, telematics_imei: e.target.value })}
-                placeholder="e.g. 863656045600231"
-                className="font-mono text-xs"
-              />
-              <p className="text-[10px] text-muted-foreground">Auto-syncs live odometer, speed, and GPS location from Trakzee</p>
-            </div>
-
-            {/* Fuel Type (Trucks only) */}
-            {!isTrailer && (
-              <div className="space-y-1.5">
-                <Label>Fuel Type</Label>
-                <Select value={form.fuel_type} onValueChange={(v) => setForm({ ...form, fuel_type: v })}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {FUEL_TYPES.map((f) => <SelectItem key={f} value={f} className="capitalize">{f}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
-
-            {/* Odometer */}
-            <div className="space-y-1.5">
-              <Label>{isTrailer ? "Approx. Distance Run (km)" : "Current Odometer (km)"}</Label>
-              <Input type="number" step="any" value={form.current_odometer_km} onChange={(e) => setForm({ ...form, current_odometer_km: e.target.value })} placeholder="e.g. 120500" />
-            </div>
-
-            {/* Operating Hours (Engine runtime) */}
-            <div className="space-y-1.5">
-              <Label className="flex items-center gap-1.5">
-                <Clock className="h-3.5 w-3.5 text-primary" /> Current Operating Hours (hrs)
-              </Label>
-              <Input type="number" step="any" value={form.current_hours} onChange={(e) => setForm({ ...form, current_hours: e.target.value })} placeholder="e.g. 2450" />
-            </div>
-
-            {/* Automated PM Maintenance Notifications (Optional) */}
-            <div className="sm:col-span-2 rounded-xl border border-primary/20 bg-primary/5 p-4 space-y-3">
-              <div className="flex items-center justify-between">
-                <div className="space-y-0.5">
-                  <div className="flex items-center gap-2">
-                    <Wrench className="h-4 w-4 text-primary" />
-                    <Label className="text-sm font-semibold cursor-pointer" htmlFor="auto-pm-switch">
-                      Automated Preventive Maintenance (PM) Trigger
-                    </Label>
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <Label>Rated Power / Capacity</Label>
+                    <span className="text-[10px] text-muted-foreground font-normal">e.g. kVA, CFM, m³/h, Tons</span>
                   </div>
-                  <p className="text-xs text-muted-foreground">
-                    Automatically track runtime hours or distance, and notify maintenance when this vehicle needs service.
-                  </p>
+                  <Input
+                    value={form.rated_power_capacity}
+                    onChange={(e) => setForm({ ...form, rated_power_capacity: e.target.value })}
+                    placeholder="e.g. 500 kVA (400 kW) or 7.5 bar 350 CFM"
+                  />
                 </div>
-                <Switch
-                  id="auto-pm-switch"
-                  checked={form.auto_pm_enabled}
-                  onCheckedChange={(checked) => setForm({ ...form, auto_pm_enabled: checked })}
-                />
-              </div>
 
-              {form.auto_pm_enabled && (
-                <div className="grid gap-3 sm:grid-cols-2 pt-2 border-t border-primary/10">
-                  <div className="space-y-1.5">
-                    <Label className="text-xs font-medium">Service Trigger Every (Hours)</Label>
-                    <Input
-                      type="number"
-                      step="any"
-                      value={form.auto_pm_hours_interval}
-                      onChange={(e) => setForm({ ...form, auto_pm_hours_interval: e.target.value })}
-                      placeholder="e.g. 250 or 500"
+                {/* Day / Fuel Tank Capacity & Current Operating Hours */}
+                <div className="space-y-1.5">
+                  <Label>Day / Fuel Tank Capacity (L)</Label>
+                  <Input
+                    type="number"
+                    step="any"
+                    value={form.tank_capacity_l}
+                    onChange={(e) => setForm({ ...form, tank_capacity_l: e.target.value, total_tank_capacity_l: e.target.value })}
+                    placeholder="e.g. 1000 (leave blank if electric)"
+                  />
+                  <span className="text-[10px] text-muted-foreground">For diesel gensets, boilers & diesel forklifts</span>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label className="flex items-center gap-1.5 text-primary font-semibold">
+                    <Clock className="h-3.5 w-3.5" /> Current Operating Hours (hrs) *
+                  </Label>
+                  <Input
+                    type="number"
+                    step="any"
+                    value={form.current_hours}
+                    onChange={(e) => setForm({ ...form, current_hours: e.target.value })}
+                    placeholder="e.g. 1450"
+                  />
+                  <span className="text-[10px] text-muted-foreground">Meter reading for maintenance scheduling</span>
+                </div>
+
+                {/* Installation Location / Bay / Depot */}
+                <div className="space-y-1.5 sm:col-span-2">
+                  <Label>Installation Location / Plant Room / Depot Bay</Label>
+                  <Input
+                    value={form.home_depot}
+                    onChange={(e) => setForm({ ...form, home_depot: e.target.value })}
+                    placeholder="e.g. Dar es Salaam Depot - Main Generator Room / Workshop Bay 2"
+                  />
+                </div>
+
+                {/* Purchase Date & Purchase Cost */}
+                <div className="space-y-1.5">
+                  <Label>Purchase Date</Label>
+                  <Input
+                    type="date"
+                    value={form.purchase_date}
+                    onChange={(e) => setForm({ ...form, purchase_date: e.target.value })}
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label>Purchase Cost (TZS / USD)</Label>
+                  <Input
+                    type="number"
+                    step="any"
+                    value={form.purchase_cost}
+                    onChange={(e) => setForm({ ...form, purchase_cost: e.target.value })}
+                    placeholder="e.g. 45000000"
+                  />
+                </div>
+
+                {/* Operational Status */}
+                <div className="space-y-1.5 sm:col-span-2">
+                  <Label>Operational Status</Label>
+                  <Select value={form.status} onValueChange={(v) => setForm({ ...form, status: v })}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="active">Active / Operational</SelectItem>
+                      <SelectItem value="workshop">In Workshop</SelectItem>
+                      <SelectItem value="under_maintenance">Under Maintenance</SelectItem>
+                      <SelectItem value="breakdown">Breakdown</SelectItem>
+                      <SelectItem value="out_of_service">Out of Service</SelectItem>
+                      <SelectItem value="retired">Retired / Decommissioned</SelectItem>
+                      <SelectItem value="disposed">Disposed</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Automated PM Trigger (Hours based for stationary plant) */}
+                <div className="sm:col-span-2 rounded-xl border border-amber-500/30 bg-amber-500/5 p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-0.5">
+                      <div className="flex items-center gap-2">
+                        <Wrench className="h-4 w-4 text-amber-600" />
+                        <Label className="text-sm font-semibold cursor-pointer" htmlFor="auto-pm-switch">
+                          Automated Runtime PM Trigger
+                        </Label>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        Automatically track operating hours and create PM alerts / job cards (e.g., 250h or 500h service interval).
+                      </p>
+                    </div>
+                    <Switch
+                      id="auto-pm-switch"
+                      checked={form.auto_pm_enabled}
+                      onCheckedChange={(checked) => setForm({ ...form, auto_pm_enabled: checked })}
                     />
-                    <span className="text-[10px] text-muted-foreground">Alerts when machine reaches runtime threshold</span>
                   </div>
+
+                  {form.auto_pm_enabled && (
+                    <div className="space-y-1.5 pt-2 border-t border-amber-500/20">
+                      <Label className="text-xs font-medium">Service Trigger Every (Operating Hours)</Label>
+                      <Input
+                        type="number"
+                        step="any"
+                        value={form.auto_pm_hours_interval}
+                        onChange={(e) => setForm({ ...form, auto_pm_hours_interval: e.target.value })}
+                        placeholder="e.g. 250 or 500"
+                      />
+                      <span className="text-[10px] text-muted-foreground">Alerts when machine reaches runtime threshold (e.g. oil, filters & calibration)</span>
+                    </div>
+                  )}
+                </div>
+              </>
+            ) : (
+              /* ROAD VEHICLE & TRAILER FORM */
+              <>
+                {/* Name & Asset ID / Code */}
+                <div className="space-y-1.5 sm:col-span-2">
+                  <div className="grid gap-4 sm:grid-cols-3">
+                    <div className="space-y-1.5 sm:col-span-2">
+                      <Label>{isTrailer ? "Trailer Name / Unit ID *" : "Vehicle Name *"}</Label>
+                      <Input
+                        value={form.name}
+                        onChange={(e) => setForm({ ...form, name: e.target.value })}
+                        placeholder={isTrailer ? "e.g. Tanker Semi-Trailer #01 (BPW)" : "e.g. Scania R500 Prime Mover"}
+                        maxLength={100}
+                        required
+                      />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <Label className="text-xs font-semibold">{isTrailer ? "Trailer ID / Code *" : "Asset ID / Code *"}</Label>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const nextCode = generateVehicleCode(
+                              form.category,
+                              undefined,
+                              (existingCount ?? 0) + Math.floor(1 + Math.random() * 20)
+                            );
+                            setForm((prev) => ({ ...prev, vehicle_code: nextCode }));
+                          }}
+                          className="text-[10px] text-primary hover:underline flex items-center gap-0.5 cursor-pointer font-medium"
+                          title="Generate next ID"
+                        >
+                          <RefreshCw className="h-2.5 w-2.5" /> Auto-Gen
+                        </button>
+                      </div>
+                      <Input
+                        value={form.vehicle_code}
+                        onChange={(e) => setForm({ ...form, vehicle_code: e.target.value.toUpperCase() })}
+                        placeholder={isTrailer ? "TRL-001" : "TRK-001"}
+                        className="font-mono font-bold text-foreground tracking-wider uppercase h-10"
+                        required
+                      />
+                      <p className="text-[10px] text-muted-foreground">{isTrailer ? "e.g. TRL-001, TRL-012" : "e.g. TRK-001, FLT-042"}</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Vehicle Type (Only for power units) */}
+                {!isTrailer && (
                   <div className="space-y-1.5">
-                    <Label className="text-xs font-medium">Service Trigger Every (Kilometers)</Label>
-                    <Input
-                      type="number"
-                      step="any"
-                      value={form.auto_pm_km_interval}
-                      onChange={(e) => setForm({ ...form, auto_pm_km_interval: e.target.value })}
-                      placeholder="e.g. 10000 or 15000"
-                    />
-                    <span className="text-[10px] text-muted-foreground">Optional distance interval for highway hauls</span>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Home Depot */}
-            <div className="space-y-1.5 sm:col-span-2">
-              <Label>Home Depot / Base Station</Label>
-              <Input value={form.home_depot} onChange={(e) => setForm({ ...form, home_depot: e.target.value })} placeholder="e.g. Dar es Salaam Depot / Kurasini Yard" />
-            </div>
-
-            {/* Trailer Tank Capacity (for independent trailer) */}
-            {isTrailer && (
-              <div className="sm:col-span-2 rounded-xl border border-border bg-emerald-500/5 p-4 space-y-3">
-                <div className="flex items-center gap-2">
-                  <Fuel className="h-4 w-4 text-emerald-600" />
-                  <h4 className="text-sm font-semibold text-foreground">Trailer Tank / Cargo Capacity</h4>
-                </div>
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <div className="space-y-1.5">
-                    <Label className="text-xs">Tank Capacity (Liters)</Label>
-                    <Input
-                      type="number"
-                      step="any"
-                      value={form.total_tank_capacity_l}
-                      onChange={(e) => setForm({ ...form, total_tank_capacity_l: e.target.value, tank_capacity_l: e.target.value })}
-                      placeholder="e.g. 40000"
-                    />
-                    <span className="text-[10px] text-muted-foreground">For tanker trailers (leave blank if flatbed/dry cargo)</span>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Truck Trailer Hitching & Multi-Tank Section (for power units only) */}
-            {!isTrailer && (
-              <div className="sm:col-span-2 rounded-xl border border-border bg-muted/30 p-4 space-y-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h4 className="text-sm font-semibold text-foreground flex items-center gap-2">
-                      <Truck className="h-4 w-4 text-primary" /> Independent Trailer Hitching & Tanks
-                    </h4>
-                    <p className="text-xs text-muted-foreground">
-                      Hitch an independent fleet trailer or configure head + trailer tank capacities.
-                    </p>
-                  </div>
-                </div>
-
-                <div className="space-y-3 pt-2 border-t border-border">
-                  <div className="space-y-1.5">
-                    <Label className="text-xs font-medium">Hitch Independent Trailer</Label>
+                    <Label>Vehicle Type</Label>
                     <Select
-                      value={form.trailer_mode === "fleet" ? form.linked_trailer_id : form.trailer_mode}
+                      value={form.vehicle_type}
                       onValueChange={(v) => {
-                        if (v === "none") {
-                          onFleetTrailerSelect("none");
-                        } else if (v === "manual") {
-                          setForm((prev) => ({
-                            ...prev,
-                            trailer_mode: "manual",
-                            linked_trailer_id: "",
-                          }));
-                        } else {
-                          onFleetTrailerSelect(v);
-                        }
+                        let defaultAxle: TruckLayoutConfigId = "6x4";
+                        if (v === "rigid") defaultAxle = "4x2";
+                        else if (v === "rigid_trailer") defaultAxle = "4x2_trailer";
+                        else if (v === "van_pickup") defaultAxle = "4_wheel";
+                        else if (v === "prime_mover" || v === "tanker" || v === "truck") defaultAxle = "6x4";
+
+                        setForm((prev) => ({
+                          ...prev,
+                          vehicle_type: v,
+                          axle_configuration: defaultAxle,
+                        }));
                       }}
                     >
-                      <SelectTrigger className="h-9 text-sm">
-                        <SelectValue placeholder="Select trailer attachment" />
-                      </SelectTrigger>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="none">
-                          <span className="text-muted-foreground">No Trailer (Bobtail / Solo Unit)</span>
-                        </SelectItem>
-                        {availableTrailers
-                          .filter((t) => !machine || t.id !== machine.id)
-                          .map((t) => (
-                            <SelectItem key={t.id} value={t.id}>
-                              <div className="flex items-center gap-2">
-                                <span className="font-semibold text-primary">[{t.plate_number || "NO PLATE"}]</span>
-                                <span>{t.name}</span>
-                                {t.total_tank_capacity_l ? (
-                                  <span className="text-xs text-muted-foreground">({formatNumber(t.total_tank_capacity_l)}L tank)</span>
-                                ) : null}
-                              </div>
-                            </SelectItem>
-                          ))}
-                        <SelectItem value="manual">
-                          <span>External / Custom Trailer (Manual Plate Entry)</span>
-                        </SelectItem>
+                        {VEHICLE_TYPES.filter((vt) => vt.value !== "trailer").map((vt) => (
+                          <SelectItem key={vt.value} value={vt.value}>{vt.label}</SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                   </div>
+                )}
 
-                  {form.trailer_mode === "manual" && (
-                    <div className="grid gap-3 sm:grid-cols-2 pt-2 bg-background p-3 rounded-lg border border-dashed">
+                {/* Plate Number */}
+                <div className="space-y-1.5">
+                  <Label>{isTrailer ? "Trailer Plate Number *" : "Plate Number"}</Label>
+                  <Input
+                    value={form.plate_number}
+                    onChange={(e) => setForm({ ...form, plate_number: e.target.value })}
+                    placeholder={isTrailer ? "e.g. T 892 DFE" : "e.g. T 123 ABC"}
+                  />
+                </div>
+
+                {/* Axle Configuration (Key feature for tyre management) */}
+                <div className="space-y-1.5 sm:col-span-2">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-primary font-semibold flex items-center gap-1.5">
+                      <Layers className="h-4 w-4" /> Axle & Tyre Configuration *
+                    </Label>
+                    <span className="text-[11px] text-muted-foreground">Auto-binds tyre positions in Tyre Management</span>
+                  </div>
+                  <Select
+                    value={form.axle_configuration}
+                    onValueChange={(v) => setForm({ ...form, axle_configuration: v as TruckLayoutConfigId })}
+                  >
+                    <SelectTrigger className="border-primary/40"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {AXLE_CONFIG_OPTIONS.filter((opt) => {
+                        if (isTrailer) return opt.value.startsWith("trailer");
+                        return !opt.value.startsWith("trailer");
+                      }).map((opt) => (
+                        <SelectItem key={opt.value} value={opt.value}>
+                          <div className="flex flex-col text-left py-0.5">
+                            <span className="font-medium">{opt.label}</span>
+                            <span className="text-[11px] text-muted-foreground">{opt.description}</span>
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Status */}
+                <div className="space-y-1.5">
+                  <Label>Status</Label>
+                  <Select value={form.status} onValueChange={(v) => setForm({ ...form, status: v })}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="active">Active</SelectItem>
+                      <SelectItem value="workshop">In Workshop</SelectItem>
+                      <SelectItem value="under_maintenance">Under maintenance</SelectItem>
+                      <SelectItem value="breakdown">Breakdown</SelectItem>
+                      <SelectItem value="out_of_service">Out of service</SelectItem>
+                      <SelectItem value="retired">Retired</SelectItem>
+                      <SelectItem value="disposed">Disposed</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Make */}
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <Label>Make *</Label>
+                    {form.make && (
+                      <span className="text-[10px] font-mono text-primary font-medium">
+                        {form.make}
+                      </span>
+                    )}
+                  </div>
+                  <Select
+                    value={
+                      customMake
+                        ? "OTHER"
+                        : (relevantMakes.some(
+                            (m) => m.name.toLowerCase() === (form.make || "").trim().toLowerCase()
+                          )
+                            ? relevantMakes.find(
+                                (m) => m.name.toLowerCase() === (form.make || "").trim().toLowerCase()
+                              )!.name
+                            : (form.make ? "OTHER" : ""))
+                    }
+                    onValueChange={(val) => {
+                      if (val === "OTHER") {
+                        setCustomMake(true);
+                      } else {
+                        setCustomMake(false);
+                        setForm({ ...form, make: val });
+                      }
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder={isTrailer ? "Select Trailer Make..." : "Select Truck / Bus Make..."} />
+                    </SelectTrigger>
+                    <SelectContent className="max-h-72">
+                      <div className="px-2 py-1.5 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
+                        {isTrailer
+                          ? "Common Trailer Makes (Tanzania)"
+                          : (form.vehicle_type === "bus"
+                              ? "Common Bus Makes (Tanzania)"
+                              : "Common Truck Makes (Tanzania)")}
+                      </div>
+                      {relevantMakes.map((m) => (
+                        <SelectItem key={m.name} value={m.name}>
+                          <div className="flex items-center justify-between gap-3 w-full py-0.5">
+                            <span className="font-medium text-xs">{m.name}</span>
+                            <span className="text-[10px] text-muted-foreground">({m.category})</span>
+                          </div>
+                        </SelectItem>
+                      ))}
+                      <SelectItem value="OTHER">
+                        <span className="font-semibold text-primary text-xs">Other / Custom Make...</span>
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+
+                  {customMake && (
+                    <div className="space-y-1 mt-1.5">
+                      <Input
+                        value={form.make}
+                        onChange={(e) => setForm({ ...form, make: e.target.value })}
+                        placeholder="Enter custom make (e.g. Kenworth, Peterbilt, Sinotruk Sitrak)"
+                        className="text-xs"
+                        autoFocus
+                      />
+                      <p className="text-[10px] text-muted-foreground">Type custom or unlisted vehicle make</p>
+                    </div>
+                  )}
+                </div>
+
+                {/* Model */}
+                <div className="space-y-1.5">
+                  <Label>Model</Label>
+                  <Input
+                    value={form.model}
+                    onChange={(e) => setForm({ ...form, model: e.target.value })}
+                    placeholder={isTrailer ? "e.g. 40,000L Fuel Tanker / Flatbed 40ft" : "e.g. R500 / Actros 3340"}
+                  />
+                </div>
+
+                {/* Year */}
+                <div className="space-y-1.5">
+                  <Label>Year</Label>
+                  <Input type="number" value={form.year} onChange={(e) => setForm({ ...form, year: e.target.value })} placeholder="e.g. 2022" />
+                </div>
+
+                {/* VIN / Chassis */}
+                <div className="space-y-1.5">
+                  <Label>VIN / Chassis Number</Label>
+                  <Input value={form.vin} onChange={(e) => setForm({ ...form, vin: e.target.value })} />
+                </div>
+
+                {/* GPS Telematics Tracker IMEI */}
+                <div className="space-y-1.5">
+                  <Label className="flex items-center gap-1.5">
+                    <Radio className="h-3.5 w-3.5 text-primary" /> GPS Tracker IMEI
+                  </Label>
+                  <Input
+                    value={form.telematics_imei}
+                    onChange={(e) => setForm({ ...form, telematics_imei: e.target.value })}
+                    placeholder="e.g. 863656045600231"
+                    className="font-mono text-xs"
+                  />
+                  <p className="text-[10px] text-muted-foreground">Auto-syncs live odometer, speed, and GPS location from Trakzee</p>
+                </div>
+
+                {/* Fuel Type (Trucks only) */}
+                {!isTrailer && (
+                  <div className="space-y-1.5">
+                    <Label>Fuel Type</Label>
+                    <Select value={form.fuel_type} onValueChange={(v) => setForm({ ...form, fuel_type: v })}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {FUEL_TYPES.map((f) => <SelectItem key={f} value={f} className="capitalize">{f}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+
+                {/* Odometer */}
+                <div className="space-y-1.5">
+                  <Label>{isTrailer ? "Approx. Distance Run (km)" : "Current Odometer (km)"}</Label>
+                  <Input type="number" step="any" value={form.current_odometer_km} onChange={(e) => setForm({ ...form, current_odometer_km: e.target.value })} placeholder="e.g. 120500" />
+                </div>
+
+                {/* Operating Hours (Engine runtime) */}
+                <div className="space-y-1.5">
+                  <Label className="flex items-center gap-1.5">
+                    <Clock className="h-3.5 w-3.5 text-primary" /> Current Operating Hours (hrs)
+                  </Label>
+                  <Input type="number" step="any" value={form.current_hours} onChange={(e) => setForm({ ...form, current_hours: e.target.value })} placeholder="e.g. 2450" />
+                </div>
+
+                {/* Automated PM Maintenance Notifications */}
+                <div className="sm:col-span-2 rounded-xl border border-primary/20 bg-primary/5 p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="space-y-0.5">
+                      <div className="flex items-center gap-2">
+                        <Wrench className="h-4 w-4 text-primary" />
+                        <Label className="text-sm font-semibold cursor-pointer" htmlFor="auto-pm-switch">
+                          Automated Preventive Maintenance (PM) Trigger
+                        </Label>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        Automatically track runtime hours or distance, and notify maintenance when this vehicle needs service.
+                      </p>
+                    </div>
+                    <Switch
+                      id="auto-pm-switch"
+                      checked={form.auto_pm_enabled}
+                      onCheckedChange={(checked) => setForm({ ...form, auto_pm_enabled: checked })}
+                    />
+                  </div>
+
+                  {form.auto_pm_enabled && (
+                    <div className="grid gap-3 sm:grid-cols-2 pt-2 border-t border-primary/10">
                       <div className="space-y-1.5">
-                        <Label className="text-xs">Trailer Plate Number *</Label>
+                        <Label className="text-xs font-medium">Service Trigger Every (Hours)</Label>
                         <Input
-                          value={form.trailer_plate}
-                          onChange={(e) => setForm({ ...form, trailer_plate: e.target.value })}
-                          placeholder="e.g. T 892 DFE"
-                          className="h-8 text-sm"
+                          type="number"
+                          step="any"
+                          value={form.auto_pm_hours_interval}
+                          onChange={(e) => setForm({ ...form, auto_pm_hours_interval: e.target.value })}
+                          placeholder="e.g. 250 or 500"
                         />
+                        <span className="text-[10px] text-muted-foreground">Alerts when machine reaches runtime threshold</span>
                       </div>
                       <div className="space-y-1.5">
-                        <Label className="text-xs">Trailer Description</Label>
+                        <Label className="text-xs font-medium">Service Trigger Every (Kilometers)</Label>
                         <Input
-                          value={form.trailer_make_model}
-                          onChange={(e) => setForm({ ...form, trailer_make_model: e.target.value })}
-                          placeholder="e.g. 40,000L Tri-Axle Tanker"
-                          className="h-8 text-sm"
+                          type="number"
+                          step="any"
+                          value={form.auto_pm_km_interval}
+                          onChange={(e) => setForm({ ...form, auto_pm_km_interval: e.target.value })}
+                          placeholder="e.g. 10000 or 15000"
                         />
+                        <span className="text-[10px] text-muted-foreground">Optional distance interval for highway hauls</span>
                       </div>
                     </div>
                   )}
+                </div>
 
-                  {/* Tank Capacities Calculation */}
-                  <div className="grid gap-3 sm:grid-cols-3 pt-2">
-                    <div className="space-y-1.5">
-                      <Label className="text-xs">Head Tank (L)</Label>
-                      <Input
-                        type="number"
-                        step="any"
-                        value={form.head_tank_capacity_l}
-                        onChange={(e) => updateHeadTank(e.target.value)}
-                        placeholder="e.g. 450"
-                        className="h-9 text-sm"
-                      />
-                      <span className="text-[10px] text-muted-foreground">Tractor / Prime mover</span>
+                {/* Home Depot */}
+                <div className="space-y-1.5 sm:col-span-2">
+                  <Label>Home Depot / Base Station</Label>
+                  <Input value={form.home_depot} onChange={(e) => setForm({ ...form, home_depot: e.target.value })} placeholder="e.g. Dar es Salaam Depot / Kurasini Yard" />
+                </div>
+
+                {/* Trailer Tank Capacity (for independent trailer) */}
+                {isTrailer && (
+                  <div className="sm:col-span-2 rounded-xl border border-border bg-emerald-500/5 p-4 space-y-3">
+                    <div className="flex items-center gap-2">
+                      <Fuel className="h-4 w-4 text-emerald-600" />
+                      <h4 className="text-sm font-semibold text-foreground">Trailer Tank / Cargo Capacity</h4>
                     </div>
-
-                    <div className="space-y-1.5">
-                      <Label className="text-xs">Trailer Tank (L)</Label>
-                      <Input
-                        type="number"
-                        step="any"
-                        disabled={form.trailer_mode === "none"}
-                        value={form.trailer_tank_capacity_l}
-                        onChange={(e) => updateTrailerTank(e.target.value)}
-                        placeholder={form.trailer_mode !== "none" ? "e.g. 40000" : "Hitch trailer first"}
-                        className="h-9 text-sm"
-                      />
-                      <span className="text-[10px] text-muted-foreground">Trailer payload tank</span>
-                    </div>
-
-                    <div className="space-y-1.5">
-                      <Label className="text-xs font-semibold text-primary">Total Tank Capacity (L)</Label>
-                      <Input
-                        type="number"
-                        step="any"
-                        value={form.total_tank_capacity_l}
-                        onChange={(e) => setForm({ ...form, total_tank_capacity_l: e.target.value, tank_capacity_l: e.target.value })}
-                        placeholder="e.g. 40450"
-                        className="h-9 text-sm font-semibold border-primary/40 bg-background"
-                      />
-                      <span className="text-[10px] text-muted-foreground">Auto-sum: Head + Trailer</span>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <div className="space-y-1.5">
+                        <Label className="text-xs">Tank Capacity (Liters)</Label>
+                        <Input
+                          type="number"
+                          step="any"
+                          value={form.total_tank_capacity_l}
+                          onChange={(e) => setForm({ ...form, total_tank_capacity_l: e.target.value, tank_capacity_l: e.target.value })}
+                          placeholder="e.g. 40000"
+                        />
+                        <span className="text-[10px] text-muted-foreground">For tanker trailers (leave blank if flatbed/dry cargo)</span>
+                      </div>
                     </div>
                   </div>
-                </div>
-              </div>
+                )}
+
+                {/* Truck Trailer Hitching & Multi-Tank Section (for power units only) */}
+                {!isTrailer && (
+                  <div className="sm:col-span-2 rounded-xl border border-border bg-muted/30 p-4 space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h4 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                          <Truck className="h-4 w-4 text-primary" /> Independent Trailer Hitching & Tanks
+                        </h4>
+                        <p className="text-xs text-muted-foreground">
+                          Hitch an independent fleet trailer or configure head + trailer tank capacities.
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="space-y-3 pt-2 border-t border-border">
+                      <div className="space-y-1.5">
+                        <Label className="text-xs font-medium">Hitch Independent Trailer</Label>
+                        <Select
+                          value={form.trailer_mode === "fleet" ? form.linked_trailer_id : form.trailer_mode}
+                          onValueChange={(v) => {
+                            if (v === "none") {
+                              onFleetTrailerSelect("none");
+                            } else if (v === "manual") {
+                              setForm((prev) => ({
+                                ...prev,
+                                trailer_mode: "manual",
+                                linked_trailer_id: "",
+                              }));
+                            } else {
+                              onFleetTrailerSelect(v);
+                            }
+                          }}
+                        >
+                          <SelectTrigger className="h-9 text-sm">
+                            <SelectValue placeholder="Select trailer attachment" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="none">
+                              <span className="text-muted-foreground">No Trailer (Bobtail / Solo Unit)</span>
+                            </SelectItem>
+                            {availableTrailers
+                              .filter((t) => !machine || t.id !== machine.id)
+                              .map((t) => (
+                                <SelectItem key={t.id} value={t.id}>
+                                  <div className="flex items-center gap-2">
+                                    <span className="font-semibold text-primary">[{t.plate_number || "NO PLATE"}]</span>
+                                    <span>{t.name}</span>
+                                    {t.total_tank_capacity_l ? (
+                                      <span className="text-xs text-muted-foreground">({formatNumber(t.total_tank_capacity_l)}L tank)</span>
+                                    ) : null}
+                                  </div>
+                                </SelectItem>
+                              ))}
+                            <SelectItem value="manual">
+                              <span>External / Custom Trailer (Manual Plate Entry)</span>
+                            </SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      {form.trailer_mode === "manual" && (
+                        <div className="grid gap-3 sm:grid-cols-2 pt-2 bg-background p-3 rounded-lg border border-dashed">
+                          <div className="space-y-1.5">
+                            <Label className="text-xs">Trailer Plate Number *</Label>
+                            <Input
+                              value={form.trailer_plate}
+                              onChange={(e) => setForm({ ...form, trailer_plate: e.target.value })}
+                              placeholder="e.g. T 892 DFE"
+                              className="h-8 text-sm"
+                            />
+                          </div>
+                          <div className="space-y-1.5">
+                            <Label className="text-xs">Trailer Description</Label>
+                            <Input
+                              value={form.trailer_make_model}
+                              onChange={(e) => setForm({ ...form, trailer_make_model: e.target.value })}
+                              placeholder="e.g. 40,000L Tri-Axle Tanker"
+                              className="h-8 text-sm"
+                            />
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Tank Capacities Calculation */}
+                      <div className="grid gap-3 sm:grid-cols-3 pt-2">
+                        <div className="space-y-1.5">
+                          <Label className="text-xs">Head Tank (L)</Label>
+                          <Input
+                            type="number"
+                            step="any"
+                            value={form.head_tank_capacity_l}
+                            onChange={(e) => updateHeadTank(e.target.value)}
+                            placeholder="e.g. 450"
+                            className="h-9 text-sm"
+                          />
+                          <span className="text-[10px] text-muted-foreground">Tractor / Prime mover</span>
+                        </div>
+
+                        <div className="space-y-1.5">
+                          <Label className="text-xs">Trailer Tank (L)</Label>
+                          <Input
+                            type="number"
+                            step="any"
+                            disabled={form.trailer_mode === "none"}
+                            value={form.trailer_tank_capacity_l}
+                            onChange={(e) => updateTrailerTank(e.target.value)}
+                            placeholder={form.trailer_mode !== "none" ? "e.g. 40000" : "Hitch trailer first"}
+                            className="h-9 text-sm"
+                          />
+                          <span className="text-[10px] text-muted-foreground">Trailer payload tank</span>
+                        </div>
+
+                        <div className="space-y-1.5">
+                          <Label className="text-xs font-semibold text-primary">Total Tank Capacity (L)</Label>
+                          <Input
+                            type="number"
+                            step="any"
+                            value={form.total_tank_capacity_l}
+                            onChange={(e) => setForm({ ...form, total_tank_capacity_l: e.target.value, tank_capacity_l: e.target.value })}
+                            placeholder="e.g. 40450"
+                            className="h-9 text-sm font-semibold border-primary/40 bg-background"
+                          />
+                          <span className="text-[10px] text-muted-foreground">Auto-sum: Head + Trailer</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </>
             )}
           </div>
 
@@ -1961,7 +2449,9 @@ export function VehicleDialog({
             <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>Cancel</Button>
             <Button type="submit" disabled={submitting}>
               {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              {machine ? t.common.save : (isTrailer ? "Add Independent Trailer" : t.fleet.addVehicle)}
+              {machine
+                ? t.common.save
+                : (isWsAsset ? "Register Plant / Equipment" : isTrailer ? "Add Independent Trailer" : t.fleet.addVehicle)}
             </Button>
           </DialogFooter>
         </form>

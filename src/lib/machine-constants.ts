@@ -31,8 +31,13 @@ export const STATUS_LABELS: Record<string, string> = {
   due_soon: "Due soon",
   overdue: "Overdue",
   active: "Active",
+  operational: "Operational",
   under_maintenance: "Under maintenance",
+  workshop: "In Workshop",
+  breakdown: "Breakdown",
+  out_of_service: "Out of Service",
   retired: "Retired",
+  disposed: "Disposed",
   completed: "Completed",
   in_progress: "In progress",
 };

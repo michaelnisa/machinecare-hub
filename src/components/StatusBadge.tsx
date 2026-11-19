@@ -9,12 +9,17 @@ interface Props {
 const MAP: Record<string, string> = {
   ok: "status-ok",
   active: "status-ok",
+  operational: "status-ok",
   completed: "status-ok",
   due_soon: "status-due",
   overdue: "status-overdue",
   under_maintenance: "status-maintenance",
+  workshop: "status-maintenance",
   in_progress: "status-maintenance",
+  breakdown: "status-overdue",
+  out_of_service: "status-due",
   retired: "status-inactive",
+  disposed: "status-inactive",
 };
 
 export function StatusBadge({ status, className }: Props) {

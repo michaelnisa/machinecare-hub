@@ -13,6 +13,7 @@ import { toast } from "sonner";
 import { formatDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { useI18n } from "@/i18n/I18nProvider";
+import { FLEET_AND_ASSET_CATEGORIES } from "@/lib/fleet-metadata";
 
 type Machine = { id: string; name: string; plate_number: string | null; organisation_id: string; current_odometer_km?: number | null; category?: string };
 type Driver = { id: string; full_name: string };
@@ -56,7 +57,7 @@ export default function Inspections() {
     let templateIds = (templates ?? []).map((t) => t.id);
 
     const [{ data: m }, { data: d }] = await Promise.all([
-      supabase.from("machines").select("id, name, plate_number, organisation_id, current_odometer_km, category").in("category", ["Vehicle", "Trailer"]),
+      supabase.from("machines").select("id, name, plate_number, organisation_id, current_odometer_km, category").in("category", FLEET_AND_ASSET_CATEGORIES as any),
       supabase.from("drivers").select("id, full_name").eq("status", "active"),
     ]);
     const vehicleList = (m ?? []) as Machine[];

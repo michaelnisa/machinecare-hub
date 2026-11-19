@@ -15,6 +15,7 @@ import { toast } from "sonner";
 import { formatDate } from "@/lib/format";
 import { scheduleStatus } from "@/lib/machine-constants";
 import { useI18n } from "@/i18n/I18nProvider";
+import { FLEET_AND_ASSET_CATEGORIES } from "@/lib/fleet-metadata";
 
 export const DOC_TYPES = [
   { value: "insurance", label: "Commercial Insurance (Comprehensive / Third Party)" },
@@ -79,7 +80,7 @@ export default function FleetDocuments() {
     setLoading(true);
     const [{ data: d, error: dErr }, { data: m }, { data: dr }] = await Promise.all([
       supabase.from("vehicle_documents").select("*"),
-      supabase.from("machines").select("id, name, plate_number").in("category", ["Vehicle", "Trailer"]),
+      supabase.from("machines").select("id, name, plate_number").in("category", FLEET_AND_ASSET_CATEGORIES as any),
       supabase.from("drivers").select("id, full_name, licence_expiry, medical_expiry").eq("status", "active"),
     ]);
     if (dErr) toast.error(dErr.message);

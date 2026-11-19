@@ -21,6 +21,8 @@ import {
   SAFE_DRIVER_COLUMNS,
   SAFE_TRIP_COLUMNS,
   SAFE_TYRE_COLUMNS,
+  FLEET_AND_ASSET_CATEGORIES,
+  isWorkshopAssetCategory,
   parseMachine,
   parseDriver,
   parseTrip,
@@ -70,6 +72,12 @@ import {
   Package,
   ShoppingCart,
   ShieldCheck,
+  Zap,
+  Wind,
+  Droplets,
+  Boxes,
+  Factory,
+  Cog,
 } from "lucide-react";
 
 type Trip = {
@@ -242,7 +250,7 @@ export default function FleetVehicleDetail() {
         supabase.from("service_logs").select("*").eq("machine_id", targetMachineId).order("performed_at", { ascending: false }).limit(20),
         supabase.from("vehicle_documents").select("*").eq("machine_id", targetMachineId).order("expires_on"),
         supabase.from("drivers").select(SAFE_DRIVER_COLUMNS),
-        supabase.from("machines").select(SAFE_MACHINE_COLUMNS).in("category", ["Vehicle", "Trailer"]),
+        supabase.from("machines").select(SAFE_MACHINE_COLUMNS).in("category", FLEET_AND_ASSET_CATEGORIES as any),
         supabase.from("work_orders").select("id, wo_number, wo_year, title, work_type, status, priority, is_outsourced, vendor_id, vendor_cost, created_at, due_date").eq("machine_id", targetMachineId).order("created_at", { ascending: false }).limit(20),
         supabase.from("vendors").select("id, name, specialization, phone"),
       ]);
@@ -455,7 +463,8 @@ export default function FleetVehicleDetail() {
     );
   }
 
-  const isTrailer = vehicle.is_trailer || vehicle.category === "Trailer";
+  const isWsAsset = vehicle.is_workshop_asset || isWorkshopAssetCategory(vehicle.category, vehicle.notes);
+  const isTrailer = !isWsAsset && (vehicle.is_trailer || vehicle.category === "Trailer");
   const totalTank = vehicle.total_tank_capacity_l ?? vehicle.tank_capacity_l;
 
   return (
@@ -466,9 +475,9 @@ export default function FleetVehicleDetail() {
           to="/fleet/vehicles"
           className="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
         >
-          <ArrowLeft className="h-3.5 w-3.5" /> Back to Fleet Registry
+          <ArrowLeft className="h-3.5 w-3.5" /> Back to Vehicles & Assets
         </Link>
-        <span className="text-xs text-muted-foreground">Logistics & Fleet Management</span>
+        <span className="text-xs text-muted-foreground">Logistics, Fleet & Plant Asset Registry</span>
       </div>
 
       {/* Main Asset Header */}
@@ -479,7 +488,27 @@ export default function FleetVehicleDetail() {
               value={vehicle.cover_image_url}
               alt={vehicle.name}
               className="h-full w-full object-cover"
-              fallback={isTrailer ? <Container className="h-8 w-8 text-emerald-600" /> : <Truck className="h-8 w-8 text-muted-foreground" />}
+              fallback={
+                isWsAsset ? (
+                  vehicle.category === "Generator" ? (
+                    <Zap className="h-8 w-8 text-amber-500" />
+                  ) : vehicle.category === "Compressor" ? (
+                    <Wind className="h-8 w-8 text-blue-500" />
+                  ) : vehicle.category === "Pump" ? (
+                    <Droplets className="h-8 w-8 text-cyan-500" />
+                  ) : vehicle.category === "Forklift" ? (
+                    <Boxes className="h-8 w-8 text-orange-500" />
+                  ) : vehicle.category === "Boiler" ? (
+                    <Factory className="h-8 w-8 text-rose-500" />
+                  ) : (
+                    <Wrench className="h-8 w-8 text-amber-600" />
+                  )
+                ) : isTrailer ? (
+                  <Container className="h-8 w-8 text-emerald-600" />
+                ) : (
+                  <Truck className="h-8 w-8 text-muted-foreground" />
+                )
+              }
             />
           </div>
 
@@ -495,7 +524,11 @@ export default function FleetVehicleDetail() {
                 <span>{vehicle.vehicle_code}</span>
               </span>
 
-              {isTrailer ? (
+              {isWsAsset ? (
+                <span className="rounded bg-amber-500/10 px-2 py-0.5 text-xs font-semibold text-amber-700 dark:text-amber-400 border border-amber-500/20 flex items-center gap-1">
+                  <Wrench className="h-3 w-3 text-amber-600" /> {vehicle.category || "Workshop Plant"}
+                </span>
+              ) : isTrailer ? (
                 <span className="rounded bg-emerald-500/10 px-2 py-0.5 text-xs font-semibold text-emerald-600 border border-emerald-500/20">
                   Independent Trailer
                 </span>
@@ -512,19 +545,39 @@ export default function FleetVehicleDetail() {
               />
             </div>
 
-            <div className="flex flex-wrap items-center gap-2 mt-1.5 text-xs text-muted-foreground">
-              <span className="font-semibold text-foreground font-mono">{vehicle.plate_number || "No Plate"}</span>
-              <span>•</span>
-              <span>{[vehicle.make, vehicle.model, vehicle.year].filter(Boolean).join(" · ") || (isTrailer ? "Semi-Trailer" : "Heavy Commercial")}</span>
-              <span>•</span>
-              <span className="capitalize">{vehicle.vehicle_type?.replace("_", " ")}</span>
-              {vehicle.home_depot && (
-                <>
-                  <span>•</span>
-                  <span>Base: {vehicle.home_depot}</span>
-                </>
-              )}
-            </div>
+            {isWsAsset ? (
+              <div className="flex flex-wrap items-center gap-2 mt-1.5 text-xs text-muted-foreground">
+                <span className="font-semibold text-foreground font-mono">S/N: {vehicle.serial_number || "—"}</span>
+                <span>•</span>
+                <span>{[vehicle.make, vehicle.model, vehicle.year].filter(Boolean).join(" · ") || "Workshop Plant"}</span>
+                {vehicle.rated_power_capacity && (
+                  <>
+                    <span>•</span>
+                    <span className="font-medium text-foreground">Rating: {vehicle.rated_power_capacity}</span>
+                  </>
+                )}
+                {vehicle.home_depot && (
+                  <>
+                    <span>•</span>
+                    <span>Bay / Room: {vehicle.home_depot}</span>
+                  </>
+                )}
+              </div>
+            ) : (
+              <div className="flex flex-wrap items-center gap-2 mt-1.5 text-xs text-muted-foreground">
+                <span className="font-semibold text-foreground font-mono">{vehicle.plate_number || "No Plate"}</span>
+                <span>•</span>
+                <span>{[vehicle.make, vehicle.model, vehicle.year].filter(Boolean).join(" · ") || (isTrailer ? "Semi-Trailer" : "Heavy Commercial")}</span>
+                <span>•</span>
+                <span className="capitalize">{vehicle.vehicle_type?.replace("_", " ")}</span>
+                {vehicle.home_depot && (
+                  <>
+                    <span>•</span>
+                    <span>Base: {vehicle.home_depot}</span>
+                  </>
+                )}
+              </div>
+            )}
           </div>
         </div>
 
@@ -550,7 +603,7 @@ export default function FleetVehicleDetail() {
             </Button>
           )}
 
-          {!isTrailer && (
+          {!isWsAsset && !isTrailer && (
             <Button
               variant="outline"
               size="sm"
@@ -577,352 +630,606 @@ export default function FleetVehicleDetail() {
         </div>
       </div>
 
-      {/* Fleet KPI Quick Stats Strip */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5">
-        {/* Odometer / Operating Hours */}
-        <div className="p-4 rounded-xl border border-border bg-card shadow-2xs flex flex-col justify-between">
-          <div className="flex items-center justify-between text-xs font-medium text-muted-foreground">
-            <span>Odometer & Usage</span>
-            <Gauge className="h-4 w-4 text-primary" />
-          </div>
-          <div className="mt-2">
-            <div className="text-xl font-bold text-foreground">
-              {vehicle.current_odometer_km != null ? `${formatNumber(vehicle.current_odometer_km)} km` : "—"}
+      {/* Fleet & Plant KPI Quick Stats Strip */}
+      {isWsAsset ? (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5">
+          {/* 1. Operating Runtime Hours */}
+          <div className="p-4 rounded-xl border border-border bg-card shadow-2xs flex flex-col justify-between">
+            <div className="flex items-center justify-between text-xs font-medium text-muted-foreground">
+              <span>Operating Runtime</span>
+              <Clock className="h-4 w-4 text-amber-600" />
             </div>
-            <div className="text-xs text-muted-foreground mt-0.5">
-              {vehicle.current_hours != null ? `${formatNumber(vehicle.current_hours)} operating hrs` : "0 operating hrs"}
-            </div>
-          </div>
-          {canWrite && (
-            <button
-              type="button"
-              onClick={() => setOdoOpen(true)}
-              className="text-[11px] font-semibold text-primary hover:underline mt-2 text-left cursor-pointer inline-flex items-center gap-1"
-            >
-              + Update odometer reading
-            </button>
-          )}
-        </div>
-
-        {/* Assigned Driver */}
-        <div className="p-4 rounded-xl border border-border bg-card shadow-2xs flex flex-col justify-between">
-          <div className="flex items-center justify-between text-xs font-medium text-muted-foreground">
-            <span>Current / Assigned Driver</span>
-            <User className="h-4 w-4 text-emerald-600" />
-          </div>
-          <div className="mt-2">
-            {currentDriver?.driver ? (
-              <div>
-                <div className="font-bold text-foreground text-base leading-tight">
-                  {currentDriver.driver.full_name}
-                </div>
-                <div className="flex items-center gap-1.5 mt-1">
-                  <span className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded text-[10px] font-mono font-bold bg-muted text-foreground border">
-                    ID {currentDriver.driver.driver_code}
-                  </span>
-                  {currentDriver.onTrip && (
-                    <span className="inline-flex items-center gap-1 text-[10px] text-emerald-600 font-medium">
-                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" /> On trip
-                    </span>
-                  )}
-                </div>
+            <div className="mt-2">
+              <div className="text-xl font-bold text-foreground">
+                {vehicle.current_hours != null ? `${formatNumber(vehicle.current_hours)} hrs` : "0 hrs"}
               </div>
-            ) : (
-              <div className="text-sm text-muted-foreground italic">No driver assigned</div>
+              <div className="text-xs text-muted-foreground mt-0.5">
+                Runtime meter reading
+              </div>
+            </div>
+            {canWrite && (
+              <button
+                type="button"
+                onClick={() => setOdoOpen(true)}
+                className="text-[11px] font-semibold text-amber-700 dark:text-amber-400 hover:underline mt-2 text-left cursor-pointer inline-flex items-center gap-1"
+              >
+                + Update hours meter
+              </button>
             )}
           </div>
-          {currentDriver?.driver?.phone && (
-            <a
-              href={`tel:${currentDriver.driver.phone}`}
-              className="text-[11px] font-medium text-muted-foreground hover:text-primary transition-colors mt-2 flex items-center gap-1"
-            >
-              <Phone className="h-3 w-3" /> {currentDriver.driver.phone}
-            </a>
-          )}
-        </div>
 
-        {/* Axle Layout & Tyres */}
-        <div className="p-4 rounded-xl border border-border bg-card shadow-2xs flex flex-col justify-between">
-          <div className="flex items-center justify-between text-xs font-medium text-muted-foreground">
-            <span>Axle & Wheel Layout</span>
-            <Layers className="h-4 w-4 text-blue-600" />
-          </div>
-          <div className="mt-2">
-            <div className="font-bold text-foreground text-sm truncate" title={axleMatch?.label}>
-              {axleMatch ? axleMatch.label.split("(")[0].trim() : vehicle.axle_configuration || "6x4"}
+          {/* 2. Rated Power / Capacity */}
+          <div className="p-4 rounded-xl border border-border bg-card shadow-2xs flex flex-col justify-between">
+            <div className="flex items-center justify-between text-xs font-medium text-muted-foreground">
+              <span>Rated Capacity / Power</span>
+              <Zap className="h-4 w-4 text-amber-500" />
             </div>
-            <div className="text-xs text-muted-foreground mt-0.5">
-              {axleMatch ? `${axleMatch.tyreCount} wheel positions` : "Configured"} • {tyres.length} tyres fitted
+            <div className="mt-2">
+              <div className="font-bold text-foreground text-base">
+                {vehicle.rated_power_capacity || "Standard Rating"}
+              </div>
+              <div className="text-xs text-muted-foreground mt-0.5 capitalize">
+                Power: {vehicle.fuel_type?.replace(/_/g, " ") || "Electric / Diesel"}
+              </div>
+            </div>
+            <div className="text-[11px] text-muted-foreground mt-2">
+              Nameplate rating
             </div>
           </div>
-          <Link
-            to="/fleet/tyres"
-            className="text-[11px] font-semibold text-primary hover:underline mt-2 text-left inline-flex items-center gap-1"
-          >
-            Manage tyre fitment →
-          </Link>
-        </div>
 
-        {/* Hitched Unit & Tank Capacity */}
-        <div className="p-4 rounded-xl border border-border bg-card shadow-2xs flex flex-col justify-between">
-          <div className="flex items-center justify-between text-xs font-medium text-muted-foreground">
-            <span>Hitch & Tank Capacity</span>
-            <Fuel className="h-4 w-4 text-amber-600" />
-          </div>
-          <div className="mt-2">
-            <div className="font-bold text-foreground text-base">
-              {totalTank ? `${formatNumber(totalTank)} L` : "No tank recorded"}
+          {/* 3. Serial Number & Model */}
+          <div className="p-4 rounded-xl border border-border bg-card shadow-2xs flex flex-col justify-between">
+            <div className="flex items-center justify-between text-xs font-medium text-muted-foreground">
+              <span>Equipment S/N</span>
+              <Shield className="h-4 w-4 text-blue-600" />
             </div>
-            <div className="text-xs text-muted-foreground mt-0.5">
-              {!isTrailer ? (
-                vehicle.has_trailer && vehicle.trailer_plate ? (
-                  <span className="font-medium text-primary flex items-center gap-1 truncate">
-                    <Link2 className="h-3 w-3" /> Trailer: {vehicle.trailer_plate}
-                  </span>
-                ) : (
-                  <span>Solo (No trailer attached)</span>
-                )
-              ) : (
-                <span>Independent Semi-Trailer</span>
-              )}
+            <div className="mt-2">
+              <div className="font-bold text-foreground text-sm font-mono truncate" title={vehicle.serial_number || undefined}>
+                {vehicle.serial_number || "No S/N recorded"}
+              </div>
+              <div className="text-xs text-muted-foreground mt-0.5">
+                Make: {vehicle.make || "Manufacturer"}
+              </div>
+            </div>
+            <div className="text-[11px] text-muted-foreground mt-2">
+              Mfg Year: {vehicle.year || "—"}
             </div>
           </div>
-          {earliestExpiry ? (
-            <div className="text-[11px] font-medium text-muted-foreground mt-2 truncate">
-              {earliestExpiry.isOverdue ? (
-                <span className="text-destructive font-semibold">● Doc expired ({earliestExpiry.doc.doc_type})</span>
-              ) : earliestExpiry.isSoon ? (
-                <span className="text-amber-600 font-semibold">● Doc expires in {earliestExpiry.days}d</span>
-              ) : (
-                <span className="text-emerald-600">● Compliance valid</span>
-              )}
-            </div>
-          ) : (
-            <span className="text-[11px] text-muted-foreground mt-2">All checks recorded</span>
-          )}
-        </div>
 
-        {/* Live GPS & Telematics */}
-        <div className="p-4 rounded-xl border border-border bg-card shadow-2xs flex flex-col justify-between">
-          <div className="flex items-center justify-between text-xs font-medium text-muted-foreground">
-            <span className="flex items-center gap-1.5">
-              <span className={`h-2 w-2 rounded-full ${vehicle.telematics_ignition ? "bg-emerald-500 animate-pulse" : "bg-muted-foreground/40"}`} />
-              Live Telematics
-            </span>
-            <Radio className={`h-4 w-4 ${vehicle.telematics_ignition ? "text-emerald-600 animate-pulse" : "text-muted-foreground"}`} />
+          {/* 4. Location Bay & Day Tank */}
+          <div className="p-4 rounded-xl border border-border bg-card shadow-2xs flex flex-col justify-between">
+            <div className="flex items-center justify-between text-xs font-medium text-muted-foreground">
+              <span>Location & Tank</span>
+              <Building2 className="h-4 w-4 text-emerald-600" />
+            </div>
+            <div className="mt-2">
+              <div className="font-bold text-foreground text-sm truncate" title={vehicle.home_depot || undefined}>
+                {vehicle.home_depot || "Main Workshop"}
+              </div>
+              <div className="text-xs text-muted-foreground mt-0.5">
+                {totalTank ? `Day Tank: ${formatNumber(totalTank)} L` : "Stationary equipment"}
+              </div>
+            </div>
+            <div className="text-[11px] text-muted-foreground mt-2">
+              Base installation
+            </div>
           </div>
-          <div className="mt-2 space-y-1">
-            {(() => {
-              const hasGps = vehicle.telematics_latitude != null && vehicle.telematics_longitude != null;
-              const vStatus = normalizeTelematicsStatus(
-                vehicle.telematics_status,
-                vehicle.telematics_speed,
-                vehicle.telematics_ignition,
-                vehicle.telematics_last_at,
-                hasGps
-              );
-              return (
-                <div className="flex items-center gap-2">
-                  <span className="font-bold text-foreground text-base">
-                    {vehicle.telematics_speed != null ? `${vehicle.telematics_speed} km/h` : "0 km/h"}
-                  </span>
-                  <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase flex items-center gap-1 ${
-                    vStatus === "Running"
-                      ? "bg-emerald-500/10 text-emerald-600 border border-emerald-500/20"
-                      : vStatus === "Idle"
-                      ? "bg-amber-500/10 text-amber-600 border border-amber-500/20"
-                      : vStatus === "Inactive"
-                      ? "bg-slate-500/10 text-slate-500 border border-slate-500/20"
-                      : "bg-sky-500/10 text-sky-600 border border-sky-500/20"
-                  }`}>
-                    <span className={`h-1.5 w-1.5 rounded-full ${
-                      vStatus === "Running" ? "bg-emerald-500 animate-pulse" :
-                      vStatus === "Idle" ? "bg-amber-500" :
-                      vStatus === "Inactive" ? "bg-slate-400" : "bg-sky-500"
-                    }`} />
-                    {vStatus === "Running" ? "Running" : vStatus === "Idle" ? "Idle (Key ON)" : vStatus === "Inactive" ? "Inactive" : "Stopped"}
-                  </span>
+
+          {/* 5. PM Due Status / Spares */}
+          <div className="p-4 rounded-xl border border-border bg-card shadow-2xs flex flex-col justify-between">
+            <div className="flex items-center justify-between text-xs font-medium text-muted-foreground">
+              <span>Preventive Service</span>
+              <Wrench className="h-4 w-4 text-primary" />
+            </div>
+            <div className="mt-2">
+              {schedules.length > 0 ? (
+                <div>
+                  <div className="font-bold text-foreground text-sm truncate">
+                    {schedules[0].name}
+                  </div>
+                  <div className="text-xs text-muted-foreground mt-0.5">
+                    {schedules[0].next_due_hours != null
+                      ? `Due at ${formatNumber(schedules[0].next_due_hours)} hrs`
+                      : schedules[0].next_due_date
+                      ? `Due on ${formatDate(schedules[0].next_due_date)}`
+                      : "Schedule active"}
+                  </div>
                 </div>
-              );
-            })()}
-            <div className="text-[11px] text-muted-foreground truncate">
-              {vehicle.telematics_battery_volt != null && <span>Battery: {vehicle.telematics_battery_volt}V • </span>}
-              {vehicle.telematics_imei ? `IMEI: ${vehicle.telematics_imei}` : "No IMEI set"}
+              ) : (
+                <div className="text-sm text-muted-foreground italic">No PM schedule</div>
+              )}
             </div>
+            {canWrite && (
+              <button
+                type="button"
+                onClick={() => setScheduleDialogOpen(true)}
+                className="text-[11px] font-semibold text-primary hover:underline mt-2 text-left cursor-pointer inline-flex items-center gap-1"
+              >
+                + Configure PM schedule
+              </button>
+            )}
           </div>
-          {vehicle.telematics_latitude != null && vehicle.telematics_longitude != null ? (
-            <a
-              href={`https://maps.google.com/?q=${vehicle.telematics_latitude},${vehicle.telematics_longitude}`}
-              target="_blank"
-              rel="noreferrer"
-              className="text-[11px] font-semibold text-primary hover:underline mt-2 inline-flex items-center gap-1"
-            >
-              <Navigation className="h-3 w-3" /> Live GPS Map →
-            </a>
-          ) : (
-            <span className="text-[11px] text-muted-foreground mt-2 italic">
-              {vehicle.telematics_imei ? "Awaiting GPS fix" : "No GPS tracker"}
-            </span>
-          )}
         </div>
-      </div>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5">
+          {/* Odometer / Operating Hours */}
+          <div className="p-4 rounded-xl border border-border bg-card shadow-2xs flex flex-col justify-between">
+            <div className="flex items-center justify-between text-xs font-medium text-muted-foreground">
+              <span>Odometer & Usage</span>
+              <Gauge className="h-4 w-4 text-primary" />
+            </div>
+            <div className="mt-2">
+              <div className="text-xl font-bold text-foreground">
+                {vehicle.current_odometer_km != null ? `${formatNumber(vehicle.current_odometer_km)} km` : "—"}
+              </div>
+              <div className="text-xs text-muted-foreground mt-0.5">
+                {vehicle.current_hours != null ? `${formatNumber(vehicle.current_hours)} operating hrs` : "0 operating hrs"}
+              </div>
+            </div>
+            {canWrite && (
+              <button
+                type="button"
+                onClick={() => setOdoOpen(true)}
+                className="text-[11px] font-semibold text-primary hover:underline mt-2 text-left cursor-pointer inline-flex items-center gap-1"
+              >
+                + Update odometer reading
+              </button>
+            )}
+          </div>
+
+          {/* Assigned Driver */}
+          <div className="p-4 rounded-xl border border-border bg-card shadow-2xs flex flex-col justify-between">
+            <div className="flex items-center justify-between text-xs font-medium text-muted-foreground">
+              <span>Current / Assigned Driver</span>
+              <User className="h-4 w-4 text-emerald-600" />
+            </div>
+            <div className="mt-2">
+              {currentDriver?.driver ? (
+                <div>
+                  <div className="font-bold text-foreground text-base leading-tight">
+                    {currentDriver.driver.full_name}
+                  </div>
+                  <div className="flex items-center gap-1.5 mt-1">
+                    <span className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded text-[10px] font-mono font-bold bg-muted text-foreground border">
+                      ID {currentDriver.driver.driver_code}
+                    </span>
+                    {currentDriver.onTrip && (
+                      <span className="inline-flex items-center gap-1 text-[10px] text-emerald-600 font-medium">
+                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" /> On trip
+                      </span>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <div className="text-sm text-muted-foreground italic">No driver assigned</div>
+              )}
+            </div>
+            {currentDriver?.driver?.phone && (
+              <a
+                href={`tel:${currentDriver.driver.phone}`}
+                className="text-[11px] font-medium text-muted-foreground hover:text-primary transition-colors mt-2 flex items-center gap-1"
+              >
+                <Phone className="h-3 w-3" /> {currentDriver.driver.phone}
+              </a>
+            )}
+          </div>
+
+          {/* Axle Layout & Tyres */}
+          <div className="p-4 rounded-xl border border-border bg-card shadow-2xs flex flex-col justify-between">
+            <div className="flex items-center justify-between text-xs font-medium text-muted-foreground">
+              <span>Axle & Wheel Layout</span>
+              <Layers className="h-4 w-4 text-blue-600" />
+            </div>
+            <div className="mt-2">
+              <div className="font-bold text-foreground text-sm truncate" title={axleMatch?.label}>
+                {axleMatch ? axleMatch.label.split("(")[0].trim() : vehicle.axle_configuration || "6x4"}
+              </div>
+              <div className="text-xs text-muted-foreground mt-0.5">
+                {axleMatch ? `${axleMatch.tyreCount} wheel positions` : "Configured"} • {tyres.length} tyres fitted
+              </div>
+            </div>
+            <Link
+              to="/fleet/tyres"
+              className="text-[11px] font-semibold text-primary hover:underline mt-2 text-left inline-flex items-center gap-1"
+            >
+              Manage tyre fitment →
+            </Link>
+          </div>
+
+          {/* Hitched Unit & Tank Capacity */}
+          <div className="p-4 rounded-xl border border-border bg-card shadow-2xs flex flex-col justify-between">
+            <div className="flex items-center justify-between text-xs font-medium text-muted-foreground">
+              <span>Hitch & Tank Capacity</span>
+              <Fuel className="h-4 w-4 text-amber-600" />
+            </div>
+            <div className="mt-2">
+              <div className="font-bold text-foreground text-base">
+                {totalTank ? `${formatNumber(totalTank)} L` : "No tank recorded"}
+              </div>
+              <div className="text-xs text-muted-foreground mt-0.5">
+                {!isTrailer ? (
+                  vehicle.has_trailer && vehicle.trailer_plate ? (
+                    <span className="font-medium text-primary flex items-center gap-1 truncate">
+                      <Link2 className="h-3 w-3" /> Trailer: {vehicle.trailer_plate}
+                    </span>
+                  ) : (
+                    <span>Solo (No trailer attached)</span>
+                  )
+                ) : (
+                  <span>Independent Semi-Trailer</span>
+                )}
+              </div>
+            </div>
+            {earliestExpiry ? (
+              <div className="text-[11px] font-medium text-muted-foreground mt-2 truncate">
+                {earliestExpiry.isOverdue ? (
+                  <span className="text-destructive font-semibold">● Doc expired ({earliestExpiry.doc.doc_type})</span>
+                ) : earliestExpiry.isSoon ? (
+                  <span className="text-amber-600 font-semibold">● Doc expires in {earliestExpiry.days}d</span>
+                ) : (
+                  <span className="text-emerald-600">● Compliance valid</span>
+                )}
+              </div>
+            ) : (
+              <span className="text-[11px] text-muted-foreground mt-2">All checks recorded</span>
+            )}
+          </div>
+
+          {/* Live GPS & Telematics */}
+          <div className="p-4 rounded-xl border border-border bg-card shadow-2xs flex flex-col justify-between">
+            <div className="flex items-center justify-between text-xs font-medium text-muted-foreground">
+              <span className="flex items-center gap-1.5">
+                <span className={`h-2 w-2 rounded-full ${vehicle.telematics_ignition ? "bg-emerald-500 animate-pulse" : "bg-muted-foreground/40"}`} />
+                Live Telematics
+              </span>
+              <Radio className={`h-4 w-4 ${vehicle.telematics_ignition ? "text-emerald-600 animate-pulse" : "text-muted-foreground"}`} />
+            </div>
+            <div className="mt-2 space-y-1">
+              {(() => {
+                const hasGps = vehicle.telematics_latitude != null && vehicle.telematics_longitude != null;
+                const vStatus = normalizeTelematicsStatus(
+                  vehicle.telematics_status,
+                  vehicle.telematics_speed,
+                  vehicle.telematics_ignition,
+                  vehicle.telematics_last_at,
+                  hasGps
+                );
+                return (
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold text-foreground text-base">
+                      {vehicle.telematics_speed != null ? `${vehicle.telematics_speed} km/h` : "0 km/h"}
+                    </span>
+                    <span className={`px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase flex items-center gap-1 ${
+                      vStatus === "Running"
+                        ? "bg-emerald-500/10 text-emerald-600 border border-emerald-500/20"
+                        : vStatus === "Idle"
+                        ? "bg-amber-500/10 text-amber-600 border border-amber-500/20"
+                        : vStatus === "Inactive"
+                        ? "bg-slate-500/10 text-slate-500 border border-slate-500/20"
+                        : "bg-sky-500/10 text-sky-600 border border-sky-500/20"
+                    }`}>
+                      <span className={`h-1.5 w-1.5 rounded-full ${
+                        vStatus === "Running" ? "bg-emerald-500 animate-pulse" :
+                        vStatus === "Idle" ? "bg-amber-500" :
+                        vStatus === "Inactive" ? "bg-slate-400" : "bg-sky-500"
+                      }`} />
+                      {vStatus === "Running" ? "Running" : vStatus === "Idle" ? "Idle (Key ON)" : vStatus === "Inactive" ? "Inactive" : "Stopped"}
+                    </span>
+                  </div>
+                );
+              })()}
+              <div className="text-[11px] text-muted-foreground truncate">
+                {vehicle.telematics_battery_volt != null && <span>Battery: {vehicle.telematics_battery_volt}V • </span>}
+                {vehicle.telematics_imei ? `IMEI: ${vehicle.telematics_imei}` : "No IMEI set"}
+              </div>
+            </div>
+            {vehicle.telematics_latitude != null && vehicle.telematics_longitude != null ? (
+              <a
+                href={`https://maps.google.com/?q=${vehicle.telematics_latitude},${vehicle.telematics_longitude}`}
+                target="_blank"
+                rel="noreferrer"
+                className="text-[11px] font-semibold text-primary hover:underline mt-2 inline-flex items-center gap-1"
+              >
+                <Navigation className="h-3 w-3" /> Live GPS Map →
+              </a>
+            ) : (
+              <span className="text-[11px] text-muted-foreground mt-2 italic">
+                {vehicle.telematics_imei ? "Awaiting GPS fix" : "No GPS tracker"}
+              </span>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Main Tabbed Sections */}
       <Tabs defaultValue="overview" className="space-y-4">
         <TabsList className="bg-muted/60 p-1 flex-wrap">
           <TabsTrigger value="overview" className="gap-1.5">
-            <FileText className="h-3.5 w-3.5" /> Fleet Dossier
+            <FileText className="h-3.5 w-3.5" /> {isWsAsset ? "Asset Dossier" : "Fleet Dossier"}
           </TabsTrigger>
-          <TabsTrigger value="axles" className="gap-1.5">
-            <Layers className="h-3.5 w-3.5" /> Axles & Tyres ({tyres.length})
-          </TabsTrigger>
-          <TabsTrigger value="trips" className="gap-1.5">
-            <Navigation className="h-3.5 w-3.5" /> Trips ({trips.length})
-          </TabsTrigger>
+          {!isWsAsset && (
+            <TabsTrigger value="axles" className="gap-1.5">
+              <Layers className="h-3.5 w-3.5" /> Axles & Tyres ({tyres.length})
+            </TabsTrigger>
+          )}
+          {!isWsAsset && (
+            <TabsTrigger value="trips" className="gap-1.5">
+              <Navigation className="h-3.5 w-3.5" /> Trips ({trips.length})
+            </TabsTrigger>
+          )}
           <TabsTrigger value="maintenance" className="gap-1.5">
             <Wrench className="h-3.5 w-3.5" /> Maintenance & PM ({schedules.length})
           </TabsTrigger>
           <TabsTrigger value="documents" className="gap-1.5">
-            <Shield className="h-3.5 w-3.5" /> Documents ({documents.length})
+            <Shield className="h-3.5 w-3.5" /> {isWsAsset ? "Certificates & Docs" : "Documents"} ({documents.length})
           </TabsTrigger>
         </TabsList>
 
-        {/* Tab 1: Overview & Fleet Dossier */}
+        {/* Tab 1: Overview & Fleet/Asset Dossier */}
         <TabsContent value="overview" className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* Asset Identity Card */}
-            <div className="p-5 rounded-2xl border border-border bg-card shadow-2xs space-y-4">
-              <div className="flex items-center justify-between pb-3 border-b border-border/80">
-                <h3 className="font-semibold text-base text-foreground flex items-center gap-2">
-                  <Truck className="h-4 w-4 text-primary" /> Vehicle Identification
-                </h3>
-                <span className="text-xs font-mono font-bold bg-muted px-2 py-0.5 rounded text-muted-foreground border">
-                  {vehicle.vehicle_code}
-                </span>
-              </div>
-
-              <div className="space-y-3 text-sm">
-                <div className="flex items-center justify-between py-1 border-b border-border/40">
-                  <span className="text-muted-foreground">Registration Plate:</span>
-                  <span className="font-bold text-foreground font-mono text-base">{vehicle.plate_number || "—"}</span>
-                </div>
-
-                <div className="flex items-center justify-between py-1 border-b border-border/40">
-                  <span className="text-muted-foreground">Make & Model:</span>
-                  <span className="font-semibold text-foreground">
-                    {[vehicle.make, vehicle.model].filter(Boolean).join(" ") || "—"}
+          {isWsAsset ? (
+            /* Plant Asset Technical Dossier */
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Plant Identification Card */}
+              <div className="p-5 rounded-2xl border border-border bg-card shadow-2xs space-y-4">
+                <div className="flex items-center justify-between pb-3 border-b border-border/80">
+                  <h3 className="font-semibold text-base text-foreground flex items-center gap-2">
+                    <Wrench className="h-4 w-4 text-amber-600" /> Plant Equipment Identification
+                  </h3>
+                  <span className="text-xs font-mono font-bold bg-muted px-2 py-0.5 rounded text-foreground border">
+                    {vehicle.vehicle_code}
                   </span>
                 </div>
 
-                <div className="flex items-center justify-between py-1 border-b border-border/40">
-                  <span className="text-muted-foreground">Manufacture Year:</span>
-                  <span className="font-medium text-foreground">{vehicle.year || "—"}</span>
-                </div>
+                <div className="space-y-3 text-sm">
+                  <div className="flex items-center justify-between py-1 border-b border-border/40">
+                    <span className="text-muted-foreground">Asset Tag / ID:</span>
+                    <span className="font-bold text-foreground font-mono text-base">{vehicle.vehicle_code}</span>
+                  </div>
 
-                <div className="flex items-center justify-between py-1 border-b border-border/40">
-                  <span className="text-muted-foreground">VIN / Chassis Number:</span>
-                  <span className="font-mono text-xs text-foreground bg-muted/60 px-2 py-0.5 rounded border">
-                    {vehicle.vin || "Not recorded"}
-                  </span>
-                </div>
+                  <div className="flex items-center justify-between py-1 border-b border-border/40">
+                    <span className="text-muted-foreground">Equipment Category:</span>
+                    <span className="font-semibold text-amber-700 dark:text-amber-400">{vehicle.category || "Workshop Asset"}</span>
+                  </div>
 
-                <div className="flex items-center justify-between py-1 border-b border-border/40">
-                  <span className="text-muted-foreground">Vehicle Classification:</span>
-                  <span className="capitalize font-medium text-foreground">
-                    {vehicle.vehicle_type?.replace("_", " ") || "Commercial Transport"}
-                  </span>
-                </div>
-
-                <div className="flex items-center justify-between py-1 border-b border-border/40">
-                  <span className="text-muted-foreground">Fuel Propulsion:</span>
-                  <span className="capitalize font-medium text-foreground flex items-center gap-1.5">
-                    <Fuel className="h-3.5 w-3.5 text-amber-600" />
-                    {vehicle.fuel_type || "Diesel"}
-                  </span>
-                </div>
-
-                <div className="flex items-center justify-between py-1">
-                  <span className="text-muted-foreground">Home Depot / Terminal:</span>
-                  <span className="font-medium text-foreground">{vehicle.home_depot || "Default Depot"}</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Logistics & Hitching Card */}
-            <div className="p-5 rounded-2xl border border-border bg-card shadow-2xs space-y-4">
-              <div className="flex items-center justify-between pb-3 border-b border-border/80">
-                <h3 className="font-semibold text-base text-foreground flex items-center gap-2">
-                  <Link2 className="h-4 w-4 text-blue-600" /> Hitching & Fleet Capacities
-                </h3>
-                <span className="text-xs text-muted-foreground">Logistics Specs</span>
-              </div>
-
-              <div className="space-y-3 text-sm">
-                <div className="flex items-center justify-between py-1 border-b border-border/40">
-                  <span className="text-muted-foreground">Trailer Hitch Status:</span>
-                  {isTrailer ? (
-                    <span className="font-semibold text-emerald-600">Independent Cargo Unit</span>
-                  ) : vehicle.has_trailer && vehicle.trailer_plate ? (
-                    <span className="inline-flex items-center gap-1 rounded bg-primary/10 px-2 py-0.5 text-xs font-bold text-primary border border-primary/20">
-                      <Link2 className="h-3 w-3" /> Hitched: {vehicle.trailer_plate}
+                  <div className="flex items-center justify-between py-1 border-b border-border/40">
+                    <span className="text-muted-foreground">Serial Number / S/N:</span>
+                    <span className="font-mono text-xs text-foreground bg-muted/60 px-2 py-0.5 rounded border font-bold">
+                      {vehicle.serial_number || "Not recorded"}
                     </span>
-                  ) : (
-                    <span className="text-muted-foreground italic">Solo (No trailer attached)</span>
+                  </div>
+
+                  <div className="flex items-center justify-between py-1 border-b border-border/40">
+                    <span className="text-muted-foreground">Make & Model:</span>
+                    <span className="font-semibold text-foreground">
+                      {[vehicle.make, vehicle.model].filter(Boolean).join(" ") || "—"}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center justify-between py-1 border-b border-border/40">
+                    <span className="text-muted-foreground">Year of Manufacture:</span>
+                    <span className="font-medium text-foreground">{vehicle.year || "—"}</span>
+                  </div>
+
+                  <div className="flex items-center justify-between py-1 border-b border-border/40">
+                    <span className="text-muted-foreground">Power Source / Drive:</span>
+                    <span className="capitalize font-medium text-foreground flex items-center gap-1.5">
+                      <Fuel className="h-3.5 w-3.5 text-amber-600" />
+                      {vehicle.fuel_type?.replace(/_/g, " ") || "Diesel Engine"}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center justify-between py-1">
+                    <span className="text-muted-foreground">Rated Power / Capacity:</span>
+                    <span className="font-bold text-foreground">{vehicle.rated_power_capacity || "—"}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Operating Specs & Maintenance Setup Card */}
+              <div className="p-5 rounded-2xl border border-border bg-card shadow-2xs space-y-4">
+                <div className="flex items-center justify-between pb-3 border-b border-border/80">
+                  <h3 className="font-semibold text-base text-foreground flex items-center gap-2">
+                    <Building2 className="h-4 w-4 text-emerald-600" /> Installation & Maintenance Setup
+                  </h3>
+                  <span className="text-xs text-muted-foreground">Slide 19 Plant Specs</span>
+                </div>
+
+                <div className="space-y-3 text-sm">
+                  <div className="flex items-center justify-between py-1 border-b border-border/40">
+                    <span className="text-muted-foreground">Installation Location / Bay:</span>
+                    <span className="font-semibold text-foreground">{vehicle.home_depot || "Main Workshop"}</span>
+                  </div>
+
+                  <div className="flex items-center justify-between py-1 border-b border-border/40">
+                    <span className="text-muted-foreground">Current Operating Hours:</span>
+                    <span className="font-bold text-foreground text-base">
+                      {vehicle.current_hours != null ? `${formatNumber(vehicle.current_hours)} hrs` : "0 hrs"}
+                    </span>
+                  </div>
+
+                  {totalTank != null && totalTank > 0 && (
+                    <div className="flex items-center justify-between py-1 border-b border-border/40">
+                      <span className="text-muted-foreground">Day Fuel Tank Capacity:</span>
+                      <span className="font-medium text-foreground">{formatNumber(totalTank)} Litres</span>
+                    </div>
+                  )}
+
+                  {vehicle.purchase_date && (
+                    <div className="flex items-center justify-between py-1 border-b border-border/40">
+                      <span className="text-muted-foreground">Commissioning / Purchase Date:</span>
+                      <span className="font-medium text-foreground">{formatDate(vehicle.purchase_date)}</span>
+                    </div>
+                  )}
+
+                  {vehicle.purchase_cost != null && vehicle.purchase_cost > 0 && (
+                    <div className="flex items-center justify-between py-1 border-b border-border/40">
+                      <span className="text-muted-foreground">Asset Purchase Cost:</span>
+                      <span className="font-mono font-bold text-foreground">{formatMoney(vehicle.purchase_cost)}</span>
+                    </div>
+                  )}
+
+                  <div className="flex items-center justify-between py-1 border-b border-border/40">
+                    <span className="text-muted-foreground">Automated PM Alerts:</span>
+                    <span className="font-medium text-foreground">
+                      {vehicle.auto_pm_enabled ? (
+                        <span className="text-emerald-600 font-semibold inline-flex items-center gap-1">
+                          <CheckCircle2 className="h-3.5 w-3.5" /> Active (Every {vehicle.auto_pm_hours_interval ?? 250} hrs)
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground">Manual schedule</span>
+                      )}
+                    </span>
+                  </div>
+
+                  {vehicle.user_notes && (
+                    <div className="pt-2">
+                      <span className="text-xs text-muted-foreground font-semibold block mb-1">Equipment Notes & Maintenance Instructions:</span>
+                      <div className="p-2.5 rounded-lg bg-muted/40 text-xs text-foreground italic border">
+                        {vehicle.user_notes}
+                      </div>
+                    </div>
                   )}
                 </div>
-
-                {vehicle.has_trailer && vehicle.trailer_make_model && (
-                  <div className="flex items-center justify-between py-1 border-b border-border/40">
-                    <span className="text-muted-foreground">Coupled Trailer Model:</span>
-                    <span className="font-medium text-foreground">{vehicle.trailer_make_model}</span>
-                  </div>
-                )}
-
-                <div className="flex items-center justify-between py-1 border-b border-border/40">
-                  <span className="text-muted-foreground">Total Combined Fuel / Tank:</span>
-                  <span className="font-bold text-foreground text-base">
-                    {totalTank ? `${formatNumber(totalTank)} Litres` : "—"}
-                  </span>
-                </div>
-
-                {vehicle.head_tank_capacity_l != null && (
-                  <div className="flex items-center justify-between py-1 border-b border-border/40">
-                    <span className="text-muted-foreground">Tractor Head Tank:</span>
-                    <span className="font-medium text-foreground">{formatNumber(vehicle.head_tank_capacity_l)} L</span>
-                  </div>
-                )}
-
-                {vehicle.trailer_tank_capacity_l != null && (
-                  <div className="flex items-center justify-between py-1 border-b border-border/40">
-                    <span className="text-muted-foreground">Trailer Tank Payload:</span>
-                    <span className="font-medium text-foreground">{formatNumber(vehicle.trailer_tank_capacity_l)} L</span>
-                  </div>
-                )}
-
-                <div className="flex items-center justify-between py-1 border-b border-border/40">
-                  <span className="text-muted-foreground">Automated PM Alerts:</span>
-                  <span className="font-medium text-foreground">
-                    {vehicle.auto_pm_enabled ? (
-                      <span className="text-emerald-600 font-semibold inline-flex items-center gap-1">
-                        <CheckCircle2 className="h-3.5 w-3.5" /> Enabled (Every {vehicle.auto_pm_hours_interval ?? 250} hrs)
-                      </span>
-                    ) : (
-                      <span className="text-muted-foreground">Manual schedule</span>
-                    )}
-                  </span>
-                </div>
-
-                {vehicle.user_notes && (
-                  <div className="pt-2">
-                    <span className="text-xs text-muted-foreground font-semibold block mb-1">Dispatcher Remarks & Notes:</span>
-                    <div className="p-2.5 rounded-lg bg-muted/40 text-xs text-foreground italic border">
-                      {vehicle.user_notes}
-                    </div>
-                  </div>
-                )}
               </div>
             </div>
-          </div>
+          ) : (
+            /* Road Vehicle Dossier */
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Asset Identity Card */}
+              <div className="p-5 rounded-2xl border border-border bg-card shadow-2xs space-y-4">
+                <div className="flex items-center justify-between pb-3 border-b border-border/80">
+                  <h3 className="font-semibold text-base text-foreground flex items-center gap-2">
+                    <Truck className="h-4 w-4 text-primary" /> Vehicle Identification
+                  </h3>
+                  <span className="text-xs font-mono font-bold bg-muted px-2 py-0.5 rounded text-muted-foreground border">
+                    {vehicle.vehicle_code}
+                  </span>
+                </div>
+
+                <div className="space-y-3 text-sm">
+                  <div className="flex items-center justify-between py-1 border-b border-border/40">
+                    <span className="text-muted-foreground">Registration Plate:</span>
+                    <span className="font-bold text-foreground font-mono text-base">{vehicle.plate_number || "—"}</span>
+                  </div>
+
+                  <div className="flex items-center justify-between py-1 border-b border-border/40">
+                    <span className="text-muted-foreground">Make & Model:</span>
+                    <span className="font-semibold text-foreground">
+                      {[vehicle.make, vehicle.model].filter(Boolean).join(" ") || "—"}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center justify-between py-1 border-b border-border/40">
+                    <span className="text-muted-foreground">Manufacture Year:</span>
+                    <span className="font-medium text-foreground">{vehicle.year || "—"}</span>
+                  </div>
+
+                  <div className="flex items-center justify-between py-1 border-b border-border/40">
+                    <span className="text-muted-foreground">VIN / Chassis Number:</span>
+                    <span className="font-mono text-xs text-foreground bg-muted/60 px-2 py-0.5 rounded border">
+                      {vehicle.vin || "Not recorded"}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center justify-between py-1 border-b border-border/40">
+                    <span className="text-muted-foreground">Vehicle Classification:</span>
+                    <span className="capitalize font-medium text-foreground">
+                      {vehicle.vehicle_type?.replace("_", " ") || "Commercial Transport"}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center justify-between py-1 border-b border-border/40">
+                    <span className="text-muted-foreground">Fuel Propulsion:</span>
+                    <span className="capitalize font-medium text-foreground flex items-center gap-1.5">
+                      <Fuel className="h-3.5 w-3.5 text-amber-600" />
+                      {vehicle.fuel_type || "Diesel"}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center justify-between py-1">
+                    <span className="text-muted-foreground">Home Depot / Terminal:</span>
+                    <span className="font-medium text-foreground">{vehicle.home_depot || "Default Depot"}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Logistics & Hitching Card */}
+              <div className="p-5 rounded-2xl border border-border bg-card shadow-2xs space-y-4">
+                <div className="flex items-center justify-between pb-3 border-b border-border/80">
+                  <h3 className="font-semibold text-base text-foreground flex items-center gap-2">
+                    <Link2 className="h-4 w-4 text-blue-600" /> Hitching & Fleet Capacities
+                  </h3>
+                  <span className="text-xs text-muted-foreground">Logistics Specs</span>
+                </div>
+
+                <div className="space-y-3 text-sm">
+                  <div className="flex items-center justify-between py-1 border-b border-border/40">
+                    <span className="text-muted-foreground">Trailer Hitch Status:</span>
+                    {isTrailer ? (
+                      <span className="font-semibold text-emerald-600">Independent Cargo Unit</span>
+                    ) : vehicle.has_trailer && vehicle.trailer_plate ? (
+                      <span className="inline-flex items-center gap-1 rounded bg-primary/10 px-2 py-0.5 text-xs font-bold text-primary border border-primary/20">
+                        <Link2 className="h-3 w-3" /> Hitched: {vehicle.trailer_plate}
+                      </span>
+                    ) : (
+                      <span className="text-muted-foreground italic">Solo (No trailer attached)</span>
+                    )}
+                  </div>
+
+                  {vehicle.has_trailer && vehicle.trailer_make_model && (
+                    <div className="flex items-center justify-between py-1 border-b border-border/40">
+                      <span className="text-muted-foreground">Coupled Trailer Model:</span>
+                      <span className="font-medium text-foreground">{vehicle.trailer_make_model}</span>
+                    </div>
+                  )}
+
+                  <div className="flex items-center justify-between py-1 border-b border-border/40">
+                    <span className="text-muted-foreground">Total Combined Fuel / Tank:</span>
+                    <span className="font-bold text-foreground text-base">
+                      {totalTank ? `${formatNumber(totalTank)} Litres` : "—"}
+                    </span>
+                  </div>
+
+                  {vehicle.head_tank_capacity_l != null && (
+                    <div className="flex items-center justify-between py-1 border-b border-border/40">
+                      <span className="text-muted-foreground">Tractor Head Tank:</span>
+                      <span className="font-medium text-foreground">{formatNumber(vehicle.head_tank_capacity_l)} L</span>
+                    </div>
+                  )}
+
+                  {vehicle.trailer_tank_capacity_l != null && (
+                    <div className="flex items-center justify-between py-1 border-b border-border/40">
+                      <span className="text-muted-foreground">Trailer Tank Payload:</span>
+                      <span className="font-medium text-foreground">{formatNumber(vehicle.trailer_tank_capacity_l)} L</span>
+                    </div>
+                  )}
+
+                  <div className="flex items-center justify-between py-1 border-b border-border/40">
+                    <span className="text-muted-foreground">Automated PM Alerts:</span>
+                    <span className="font-medium text-foreground">
+                      {vehicle.auto_pm_enabled ? (
+                        <span className="text-emerald-600 font-semibold inline-flex items-center gap-1">
+                          <CheckCircle2 className="h-3.5 w-3.5" /> Enabled (Every {vehicle.auto_pm_hours_interval ?? 250} hrs)
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground">Manual schedule</span>
+                      )}
+                    </span>
+                  </div>
+
+                  {vehicle.user_notes && (
+                    <div className="pt-2">
+                      <span className="text-xs text-muted-foreground font-semibold block mb-1">Dispatcher Remarks & Notes:</span>
+                      <div className="p-2.5 rounded-lg bg-muted/40 text-xs text-foreground italic border">
+                        {vehicle.user_notes}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
         </TabsContent>
 
         {/* Tab 2: Axles & Tyres */}
@@ -1608,7 +1915,7 @@ export default function FleetVehicleDetail() {
         open={editOpen}
         onOpenChange={setEditOpen}
         machine={vehicle}
-        initialCategory={vehicle.category === "Trailer" ? "Trailer" : "Vehicle"}
+        initialCategory={vehicle.category || "Vehicle"}
         availableTrailers={allTrailers.filter((t) => t.is_trailer || t.category === "Trailer")}
         onSaved={load}
       />
@@ -1622,7 +1929,7 @@ export default function FleetVehicleDetail() {
         qrEnabled={true}
         plateNumber={vehicle.plate_number}
         registrationNumber={vehicle.vehicle_code}
-        currentHours={vehicle.current_odometer_km}
+        currentHours={vehicle.current_hours ?? vehicle.current_odometer_km}
         category={vehicle.category}
         make={vehicle.make}
         model={vehicle.model}
