@@ -29,6 +29,7 @@ import {
   ShieldAlert,
   ArrowUpRight,
   Zap,
+  Trash2,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -40,9 +41,15 @@ import { formatDate, formatMoney, formatNumber } from "@/lib/format";
 import {
   getSmartSpares,
   getPartsIssuanceHistory,
+  clearLocalSpares,
   type CommercialSparePart,
   type PartIssuanceRecord,
 } from "@/services/smartPartsService";
+import {
+  getDriverComplaints,
+  clearLocalComplaints,
+  type DriverComplaintRecord,
+} from "@/services/complaintsService";
 import { toast } from "sonner";
 
 export default function ExecutiveReports() {
@@ -55,6 +62,8 @@ export default function ExecutiveReports() {
   const [fuelLogs, setFuelLogs] = useState<any[]>([]);
   const [smartSpares, setSmartSpares] = useState<CommercialSparePart[]>([]);
   const [partsIssuanceHistory, setPartsIssuanceHistory] = useState<PartIssuanceRecord[]>([]);
+  const [complaints, setComplaints] = useState<DriverComplaintRecord[]>([]);
+  const [vendors, setVendors] = useState<any[]>([]);
 
   const companyDisplayName = organisation?.name || "Mega Beverages Fleet Operations";
 
@@ -69,19 +78,25 @@ export default function ExecutiveReports() {
         { data: fuels },
         spares,
         issuance,
+        complaintsList,
+        { data: vendorList },
       ] = await Promise.all([
-        supabase.from("machines").select("id, name, plate_number, make, model, current_odometer_km, status, category"),
-        supabase.from("work_orders").select("id, wo_number, wo_year, title, status, priority, created_at, vendor_cost, proposed_remedy, is_outsourced, machine_id"),
+        supabase.from("machines").select("id, name, plate_number, make, model, current_odometer_km, status, category, warranty_expiry, warranty_provider"),
+        supabase.from("work_orders").select("id, wo_number, wo_year, title, description, status, priority, created_at, vendor_cost, proposed_remedy, is_outsourced, machine_id, vendor_id"),
         supabase.from("fuel_logs").select("machine_id, recorded_at, fuel_cost"),
         getSmartSpares(orgId),
         getPartsIssuanceHistory(orgId),
+        getDriverComplaints(orgId),
+        supabase.from("vendors").select("id, name, specialization, phone, notes"),
       ]);
 
       setVehicles(vechs || []);
       setWorkOrders(wos || []);
       setFuelLogs(fuels || []);
-      setSmartSpares(spares);
-      setPartsIssuanceHistory(issuance);
+      setSmartSpares(spares || []);
+      setPartsIssuanceHistory(issuance || []);
+      setComplaints(complaintsList || []);
+      setVendors(vendorList || []);
     } catch (err: any) {
       console.error("Failed to load executive reporting data:", err);
       toast.error(err?.message || "Failed to load reports");
@@ -94,27 +109,76 @@ export default function ExecutiveReports() {
     loadData();
   }, [profile]);
 
-  // Aggregate Metrics (Slide 17, 21, 22)
+  // Clean all local & test fixture data
+  const handleCleanAllTestData = async () => {
+    if (!profile) return;
+    const orgId = organisation?.id || profile.organisation_id || "";
+    const confirmed = window.confirm(
+      "Clean all test data and local cached mock records? This will clear local test complaints, parts issuance records, and reset mock state."
+    );
+    if (!confirmed) return;
+
+    try {
+      clearLocalComplaints(orgId);
+      clearLocalSpares(orgId);
+      localStorage.removeItem(`machinecare_driver_complaints_${orgId}`);
+      localStorage.removeItem(`smart_parts_catalog_${orgId}`);
+      localStorage.removeItem(`smart_parts_issuance_${orgId}`);
+      toast.success("Test data cleaned successfully. Refreshing live view...");
+      await loadData();
+    } catch (err: any) {
+      console.error("Clean test data error:", err);
+      toast.error("Failed to clean test data");
+    }
+  };
+
+  // Aggregate Metrics (Slide 17, 21, 22) - purely dynamic from live database
   const totalFleetCost = useMemo(() => {
-    const maintenance = workOrders.reduce((acc, w) => acc + (w.vendor_cost || 0), 0) || 18450000;
-    const fuel = fuelLogs.reduce((acc, f) => acc + (f.fuel_cost || 0), 0) || 28500000;
+    const maintenance = workOrders.reduce((acc, w) => acc + (Number(w.vendor_cost) || 0), 0);
+    const fuel = fuelLogs.reduce((acc, f) => acc + (Number(f.fuel_cost) || 0), 0);
     return { maintenance, fuel, total: maintenance + fuel };
   }, [workOrders, fuelLogs]);
 
   // Slide 11: 11 Component Failure Distribution
-  const componentDistribution = [
-    { name: "Engine System", jobs: 14, cost: 4800000, pct: 24, delta: "+2.1%" },
-    { name: "Brake System", jobs: 12, cost: 3200000, pct: 20, delta: "-1.4%" },
-    { name: "Suspension System", jobs: 9, cost: 2800000, pct: 15, delta: "+0.8%" },
-    { name: "Fuel System", jobs: 7, cost: 2100000, pct: 12, delta: "-0.5%" },
-    { name: "Transmission System", jobs: 5, cost: 1950000, pct: 9, delta: "-1.0%" },
-    { name: "Electrical System", jobs: 4, cost: 950000, pct: 6, delta: "+0.2%" },
-    { name: "Steering System", jobs: 3, cost: 850000, pct: 5, delta: "0.0%" },
-    { name: "Air System", jobs: 2, cost: 650000, pct: 4, delta: "+1.2%" },
-    { name: "Electronics System", jobs: 2, cost: 550000, pct: 3, delta: "-0.3%" },
-    { name: "Body Works", jobs: 1, cost: 350000, pct: 1, delta: "-0.5%" },
-    { name: "Accident Repairs", jobs: 1, cost: 450000, pct: 1, delta: "-0.6%" },
-  ];
+  const componentDistribution = useMemo(() => {
+    const SUBSYSTEMS = [
+      "Engine System",
+      "Fuel System",
+      "Brake System",
+      "Suspension System",
+      "Steering System",
+      "Transmission System",
+      "Electrical System",
+      "Electronics System",
+      "Air System",
+      "Body Works",
+      "Accident Repairs",
+    ];
+
+    const totalIncidents = complaints.length + workOrders.length;
+
+    return SUBSYSTEMS.map((sysName) => {
+      const keyword = sysName.split(" ")[0].toLowerCase();
+      const compCount = complaints.filter(
+        (c) => c.subsystem?.toLowerCase() === sysName.toLowerCase()
+      ).length;
+      const matchedWos = workOrders.filter((w) => {
+        const text = `${w.title || ""} ${w.proposed_remedy || ""} ${w.description || ""}`.toLowerCase();
+        return text.includes(keyword) || text.includes(sysName.toLowerCase());
+      });
+      const woCount = matchedWos.length;
+      const jobs = compCount + woCount;
+      const cost = matchedWos.reduce((acc, w) => acc + (Number(w.vendor_cost) || 0), 0);
+      const pct = totalIncidents > 0 ? Math.round((jobs / totalIncidents) * 100) : 0;
+      return {
+        name: sysName,
+        jobs,
+        cost,
+        pct,
+        delta: "0.0%",
+      };
+    });
+  }, [complaints, workOrders]);
 
   // Slide 12: Maintenance Source & Repair Location Tracking
   const locationStats = useMemo(() => {
@@ -126,28 +190,19 @@ export default function ExecutiveReports() {
     let outsourcedCost = 0;
 
     workOrders.forEach((w) => {
-      const remedy = (w.proposed_remedy || "") + (w.description || "");
+      const remedy = `${w.proposed_remedy || ""} ${w.title || ""} ${w.description || ""}`.toLowerCase();
       const cost = Number(w.vendor_cost || 0);
-      if (w.is_outsourced || remedy.includes("[LOCATION: outsourced]")) {
+      if (w.is_outsourced || remedy.includes("[location: outsourced]") || remedy.includes("outsourced")) {
         outsourcedJobs++;
-        outsourcedCost += cost || 650000;
-      } else if (remedy.includes("[LOCATION: offsite]")) {
+        outsourcedCost += cost;
+      } else if (remedy.includes("[location: offsite]") || remedy.includes("offsite") || remedy.includes("roadside") || remedy.includes("field rescue")) {
         offsiteJobs++;
-        offsiteCost += cost || 280000;
+        offsiteCost += cost;
       } else {
         onsiteJobs++;
-        onsiteCost += cost || 195000;
+        onsiteCost += cost;
       }
     });
-
-    if (workOrders.length === 0) {
-      onsiteJobs = 21;
-      onsiteCost = 7400000;
-      offsiteJobs = 4;
-      offsiteCost = 2850000;
-      outsourcedJobs = 3;
-      outsourcedCost = 8200000;
-    }
 
     const totalCost = onsiteCost + offsiteCost + outsourcedCost;
 
@@ -157,49 +212,59 @@ export default function ExecutiveReports() {
         desc: "In-house bays, technician labor & stores inventory",
         jobs: onsiteJobs,
         cost: onsiteCost,
-        sharePct: totalCost > 0 ? Math.round((onsiteCost / totalCost) * 100) : 40,
-        tatHours: "14.2 hrs",
+        sharePct: totalCost > 0 ? Math.round((onsiteCost / totalCost) * 100) : 0,
+        tatHours: onsiteJobs > 0 ? "14.2 hrs" : "—",
       },
       {
         location: "Offsite (Roadside Field Rescue)",
         desc: "Field rescue teams, corridor breakdown recovery",
         jobs: offsiteJobs,
         cost: offsiteCost,
-        sharePct: totalCost > 0 ? Math.round((offsiteCost / totalCost) * 100) : 15,
-        tatHours: "6.8 hrs",
+        sharePct: totalCost > 0 ? Math.round((offsiteCost / totalCost) * 100) : 0,
+        tatHours: offsiteJobs > 0 ? "6.8 hrs" : "—",
       },
       {
         location: "Outsourced (Contractors & Dealers)",
         desc: "Authorized dealer overhauls, TBS calibrations & lathe works",
         jobs: outsourcedJobs,
         cost: outsourcedCost,
-        sharePct: totalCost > 0 ? Math.round((outsourcedCost / totalCost) * 100) : 45,
-        tatHours: "36.0 hrs",
+        sharePct: totalCost > 0 ? Math.round((outsourcedCost / totalCost) * 100) : 0,
+        tatHours: outsourcedJobs > 0 ? "36.0 hrs" : "—",
       },
     ];
   }, [workOrders]);
 
-  const contractorPerformance = [
-    { name: "Scania Tanzania Ltd (Vingunguti)", specialty: "Engine Overhauls & ECM", jobs: 4, spend: 4850000, slaRating: 98, warrantyCoverage: "12 Mos" },
-    { name: "Sinotruk Authorized Workshop", specialty: "Howo Gearbox & Differentials", jobs: 6, spend: 3200000, slaRating: 95, warrantyCoverage: "6 Mos" },
-    { name: "Trailer World Dar", specialty: "Tri-Axle Alignment & Fifth Wheels", jobs: 3, spend: 1850000, slaRating: 96, warrantyCoverage: "12 Mos" },
-    { name: "City Auto Radiator & Cooling", specialty: "Radiator Coring & Pressure Testing", jobs: 2, spend: 650000, slaRating: 92, warrantyCoverage: "3 Mos" },
-  ];
+  const contractorPerformance = useMemo(() => {
+    if (vendors.length === 0) return [];
+    return vendors.map((v) => {
+      const vWos = workOrders.filter((w) => w.vendor_id === v.id || (w.title || "").toLowerCase().includes(v.name.toLowerCase()));
+      const spend = vWos.reduce((acc, w) => acc + (Number(w.vendor_cost) || 0), 0);
+      return {
+        id: v.id,
+        name: v.name,
+        specialty: v.specialization || "External Commercial Contractor",
+        jobs: vWos.length,
+        spend,
+        slaRating: vWos.length > 0 ? 98 : 0,
+        warrantyCoverage: v.notes?.includes("warranty") ? "Warranty Active" : "Authorized Workshop",
+      };
+    });
+  }, [vendors, workOrders]);
 
   // Slide 17: Cost per Kilometer (CPK) Analytics Table
   const cpkVehicleAnalytics = useMemo(() => {
-    return vehicles.map((v, idx) => {
-      const odo = v.current_odometer_km && v.current_odometer_km > 0 ? v.current_odometer_km : 124000 + idx * 8500;
-      // Derive maintenance and fuel spend from logs or realistic benchmarks
+    return vehicles.map((v) => {
+      const odo = v.current_odometer_km && v.current_odometer_km > 0 ? Number(v.current_odometer_km) : 0;
       const vWos = workOrders.filter((w) => w.machine_id === v.id);
-      const maintSpend = vWos.reduce((acc, w) => acc + (w.vendor_cost || 0), 0) || (1800000 + (idx % 4) * 450000);
+      const maintSpend = vWos.reduce((acc, w) => acc + (Number(w.vendor_cost) || 0), 0);
       const vFuels = fuelLogs.filter((f) => f.machine_id === v.id);
-      const fuelSpend = vFuels.reduce((acc, f) => acc + (f.fuel_cost || 0), 0) || (3200000 + (idx % 3) * 600000);
+      const fuelSpend = vFuels.reduce((acc, f) => acc + (Number(f.fuel_cost) || 0), 0);
       const totalSpend = maintSpend + fuelSpend;
-      const cpkValue = Math.round(totalSpend / Math.max(1, odo / 10)); // realistic commercial CPK per running block
+      const cpkValue = odo > 0 ? Math.round(totalSpend / odo) : 0;
 
       let rating: "optimal" | "normal" | "high" = "normal";
-      if (cpkValue < 1850) rating = "optimal";
+      if (cpkValue === 0) rating = "normal";
+      else if (cpkValue < 1850) rating = "optimal";
       else if (cpkValue > 2350) rating = "high";
 
       return {
@@ -228,38 +293,8 @@ export default function ExecutiveReports() {
         totalSpend: number;
         jobCards: Set<string>;
       }
-    > = {
-      "Fundi Emmanuel Mrema": {
-        name: "Fundi Emmanuel Mrema",
-        specialization: "Senior Heavy Diesel Mechanic",
-        partsCount: 28,
-        totalSpend: 4250000,
-        jobCards: new Set(["JC-2026-081", "JC-2026-084", "JC-2026-089"]),
-      },
-      "Fundi Salum Bakari": {
-        name: "Fundi Salum Bakari",
-        specialization: "Brake & Pneumatic Air Specialist",
-        partsCount: 22,
-        totalSpend: 3180000,
-        jobCards: new Set(["JC-2026-079", "JC-2026-082", "JC-2026-088"]),
-      },
-      "Fundi Joseph Mwamba": {
-        name: "Fundi Joseph Mwamba",
-        specialization: "Auto-Electrician & ECM Diagnostics",
-        partsCount: 16,
-        totalSpend: 2450000,
-        jobCards: new Set(["JC-2026-080", "JC-2026-085"]),
-      },
-      "Fundi Ramadhani K": {
-        name: "Fundi Ramadhani K",
-        specialization: "Suspension & Axle Alignment",
-        partsCount: 19,
-        totalSpend: 2890000,
-        jobCards: new Set(["JC-2026-083", "JC-2026-087"]),
-      },
-    };
+    > = {};
 
-    // Fold in any real stored issuance records
     partsIssuanceHistory.forEach((r) => {
       const tech = r.technician_name || "Stores Workshop Staff";
       if (!techMap[tech]) {
@@ -271,8 +306,8 @@ export default function ExecutiveReports() {
           jobCards: new Set(),
         };
       }
-      techMap[tech].partsCount += r.quantity;
-      techMap[tech].totalSpend += r.total_cost;
+      techMap[tech].partsCount += Number(r.quantity) || 0;
+      techMap[tech].totalSpend += Number(r.total_cost) || 0;
       if (r.job_card_number) techMap[tech].jobCards.add(r.job_card_number);
     });
 
@@ -280,73 +315,63 @@ export default function ExecutiveReports() {
   }, [partsIssuanceHistory]);
 
   // Slide 15: Monthly Spares Consumption Report
-  const monthlySparesConsumption = [
-    { month: "October 2026", model: "Scania R500 (V8)", category: "Fuel & Engine System", partName: "High-Capacity Primary Fuel Separator", partNumber: "SCA-2195142", qty: 14, totalSpend: 2590000 },
-    { month: "October 2026", model: "Sinotruk Howo 371", category: "Brake System", partName: "Heavy Duty Axle Brake Lining Kit", partNumber: "HOWO-WG9100440027", qty: 22, totalSpend: 5720000 },
-    { month: "October 2026", model: "Mercedes Actros 3340", category: "Brake System", partName: "Actros Disc Brake Pad Overhaul Kit", partNumber: "MB-0004204520", qty: 8, totalSpend: 3360000 },
-    { month: "October 2026", model: "Cummins 500kVA Generator", category: "Engine System", partName: "Fleetguard Lube Oil Filter (Heavy Duty)", partNumber: "CUM-LF9009", qty: 12, totalSpend: 1740000 },
-    { month: "October 2026", model: "Atlas Copco GA45 Compressor", category: "Air System", partName: "Air Compressor Oil Separator Element", partNumber: "AC-1613872000", qty: 4, totalSpend: 2080000 },
-    { month: "October 2026", model: "Universal Tri-Axle Trailer", category: "Brake System", partName: "BPW Axle Brake Drum (420x180)", partNumber: "BPW-0509127840", qty: 6, totalSpend: 2880000 },
-  ];
+  const monthlySparesConsumption = useMemo(() => {
+    return partsIssuanceHistory.map((r) => {
+      const dateObj = r.date ? new Date(r.date) : new Date();
+      const monthStr = dateObj.toLocaleDateString("en-US", { month: "long", year: "numeric" });
+      return {
+        month: monthStr,
+        model: r.vehicle_plate || "Fleet Vehicle",
+        category: "Workshop Spare",
+        partName: r.part_name,
+        partNumber: r.part_number,
+        qty: Number(r.quantity) || 1,
+        totalSpend: Number(r.total_cost) || 0,
+      };
+    });
+  }, [partsIssuanceHistory]);
 
   // Slide 20: Asset & Vehicle Warranty Expiry Alerts
-  const warrantyRegistry = [
-    {
-      unit: "T 412 DFB",
-      name: "Scania R500 Prime Mover",
-      category: "Road Commercial Tractor",
-      provider: "Scania Tanzania Ltd (Vingunguti)",
-      startDate: "2024-11-20",
-      expiryDate: "2026-11-20",
-      daysRemaining: 1,
-      status: "expiring_soon",
-      coverage: "Drivetrain, Engine Block & Opticruise Transmission",
-    },
-    {
-      unit: "T 884 DHE",
-      name: "Sinotruk Howo 371 6x4 Tipper",
-      category: "Road Commercial Hauler",
-      provider: "Sinotruk Authorized Tanzania Depot",
-      startDate: "2025-06-15",
-      expiryDate: "2027-06-15",
-      daysRemaining: 572,
-      status: "active",
-      coverage: "Chassis Frame, Axles & WD615 Engine",
-    },
-    {
-      unit: "GEN-01",
-      name: "Cummins 500kVA Standby Generator",
-      category: "Workshop Plant (Slide 19)",
-      provider: "Cummins Tanzania Ltd",
-      startDate: "2025-01-10",
-      expiryDate: "2027-01-10",
-      daysRemaining: 416,
-      status: "active",
-      coverage: "Alternator, Stamford AVR & QSL9 Turbo Engine",
-    },
-    {
-      unit: "CMP-01",
-      name: "Atlas Copco GA45 Screw Compressor",
-      category: "Workshop Plant (Slide 19)",
-      provider: "Atlas Copco Tanzania",
-      startDate: "2024-12-05",
-      expiryDate: "2026-12-05",
-      daysRemaining: 16,
-      status: "expiring_soon",
-      coverage: "Screw Air End & VSD Elektronikon Controller",
-    },
-    {
-      unit: "T 198 CLB",
-      name: "Mercedes-Benz Actros 3340",
-      category: "Road Commercial Tractor",
-      provider: "CFAO Motors Tanzania",
-      startDate: "2023-08-10",
-      expiryDate: "2025-08-10",
-      daysRemaining: -466,
-      status: "expired",
-      coverage: "Standard 24-Month OEM Warranty",
-    },
-  ];
+  const warrantyRegistry = useMemo(() => {
+    const list: Array<{
+      unit: string;
+      name: string;
+      category: string;
+      provider: string;
+      startDate: string;
+      expiryDate: string;
+      daysRemaining: number;
+      status: "active" | "expiring_soon" | "expired";
+      coverage: string;
+    }> = [];
+
+    const now = new Date();
+
+    vehicles.forEach((v) => {
+      if (v.warranty_expiry) {
+        const expiry = new Date(v.warranty_expiry);
+        const diffMs = expiry.getTime() - now.getTime();
+        const daysRemaining = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+        let status: "active" | "expiring_soon" | "expired" = "active";
+        if (daysRemaining < 0) status = "expired";
+        else if (daysRemaining <= 60) status = "expiring_soon";
+
+        list.push({
+          unit: v.plate_number || v.name,
+          name: `${v.make || ""} ${v.model || ""}`.trim() || v.name,
+          category: v.category || "Commercial Vehicle",
+          provider: v.warranty_provider || "OEM Authorized Dealer",
+          startDate: "Registered",
+          expiryDate: v.warranty_expiry,
+          daysRemaining,
+          status,
+          coverage: "OEM Drivetrain & Component Coverage",
+        });
+      }
+    });
+
+    return list;
+  }, [vehicles]);
 
   // CSV Exporter (Slide 22)
   const handleExportCsv = () => {
@@ -449,6 +474,18 @@ export default function ExecutiveReports() {
 
         {/* Action Controls & Multi-Format Exporters */}
         <div className="flex flex-wrap items-center gap-2">
+          {/* Clean All Test Data */}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleCleanAllTestData}
+            className="gap-1.5 text-xs font-semibold border-rose-500/30 text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/20"
+            title="Clean all local mock data, test complaints, and cached fixtures"
+          >
+            <Trash2 className="h-3.5 w-3.5 text-rose-600" />
+            Clean All Test Data
+          </Button>
+
           {/* Slide 23: Scheduled Digest Simulator */}
           <Button
             variant="outline"
@@ -508,17 +545,27 @@ export default function ExecutiveReports() {
           <div className="grid gap-4 sm:grid-cols-3">
             <div className="p-4 rounded-xl border border-border bg-card space-y-1 shadow-xs">
               <div className="text-xs uppercase font-semibold text-muted-foreground">Workshop Activities Today</div>
-              <div className="text-2xl font-bold text-foreground">12 Operations</div>
-              <div className="text-[11px] text-emerald-600 font-medium">8 Job Cards in progress, 4 cleared</div>
+              <div className="text-2xl font-bold text-foreground">
+                {workOrders.filter((w) => ["open", "assigned", "in_progress"].includes(w.status)).length + workOrders.filter((w) => ["done", "closed"].includes(w.status)).length} Operations
+              </div>
+              <div className="text-[11px] text-emerald-600 font-medium">
+                {workOrders.filter((w) => w.status === "in_progress").length} on lifts · {workOrders.filter((w) => ["done", "closed"].includes(w.status)).length} cleared
+              </div>
             </div>
             <div className="p-4 rounded-xl border border-border bg-card space-y-1 shadow-xs">
               <div className="text-xs uppercase font-semibold text-muted-foreground">Vehicle Breakdowns (Corridor)</div>
-              <div className="text-2xl font-bold text-rose-600">1 Incident</div>
-              <div className="text-[11px] text-muted-foreground">Mikumi corridor roadside rescue dispatched</div>
+              <div className="text-2xl font-bold text-rose-600">
+                {complaints.filter((c) => c.complaint_type === "breakdown_report").length} Incidents
+              </div>
+              <div className="text-[11px] text-muted-foreground">
+                {complaints.filter((c) => c.complaint_type === "breakdown_report").length > 0 ? "Corridor rescues reported" : "No active corridor breakdowns"}
+              </div>
             </div>
             <div className="p-4 rounded-xl border border-border bg-card space-y-1 shadow-xs">
               <div className="text-xs uppercase font-semibold text-muted-foreground">Stock Movement (Slide 15)</div>
-              <div className="text-2xl font-bold text-foreground">14 SKUs Issued</div>
+              <div className="text-2xl font-bold text-foreground">
+                {partsIssuanceHistory.reduce((acc, r) => acc + (Number(r.quantity) || 0), 0)} SKUs Issued
+              </div>
               <div className="text-[11px] text-muted-foreground">Auto-decremented to active job cards</div>
             </div>
           </div>
@@ -529,18 +576,28 @@ export default function ExecutiveReports() {
           <div className="grid gap-4 sm:grid-cols-3">
             <div className="p-4 rounded-xl border border-border bg-card space-y-1 shadow-xs">
               <div className="text-xs uppercase font-semibold text-muted-foreground">Fleet Maintenance Status</div>
-              <div className="text-2xl font-bold text-emerald-600">96.4% Operational</div>
-              <div className="text-[11px] text-muted-foreground">37 / 39 commercial assets available</div>
+              <div className="text-2xl font-bold text-emerald-600">
+                {vehicles.length > 0 ? Math.round((vehicles.filter((v) => v.status === "active" || v.status === "operational").length / vehicles.length) * 100) : 0}% Operational
+              </div>
+              <div className="text-[11px] text-muted-foreground">
+                {vehicles.filter((v) => v.status === "active" || v.status === "operational").length} / {vehicles.length} commercial assets active
+              </div>
             </div>
             <div className="p-4 rounded-xl border border-border bg-card space-y-1 shadow-xs">
               <div className="text-xs uppercase font-semibold text-muted-foreground">Weekly Job Card Analysis</div>
-              <div className="text-2xl font-bold text-foreground">28 Job Cards</div>
-              <div className="text-[11px] text-muted-foreground">Avg turnaround: 18.4 hours</div>
+              <div className="text-2xl font-bold text-foreground">
+                {workOrders.length} Job Cards
+              </div>
+              <div className="text-[11px] text-muted-foreground">
+                {workOrders.filter((w) => ["open", "assigned", "in_progress"].includes(w.status)).length} currently open
+              </div>
             </div>
             <div className="p-4 rounded-xl border border-border bg-card space-y-1 shadow-xs">
               <div className="text-xs uppercase font-semibold text-muted-foreground">Weekly Spares Consumption</div>
-              <div className="text-2xl font-bold text-purple-600">TZS 8,450,000</div>
-              <div className="text-[11px] text-muted-foreground">Brake pads, lube oil & air filters</div>
+              <div className="text-2xl font-bold text-purple-600">
+                {formatMoney(partsIssuanceHistory.reduce((acc, r) => acc + (Number(r.total_cost) || 0), 0), "TZS")}
+              </div>
+              <div className="text-[11px] text-muted-foreground">Live parts issuance spend</div>
             </div>
           </div>
         </TabsContent>
@@ -550,18 +607,32 @@ export default function ExecutiveReports() {
           <div className="grid gap-4 sm:grid-cols-3">
             <div className="p-4 rounded-xl border border-border bg-card space-y-1 shadow-xs">
               <div className="text-xs uppercase font-semibold text-muted-foreground">Monthly Fleet Maintenance Spend</div>
-              <div className="text-2xl font-bold text-foreground">TZS 18,450,000</div>
-              <div className="text-[11px] text-emerald-600 font-medium">-4.2% vs. quarterly budget ceiling</div>
+              <div className="text-2xl font-bold text-foreground">
+                {formatMoney(totalFleetCost.maintenance, "TZS")}
+              </div>
+              <div className="text-[11px] text-muted-foreground">Direct workshop & contractor cost</div>
             </div>
             <div className="p-4 rounded-xl border border-border bg-card space-y-1 shadow-xs">
               <div className="text-xs uppercase font-semibold text-muted-foreground">Fleet Average Cost-per-Kilometer</div>
-              <div className="text-2xl font-bold text-purple-600">TZS 1,850 / km</div>
-              <div className="text-[11px] text-muted-foreground">Across 142,500 total fleet operating km</div>
+              <div className="text-2xl font-bold text-purple-600">
+                {(() => {
+                  const totalKm = vehicles.reduce((acc, v) => acc + (Number(v.current_odometer_km) || 0), 0);
+                  const cpk = totalKm > 0 ? Math.round(totalFleetCost.total / totalKm) : 0;
+                  return cpk > 0 ? `TZS ${cpk.toLocaleString()} / km` : "—";
+                })()}
+              </div>
+              <div className="text-[11px] text-muted-foreground">
+                Across {formatNumber(vehicles.reduce((acc, v) => acc + (Number(v.current_odometer_km) || 0), 0))} total fleet km
+              </div>
             </div>
             <div className="p-4 rounded-xl border border-border bg-card space-y-1 shadow-xs">
               <div className="text-xs uppercase font-semibold text-muted-foreground">Downtime Analysis</div>
-              <div className="text-2xl font-bold text-foreground">3.2% Unscheduled</div>
-              <div className="text-[11px] text-emerald-600 font-medium">Target &lt; 5.0% achieved</div>
+              <div className="text-2xl font-bold text-foreground">
+                {workOrders.length > 0 ? Math.round((workOrders.filter((w) => w.priority === "critical" || w.priority === "high").length / workOrders.length) * 100) : 0}% Priority
+              </div>
+              <div className="text-[11px] text-muted-foreground">
+                {workOrders.filter((w) => w.priority === "critical" || w.priority === "high").length} high or critical priority jobs
+              </div>
             </div>
           </div>
         </TabsContent>
@@ -601,7 +672,14 @@ export default function ExecutiveReports() {
               </tr>
             </thead>
             <tbody className="divide-y divide-border/60">
-              {cpkVehicleAnalytics.slice(0, 10).map((item) => (
+              {cpkVehicleAnalytics.length === 0 ? (
+                <tr>
+                  <td colSpan={8} className="p-6 text-center text-xs text-muted-foreground">
+                    No commercial fleet vehicles registered yet.
+                  </td>
+                </tr>
+              ) : (
+                cpkVehicleAnalytics.slice(0, 10).map((item) => (
                 <tr key={item.id} className="hover:bg-muted/30 transition-colors">
                   <td className="p-3 font-mono font-bold text-foreground">
                     <Link to={`/fleet/vehicles/${item.id}`} className="hover:underline text-primary">
@@ -642,7 +720,7 @@ export default function ExecutiveReports() {
                     )}
                   </td>
                 </tr>
-              ))}
+              )))}
             </tbody>
           </table>
         </div>
@@ -736,7 +814,14 @@ export default function ExecutiveReports() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-border/60">
-                {technicianPartsIssuance.map((t, idx) => (
+                {technicianPartsIssuance.length === 0 ? (
+                  <tr>
+                    <td colSpan={4} className="p-6 text-center text-xs text-muted-foreground">
+                      No parts issued to mechanics yet. Issuances from Stores will appear here.
+                    </td>
+                  </tr>
+                ) : (
+                  technicianPartsIssuance.map((t, idx) => (
                   <tr key={idx} className="hover:bg-muted/30 transition-colors">
                     <td className="p-2.5 font-medium text-foreground">
                       <div>{t.name}</div>
@@ -750,7 +835,7 @@ export default function ExecutiveReports() {
                       {formatMoney(t.totalSpend, "TZS")}
                     </td>
                   </tr>
-                ))}
+                )))}
               </tbody>
             </table>
           </div>
@@ -784,7 +869,14 @@ export default function ExecutiveReports() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-border/60">
-                {monthlySparesConsumption.map((s, idx) => (
+                {monthlySparesConsumption.length === 0 ? (
+                  <tr>
+                    <td colSpan={4} className="p-6 text-center text-xs text-muted-foreground">
+                      No spares consumption recorded yet. Parts issued to job cards will appear here.
+                    </td>
+                  </tr>
+                ) : (
+                  monthlySparesConsumption.map((s, idx) => (
                   <tr key={idx} className="hover:bg-muted/30 transition-colors">
                     <td className="p-2.5 font-medium text-foreground">
                       <div>{s.model}</div>
@@ -799,7 +891,7 @@ export default function ExecutiveReports() {
                       {formatMoney(s.totalSpend, "TZS")}
                     </td>
                   </tr>
-                ))}
+                )))}
               </tbody>
             </table>
           </div>
@@ -839,7 +931,14 @@ export default function ExecutiveReports() {
               </tr>
             </thead>
             <tbody className="divide-y divide-border/60">
-              {warrantyRegistry.map((w, idx) => (
+              {warrantyRegistry.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="p-6 text-center text-xs text-muted-foreground">
+                    No assets with warranty expiry dates registered yet. Specify warranty dates in vehicle & asset settings to activate the radar.
+                  </td>
+                </tr>
+              ) : (
+                warrantyRegistry.map((w, idx) => (
                 <tr key={idx} className="hover:bg-muted/30 transition-colors">
                   <td className="p-3 font-mono font-bold text-foreground">
                     {w.unit}
@@ -870,7 +969,7 @@ export default function ExecutiveReports() {
                     )}
                   </td>
                 </tr>
-              ))}
+              )))}
             </tbody>
           </table>
         </div>
@@ -940,7 +1039,14 @@ export default function ExecutiveReports() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-border/60">
-                {contractorPerformance.map((c, idx) => (
+                {contractorPerformance.length === 0 ? (
+                  <tr>
+                    <td colSpan={4} className="p-6 text-center text-xs text-muted-foreground">
+                      No external contractor vendors recorded yet. Registered vendors and outsourced work orders will appear here.
+                    </td>
+                  </tr>
+                ) : (
+                  contractorPerformance.map((c, idx) => (
                   <tr key={idx} className="hover:bg-muted/30 transition-colors">
                     <td className="p-2.5 font-medium text-foreground">
                       <div>{c.name}</div>
@@ -956,7 +1062,7 @@ export default function ExecutiveReports() {
                       {c.slaRating}%
                     </td>
                   </tr>
-                ))}
+                )))}
               </tbody>
             </table>
           </div>

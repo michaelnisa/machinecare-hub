@@ -10,10 +10,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Wrench, Loader2, ArrowLeft, CheckCircle2, Building2, UserPlus, Sparkles } from "lucide-react";
+import { Wrench, Loader2, ArrowLeft, CheckCircle2, Building2, UserPlus, Sparkles, Truck, ShieldCheck, Check } from "lucide-react";
 import { toast } from "sonner";
 import { useI18n } from "@/i18n/I18nProvider";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
+import { cn } from "@/lib/utils";
 
 // ── Zod Schemas ────────────────────────────────────────────────
 const signupSchema = z.object({
@@ -461,13 +462,76 @@ export default function Signup() {
                 </div>
 
                 {!orgInviteToken && (
-                  <div className="pt-2">
+                  <div className="pt-2 space-y-3">
                     <SolutionSuitePicker
                       selectedSuiteId={selectedSuite.id}
                       onSelectSuite={setSelectedSuite}
                       accountTier={accountTier}
                       onChangeAccountTier={setAccountTier}
                     />
+
+                    {/* Dedicated Fleet Governance Edition Selection */}
+                    {selectedSuite.id === "fleet" && (
+                      <div className="rounded-xl border border-primary/30 bg-primary/5 p-3.5 space-y-2.5 animate-fade-in">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <Truck className="h-4 w-4 text-primary" />
+                            <span className="text-xs font-bold text-foreground">
+                              {isSwahili ? "Chagua Toleo la Fleet" : "Select Fleet Operational Edition *"}
+                            </span>
+                          </div>
+                          <span className="text-[10px] text-muted-foreground uppercase font-semibold">
+                            {accountTier === "enterprise" ? "Enterprise Mega Beverages" : "Standard Lean"}
+                          </span>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                          <div
+                            onClick={() => setAccountTier("standard")}
+                            className={cn(
+                              "p-3 rounded-lg border text-left cursor-pointer transition-all space-y-1.5",
+                              accountTier === "standard"
+                                ? "border-emerald-500 bg-card ring-2 ring-emerald-500 shadow-xs"
+                                : "border-border/80 bg-card/60 hover:bg-card"
+                            )}
+                          >
+                            <div className="flex items-center justify-between">
+                              <span className="font-semibold text-xs text-foreground flex items-center gap-1.5">
+                                <Truck className="h-3.5 w-3.5 text-emerald-600" /> Standard Fleet
+                              </span>
+                              <span className="text-[9px] uppercase font-bold px-1.5 py-0.2 rounded bg-emerald-500/10 text-emerald-700 dark:text-emerald-400">
+                                Lean Ops
+                              </span>
+                            </div>
+                            <p className="text-[11px] text-muted-foreground leading-snug">
+                              Lean 1-step manager approval, commercial trucks & trailers, GPS telemetry, fuel & driver walkarounds.
+                            </p>
+                          </div>
+
+                          <div
+                            onClick={() => setAccountTier("enterprise")}
+                            className={cn(
+                              "p-3 rounded-lg border text-left cursor-pointer transition-all space-y-1.5",
+                              accountTier === "enterprise"
+                                ? "border-emerald-600 bg-card ring-2 ring-emerald-600 shadow-xs"
+                                : "border-border/80 bg-card/60 hover:bg-card"
+                            )}
+                          >
+                            <div className="flex items-center justify-between">
+                              <span className="font-semibold text-xs text-foreground flex items-center gap-1.5">
+                                <ShieldCheck className="h-3.5 w-3.5 text-emerald-600" /> Enterprise Fleet
+                              </span>
+                              <span className="text-[9px] uppercase font-bold px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-700 dark:text-emerald-300">
+                                Recommended
+                              </span>
+                            </div>
+                            <p className="text-[11px] text-muted-foreground leading-snug">
+                              6-department governance (Workshop, Stores, Procurement, Finance, Management), 11 subsystems, stationary plant, CPK & warranty radar.
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )}
 

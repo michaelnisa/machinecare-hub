@@ -102,6 +102,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             .eq("id", org.id);
           org.name = metaCompany.trim();
         }
+
+        const metaPlan = user?.user_metadata?.plan;
+        if (metaPlan && (!org.plan || org.plan === "free")) {
+          await supabase
+            .from("organisations")
+            .update({ plan: metaPlan })
+            .eq("id", org.id);
+          org.plan = metaPlan;
+        }
         setOrganisation(org as Organisation | null);
       } else {
         setOrganisation(null);

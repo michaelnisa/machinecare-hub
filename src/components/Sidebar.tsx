@@ -422,7 +422,7 @@ export function Sidebar() {
         id: "dept-fleet-ops",
         label: "Fleet Operations",
         items: [
-          { to: "/dashboard", label: "Fleet Cockpit", icon: LayoutDashboard },
+          { to: "/dashboard", label: "Fleet Dashboard", icon: LayoutDashboard },
           { to: "/fleet/vehicles", label: "Vehicles & Assets", icon: Truck },
           { to: "/fleet/live-map", label: "Live Telematics & GPS", icon: MapPin },
           { to: "/fleet/drivers", label: "Driver Management", icon: Contact },
@@ -436,7 +436,7 @@ export function Sidebar() {
         id: "dept-workshop",
         label: "Workshop Department",
         items: [
-          { to: "/fleet/workshop", label: "Workshop Cockpit", icon: Wrench },
+          { to: "/fleet/workshop", label: "Workshop Dashboard", icon: Wrench },
           { to: "/work-orders", label: "Job Cards & Repairs", icon: ClipboardList },
           { to: "/maintenance/schedules", label: "Preventive Schedules", icon: ClipboardCheck },
           { to: "/maintenance/calendar", label: "Maintenance Calendar", icon: Calendar },
@@ -465,7 +465,7 @@ export function Sidebar() {
         id: "dept-procurement",
         label: "Procurement Department",
         items: [
-          { to: "/fleet/procurement", label: "Procurement Cockpit", icon: ShoppingCart },
+          { to: "/fleet/procurement", label: "Procurement Dashboard", icon: ShoppingCart },
           { to: "/inventory/purchase-requests", label: "Purchase Requisitions", icon: FileText },
           { to: "/inventory/purchase-orders", label: "Purchase Orders (POs)", icon: ClipboardList },
           { to: "/fleet/approvals", label: "Multi-Stage Approvals", icon: ShieldCheck },
@@ -477,7 +477,7 @@ export function Sidebar() {
         id: "dept-finance",
         label: "Finance & Accounts",
         items: [
-          { to: "/finance", label: "Financial Cockpit", icon: LayoutDashboard },
+          { to: "/finance", label: "Financial Dashboard", icon: LayoutDashboard },
           { to: "/finance/expenses", label: "Expense Vouchers", icon: Receipt },
           { to: "/finance/fuel", label: "Fuel Reconciliation", icon: Fuel },
           { to: "/finance/vehicle-profitability", label: "Chassis Profit & Loss", icon: TrendingUp },
@@ -491,7 +491,7 @@ export function Sidebar() {
         id: "dept-management",
         label: "Management & Approvals",
         items: [
-          { to: "/dashboard", label: "Executive Cockpit", icon: LayoutDashboard },
+          { to: "/dashboard", label: "Executive Dashboard", icon: LayoutDashboard },
           { to: "/fleet/approvals", label: "Executive Approvals", icon: ShieldCheck },
           { to: "/fleet/reports", label: "Executive Reporting Center", icon: FileBarChart },
           { to: "/fleet/insights", label: "KPIs & Telematics Trends", icon: Gauge },
@@ -1026,8 +1026,13 @@ export function Sidebar() {
             </div>
           )}
           <div className="min-w-0">
-            <div className="text-base font-bold leading-tight tracking-tight text-sidebar-foreground truncate group-hover:text-primary transition-colors" title={companyDisplayName}>
-              {companyDisplayName}
+            <div className="flex items-center gap-1.5 text-base font-bold leading-tight tracking-tight text-sidebar-foreground truncate group-hover:text-primary transition-colors" title={companyDisplayName}>
+              <span className="truncate">{companyDisplayName}</span>
+              {isEnterpriseFleet(organisation) && (
+                <span className="shrink-0 inline-flex items-center rounded px-1.5 py-0.2 text-[9px] font-bold uppercase tracking-wider bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30">
+                  Enterprise
+                </span>
+              )}
             </div>
             {(() => {
               if (
@@ -1048,7 +1053,7 @@ export function Sidebar() {
                   return (
                     <div className="flex items-center gap-1.5 truncate">
                       <span className="text-[11px] font-semibold uppercase tracking-wider text-primary truncate">Fleet & Logistics</span>
-                      <span className="inline-flex items-center rounded px-1 py-0.2 text-[9px] font-bold uppercase tracking-wider bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30">Enterprise</span>
+                      <span className="inline-flex items-center rounded px-1.5 py-0.2 text-[9px] font-bold uppercase tracking-wider bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30">Enterprise</span>
                     </div>
                   );
                 }

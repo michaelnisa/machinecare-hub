@@ -327,6 +327,34 @@ export default function Admin() {
     }
   };
 
+  // Handle Organization Plan Tier Update (Standard vs Enterprise)
+  const handleUpdateOrgPlan = async (orgId: string, newPlan: "standard" | "enterprise") => {
+    try {
+      const { error } = await supabase
+        .from("organisations")
+        .update({ plan: newPlan } as any)
+        .eq("id", orgId);
+
+      if (error) throw error;
+
+      setOrganisations((prev) =>
+        prev.map((o) => (o.id === orgId ? { ...o, plan: newPlan } : o))
+      );
+
+      if (orgId === organisation?.id) {
+        await refresh();
+      }
+
+      toast.success(
+        isSwahili
+          ? `Ngazi ya mfumo imesasishwa kuwa ${newPlan.toUpperCase()}`
+          : `Organisation plan updated to ${newPlan.toUpperCase()}`
+      );
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to update organisation plan");
+    }
+  };
+
   // Handle Direct SMS Dispatch
   const handleSendSms = async () => {
     if (!targetPhone || !smsText) {
@@ -759,6 +787,15 @@ export default function Admin() {
                         <div>
                           <CardTitle className="text-base flex items-center gap-1.5 flex-wrap">
                             <span>{org.name}</span>
+                            {org.plan === "enterprise" ? (
+                              <Badge variant="outline" className="text-[10px] font-bold bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30 gap-1 px-1.5 py-0">
+                                Enterprise
+                              </Badge>
+                            ) : (
+                              <Badge variant="outline" className="text-[10px] font-bold bg-muted text-muted-foreground border-border gap-1 px-1.5 py-0">
+                                Standard
+                              </Badge>
+                            )}
                             {isActive && (
                               <Badge variant="outline" className="text-[10px] font-bold bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border-emerald-500/30 gap-1 px-1.5 py-0">
                                 <Check className="h-3 w-3" />
@@ -813,6 +850,18 @@ export default function Admin() {
                         <option value="manufacturing">Manufacturing</option>
                         <option value="garage">Garage & Workshop</option>
                         <option value="mixed">Mixed Enterprise</option>
+                      </select>
+                    </div>
+
+                    <div className="flex items-center justify-between gap-2 border-t border-border pt-2.5">
+                      <span className="text-muted-foreground font-medium">{isSwahili ? "Ngazi ya Mpango:" : "Fleet Plan Tier:"}</span>
+                      <select
+                        value={org.plan || "standard"}
+                        onChange={(e) => handleUpdateOrgPlan(org.id, e.target.value as "standard" | "enterprise")}
+                        className="rounded-md border border-input bg-background px-2 py-1 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary font-medium"
+                      >
+                        <option value="standard">Standard (Lean)</option>
+                        <option value="enterprise">Enterprise (Mega Beverages)</option>
                       </select>
                     </div>
 

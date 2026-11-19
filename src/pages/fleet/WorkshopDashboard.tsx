@@ -152,23 +152,23 @@ export default function WorkshopDashboard() {
 
   // Maintenance Source breakdown (Slide 12)
   const sourceStats = useMemo(() => {
-    const total = Math.max(1, workOrders.length);
+    const total = workOrders.length;
     const outsourced = workOrders.filter(
-      (w) => w.is_outsourced || (w.description || "").includes("[Repair Location Source]: Outsourced") || (w.proposed_remedy || "").includes("outsourced")
+      (w) => w.is_outsourced || (w.description || "").toLowerCase().includes("[repair location source]: outsourced") || (w.proposed_remedy || "").toLowerCase().includes("outsourced")
     ).length;
     const offsite = workOrders.filter(
-      (w) => (w.description || "").includes("[Repair Location Source]: Offsite") || (w.proposed_remedy || "").includes("offsite")
+      (w) => (w.description || "").toLowerCase().includes("[repair location source]: offsite") || (w.proposed_remedy || "").toLowerCase().includes("offsite") || (w.description || "").toLowerCase().includes("highway") || (w.proposed_remedy || "").toLowerCase().includes("field")
     ).length;
-    const onsite = Math.max(0, total - outsourced - offsite) || 24;
+    const onsite = Math.max(0, total - outsourced - offsite);
 
-    const grand = onsite + (offsite || 4) + (outsourced || 3);
+    const grand = total > 0 ? total : 1;
     return {
       onsiteCount: onsite,
-      onsitePct: Math.round((onsite / grand) * 100),
-      offsiteCount: offsite || 4,
-      offsitePct: Math.round(((offsite || 4) / grand) * 100),
-      outsourcedCount: outsourced || 3,
-      outsourcedPct: Math.round(((outsourced || 3) / grand) * 100),
+      onsitePct: total > 0 ? Math.round((onsite / grand) * 100) : 0,
+      offsiteCount: offsite,
+      offsitePct: total > 0 ? Math.round((offsite / grand) * 100) : 0,
+      outsourcedCount: outsourced,
+      outsourcedPct: total > 0 ? Math.round((outsourced / grand) * 100) : 0,
     };
   }, [workOrders]);
 
@@ -180,11 +180,11 @@ export default function WorkshopDashboard() {
         const text = `${w.proposed_remedy || ""} ${w.description || ""} ${w.title || ""}`.toLowerCase();
         return text.includes(sys.id) || text.includes(sys.label.toLowerCase());
       });
-      const count = matches.length > 0 ? matches.length : Math.round((sys.benchmarkPct / 100) * (totalOrders || 36));
+      const count = matches.length;
       return {
         ...sys,
-        count: Math.max(1, count),
-        percentage: sys.benchmarkPct,
+        count,
+        percentage: totalOrders > 0 ? Math.round((count / totalOrders) * 100) : 0,
       };
     });
   }, [workOrders]);
@@ -323,20 +323,20 @@ export default function WorkshopDashboard() {
           </div>
         </div>
 
-        <div className="rounded-xl border border-purple-500/20 bg-card p-4 relative overflow-hidden shadow-xs">
+        <div className="rounded-xl border border-emerald-500/20 bg-card p-4 relative overflow-hidden shadow-xs">
           <div className="flex items-start justify-between">
             <div>
               <div className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
                 Workshop Plant
               </div>
-              <div className="mt-1.5 text-2xl font-bold tracking-tight text-purple-600 dark:text-purple-400">
+              <div className="mt-1.5 text-2xl font-bold tracking-tight text-emerald-600 dark:text-emerald-400">
                 {plantAssets.length} Units
               </div>
               <div className="mt-0.5 text-[11px] text-muted-foreground">
                 Gensets, compressors, lifts (Slide 19)
               </div>
             </div>
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-purple-500/10 text-purple-600 dark:text-purple-400">
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
               <Cpu className="h-4 w-4" />
             </div>
           </div>
@@ -592,10 +592,11 @@ export default function WorkshopDashboard() {
               </div>
             ) : (
               <div className="space-y-3">
-                {mechanics.slice(0, 4).map((m, idx) => {
-                  const bookedHours = [36.5, 34.0, 38.0, 33.5][idx % 4];
+                {mechanics.slice(0, 4).map((m) => {
+                  const assignedWos = workOrders.filter((w) => w.assignee_id === m.id);
+                  const activeJobs = assignedWos.filter((w) => ["assigned", "in_progress", "waiting_parts"].includes(w.status)).length;
+                  const bookedHours = Math.min(40, activeJobs * 8);
                   const utilPct = Math.round((bookedHours / 40) * 100);
-                  const activeJobs = [3, 2, 4, 2][idx % 4];
 
                   return (
                     <div

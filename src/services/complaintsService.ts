@@ -217,13 +217,15 @@ function getLocalStore(orgId: string): DriverComplaintRecord[] {
     console.warn("Could not read local driver complaints:", e);
   }
 
-  // Initialize seed complaints for this organisation
-  const initial = SEED_COMPLAINTS.map((c) => ({
-    ...c,
-    organisation_id: orgId,
-  }));
-  saveLocalStore(orgId, initial);
-  return initial;
+  return [];
+}
+
+export function clearLocalComplaints(orgId: string): void {
+  try {
+    localStorage.removeItem(`${STORAGE_COMPLAINTS_KEY}${orgId}`);
+  } catch (e) {
+    console.warn("Could not clear local complaints:", e);
+  }
 }
 
 function saveLocalStore(orgId: string, records: DriverComplaintRecord[]) {

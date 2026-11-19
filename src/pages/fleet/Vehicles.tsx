@@ -509,8 +509,8 @@ export default function Vehicles() {
             <TabsTrigger value="trailers" className="flex items-center gap-1.5">
               <Container className="h-3.5 w-3.5" /> Trailers ({fleetTrailers.length})
             </TabsTrigger>
-            <TabsTrigger value="workshop_assets" className="flex items-center gap-1.5 text-amber-700 dark:text-amber-400 font-semibold">
-              <Wrench className="h-3.5 w-3.5 text-amber-600" /> Workshop Plant ({workshopAssets.length})
+            <TabsTrigger value="workshop_assets" className="flex items-center gap-1.5 text-emerald-700 dark:text-emerald-400 font-semibold">
+              <Wrench className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" /> Workshop Plant ({workshopAssets.length})
             </TabsTrigger>
           </TabsList>
         </Tabs>
@@ -655,8 +655,8 @@ export default function Vehicles() {
                             <span>{m.vehicle_code}</span>
                           </div>
                           {isWsAsset ? (
-                            <span className="rounded bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700 dark:text-amber-400 border border-amber-500/20 flex items-center gap-1">
-                              <Wrench className="h-2.5 w-2.5" /> {m.category || "Workshop Asset"}
+                            <span className="rounded bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700 dark:text-emerald-400 border border-emerald-500/20 flex items-center gap-1">
+                              <Wrench className="h-2.5 w-2.5 text-emerald-600 dark:text-emerald-400" /> {m.category || "Workshop Asset"}
                             </span>
                           ) : isTrailer ? (
                             <span className="rounded bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-600 border border-emerald-500/20">
@@ -979,7 +979,7 @@ export default function Vehicles() {
                                 <span>{m.vehicle_code}</span>
                               </span>
                               {isWsAsset ? (
-                                <span className="rounded bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700 dark:text-amber-400 border border-amber-500/20">
+                                <span className="rounded bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700 dark:text-emerald-400 border border-emerald-500/20">
                                   {m.category || "Workshop Plant"}
                                 </span>
                               ) : isTrailer ? (

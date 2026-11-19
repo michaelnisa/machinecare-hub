@@ -648,8 +648,8 @@ export default function FleetVehicleDetail() {
               </span>
 
               {isWsAsset ? (
-                <span className="rounded bg-amber-500/10 px-2 py-0.5 text-xs font-semibold text-amber-700 dark:text-amber-400 border border-amber-500/20 flex items-center gap-1">
-                  <Wrench className="h-3 w-3 text-amber-600" /> {vehicle.category || "Workshop Plant"}
+                <span className="rounded bg-emerald-500/10 px-2 py-0.5 text-xs font-semibold text-emerald-700 dark:text-emerald-400 border border-emerald-500/20 flex items-center gap-1">
+                  <Wrench className="h-3 w-3 text-emerald-600 dark:text-emerald-400" /> {vehicle.category || "Workshop Plant"}
                 </span>
               ) : isTrailer ? (
                 <span className="rounded bg-emerald-500/10 px-2 py-0.5 text-xs font-semibold text-emerald-600 border border-emerald-500/20">

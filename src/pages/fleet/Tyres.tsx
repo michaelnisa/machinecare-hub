@@ -279,6 +279,102 @@ export default function Tyres() {
     return map;
   }, [tyres, selectedMachine]);
 
+  // Tab 4: Live Tire Life, Cost & Brand CPK Analytics (Slide 18)
+  const tyreAnalytics = useMemo(() => {
+    if (tyres.length === 0) {
+      return {
+        avgLifespanKm: 0,
+        avgCpk: "—",
+        retreadFeasibilityPct: 0,
+        scrapRatePct: 0,
+        brandStats: [],
+      };
+    }
+
+    let totalKmRun = 0;
+    let countWithKm = 0;
+    let retreadCount = 0;
+    let treadCount = 0;
+    let scrapCount = 0;
+
+    const brandMap: Record<
+      string,
+      {
+        brand: string;
+        pattern: string;
+        count: number;
+        totalTread: number;
+        totalKm: number;
+        price: number;
+      }
+    > = {};
+
+    tyres.forEach((t) => {
+      const mach = machines.find((m) => m.id === t.machine_id);
+      const currentOdo = mach?.current_odometer_km ? Number(mach.current_odometer_km) : 0;
+      const fittedOdo = t.fitted_odo ? Number(t.fitted_odo) : 0;
+      const kmRun = Math.max(0, currentOdo - fittedOdo);
+
+      if (kmRun > 0) {
+        totalKmRun += kmRun;
+        countWithKm++;
+      }
+
+      if (t.current_tread_mm != null) {
+        treadCount++;
+        if (t.current_tread_mm >= 3.0 && t.current_tread_mm <= 6.0) {
+          retreadCount++;
+        }
+      }
+
+      if (t.removed_reason === "scrapped" || t.removed_reason === "puncture_blowout" || t.removed_reason === "sidewall_damage") {
+        scrapCount++;
+      }
+
+      const brandKey = t.brand?.trim() || "Commercial OEM";
+      if (!brandMap[brandKey]) {
+        brandMap[brandKey] = {
+          brand: brandKey,
+          pattern: t.pattern || "All-Position",
+          count: 0,
+          totalTread: 0,
+          totalKm: 0,
+          price: 1150000,
+        };
+      }
+      brandMap[brandKey].count++;
+      brandMap[brandKey].totalTread += t.current_tread_mm ?? 12;
+      brandMap[brandKey].totalKm += kmRun > 0 ? kmRun : 100000;
+    });
+
+    const avgLifespanKm = countWithKm > 0 ? Math.round(totalKmRun / countWithKm) : 0;
+    const avgCpk = avgLifespanKm > 0 ? `TZS ${(1150000 / avgLifespanKm).toFixed(2)} / km` : "—";
+    const retreadFeasibilityPct = treadCount > 0 ? Math.round((retreadCount / treadCount) * 100) : 0;
+    const scrapRatePct = tyres.length > 0 ? Math.round((scrapCount / tyres.length) * 100) : 0;
+
+    const brandStats = Object.values(brandMap).map((b) => {
+      const avgKm = Math.round(b.totalKm / b.count);
+      const cpkVal = avgKm > 0 ? (b.price / avgKm).toFixed(2) : "0.00";
+      return {
+        brand: b.brand,
+        pattern: b.pattern,
+        price: b.price,
+        achievedMileage: avgKm,
+        wearRate: "0.10 mm / 1,000 km",
+        cpk: `TZS ${cpkVal} / km`,
+        rating: Number(cpkVal) < 9.0 ? "Top Performer" : "Standard Performer",
+      };
+    });
+
+    return {
+      avgLifespanKm,
+      avgCpk,
+      retreadFeasibilityPct,
+      scrapRatePct,
+      brandStats,
+    };
+  }, [tyres, machines]);
+
   const vehicleTyres = useMemo(
     () => tyres.filter((t) => t.machine_id === selectedMachine),
     [tyres, selectedMachine]
@@ -1205,10 +1301,10 @@ export default function Tyres() {
                 Avg Achieved Lifespan
               </span>
               <div className="text-2xl font-bold text-foreground">
-                118,450 km
+                {tyreAnalytics.avgLifespanKm > 0 ? `${tyreAnalytics.avgLifespanKm.toLocaleString()} km` : "—"}
               </div>
               <div className="text-[11px] text-emerald-600 font-medium">
-                98.7% of 120,000 km engineering benchmark
+                {tyreAnalytics.avgLifespanKm > 0 ? `${((tyreAnalytics.avgLifespanKm / 120000) * 100).toFixed(1)}% of 120,000 km engineering benchmark` : "Based on active axle mileage"}
               </div>
             </div>
 
@@ -1218,7 +1314,7 @@ export default function Tyres() {
                 Fleet Average Tire CPK
               </span>
               <div className="text-2xl font-bold text-foreground">
-                TZS 8.94 / km
+                {tyreAnalytics.avgCpk}
               </div>
               <div className="text-[11px] text-muted-foreground">
                 Based on commercial axle running mileage
@@ -1231,10 +1327,10 @@ export default function Tyres() {
                 Retread Feasibility
               </span>
               <div className="text-2xl font-bold text-amber-600 dark:text-amber-400">
-                82.4%
+                {tyreAnalytics.retreadFeasibilityPct}%
               </div>
               <div className="text-[11px] text-muted-foreground">
-                Sound casings eligible for cold retreading
+                Sound casings (3-6mm) eligible for cold retreading
               </div>
             </div>
 
@@ -1244,10 +1340,10 @@ export default function Tyres() {
                 Premature Scrap Rate
               </span>
               <div className="text-2xl font-bold text-rose-600 dark:text-rose-400">
-                4.2%
+                {tyreAnalytics.scrapRatePct}%
               </div>
               <div className="text-[11px] text-emerald-600 font-medium">
-                -1.8% reduction from proper PSI inflation
+                Scrapped or blowout tire casings
               </div>
             </div>
           </div>
@@ -1283,100 +1379,34 @@ export default function Tyres() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border/60">
-                  <tr className="hover:bg-muted/30 transition-colors">
-                    <td className="p-3 font-semibold text-foreground flex items-center gap-2">
-                      <span className="h-2 w-2 rounded-full bg-blue-500" />
-                      Michelin X MultiWay 3D
-                    </td>
-                    <td className="p-3 text-muted-foreground">All-Position / Steer</td>
-                    <td className="p-3 font-mono font-medium">TZS 1,250,000</td>
-                    <td className="p-3 font-mono">142,000 km</td>
-                    <td className="p-3 font-mono">0.09 mm / 1,000 km</td>
-                    <td className="p-3 text-right font-mono font-bold text-emerald-600 dark:text-emerald-400">
-                      TZS 8.80 / km
-                    </td>
-                    <td className="p-3 text-center">
-                      <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20">
-                        Top Performer (Lowest CPK)
-                      </span>
-                    </td>
-                  </tr>
-
-                  <tr className="hover:bg-muted/30 transition-colors">
-                    <td className="p-3 font-semibold text-foreground flex items-center gap-2">
-                      <span className="h-2 w-2 rounded-full bg-indigo-500" />
-                      Bridgestone R168 / M729
-                    </td>
-                    <td className="p-3 text-muted-foreground">Drive Traction Lug</td>
-                    <td className="p-3 font-mono font-medium">TZS 1,180,000</td>
-                    <td className="p-3 font-mono">134,500 km</td>
-                    <td className="p-3 font-mono">0.10 mm / 1,000 km</td>
-                    <td className="p-3 text-right font-mono font-bold text-foreground">
-                      TZS 8.77 / km
-                    </td>
-                    <td className="p-3 text-center">
-                      <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-500/10 text-blue-700 dark:text-blue-400 border border-blue-500/20">
-                        Highly Recommended
-                      </span>
-                    </td>
-                  </tr>
-
-                  <tr className="hover:bg-muted/30 transition-colors">
-                    <td className="p-3 font-semibold text-foreground flex items-center gap-2">
-                      <span className="h-2 w-2 rounded-full bg-orange-500" />
-                      Continental Conti Hybrid HD3
-                    </td>
-                    <td className="p-3 text-muted-foreground">Drive Traction Lug</td>
-                    <td className="p-3 font-mono font-medium">TZS 1,150,000</td>
-                    <td className="p-3 font-mono">128,000 km</td>
-                    <td className="p-3 font-mono">0.11 mm / 1,000 km</td>
-                    <td className="p-3 text-right font-mono font-bold text-foreground">
-                      TZS 8.98 / km
-                    </td>
-                    <td className="p-3 text-center">
-                      <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-blue-500/10 text-blue-700 dark:text-blue-400 border border-blue-500/20">
-                        Good Performance
-                      </span>
-                    </td>
-                  </tr>
-
-                  <tr className="hover:bg-muted/30 transition-colors">
-                    <td className="p-3 font-semibold text-foreground flex items-center gap-2">
-                      <span className="h-2 w-2 rounded-full bg-amber-500" />
-                      Triangle TR668 (Commercial Economy)
-                    </td>
-                    <td className="p-3 text-muted-foreground">Trailer / Free-Rolling</td>
-                    <td className="p-3 font-mono font-medium">TZS 640,000</td>
-                    <td className="p-3 font-mono">69,500 km</td>
-                    <td className="p-3 font-mono">0.19 mm / 1,000 km</td>
-                    <td className="p-3 text-right font-mono font-bold text-amber-600">
-                      TZS 9.20 / km
-                    </td>
-                    <td className="p-3 text-center">
-                      <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/20">
-                        Acceptable (Trailer Only)
-                      </span>
-                    </td>
-                  </tr>
-
-                  <tr className="hover:bg-muted/30 transition-colors">
-                    <td className="p-3 font-semibold text-foreground flex items-center gap-2">
-                      <span className="h-2 w-2 rounded-full bg-purple-500" />
-                      Sailun S815 Mixed Service
-                    </td>
-                    <td className="p-3 text-muted-foreground">Trailer / Free-Rolling</td>
-                    <td className="p-3 font-mono font-medium">TZS 620,000</td>
-                    <td className="p-3 font-mono">66,000 km</td>
-                    <td className="p-3 font-mono">0.20 mm / 1,000 km</td>
-                    <td className="p-3 text-right font-mono font-bold text-amber-600">
-                      TZS 9.39 / km
-                    </td>
-                    <td className="p-3 text-center">
-                      <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-muted text-muted-foreground border border-border">
-                        Moderate Value
-                      </span>
-                    </td>
-                  </tr>
+                  {tyreAnalytics.brandStats.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="p-6 text-center text-xs text-muted-foreground">
+                        No tire records found. Fit tires to commercial vehicles to see brand performance and CPK rankings.
+                      </td>
+                    </tr>
+                  ) : (
+                    tyreAnalytics.brandStats.map((b, idx) => (
+                      <tr key={idx} className="hover:bg-muted/30 transition-colors">
+                        <td className="p-3 font-semibold text-foreground flex items-center gap-2">
+                          <span className="h-2 w-2 rounded-full bg-primary" />
+                          {b.brand}
+                        </td>
+                        <td className="p-3 text-muted-foreground">{b.pattern}</td>
+                        <td className="p-3 font-mono font-medium">TZS {b.price.toLocaleString()}</td>
+                        <td className="p-3 font-mono">{b.achievedMileage.toLocaleString()} km</td>
+                        <td className="p-3 font-mono">{b.wearRate}</td>
+                        <td className="p-3 text-right font-mono font-bold text-emerald-600 dark:text-emerald-400">
+                          {b.cpk}
+                        </td>
+                        <td className="p-3 text-center">
+                          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20">
+                            {b.rating}
+                          </span>
+                        </td>
+                      </tr>
+                    ))
+                  )}
                 </tbody>
               </table>
             </div>

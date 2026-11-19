@@ -300,6 +300,15 @@ const DEFAULT_ENTERPRISE_SPARES: Omit<CommercialSparePart, "organisation_id">[] 
   },
 ];
 
+export function clearLocalSpares(orgId: string): void {
+  try {
+    localStorage.removeItem(`${STORAGE_SPARES_KEY}${orgId}`);
+    localStorage.removeItem(`${STORAGE_ISSUANCE_KEY}${orgId}`);
+  } catch (e) {
+    console.warn("Could not clear local spares:", e);
+  }
+}
+
 /**
  * Fetch all smart stores spares for an organization, optionally filtered by vehicle model or make
  */
@@ -308,20 +317,41 @@ export async function getSmartSpares(
   vehicleModelOrMake?: string
 ): Promise<CommercialSparePart[]> {
   let catalog: CommercialSparePart[] = [];
-  try {
-    const raw = localStorage.getItem(`${STORAGE_SPARES_KEY}${orgId}`);
-    if (raw) {
-      catalog = JSON.parse(raw);
-    }
-  } catch (_e) {}
 
-  if (!catalog || catalog.length === 0) {
-    catalog = DEFAULT_ENTERPRISE_SPARES.map((s) => ({
-      ...s,
-      organisation_id: orgId,
-    }));
+  // 1. Prioritize live inventory items from Supabase
+  try {
+    const { data: dbItems } = await supabase
+      .from("inventory_items")
+      .select("id, name, part_number, category, min_quantity, unit, unit_cost, bin_location, status")
+      .eq("status", "active")
+      .order("name");
+
+    if (Array.isArray(dbItems) && dbItems.length > 0) {
+      const liveParts: CommercialSparePart[] = dbItems.map((item) => ({
+        id: item.id,
+        organisation_id: orgId,
+        part_number: item.part_number || `PART-${item.id.slice(0, 6)}`,
+        name: item.name,
+        system_category: (item.category as any) || "General Spares",
+        compatible_makes: ["Universal", "Scania", "Howo", "Actros", "Trailer"],
+        compatible_models: ["Universal", "R500", "Howo 371", "Actros 3340"],
+        bin_location: (item as any).bin_location || "MAIN-STORE",
+        stock_quantity: 10,
+        min_reorder_level: item.min_quantity || 2,
+        max_capacity: 50,
+        unit_price_tzs: Number(item.unit_cost || 150000),
+        supplier_name: "Stores Depot",
+      }));
+      catalog = liveParts;
+    }
+  } catch (_err) {}
+
+  if (catalog.length === 0) {
     try {
-      localStorage.setItem(`${STORAGE_SPARES_KEY}${orgId}`, JSON.stringify(catalog));
+      const raw = localStorage.getItem(`${STORAGE_SPARES_KEY}${orgId}`);
+      if (raw) {
+        catalog = JSON.parse(raw);
+      }
     } catch (_e) {}
   }
 

@@ -814,7 +814,7 @@ export default function FleetDashboard() {
             <div className="flex items-center gap-2">
               <ShieldCheck className="h-4 w-4 text-purple-500" />
               <span className="text-sm font-semibold tracking-tight text-foreground">
-                Enterprise Governance & Commercial Fleet Cockpit
+                Enterprise Governance & Commercial Fleet Dashboard
               </span>
             </div>
             <span className="text-xs text-muted-foreground">
