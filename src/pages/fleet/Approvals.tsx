@@ -136,7 +136,7 @@ export default function FleetApprovals() {
   const [reviewing, setReviewing] = useState(false);
 
   // Disbursement state
-  const [disburseMethod, setDisburseMethod] = useState<"selcom" | "m_pesa" | "bank_transfer" | "petty_cash" | "store_grn">("selcom");
+  const [disburseMethod, setDisburseMethod] = useState<"cash" | "mobile" | "bank">("cash");
   const [disburseRef, setDisburseRef] = useState("");
   const [disburseNote, setDisburseNote] = useState("");
   const [disbursing, setDisbursing] = useState(false);
@@ -265,7 +265,7 @@ export default function FleetApprovals() {
   const handleDisbursement = async () => {
     if (!selectedRequest || !profile) return;
     if (!disburseRef.trim()) {
-      return toast.error("Enter a payment / voucher reference number (e.g. M-Pesa or Selcom code)");
+      return toast.error("Enter a payment reference number (e.g. Receipt #, TXN ID, or Voucher #)");
     }
     setDisbursing(true);
     try {
@@ -797,7 +797,15 @@ export default function FleetApprovals() {
                   </div>
                   <p className="mt-1">
                     Disbursed by {selectedRequest.disbursement_info.disburser_name} via{" "}
-                    <span className="font-semibold uppercase">{selectedRequest.disbursement_info.method}</span>.
+                    <span className="font-semibold uppercase">
+                      {selectedRequest.disbursement_info.method === "cash"
+                        ? "Cash"
+                        : selectedRequest.disbursement_info.method === "mobile"
+                        ? "Mobile Money"
+                        : selectedRequest.disbursement_info.method === "bank"
+                        ? "Bank Transfer"
+                        : selectedRequest.disbursement_info.method}
+                    </span>.
                     Reference: <span className="font-mono font-bold">{selectedRequest.disbursement_info.reference}</span>
                   </p>
                   {selectedRequest.disbursement_info.note && (
@@ -884,11 +892,9 @@ export default function FleetApprovals() {
                   onChange={(e: any) => setDisburseMethod(e.target.value)}
                   className="mt-1 flex h-9 w-full rounded-md border border-input bg-background px-3 py-1.5 text-xs"
                 >
-                  <option value="selcom">Selcom Corporate Gateway</option>
-                  <option value="m_pesa">Vodacom M-Pesa B2C</option>
-                  <option value="bank_transfer">Commercial Bank Transfer (CRDB / NMB)</option>
-                  <option value="petty_cash">Workshop Petty Cash Voucher</option>
-                  <option value="store_grn">Stores Inventory Release Note</option>
+                  <option value="cash">Cash (Petty Cash Voucher)</option>
+                  <option value="mobile">Mobile Money</option>
+                  <option value="bank">Bank Transfer</option>
                 </select>
               </div>
 
@@ -898,7 +904,7 @@ export default function FleetApprovals() {
                   id="disburse_ref"
                   value={disburseRef}
                   onChange={(e) => setDisburseRef(e.target.value)}
-                  placeholder="e.g. SEL-98124, MPESA-8912, PV-0021"
+                  placeholder="e.g. CASH-0012, TXN-8912, or Bank Ref"
                   className="mt-1 text-xs"
                 />
               </div>
@@ -1066,7 +1072,7 @@ export default function FleetApprovals() {
                     </div>
                   </div>
                   <div>
-                    <Label htmlFor="req_vphone">Vendor Mobile Phone (for M-Pesa / Selcom)</Label>
+                    <Label htmlFor="req_vphone">Vendor Mobile Phone</Label>
                     <Input
                       id="req_vphone"
                       value={reqVendorPhone}

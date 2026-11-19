@@ -46,7 +46,7 @@ export interface DisbursementInfo {
   disbursed_at: string;
   disbursed_by: string;
   disburser_name?: string;
-  method: "m_pesa" | "selcom" | "bank_transfer" | "petty_cash" | "store_grn";
+  method: "cash" | "mobile" | "bank" | string;
   reference: string;
   note?: string;
 }
