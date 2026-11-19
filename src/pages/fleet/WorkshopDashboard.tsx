@@ -230,6 +230,12 @@ export default function WorkshopDashboard() {
               PM Calendar
             </Link>
           </Button>
+          <Button asChild variant="outline" size="sm" className="gap-1.5 border-blue-500/30 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/30">
+            <Link to="/fleet/approvals?new=1&type=spare_parts">
+              <ShieldCheck className="h-4 w-4 text-blue-600" />
+              Order Spares / Requisition
+            </Link>
+          </Button>
           <Button asChild variant="outline" size="sm" className="gap-1.5">
             <Link to="/fleet/tyres">
               <CircleDot className="h-4 w-4 text-blue-600" />

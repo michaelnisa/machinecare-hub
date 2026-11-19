@@ -174,9 +174,9 @@ export default function WorkOrderDetail() {
         </Link>
         <div className="flex flex-wrap items-center gap-2">
           {isDigitalJobCardMode && (
-            <Button variant="outline" asChild className="border-emerald-500/30 text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/30">
-              <Link to="/fleet/approvals">
-                <ShieldCheck className="mr-2 h-4 w-4 text-emerald-600" /> Fleet Approvals
+            <Button variant="outline" asChild className="border-blue-500/30 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950/30">
+              <Link to={`/fleet/approvals?new=1&type=spare_parts&work_order_id=${wo.id}&vehicle=${encodeURIComponent(machine?.plate_number || machine?.name || "")}&title=${encodeURIComponent(`Parts Requisition: ${wo.title}`)}`}>
+                <ShieldCheck className="mr-2 h-4 w-4 text-blue-600" /> Request Spares / Approval
               </Link>
             </Button>
           )}

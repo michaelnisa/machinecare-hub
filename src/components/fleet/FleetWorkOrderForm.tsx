@@ -211,10 +211,18 @@ export function FleetWorkOrderForm({
   machines,
   preselectMachineId,
   nextNumber,
+  initialDefect,
+  initialTitle,
+  initialPriority,
+  initialComponent,
 }: {
   machines: FleetVehicleOption[];
   preselectMachineId?: string | null;
   nextNumber: number | null;
+  initialDefect?: string | null;
+  initialTitle?: string | null;
+  initialPriority?: "low" | "normal" | "high" | "critical" | null;
+  initialComponent?: string | null;
 }) {
   const { profile, user, organisation } = useAuth();
   const navigate = useNavigate();
@@ -228,17 +236,19 @@ export function FleetWorkOrderForm({
 
   // Form State
   const [selectedMachineId, setSelectedMachineId] = useState(preselectMachineId ?? "");
-  const [workType, setWorkType] = useState<string>("preventive");
-  const [title, setTitle] = useState("");
-  const [defectReport, setDefectReport] = useState("");
+  const [workType, setWorkType] = useState<string>(initialDefect ? "breakdown" : "preventive");
+  const [title, setTitle] = useState(initialTitle ?? (initialDefect ? `Defect Rectification: ${initialDefect.slice(0, 50)}` : ""));
+  const [defectReport, setDefectReport] = useState(initialDefect ?? "");
   const [odometerKm, setOdometerKm] = useState("");
-  const [priority, setPriority] = useState<"low" | "normal" | "high" | "critical">("normal");
+  const [priority, setPriority] = useState<"low" | "normal" | "high" | "critical">(
+    initialPriority ?? (initialDefect ? "high" : "normal")
+  );
   const [dueDate, setDueDate] = useState(addDays(new Date(), 7));
   const [selectedTechnicianId, setSelectedTechnicianId] = useState("");
   const [pmTasksList, setPmTasksList] = useState<string[]>([...STANDARD_PM_TASKS]);
   const [newCustomTask, setNewCustomTask] = useState("");
   const [remarks, setRemarks] = useState("");
-  const [componentSystem, setComponentSystem] = useState<string>("Brake System");
+  const [componentSystem, setComponentSystem] = useState<string>(initialComponent ?? "Brake System");
   const [repairLocation, setRepairLocation] = useState<string>("onsite");
 
   // Outsourcing State

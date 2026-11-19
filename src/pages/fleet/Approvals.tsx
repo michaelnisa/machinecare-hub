@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, Navigate } from "react-router-dom";
+import { Link, Navigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useUserRole } from "@/hooks/useUserRole";
@@ -156,12 +156,12 @@ export default function FleetApprovals() {
   const [disburseNote, setDisburseNote] = useState("");
   const [disbursing, setDisbursing] = useState(false);
 
-  // New Request Form State
   const [reqType, setReqType] = useState<FleetApprovalType>("spare_parts");
   const [reqPriority, setReqPriority] = useState<FleetApprovalPriority>("standard");
   const [reqTitle, setReqTitle] = useState("");
   const [reqDescription, setReqDescription] = useState("");
   const [reqVehiclePlate, setReqVehiclePlate] = useState("");
+  const [reqWorkOrderId, setReqWorkOrderId] = useState("");
   const [reqAmount, setReqAmount] = useState<number | "">("");
   const [reqCurrency, setReqCurrency] = useState<"TZS" | "USD">("TZS");
   const [reqGps, setReqGps] = useState("");
@@ -171,6 +171,32 @@ export default function FleetApprovals() {
     { name: "", quantity: 1, unit_price: 0 },
   ]);
   const [creating, setCreating] = useState(false);
+
+  // Cross-department URL Query Param Sync (Workshop / Procurement / Stores -> Approvals)
+  const [searchParams] = useSearchParams();
+  useEffect(() => {
+    if (searchParams.get("new") === "1") {
+      setCreateModalOpen(true);
+      const qType = searchParams.get("type");
+      if (qType) {
+        setReqType(qType as FleetApprovalType);
+      }
+      const qTitle = searchParams.get("title") || searchParams.get("item");
+      if (qTitle) setReqTitle(qTitle);
+      const qVehicle = searchParams.get("vehicle");
+      if (qVehicle) setReqVehiclePlate(qVehicle);
+      const qAmount = searchParams.get("amount");
+      if (qAmount && !isNaN(Number(qAmount))) setReqAmount(Number(qAmount));
+      const qPriority = searchParams.get("priority");
+      if (qPriority && (qPriority === "standard" || qPriority === "urgent" || qPriority === "emergency")) {
+        setReqPriority(qPriority as FleetApprovalPriority);
+      }
+      const qDesc = searchParams.get("description") || searchParams.get("reason");
+      if (qDesc) setReqDescription(qDesc);
+      const qWo = searchParams.get("work_order_id");
+      if (qWo) setReqWorkOrderId(qWo);
+    }
+  }, [searchParams]);
 
   // 3-Quote Tender Competitive Bidding State (Mega Beverages Slide 16)
   const [quote1Vendor, setQuote1Vendor] = useState("");
@@ -373,13 +399,21 @@ export default function FleetApprovals() {
         });
       }
 
+      const matchedVeh = vehicles.find(
+        (v) =>
+          (v.plate_number && v.plate_number.toLowerCase() === reqVehiclePlate.trim().toLowerCase()) ||
+          (v.name && v.name.toLowerCase() === reqVehiclePlate.trim().toLowerCase())
+      );
+
       await createFleetApprovalRequest({
         organisation_id: orgId,
         request_type: reqType,
         priority: reqPriority,
         title: reqTitle.trim(),
         description: reqDescription.trim() || undefined,
+        vehicle_id: matchedVeh?.id || undefined,
         vehicle_plate: reqVehiclePlate.trim() || undefined,
+        work_order_id: reqWorkOrderId.trim() || undefined,
         amount: Number(reqAmount),
         currency: reqCurrency,
         department:
@@ -406,6 +440,7 @@ export default function FleetApprovals() {
       setReqTitle("");
       setReqDescription("");
       setReqVehiclePlate("");
+      setReqWorkOrderId("");
       setReqAmount("");
       setReqGps("");
       setReqVendorName("");

@@ -48,6 +48,10 @@ export default function WorkOrderNew() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const preselectMachineId = searchParams.get("machine");
+  const preselectReason = searchParams.get("reason") || searchParams.get("defect");
+  const preselectTitle = searchParams.get("title");
+  const preselectPriority = searchParams.get("priority");
+  const preselectComponent = searchParams.get("component");
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [formMode, setFormMode] = useState<"fleet" | "manufacturing">("manufacturing");
@@ -70,9 +74,9 @@ export default function WorkOrderNew() {
     machine_id: preselectMachineId ?? "",
     work_type: "repair",
     checklist_template_id: "",
-    title: "",
-    description: "",
-    priority: "normal",
+    title: preselectTitle ?? (preselectReason ? `Defect Repair: ${preselectReason.slice(0, 50)}` : ""),
+    description: preselectReason ?? "",
+    priority: preselectPriority ?? (preselectReason ? "urgent" : "normal"),
     assignee_id: "",
     due_date: addDays(new Date(), 7),
     is_outsourced: false,
@@ -472,6 +476,10 @@ export default function WorkOrderNew() {
           machines={fleetVehicles}
           preselectMachineId={preselectMachineId}
           nextNumber={nextNumber}
+          initialDefect={preselectReason}
+          initialTitle={preselectTitle}
+          initialPriority={preselectPriority as any}
+          initialComponent={preselectComponent}
         />
       ) : (
         <div className="grid gap-6 lg:grid-cols-2">

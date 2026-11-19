@@ -408,33 +408,41 @@ export default function ProcurementDashboard() {
               </div>
             ) : (
               <div className="space-y-2">
-                {lowStockSpares.slice(0, 5).map((part) => (
-                  <div
-                    key={part.id}
-                    className="p-2.5 rounded-lg border border-border bg-muted/20 flex items-center justify-between text-xs"
-                  >
-                    <div>
-                      <div className="font-semibold text-foreground">{part.name}</div>
-                      <div className="text-[10px] text-muted-foreground font-mono">
-                        {part.part_number} · Bin: {part.bin_location}
+                {lowStockSpares.slice(0, 5).map((part) => {
+                  const reorderQty = Math.max(1, part.max_capacity - part.stock_quantity);
+                  const totalEst = part.unit_price_tzs * reorderQty;
+                  return (
+                    <div
+                      key={part.id}
+                      className="p-2.5 rounded-lg border border-border bg-muted/20 flex items-center justify-between text-xs gap-2"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <div className="font-semibold text-foreground truncate">{part.name}</div>
+                        <div className="text-[10px] text-muted-foreground font-mono">
+                          {part.part_number} · Bin: {part.bin_location}
+                        </div>
+                      </div>
+                      <div className="text-right shrink-0">
+                        <div className="font-bold text-red-600">
+                          {part.stock_quantity} / {part.min_reorder_level} left
+                        </div>
+                        <Link
+                          to={`/fleet/approvals?new=1&type=purchase_requisition&title=${encodeURIComponent(`Replenish ${part.name} (${reorderQty} units)`)}&amount=${totalEst}&item=${encodeURIComponent(part.name)}`}
+                          className="inline-flex items-center gap-1 text-[10px] font-semibold text-purple-600 hover:text-purple-700 hover:underline mt-0.5"
+                          title="Launch 3-vendor tender comparison for this stock item"
+                        >
+                          Launch Tender <ArrowUpRight className="h-2.5 w-2.5" />
+                        </Link>
                       </div>
                     </div>
-                    <div className="text-right">
-                      <div className="font-bold text-red-600">
-                        {part.stock_quantity} / {part.min_reorder_level} left
-                      </div>
-                      <div className="text-[10px] text-muted-foreground">
-                        TZS {part.unit_price_tzs.toLocaleString()}
-                      </div>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
 
             <div className="pt-2">
-              <Button asChild size="sm" variant="outline" className="w-full text-xs gap-1.5">
-                <Link to="/fleet/approvals">
+              <Button asChild size="sm" variant="outline" className="w-full text-xs gap-1.5 border-purple-500/30 text-purple-700 dark:text-purple-300 hover:bg-purple-50 dark:hover:bg-purple-950/30">
+                <Link to="/fleet/approvals?new=1&type=purchase_requisition">
                   <Plus className="h-3.5 w-3.5" /> Raise Batch Purchase Requisition
                 </Link>
               </Button>

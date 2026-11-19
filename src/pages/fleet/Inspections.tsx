@@ -224,7 +224,7 @@ export default function Inspections() {
                         </span>
                         {(e.overall_result ?? "ok") === "attention" && (
                           <Link
-                            to={`/work-orders/new?machine=${e.machine_id}`}
+                            to={`/work-orders/new?machine=${e.machine_id}&reason=${encodeURIComponent(e.defect_notes || "Pre-trip inspection defect flagged by driver")}&priority=urgent&source=pre_trip_inspection`}
                             className="inline-flex items-center gap-1 rounded bg-red-500/10 hover:bg-red-500/20 px-2 py-0.5 text-[11px] font-semibold text-red-600 dark:text-red-400 transition-colors"
                             title="Raise Digital Job Card for this inspection defect (Slide 10)"
                           >

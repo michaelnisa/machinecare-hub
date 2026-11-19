@@ -35,6 +35,8 @@ import { VehicleDialog } from "./Vehicles";
 import { ScheduleFormDialog } from "@/components/ScheduleFormDialog";
 import { computeOdoPmStatus, recordCompletedPmService } from "@/services/fleetPmService";
 import { TireAxleMatrix } from "@/components/fleet/TireAxleMatrix";
+import { getPartsIssuanceHistory, type PartIssuanceRecord } from "@/services/smartPartsService";
+import { getFleetApprovalRequests, type FleetApprovalRequest } from "@/services/fleetApprovalService";
 import {
   Truck,
   Container,
@@ -65,6 +67,9 @@ import {
   ExternalLink,
   Radio,
   Building2,
+  Package,
+  ShoppingCart,
+  ShieldCheck,
 } from "lucide-react";
 
 type Trip = {
@@ -159,6 +164,8 @@ export default function FleetVehicleDetail() {
     due_date?: string | null;
   }>>([]);
   const [vendors, setVendors] = useState<Array<{ id: string; name: string; specialization?: string | null }>>([]);
+  const [sparesHistory, setSparesHistory] = useState<PartIssuanceRecord[]>([]);
+  const [vehicleApprovals, setVehicleApprovals] = useState<FleetApprovalRequest[]>([]);
   const [editOpen, setEditOpen] = useState(false);
   const [qrOpen, setQrOpen] = useState(false);
 
@@ -268,6 +275,27 @@ export default function FleetVehicleDetail() {
 
       setOdoValue(parsedVehicle.current_odometer_km != null ? String(parsedVehicle.current_odometer_km) : "");
       setHoursValue(parsedVehicle.current_hours != null ? String(parsedVehicle.current_hours) : "");
+
+      // Cross-Department Sync: Load Stores Spares Issuance & Financial Approvals
+      const orgId = organisation?.id || profile?.organisation_id || "";
+      if (orgId) {
+        try {
+          const [spares, appReqs] = await Promise.all([
+            getPartsIssuanceHistory(orgId, parsedVehicle.plate_number || parsedVehicle.name),
+            getFleetApprovalRequests(orgId),
+          ]);
+          setSparesHistory(spares);
+          setVehicleApprovals(
+            (appReqs || []).filter(
+              (a) =>
+                a.vehicle_id === targetMachineId ||
+                (parsedVehicle.plate_number && a.vehicle_plate && a.vehicle_plate.toLowerCase() === parsedVehicle.plate_number.toLowerCase())
+            )
+          );
+        } catch (_err) {
+          // non-blocking
+        }
+      }
     } catch (err: any) {
       toast.error(err.message || "Failed to load vehicle details");
     } finally {
@@ -1320,6 +1348,164 @@ export default function FleetVehicleDetail() {
                     </div>
                   );
                 })}
+              </div>
+            )}
+          </div>
+
+          {/* Stores Spares Consumed & Issued (Slide 15) */}
+          <div className="rounded-2xl border border-border bg-card p-5 shadow-2xs space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-border">
+              <div>
+                <h3 className="font-semibold text-base text-foreground flex items-center gap-2">
+                  <Package className="h-4 w-4 text-primary" /> Stores Spares Consumed & Issued
+                </h3>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Audit log of spare parts issued by Stores against Job Cards for this vehicle chassis (Slide 15)
+                </p>
+              </div>
+              <Button size="sm" variant="outline" asChild className="gap-1.5 h-8 text-xs">
+                <Link to="/inventory">
+                  <Package className="h-3.5 w-3.5 text-primary" /> View Stores Inventory
+                </Link>
+              </Button>
+            </div>
+
+            {sparesHistory.length === 0 ? (
+              <div className="text-center py-6 text-xs text-muted-foreground">
+                No spare parts currently recorded as issued to this vehicle.
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead className="text-left uppercase text-muted-foreground bg-muted/30">
+                    <tr>
+                      <th className="px-3 py-2">Part Number & Name</th>
+                      <th className="px-3 py-2">Job Card</th>
+                      <th className="px-3 py-2">Technician</th>
+                      <th className="px-3 py-2 text-right">Qty</th>
+                      <th className="px-3 py-2 text-right">Unit Price</th>
+                      <th className="px-3 py-2 text-right">Total Cost</th>
+                      <th className="px-3 py-2 text-right">Date Issued</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border/60">
+                    {sparesHistory.map((sp) => (
+                      <tr key={sp.id} className="hover:bg-muted/20">
+                        <td className="px-3 py-2.5">
+                          <span className="font-mono font-bold text-foreground">{sp.part_number}</span>
+                          <span className="block text-muted-foreground">{sp.part_name}</span>
+                        </td>
+                        <td className="px-3 py-2.5 font-mono text-primary font-medium">
+                          {sp.job_card_number}
+                        </td>
+                        <td className="px-3 py-2.5 text-muted-foreground">
+                          {sp.technician_name}
+                        </td>
+                        <td className="px-3 py-2.5 text-right font-bold text-foreground">
+                          {sp.quantity}
+                        </td>
+                        <td className="px-3 py-2.5 text-right font-mono text-muted-foreground">
+                          TZS {sp.unit_price.toLocaleString()}
+                        </td>
+                        <td className="px-3 py-2.5 text-right font-mono font-bold text-foreground">
+                          TZS {sp.total_cost.toLocaleString()}
+                        </td>
+                        <td className="px-3 py-2.5 text-right text-muted-foreground">
+                          {formatDate(sp.issued_at)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
+          {/* Departmental Financial Approvals & Vouchers (Slide 16, 17) */}
+          <div className="rounded-2xl border border-border bg-card p-5 shadow-2xs space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-border">
+              <div>
+                <h3 className="font-semibold text-base text-foreground flex items-center gap-2">
+                  <ShieldCheck className="h-4 w-4 text-emerald-600" /> Vehicle Financial Approvals & Vouchers
+                </h3>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Multi-stage approval requisitions, emergency road funding, and payment vouchers for this asset
+                </p>
+              </div>
+              <Button size="sm" asChild className="gap-1.5 h-8 text-xs bg-primary text-primary-foreground">
+                <Link to={`/fleet/approvals?new=1&type=spare_parts&vehicle=${encodeURIComponent(vehicle?.plate_number || vehicle?.name || "")}&title=${encodeURIComponent(`Maintenance Requisition for ${vehicle?.plate_number || vehicle?.name || ""}`)}`}>
+                  <Plus className="h-3.5 w-3.5" /> Request Requisition
+                </Link>
+              </Button>
+            </div>
+
+            {vehicleApprovals.length === 0 ? (
+              <div className="text-center py-6 text-xs text-muted-foreground">
+                No financial approval requisitions raised for this asset yet.
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead className="text-left uppercase text-muted-foreground bg-muted/30">
+                    <tr>
+                      <th className="px-3 py-2">Req # & Title</th>
+                      <th className="px-3 py-2">Type</th>
+                      <th className="px-3 py-2">Requester</th>
+                      <th className="px-3 py-2 text-right">Amount</th>
+                      <th className="px-3 py-2">Approval Status</th>
+                      <th className="px-3 py-2">Disbursement</th>
+                      <th className="px-3 py-2 text-right">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border/60">
+                    {vehicleApprovals.map((req) => (
+                      <tr key={req.id} className="hover:bg-muted/20">
+                        <td className="px-3 py-2.5">
+                          <span className="font-mono font-bold text-foreground">{req.request_number}</span>
+                          <span className="block text-muted-foreground truncate max-w-[200px]">{req.title}</span>
+                        </td>
+                        <td className="px-3 py-2.5 capitalize text-muted-foreground">
+                          {req.request_type.replace(/_/g, " ")}
+                        </td>
+                        <td className="px-3 py-2.5 text-muted-foreground">
+                          {req.requester_name}
+                        </td>
+                        <td className="px-3 py-2.5 text-right font-mono font-bold text-foreground">
+                          {req.currency} {req.amount.toLocaleString()}
+                        </td>
+                        <td className="px-3 py-2.5">
+                          <span
+                            className={`px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wider ${
+                              req.status === "approved" || req.status === "disbursed"
+                                ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30"
+                                : req.status === "rejected"
+                                ? "bg-red-500/15 text-red-700 dark:text-red-300 border border-red-500/30"
+                                : "bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30"
+                            }`}
+                          >
+                            {req.status.replace(/_/g, " ")}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2.5 text-muted-foreground font-mono">
+                          {req.disbursement_info ? (
+                            <span className="text-emerald-600 font-semibold">
+                              ✓ {req.disbursement_info.method.toUpperCase()} [{req.disbursement_info.reference}]
+                            </span>
+                          ) : (
+                            <span className="text-muted-foreground">—</span>
+                          )}
+                        </td>
+                        <td className="px-3 py-2.5 text-right">
+                          <Button size="sm" variant="ghost" asChild className="h-6 text-[11px] gap-1 px-2">
+                            <Link to="/fleet/approvals">
+                              Review <ExternalLink className="h-2.5 w-2.5" />
+                            </Link>
+                          </Button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             )}
           </div>

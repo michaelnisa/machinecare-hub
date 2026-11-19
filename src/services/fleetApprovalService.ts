@@ -5,6 +5,7 @@
  */
 
 import { supabase } from "@/integrations/supabase/client";
+import { createAccountantReceipt } from "@/services/accountantService";
 
 export type FleetApprovalType =
   | "spare_parts"
@@ -395,6 +396,43 @@ export async function disburseFleetApproval(
       .eq("id", requestId);
   } catch (e) {
     // fallback
+  }
+
+  // Cross-Department Communication: Automatically register payment receipt voucher in Finance & Accounts
+  try {
+    const category =
+      req.request_type === "spare_parts" || req.request_type === "material_request"
+        ? "Spare Parts"
+        : req.request_type === "trip_float"
+        ? "Safari Allowance"
+        : req.request_type === "tyre_replacement"
+        ? "Tyres"
+        : "Maintenance & Repairs";
+
+    const paymentMethod =
+      disbursement.method === "mobile"
+        ? "mobile_money"
+        : disbursement.method === "bank"
+        ? "bank_transfer"
+        : "cash";
+
+    await createAccountantReceipt({
+      organisation_id: orgId,
+      receipt_type: "expense",
+      category,
+      title: req.title,
+      payee_name: req.vendor_name || req.requester_name || disbursement.disburser_name || "Disbursement Payee",
+      amount: Number(req.amount),
+      currency: req.currency || "TZS",
+      payment_method: paymentMethod as any,
+      payment_date: disbursement.disbursed_at.slice(0, 10),
+      status: "paid",
+      machine_id: req.vehicle_id || null,
+      work_order_id: req.work_order_id || null,
+      notes: `Disbursed via ${disbursement.method.toUpperCase()} [Ref: ${disbursement.reference}]. Approval Req #${req.request_number || req.id}. ${disbursement.note || ""}`.trim(),
+    });
+  } catch (receiptErr) {
+    console.warn("Could not auto-generate accountant receipt voucher for disbursement:", receiptErr);
   }
 
   const updatedList = requests.map((r) => (r.id === requestId ? req : r));
