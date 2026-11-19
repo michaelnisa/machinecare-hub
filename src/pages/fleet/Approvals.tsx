@@ -118,10 +118,7 @@ export default function FleetApprovals() {
   const { isManager, isOwner, role } = useUserRole();
   const { organisation } = useIndustry();
   const isLogistix = isLogistixwareAccount(organisation);
-
-  if (isLogistix) {
-    return <Navigate to="/fleet/vehicles" replace />;
-  }
+  const isMultiDepartment = !isLogistix;
 
   const [loading, setLoading] = useState(true);
   const [requests, setRequests] = useState<FleetApprovalRequest[]>([]);
@@ -167,7 +164,7 @@ export default function FleetApprovals() {
     setLoading(true);
     try {
       const [appData, { data: vData }] = await Promise.all([
-        getFleetApprovalRequests(orgId),
+        getFleetApprovalRequests(orgId, isMultiDepartment),
         (supabase as any)
           .from("machines")
           .select("id, name, serial_number, model")
@@ -311,7 +308,7 @@ export default function FleetApprovals() {
           total_price: (Number(it.quantity) || 1) * (Number(it.unit_price) || 0),
         }));
 
-      const chain = buildApprovalChain(reqType, Number(reqAmount), true);
+      const chain = buildApprovalChain(reqType, Number(reqAmount), isMultiDepartment);
       const initialStage = chain[0].stage;
 
       await createFleetApprovalRequest({
@@ -370,11 +367,14 @@ export default function FleetApprovals() {
               Fleet Approvals &amp; Requisition Center
             </h1>
             <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2.5 py-0.5 text-xs font-semibold text-emerald-700 dark:text-emerald-400 border border-emerald-500/20">
-              <ShieldCheck className="h-3.5 w-3.5" /> Multi-Department Governance
+              <ShieldCheck className="h-3.5 w-3.5" />{" "}
+              {isMultiDepartment ? "Multi-Department Governance" : "Direct Manager Approval"}
             </span>
           </div>
           <p className="text-sm text-muted-foreground mt-0.5">
-            End-to-end digital approval workflow connecting Workshop, Stores, Procurement, and Finance.
+            {isMultiDepartment
+              ? "End-to-end digital approval workflow connecting Workshop, Stores, Procurement, and Finance."
+              : "Direct digital approval workflow for fleet maintenance, spare parts, and safari float requisitions."}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -397,7 +397,9 @@ export default function FleetApprovals() {
             </div>
           </div>
           <p className="mt-1 text-2xl font-bold tracking-tight">{metrics.pendingReview}</p>
-          <p className="text-[11px] text-muted-foreground">Awaiting department sign-offs</p>
+          <p className="text-[11px] text-muted-foreground">
+            {isMultiDepartment ? "Awaiting department sign-offs" : "Awaiting manager sign-off"}
+          </p>
         </div>
 
         <div className="rounded-xl border border-rose-500/30 bg-rose-500/5 p-3.5 shadow-sm hover:border-rose-500/50 transition-colors">
@@ -421,7 +423,9 @@ export default function FleetApprovals() {
             </div>
           </div>
           <p className="mt-1 text-2xl font-bold tracking-tight">{metrics.approvedCount}</p>
-          <p className="text-[11px] text-muted-foreground">Passed all department checks</p>
+          <p className="text-[11px] text-muted-foreground">
+            {isMultiDepartment ? "Passed all department checks" : "Passed manager authorization"}
+          </p>
         </div>
 
         <div className="rounded-xl border border-border bg-card p-3.5 shadow-sm hover:border-primary/40 transition-colors">

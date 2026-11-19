@@ -125,21 +125,15 @@ export const STAGE_CONFIG: Record<
 export function buildApprovalChain(
   type: FleetApprovalType,
   amount: number,
-  isEnterpriseMode = true
+  isMultiDepartment = true
 ): ApprovalChainStep[] {
-  // For small fleet mode or minor low-cost requests (< 500,000 TZS), use simplified 2-step chain
-  if (!isEnterpriseMode || (amount < 500000 && type !== "emergency_breakdown")) {
+  // For single-department / direct workflow (e.g. Logistixware), use 1-step direct manager sign-off
+  if (!isMultiDepartment) {
     return [
       {
-        stage: "supervisor",
-        stage_label: STAGE_CONFIG.supervisor.label,
-        roleRequired: STAGE_CONFIG.supervisor.roleRequired,
-        status: "pending",
-      },
-      {
         stage: "fleet_manager",
-        stage_label: STAGE_CONFIG.fleet_manager.label,
-        roleRequired: STAGE_CONFIG.fleet_manager.roleRequired,
+        stage_label: "Operations Manager Approval",
+        roleRequired: "manager",
         status: "pending",
       },
     ];
@@ -216,11 +210,154 @@ function saveLocalStore(orgId: string, requests: FleetApprovalRequest[]) {
 /**
  * Returns initial realistic starter approvals for demonstration (Mega Beverages context)
  */
-function getInitialSeedData(orgId: string): FleetApprovalRequest[] {
+function getInitialSeedData(orgId: string, isMultiDepartment = true): FleetApprovalRequest[] {
   const now = new Date();
   const twoHoursAgo = new Date(now.getTime() - 2 * 3600 * 1000).toISOString();
   const yesterday = new Date(now.getTime() - 24 * 3600 * 1000).toISOString();
   const threeDaysAgo = new Date(now.getTime() - 72 * 3600 * 1000).toISOString();
+
+  if (!isMultiDepartment) {
+    return [
+      {
+        id: "seed-app-01",
+        organisation_id: orgId,
+        request_number: "REQ-2026-0081",
+        request_type: "emergency_breakdown",
+        priority: "emergency",
+        title: "Highway Turbo Hose Failure & Emergency Towing",
+        description:
+          "Truck T 412 DFB blew high-pressure turbocharger intercooler hose at Mikumi Escarpment. Engine derated to limp home mode. Roadside mobile rescue mechanic requires emergency parts & labor payment.",
+        vehicle_plate: "T 412 DFB",
+        amount: 480000,
+        currency: "TZS",
+        department: "Fleet Operations & Dispatch",
+        requested_by: "driver-seed-1",
+        requester_name: "Hamisi Juma (Driver)",
+        gps_location: "Morogoro-Iringa Highway KM 182 (Mikumi)",
+        vendor_name: "Mikumi Highway Mobile Truck Service",
+        vendor_phone: "+255 754 889 120",
+        items: [
+          { name: "Heavy Duty Silicon Turbo Hose 90mm", quantity: 1, unit_price: 280000, total_price: 280000 },
+          { name: "Corridor Emergency Mobile Labor Callout", quantity: 1, unit_price: 200000, total_price: 200000 },
+        ],
+        evidence_urls: [],
+        status: "pending_fleet_manager",
+        current_stage: "fleet_manager",
+        approval_chain: [
+          {
+            stage: "fleet_manager",
+            stage_label: "Operations Manager Approval",
+            roleRequired: "manager",
+            status: "pending",
+          },
+        ],
+        created_at: twoHoursAgo,
+        updated_at: twoHoursAgo,
+      },
+      {
+        id: "seed-app-02",
+        organisation_id: orgId,
+        request_number: "REQ-2026-0082",
+        request_type: "spare_parts",
+        priority: "urgent",
+        title: "Full Set Brake Linings & S-Cam Repair Kit (Howo 6x4)",
+        description:
+          "Scheduled 60,000 KM major brake overhaul for prime mover T 839 EDK. Friction material worn down to rivets.",
+        vehicle_plate: "T 839 EDK",
+        amount: 1450000,
+        currency: "TZS",
+        department: "Workshop & Maintenance",
+        requested_by: "mechanic-seed-1",
+        requester_name: "Emanuel Kweka (Lead Mechanic)",
+        items: [
+          { name: "Howo Sinotruk Original Brake Linings (Drive Axles)", quantity: 4, unit_price: 260000, total_price: 1040000 },
+          { name: "S-Camshaft Heavy Bushing & Roller Overhaul Kit", quantity: 2, unit_price: 205000, total_price: 410000 },
+        ],
+        evidence_urls: [],
+        status: "pending_fleet_manager",
+        current_stage: "fleet_manager",
+        approval_chain: [
+          {
+            stage: "fleet_manager",
+            stage_label: "Operations Manager Approval",
+            roleRequired: "manager",
+            status: "pending",
+          },
+        ],
+        created_at: yesterday,
+        updated_at: yesterday,
+      },
+      {
+        id: "seed-app-03",
+        organisation_id: orgId,
+        request_number: "REQ-2026-0083",
+        request_type: "trip_float",
+        priority: "standard",
+        title: "Transit Safari Float: Dar es Salaam to Lusaka / Ndola",
+        description:
+          "Pre-allocated trip disbursement for consignment of commercial cargo. Covers fuel allowance card, road tolls, weighbridge passes, and driver per diem for 8 days transit.",
+        vehicle_plate: "T 281 CXY",
+        amount: 4200000,
+        currency: "TZS",
+        department: "Fleet Operations & Dispatch",
+        requested_by: "dispatcher-seed",
+        requester_name: "Amina Salum (Dispatcher)",
+        items: [
+          { name: "Enroute Diesel Float (1,250 Liters)", quantity: 1, unit_price: 3375000, total_price: 3375000 },
+          { name: "TANROADS & Zambia Road User Tolls", quantity: 1, unit_price: 350000, total_price: 350000 },
+          { name: "Driver Cross-Border Per Diem (8 Days)", quantity: 8, unit_price: 59375, total_price: 475000 },
+        ],
+        evidence_urls: [],
+        status: "approved",
+        current_stage: "completed",
+        approval_chain: [
+          {
+            stage: "fleet_manager",
+            stage_label: "Operations Manager Approval",
+            roleRequired: "manager",
+            status: "approved",
+            reviewer_name: "Operations Manager",
+            reviewed_at: threeDaysAgo,
+            note: "Journey management plan verified. Approved.",
+          },
+        ],
+        created_at: yesterday,
+        updated_at: yesterday,
+      },
+      {
+        id: "seed-app-04",
+        organisation_id: orgId,
+        request_number: "REQ-2026-0084",
+        request_type: "tyre_replacement",
+        priority: "standard",
+        title: "Steer Axle Tyre Replacement (Serial: BR-8829-X)",
+        description:
+          "Tread depth down to 2.8mm on Left Steer Tyre (minimum safety threshold 3.0mm). Requesting brand new 315/80R22.5 Bridgestone R150.",
+        vehicle_plate: "T 619 DZA",
+        amount: 1100000,
+        currency: "TZS",
+        department: "Workshop & Maintenance",
+        requested_by: "tyre-tech-1",
+        requester_name: "John Mtui (Tyre Controller)",
+        items: [
+          { name: "315/80R22.5 Premium Steer Commercial Tyre", quantity: 1, unit_price: 1100000, total_price: 1100000 },
+        ],
+        evidence_urls: [],
+        status: "pending_fleet_manager",
+        current_stage: "fleet_manager",
+        approval_chain: [
+          {
+            stage: "fleet_manager",
+            stage_label: "Operations Manager Approval",
+            roleRequired: "manager",
+            status: "pending",
+          },
+        ],
+        created_at: now.toISOString(),
+        updated_at: now.toISOString(),
+      },
+    ];
+  }
 
   return [
     {
@@ -451,7 +588,8 @@ function getInitialSeedData(orgId: string): FleetApprovalRequest[] {
  * Fetch all fleet approval requests for the organization
  */
 export async function getFleetApprovalRequests(
-  orgId: string
+  orgId: string,
+  isMultiDepartment = true
 ): Promise<FleetApprovalRequest[]> {
   try {
     const { data, error } = await (supabase as any)
@@ -473,7 +611,7 @@ export async function getFleetApprovalRequests(
     return stored;
   }
 
-  const seeded = getInitialSeedData(orgId);
+  const seeded = getInitialSeedData(orgId, isMultiDepartment);
   saveLocalStore(orgId, seeded);
   return seeded;
 }

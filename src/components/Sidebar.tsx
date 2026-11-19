@@ -351,9 +351,7 @@ export function Sidebar() {
           { to: "/fleet/live-map", label: "Live GPS Fleet", icon: MapPin },
           { to: "/fleet/drivers", label: "Drivers", icon: Contact },
           { to: "/fleet/trips", label: "Trips", icon: Route },
-          ...(!isLogistix
-            ? [{ to: "/fleet/approvals", label: "Approvals", icon: ShieldCheck }]
-            : []),
+          { to: "/fleet/approvals", label: "Approvals", icon: ShieldCheck },
           { to: "/fleet/documents", label: "Documents", icon: FileText },
           { to: "/fleet/tyres", label: "Tyres", icon: CircleDot },
           { to: "/fuel", label: t.nav.fuel, icon: Fuel },
@@ -366,7 +364,7 @@ export function Sidebar() {
         items: [
           {
             to: "/work-orders",
-            label: isLogistix ? t.nav.workOrders : "Job Cards",
+            label: "Job Cards",
             icon: ClipboardList,
           },
           { to: "/fleet/technicians", label: "Technicians", icon: UserCog },

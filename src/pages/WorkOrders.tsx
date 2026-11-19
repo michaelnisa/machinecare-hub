@@ -47,8 +47,7 @@ export default function WorkOrders() {
   const { profile } = useAuth();
   const { isManager, isTechnician } = useUserRole();
   const { isFleet, organisation } = useIndustry();
-  const isLogistix = isLogistixwareAccount(organisation);
-  const isDigitalJobCardMode = (isFleet || organisation?.industry_profile === "fleet_logistics") && !isLogistix;
+  const isDigitalJobCardMode = isFleet || organisation?.industry_profile === "fleet_logistics";
 
   const [params, setParams] = useSearchParams();
   const [loading, setLoading] = useState(true);

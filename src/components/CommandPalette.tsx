@@ -271,12 +271,10 @@ export function CommandPalette({ open: extOpen, onOpenChange: setExtOpen }: Comm
                 <Activity className="mr-2 h-4 w-4" />
                 <span>Active Trips & Dispatches</span>
               </CommandItem>
-              {!isLogistix && (
-                <CommandItem onSelect={() => runCommand(() => navigate("/fleet/approvals"))}>
-                  <ShieldCheck className="mr-2 h-4 w-4 text-primary" />
-                  <span>Fleet Approvals &amp; Requisitions</span>
-                </CommandItem>
-              )}
+              <CommandItem onSelect={() => runCommand(() => navigate("/fleet/approvals"))}>
+                <ShieldCheck className="mr-2 h-4 w-4 text-primary" />
+                <span>Fleet Approvals &amp; Requisitions</span>
+              </CommandItem>
             </>
           )}
           {isFeatureEnabled("workshop") && (

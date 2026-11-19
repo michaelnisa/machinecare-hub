@@ -104,13 +104,9 @@ export default function WorkOrderDetail() {
     return isFleet || authOrg?.industry_profile === "fleet_logistics" || isVehicleWo;
   }, [isFleet, authOrg, isVehicleWo]);
 
-  const isLogistix = useMemo(() => {
-    return isLogistixwareAccount(authOrg || org);
-  }, [authOrg, org]);
-
   const isDigitalJobCardMode = useMemo(() => {
-    return isFleetMode && !isLogistix;
-  }, [isFleetMode, isLogistix]);
+    return isFleetMode;
+  }, [isFleetMode]);
 
   const extractedComponent = useMemo(() => {
     const text = `${wo?.proposed_remedy ?? ""} ${wo?.description ?? ""}`;
