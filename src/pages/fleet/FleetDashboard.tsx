@@ -26,6 +26,8 @@ import {
   FileText,
   BarChart3,
   ShieldAlert,
+  Wallet,
+  Zap,
 } from "lucide-react";
 import {
   Dialog,
@@ -67,7 +69,19 @@ const OPEN_WO_STATUSES = new Set(["open", "assigned", "in_progress", "waiting_pa
 
 type ExpiryRow = { key: string; typeLabel: string; holderLabel: string; expiresOn: string };
 type MachineRow = FleetVehicle;
-type TripRow = { id: string; machine_id: string; driver_id: string | null; status: string; start_at: string | null; end_at: string | null; start_odo: number | null; end_odo: number | null; fuel_used_l: number | null };
+type TripRow = {
+  id: string;
+  machine_id: string;
+  driver_id: string | null;
+  status: string;
+  start_at: string | null;
+  end_at: string | null;
+  start_odo: number | null;
+  end_odo: number | null;
+  fuel_used_l: number | null;
+  cargo_description?: string | null;
+  safari_float?: any | null;
+};
 type FuelLogRow = { machine_id: string; recorded_at: string; fuel_cost: number | null };
 type TyreRow = { id: string; machine_id: string; position: string; brand: string | null; target_replace_km: number | null; fitted_odo: number | null; removed_at: string | null };
 type ScheduleRow = { machine_id: string; next_due_date: string | null };
@@ -168,7 +182,7 @@ export default function FleetDashboard() {
       supabase.from("vehicle_documents").select("id, machine_id, doc_type, expires_on").not("expires_on", "is", null),
       supabase.from("machines").select(SAFE_MACHINE_COLUMNS).in("category", ["Vehicle", "Trailer"]).order("name"),
       supabase.from("drivers").select("id, full_name, licence_expiry, medical_expiry").eq("status", "active"),
-      supabase.from("trips").select("id, machine_id, driver_id, status, start_at, end_at, start_odo, end_odo, fuel_used_l"),
+      supabase.from("trips").select("id, machine_id, driver_id, status, start_at, end_at, start_odo, end_odo, fuel_used_l, cargo_description"),
       supabase.from("fuel_logs").select("machine_id, recorded_at, fuel_cost"),
       supabase.from("tyres").select("id, machine_id, position, brand, target_replace_km, fitted_odo, removed_at").is("removed_at", null),
       supabase.from("service_schedules").select("machine_id, next_due_date, interval_hours, last_service_hours, next_due_hours, name, status"),
@@ -531,6 +545,26 @@ export default function FleetDashboard() {
 
   const isEnterprise = isEnterpriseFleet(organisation);
 
+  // Mid-sized fleet operational accounting metrics (Safari Floats in Field)
+  const safariFloatMetrics = useMemo(() => {
+    let activeRoadFloatTzs = 0;
+    let pendingSurrenderCount = 0;
+    for (const t of trips) {
+      let sf = (t as any).safari_float;
+      if (!sf && (t as any).cargo_description?.startsWith("{")) {
+        try {
+          const parsed = JSON.parse((t as any).cargo_description);
+          if (parsed.safari_float) sf = parsed.safari_float;
+        } catch (_e) {}
+      }
+      if (sf && !sf.surrendered) {
+        pendingSurrenderCount++;
+        activeRoadFloatTzs += Number(sf.dispatched_amount || 0);
+      }
+    }
+    return { activeRoadFloatTzs, pendingSurrenderCount };
+  }, [trips]);
+
   // Total trip KM logged across trips
   const totalTripKm = useMemo(() => {
     return trips.reduce((acc, t) => {
@@ -791,6 +825,52 @@ export default function FleetDashboard() {
         </div>
       </div>
 
+      {/* Standard Logistics Operational Command Dock */}
+      <div className="rounded-xl border border-border bg-card p-4 shadow-2xs">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5">
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/10 text-primary">
+              <Zap className="h-4 w-4" />
+            </div>
+            <div>
+              <h2 className="text-sm font-semibold tracking-tight text-foreground">
+                Fleet Operations &amp; Dispatch Dock
+              </h2>
+              <p className="text-xs text-muted-foreground">
+                Rapid operational shortcuts for dispatchers, foremen, and cashiers
+              </p>
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button size="sm" asChild className="gap-1.5 shadow-2xs">
+              <Link to="/fleet/trips?action=new">
+                <Route className="h-3.5 w-3.5" /> Dispatch Trip
+              </Link>
+            </Button>
+            <Button variant="outline" size="sm" asChild className="gap-1.5">
+              <Link to="/fuel">
+                <Fuel className="h-3.5 w-3.5 text-amber-500" /> Log Fuel Fill
+              </Link>
+            </Button>
+            <Button variant="outline" size="sm" asChild className="gap-1.5">
+              <Link to="/fleet/trips?tab=floats">
+                <Wallet className="h-3.5 w-3.5 text-emerald-500" /> Safari Floats
+              </Link>
+            </Button>
+            <Button variant="outline" size="sm" asChild className="gap-1.5">
+              <Link to="/work-orders?action=new">
+                <Wrench className="h-3.5 w-3.5 text-blue-500" /> New Job Card
+              </Link>
+            </Button>
+            <Button variant="outline" size="sm" asChild className="gap-1.5">
+              <Link to="/finance/invoices">
+                <FileText className="h-3.5 w-3.5 text-indigo-500" /> Freight Invoicing
+              </Link>
+            </Button>
+          </div>
+        </div>
+      </div>
+
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {kpiCards.map((c) => (
           <div key={c.label} className="rounded-xl border border-border bg-card p-5">
@@ -807,6 +887,99 @@ export default function FleetDashboard() {
           </div>
         ))}
       </div>
+
+      {!isEnterprise && (
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <ShieldCheck className="h-4 w-4 text-primary" />
+              <span className="text-sm font-semibold tracking-tight text-foreground">
+                Fleet Operations &amp; Driver Accounting Status
+              </span>
+            </div>
+            <span className="text-xs text-muted-foreground">
+              Direct manager sign-offs &amp; road cash accounting
+            </span>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="rounded-xl border border-amber-500/20 bg-card p-5 relative overflow-hidden">
+              <div className="flex items-start justify-between">
+                <div>
+                  <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                    Safari Floats in Field
+                  </div>
+                  <div className="mt-2 text-2xl font-bold tracking-tight text-foreground font-mono">
+                    {safariFloatMetrics.activeRoadFloatTzs > 0 ? formatMoney(safariFloatMetrics.activeRoadFloatTzs, "TZS") : "TZS 0"}
+                  </div>
+                  <div className="mt-1 text-xs text-amber-600 dark:text-amber-400 font-medium">
+                    {safariFloatMetrics.pendingSurrenderCount} trip{safariFloatMetrics.pendingSurrenderCount === 1 ? "" : "s"} awaiting return reconciliation
+                  </div>
+                </div>
+                <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-amber-500/10 text-amber-600 dark:text-amber-400">
+                  <Wallet className="h-4 w-4" />
+                </div>
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-rose-500/20 bg-card p-5 relative overflow-hidden">
+              <div className="flex items-start justify-between">
+                <div>
+                  <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                    Workshop Grounded
+                  </div>
+                  <div className="mt-2 text-2xl font-bold tracking-tight text-foreground">
+                    {inWorkshopCount} Truck{inWorkshopCount === 1 ? "" : "s"}
+                  </div>
+                  <div className="mt-1 text-xs text-muted-foreground">
+                    {openWorkOrders.length} active job card{openWorkOrders.length === 1 ? "" : "s"} in progress
+                  </div>
+                </div>
+                <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-rose-500/10 text-rose-600 dark:text-rose-400">
+                  <Wrench className="h-4 w-4" />
+                </div>
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-blue-500/20 bg-card p-5 relative overflow-hidden">
+              <div className="flex items-start justify-between">
+                <div>
+                  <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                    Operational Availability
+                  </div>
+                  <div className="mt-2 text-2xl font-bold tracking-tight text-foreground">
+                    {availabilityPct}%
+                  </div>
+                  <div className="mt-1 text-xs text-muted-foreground">
+                    {operationalCount} / {machines.length} haulers road-ready
+                  </div>
+                </div>
+                <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-500/10 text-blue-600 dark:text-blue-400">
+                  <Truck className="h-4 w-4" />
+                </div>
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-purple-500/20 bg-card p-5 relative overflow-hidden">
+              <div className="flex items-start justify-between">
+                <div>
+                  <div className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                    Document Compliance
+                  </div>
+                  <div className="mt-2 text-2xl font-bold tracking-tight text-foreground">
+                    {expiringWithin30.length > 0 ? `${expiringWithin30.length} Due Soon` : "100% Valid"}
+                  </div>
+                  <div className="mt-1 text-xs text-muted-foreground">
+                    LATRA, Insurance &amp; Driver licenses
+                  </div>
+                </div>
+                <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-purple-500/10 text-purple-600 dark:text-purple-400">
+                  <ShieldCheck className="h-4 w-4" />
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {isEnterprise && (
         <div className="space-y-3">

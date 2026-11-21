@@ -1491,57 +1491,50 @@ export default function FinanceInvoices() {
                   </div>
                 </div>
 
-                {/* Footer Section: Payment Instructions vs Corporate Authorization Stamps */}
-                {!isLogistix && (
-                  <>
-                    {/* Official Settlement & Bank Wire Details for non-Logistix accounts */}
-                    <div className="border-t pt-3 grid grid-cols-1 md:grid-cols-2 gap-3 text-xs bg-slate-50 p-3 rounded-lg border border-slate-200">
-                      <div>
-                        <span className="font-bold uppercase tracking-wider text-slate-700 block mb-1">
-                          Official Settlement &amp; Commercial Wire Accounts
-                        </span>
-                        <p className="text-slate-600">
-                          <span className="font-semibold text-slate-900">Beneficiary:</span>{" "}
-                          {bankSettings?.accountName || organisation?.name || "MachineCare Hub Ltd"}
-                        </p>
-                        <p className="text-slate-600">
-                          <span className="font-semibold text-slate-900">Primary Bank:</span>{" "}
-                          {bankSettings?.bankName || "CRDB Bank / Standard Chartered"}
-                        </p>
-                        <p className="text-slate-600">
-                          <span className="font-semibold text-slate-900">Branch:</span>{" "}
-                          {bankSettings?.branch || "Corporate Branch"}{" "}
-                          {bankSettings?.swiftCode ? ` · SWIFT: ${bankSettings.swiftCode}` : ""}
-                        </p>
-                      </div>
-                      <div>
-                        <span className="font-bold uppercase tracking-wider text-slate-700 block mb-1">
-                          Direct Account Numbers
-                        </span>
-                        <p className="text-slate-600">
-                          <span className="font-semibold text-slate-900">TZS Account:</span>{" "}
-                          <span className="font-mono">{bankSettings?.accountNumberTzs || "0150248839200"}</span>
-                        </p>
-                        <p className="text-slate-600">
-                          <span className="font-semibold text-slate-900">USD Account:</span>{" "}
-                          <span className="font-mono">{bankSettings?.accountNumberUsd || "0250248839201"}</span>
-                        </p>
-                        {bankSettings?.lipaNumber && (
-                          <p className="text-slate-600">
-                            <span className="font-semibold text-slate-900">Merchant / Lipa Namba:</span>{" "}
-                            <span className="font-mono">{bankSettings.lipaNumber}</span>
-                          </p>
-                        )}
-                      </div>
-                    </div>
+                {/* Official Settlement & Bank Wire Details (CRDB Bank & Lipa Namba) */}
+                <div className="border-t pt-3 grid grid-cols-1 md:grid-cols-2 gap-3 text-xs bg-slate-50 p-3 rounded-lg border border-slate-200">
+                  <div>
+                    <span className="font-bold uppercase tracking-wider text-slate-700 block mb-1">
+                      Official Settlement &amp; Commercial Wire Accounts
+                    </span>
+                    <p className="text-slate-600">
+                      <span className="font-semibold text-slate-900">Beneficiary:</span>{" "}
+                      {bankSettings?.accountName || (isLogistix ? "LOGISTIXWARE LOGISTICS LIMITED" : (organisation?.name || "MachineCare Hub Ltd"))}
+                    </p>
+                    <p className="text-slate-600">
+                      <span className="font-semibold text-slate-900">Primary Bank:</span>{" "}
+                      {bankSettings?.bankName || (isLogistix ? "CRDB Bank PLC" : "CRDB Bank / Standard Chartered")}
+                    </p>
+                    <p className="text-slate-600">
+                      <span className="font-semibold text-slate-900">Branch:</span>{" "}
+                      {bankSettings?.branch || (isLogistix ? "Dar es Salaam Corporate Branch" : "Corporate Branch")}{" "}
+                      {bankSettings?.swiftCode || isLogistix ? ` · SWIFT: ${bankSettings?.swiftCode || "CORUTZTZ"}` : ""}
+                    </p>
+                  </div>
+                  <div>
+                    <span className="font-bold uppercase tracking-wider text-slate-700 block mb-1">
+                      Direct Account Numbers
+                    </span>
+                    <p className="text-slate-600">
+                      <span className="font-semibold text-slate-900">TZS Account:</span>{" "}
+                      <span className="font-mono">{bankSettings?.accountNumberTzs || (isLogistix ? "0150244891000" : "0150248839200")}</span>
+                    </p>
+                    <p className="text-slate-600">
+                      <span className="font-semibold text-slate-900">USD Account:</span>{" "}
+                      <span className="font-mono">{bankSettings?.accountNumberUsd || (isLogistix ? "0250244891000" : "0250248839201")}</span>
+                    </p>
+                    <p className="text-slate-600">
+                      <span className="font-semibold text-slate-900">Merchant / Lipa Namba:</span>{" "}
+                      <span className="font-mono font-bold text-slate-900">{bankSettings?.lipaNumber || "5549021 (LOGISTIXWARE)"}</span>
+                    </p>
+                  </div>
+                </div>
 
-                    {cleanNotes && (
-                      <div className="border-t pt-3 text-xs text-slate-500">
-                        <span className="font-bold text-slate-700">Remarks / Instructions:</span>
-                        <p className="mt-1 whitespace-pre-line">{cleanNotes}</p>
-                      </div>
-                    )}
-                  </>
+                {cleanNotes && (
+                  <div className="border-t pt-3 text-xs text-slate-500">
+                    <span className="font-bold text-slate-700">Remarks / Instructions:</span>
+                    <p className="mt-1 whitespace-pre-line">{cleanNotes}</p>
+                  </div>
                 )}
 
                 {/* Carrier Dispatch & Consignee Receiving Stamps (Corporate Standard) */}

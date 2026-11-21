@@ -40,6 +40,7 @@ import {
   Banknote,
   CheckCheck,
   Coins,
+  Printer,
 } from "lucide-react";
 import { TripExpensesListDialog } from "@/components/TripExpensesListDialog";
 import { CorridorExpenseCatalogDialog } from "@/components/CorridorExpenseCatalogDialog";
@@ -2941,6 +2942,7 @@ function SafariFloatSurrenderDialog({
 }) {
   const { organisation, profile, user } = useAuth();
   const [submitting, setSubmitting] = useState(false);
+  const [printVoucherOpen, setPrintVoucherOpen] = useState(false);
 
   // Dispatched Float info
   const [dispatchedAmount, setDispatchedAmount] = useState<string>(
@@ -3597,14 +3599,25 @@ function SafariFloatSurrenderDialog({
         </div>
 
         <DialogFooter className="flex sm:justify-between items-center gap-2 pt-2 border-t border-border">
-          <Button
-            type="button"
-            variant="ghost"
-            onClick={() => onOpenChange(false)}
-            disabled={submitting}
-          >
-            Cancel
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => onOpenChange(false)}
+              disabled={submitting}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              className="gap-1.5"
+              onClick={() => setPrintVoucherOpen(true)}
+            >
+              <Printer className="h-4 w-4" />
+              Print Cashier Voucher
+            </Button>
+          </div>
 
           <div className="flex items-center gap-2">
             <Button
@@ -3633,6 +3646,200 @@ function SafariFloatSurrenderDialog({
           </div>
         </DialogFooter>
       </DialogContent>
+
+      {/* Printable Safari Float Settlement Voucher Dialog */}
+      {printVoucherOpen && (
+        <Dialog open={printVoucherOpen} onOpenChange={setPrintVoucherOpen}>
+          <DialogContent className="sm:max-w-3xl max-h-[92vh] overflow-y-auto p-4 sm:p-6">
+            <style>{`
+              @media print {
+                body * {
+                  visibility: hidden !important;
+                }
+                #printable-safari-voucher,
+                #printable-safari-voucher * {
+                  visibility: visible !important;
+                }
+                #printable-safari-voucher {
+                  position: fixed !important;
+                  left: 0 !important;
+                  top: 0 !important;
+                  width: 100vw !important;
+                  max-width: 100% !important;
+                  height: auto !important;
+                  margin: 0 !important;
+                  padding: 10mm 14mm !important;
+                  box-shadow: none !important;
+                  border: none !important;
+                  background: white !important;
+                  color: #0f172a !important;
+                  z-index: 9999999 !important;
+                }
+                @page {
+                  size: A4 portrait;
+                  margin: 8mm;
+                }
+              }
+            `}</style>
+            
+            <div id="printable-safari-voucher" className="space-y-5 bg-white text-slate-900 p-2">
+              {/* Header */}
+              <div className="border-b-2 border-slate-900 pb-3 flex justify-between items-start">
+                <div>
+                  <h2 className="text-xl font-black uppercase tracking-wider text-slate-900">
+                    {organisation?.name || "LOGISTIXWARE LOGISTICS LIMITED"}
+                  </h2>
+                  <p className="text-xs text-slate-600 font-medium">
+                    Commercial Fleet Operations · Road Cash &amp; Safari Float Reconciliation
+                  </p>
+                  <p className="text-[11px] text-slate-500 font-mono mt-0.5">
+                    Dar es Salaam, Tanzania · Official Settlement Voucher
+                  </p>
+                </div>
+                <div className="text-right">
+                  <div className="text-xs font-mono font-bold bg-slate-900 text-white px-2.5 py-1 rounded">
+                    VOUCHER #{trip.id ? `VCH-${trip.id.slice(0, 8).toUpperCase()}` : "VCH-FLOAT"}
+                  </div>
+                  <div className="text-[11px] text-slate-500 mt-1 font-mono">
+                    Date: {formatDate(new Date().toISOString())}
+                  </div>
+                </div>
+              </div>
+
+              {/* Trip & Driver Assignment Info */}
+              <div className="grid grid-cols-2 gap-4 text-xs bg-slate-50 p-3 rounded-lg border border-slate-200">
+                <div>
+                  <div className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">Trip Particulars</div>
+                  <div className="mt-1 font-semibold text-slate-900">
+                    Route: <span className="font-bold">{trip.origin || "Dar es Salaam"} ➔ {trip.destination || "Destination"}</span>
+                  </div>
+                  <div className="text-slate-600 mt-0.5">
+                    Vehicle: <strong className="font-mono">{trip.machine?.plate_number || trip.machine?.name || "Truck"}</strong>
+                  </div>
+                  {trip.corridor_name && (
+                    <div className="text-slate-600 mt-0.5">
+                      Corridor: <span className="font-medium">{trip.corridor_name}</span>
+                    </div>
+                  )}
+                </div>
+                <div>
+                  <div className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">Driver &amp; Cashier Details</div>
+                  <div className="mt-1 font-semibold text-slate-900">
+                    Driver: <span className="font-bold">{driver?.full_name || "Assigned Driver"}</span>
+                  </div>
+                  <div className="text-slate-600 mt-0.5">
+                    Disbursed Via: <span className="capitalize">{paymentMethod.replace("_", " ")}</span>
+                    {paymentRef && <span className="font-mono text-[11px]"> ({paymentRef})</span>}
+                  </div>
+                  <div className="text-slate-600 mt-0.5 font-mono">
+                    Dispatched Float: <strong>{formatMoney(dispatchedTzs)}</strong>
+                  </div>
+                </div>
+              </div>
+
+              {/* Receipts Table */}
+              <div>
+                <div className="text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5 flex justify-between items-center">
+                  <span>Surrendered Road Receipts &amp; Allowances</span>
+                  <span className="font-mono text-[11px] text-slate-500">{receipts.length} verified item(s)</span>
+                </div>
+                <table className="w-full text-xs text-left border border-slate-200 rounded">
+                  <thead className="bg-slate-100 text-slate-700 font-bold uppercase text-[10px] tracking-wider">
+                    <tr>
+                      <th className="p-2 w-8 text-center">#</th>
+                      <th className="p-2">Description / Expense Item</th>
+                      <th className="p-2 w-28">Category</th>
+                      <th className="p-2 w-24">Receipt #</th>
+                      <th className="p-2 text-right w-32">Amount</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-200">
+                    {receipts.length === 0 ? (
+                      <tr>
+                        <td colSpan={5} className="p-4 text-center text-slate-400 italic">
+                          No receipts surrendered for this trip.
+                        </td>
+                      </tr>
+                    ) : (
+                      receipts.map((r, idx) => (
+                        <tr key={r.id || idx}>
+                          <td className="p-2 text-center text-slate-400 font-mono text-[11px]">{idx + 1}</td>
+                          <td className="p-2 font-medium text-slate-900">{r.title}</td>
+                          <td className="p-2 capitalize text-slate-600 text-[11px]">{r.category.replace("_", " ")}</td>
+                          <td className="p-2 font-mono text-slate-600 text-[11px]">{r.receipt_no || "—"}</td>
+                          <td className="p-2 text-right font-mono font-semibold text-slate-900">
+                            {formatMoney(r.amount, r.currency)}
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Financial Settlement Box */}
+              <div className="flex justify-end text-xs">
+                <div className="w-80 rounded-xl border border-slate-300 bg-slate-50 p-3.5 space-y-2">
+                  <div className="flex justify-between text-slate-600">
+                    <span>Initial Safari Advance:</span>
+                    <span className="font-mono font-bold text-slate-900">{formatMoney(dispatchedTzs)}</span>
+                  </div>
+                  <div className="flex justify-between text-slate-600">
+                    <span>Approved Road Receipts:</span>
+                    <span className="font-mono font-bold text-slate-900">-{formatMoney(totalReceiptsTzs)}</span>
+                  </div>
+                  <div className="border-t-2 border-slate-900 pt-2 flex justify-between font-bold text-sm">
+                    <span>
+                      {balanceTzs > 0
+                        ? "Cash Returned to Office:"
+                        : balanceTzs < 0
+                        ? "Office Reimbursement Due:"
+                        : "Net Balance Due:"}
+                    </span>
+                    <span className="font-mono text-base font-black">
+                      {balanceTzs !== 0 ? formatMoney(Math.abs(balanceTzs)) : "0 TZS (Balanced)"}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Signatures & Stamps */}
+              <div className="grid grid-cols-3 gap-4 pt-6 border-t border-slate-200 text-xs">
+                <div className="border border-slate-200 rounded-lg p-3 bg-slate-50/50 space-y-10">
+                  <div className="text-[10px] font-bold uppercase text-slate-500">1. Commercial Driver Sign-off</div>
+                  <div className="border-t border-dashed border-slate-400 pt-1 text-[10px] text-slate-600">
+                    Name: <strong>{driver?.full_name || "Driver"}</strong>
+                    <br />Date: ________________________
+                  </div>
+                </div>
+                <div className="border border-slate-200 rounded-lg p-3 bg-slate-50/50 space-y-10">
+                  <div className="text-[10px] font-bold uppercase text-slate-500">2. Fleet Cashier / Accountant</div>
+                  <div className="border-t border-dashed border-slate-400 pt-1 text-[10px] text-slate-600">
+                    Received &amp; Verified By
+                    <br />Date: ________________________
+                  </div>
+                </div>
+                <div className="border border-slate-200 rounded-lg p-3 bg-slate-50/50 space-y-10">
+                  <div className="text-[10px] font-bold uppercase text-slate-500">3. Operations Manager Stamp</div>
+                  <div className="border-t border-dashed border-slate-400 pt-1 text-[10px] text-slate-600">
+                    Approved for Trip Close
+                    <br />Date: ________________________
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <DialogFooter className="gap-2 pt-3 print:hidden">
+              <Button variant="outline" onClick={() => setPrintVoucherOpen(false)}>
+                Close
+              </Button>
+              <Button onClick={() => window.print()} className="gap-1.5 shadow-xs">
+                <Printer className="h-4 w-4" /> Print / Save Voucher PDF
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
     </Dialog>
   );
 }

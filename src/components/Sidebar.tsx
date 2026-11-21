@@ -125,7 +125,7 @@ export function Sidebar() {
   const fleetFinanceNavGroup: NavGroup = useMemo(
     () => ({
       id: "fleet-finance",
-      label: "Fleet Finance",
+      label: "Finance & Accounting",
       items: [
         { to: "/finance", label: "Financial Overview", icon: LayoutDashboard },
         { to: "/finance/expenses", label: "Expenses", icon: Receipt },

@@ -509,9 +509,11 @@ export default function Vehicles() {
             <TabsTrigger value="trailers" className="flex items-center gap-1.5">
               <Container className="h-3.5 w-3.5" /> Trailers ({fleetTrailers.length})
             </TabsTrigger>
-            <TabsTrigger value="workshop_assets" className="flex items-center gap-1.5 text-emerald-700 dark:text-emerald-400 font-semibold">
-              <Wrench className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" /> Workshop Plant ({workshopAssets.length})
-            </TabsTrigger>
+            {(isEnterprise || workshopAssets.length > 0) && (
+              <TabsTrigger value="workshop_assets" className="flex items-center gap-1.5 text-emerald-700 dark:text-emerald-400 font-semibold">
+                <Wrench className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" /> Workshop Plant ({workshopAssets.length})
+              </TabsTrigger>
+            )}
           </TabsList>
         </Tabs>
 
@@ -1602,7 +1604,7 @@ export function VehicleDialog({
               <Label className="text-xs font-semibold uppercase tracking-wider text-muted-foreground block mb-2">
                 Asset Classification & Registry Type
               </Label>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+              <div className={`grid grid-cols-1 ${isEnterprise ? "sm:grid-cols-3" : "sm:grid-cols-2"} gap-2`}>
                 <Button
                   type="button"
                   variant={form.asset_kind === "vehicle" ? "default" : "outline"}
@@ -1641,31 +1643,33 @@ export function VehicleDialog({
                 >
                   <Container className="h-4 w-4" /> Independent Trailer
                 </Button>
-                <Button
-                  type="button"
-                  variant={form.asset_kind === "workshop_asset" ? "default" : "outline"}
-                  className={`flex items-center justify-center gap-2 cursor-pointer h-10 text-xs font-medium ${
-                    form.asset_kind === "workshop_asset"
-                      ? "bg-emerald-600 hover:bg-emerald-700 text-white"
-                      : "border-emerald-500/40 text-emerald-700 dark:text-emerald-400"
-                  }`}
-                  onClick={() => {
-                    const currentNum = form.vehicle_code.match(/\d+$/)?.[0] ?? String((existingCount ?? 0) + 1).padStart(3, "0");
-                    setForm((prev) => ({
-                      ...prev,
-                      category: "Generator",
-                      asset_kind: "workshop_asset",
-                      asset_type: "Generator",
-                      vehicle_code: `GEN-${currentNum.padStart(3, "0")}`,
-                      is_trailer: false,
-                      vehicle_type: "plant_asset",
-                      auto_pm_enabled: true,
-                      auto_pm_hours_interval: "250",
-                    }));
-                  }}
-                >
-                  <Wrench className="h-4 w-4" /> Workshop & Plant (Slide 19)
-                </Button>
+                {isEnterprise && (
+                  <Button
+                    type="button"
+                    variant={form.asset_kind === "workshop_asset" ? "default" : "outline"}
+                    className={`flex items-center justify-center gap-2 cursor-pointer h-10 text-xs font-medium ${
+                      form.asset_kind === "workshop_asset"
+                        ? "bg-emerald-600 hover:bg-emerald-700 text-white"
+                        : "border-emerald-500/40 text-emerald-700 dark:text-emerald-400"
+                    }`}
+                    onClick={() => {
+                      const currentNum = form.vehicle_code.match(/\d+$/)?.[0] ?? String((existingCount ?? 0) + 1).padStart(3, "0");
+                      setForm((prev) => ({
+                        ...prev,
+                        category: "Generator",
+                        asset_kind: "workshop_asset",
+                        asset_type: "Generator",
+                        vehicle_code: `GEN-${currentNum.padStart(3, "0")}`,
+                        is_trailer: false,
+                        vehicle_type: "plant_asset",
+                        auto_pm_enabled: true,
+                        auto_pm_hours_interval: "250",
+                      }));
+                    }}
+                  >
+                    <Wrench className="h-4 w-4" /> Workshop & Plant (Slide 19)
+                  </Button>
+                )}
               </div>
             </div>
           )}
