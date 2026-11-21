@@ -33,6 +33,7 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
+import { getActiveDriverSession } from "@/components/fleet/DriverSignInModal";
 
 interface TechnicianQrModalProps {
   open: boolean;
@@ -286,7 +287,11 @@ export function TechnicianQrModal({ open, onOpenChange }: TechnicianQrModalProps
                 className="h-auto flex flex-col items-start p-3 gap-1 hover:border-primary hover:bg-primary/5"
                 onClick={() => {
                   onOpenChange(false);
-                  navigate(`/m/${selectedMachine.id}/inspect`);
+                  const session = getActiveDriverSession();
+                  const dParam = session
+                    ? `?driverId=${encodeURIComponent(session.id)}&driverName=${encodeURIComponent(session.full_name)}`
+                    : "";
+                  navigate(`/m/${selectedMachine.id}/inspect${dParam}`);
                 }}
               >
                 <div className="flex items-center gap-2 font-semibold text-sm text-foreground">

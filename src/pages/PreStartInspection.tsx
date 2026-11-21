@@ -5,10 +5,11 @@ import { PageLoader } from "@/components/PageLoader";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ArrowLeft, CheckCircle2, XCircle, MinusCircle, Wrench, AlertTriangle } from "lucide-react";
+import { ArrowLeft, CheckCircle2, XCircle, MinusCircle, Wrench, AlertTriangle, UserCheck, User } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { enqueue, errorMessage, looksOffline } from "@/lib/offlineQueue";
+import { getActiveDriverSession } from "@/components/fleet/DriverSignInModal";
 
 type MachineInfo = {
   id: string;
@@ -86,12 +87,23 @@ export default function PreStartInspection() {
       }
       if (initialMachine) setMachine(initialMachine);
 
-      // Check remembered driver on this device
+      // Check driver identification: 1) URL query params, 2) Active driver session, 3) Remembered driver
+      const paramDriverId = searchParams.get("driverId") || searchParams.get("di");
+      const paramDriverName = searchParams.get("driverName") || searchParams.get("d");
+      const activeSession = getActiveDriverSession();
       const lastId = localStorage.getItem("mc_last_driver_id");
       const lastName = localStorage.getItem("mc_last_driver_name");
-      if (lastId && lastName) {
-        setRememberedDriver({ id: lastId, name: lastName });
-        setDriverId(lastId);
+
+      const resolvedDriverId = paramDriverId || activeSession?.id || lastId;
+      const resolvedDriverName = paramDriverName || activeSession?.full_name || lastName;
+
+      if (resolvedDriverId && resolvedDriverName) {
+        setRememberedDriver({ id: resolvedDriverId, name: resolvedDriverName });
+        setDriverId(resolvedDriverId);
+        // If driver came with URL parameters or an active signed-in session, proceed directly to checklist
+        if (paramDriverId || activeSession) {
+          setStep("checklist");
+        }
       }
 
       // Check cached inspection template
@@ -167,7 +179,18 @@ export default function PreStartInspection() {
     () => items.filter((it) => responses[it.item_id]?.result === "not_ok"),
     [items, responses],
   );
-  const driverName = drivers.find((d) => d.id === driverId)?.full_name ?? "Guest";
+  const driverName = useMemo(() => {
+    const found = drivers.find((d) => d.id === driverId);
+    if (found?.full_name) return found.full_name;
+    if (rememberedDriver?.name) return rememberedDriver.name;
+    const searchParams = new URLSearchParams(window.location.search);
+    const fromQuery = searchParams.get("driverName") || searchParams.get("d");
+    if (fromQuery) return fromQuery;
+    const session = getActiveDriverSession();
+    if (session?.full_name) return session.full_name;
+    if (driverId && !/^[0-9a-f-]{36}$/i.test(driverId)) return driverId;
+    return "Guest";
+  }, [drivers, driverId, rememberedDriver]);
 
   const submit = async () => {
     if (!machine || !template || !id) return;
@@ -298,7 +321,7 @@ export default function PreStartInspection() {
             abnormal_symptoms: meta.abnormal_symptoms,
             reporter_type: "driver",
             reporter_name: driverName,
-            reporter_phone: "",
+            reporter_phone: getActiveDriverSession()?.phone || "",
             severity: isCritical ? "critical_breakdown" : it.item_severity === "major" ? "major" : "minor",
             status: "open",
             attachments: [],
@@ -311,7 +334,7 @@ export default function PreStartInspection() {
             organisation_id: machine.organisation_id,
             machine_id: machine.id,
             reporter_name: driverName,
-            reporter_phone: "",
+            reporter_phone: getActiveDriverSession()?.phone || "",
             description: `${cleanDesc}\n${JSON.stringify(meta)}`,
             severity: isCritical ? "critical" : it.item_severity === "major" ? "medium" : "low",
             status: "open",
@@ -453,6 +476,27 @@ export default function PreStartInspection() {
 
         {step === "checklist" && (
           <div className="space-y-3">
+            <div className="flex items-center justify-between rounded-xl bg-card border border-border px-3.5 py-2.5 shadow-2xs">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="h-8 w-8 rounded-lg bg-emerald-500/15 text-emerald-600 flex items-center justify-center shrink-0">
+                  <UserCheck className="h-4 w-4" />
+                </div>
+                <div className="min-w-0">
+                  <span className="text-[10px] text-muted-foreground uppercase font-bold block leading-none">Inspecting as</span>
+                  <span className="text-xs font-bold text-foreground truncate block mt-0.5">{driverName}</span>
+                </div>
+              </div>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="text-xs h-7 px-2.5 text-muted-foreground hover:text-foreground"
+                onClick={() => setStep("driver")}
+              >
+                Change Driver
+              </Button>
+            </div>
+
             {items.map((it, i) => {
               const r = responses[it.item_id]?.result;
               return (
@@ -577,7 +621,7 @@ export default function PreStartInspection() {
                 <Link to={`/fleet/vehicles/${machine.id}`}>View Vehicle in Fleet Hub</Link>
               </Button>
               <Button asChild variant="outline" className="h-10 text-xs">
-                <Link to={`/m/${machine.id}`}>Back to Asset Card</Link>
+                <Link to={`/m/${machine.id}?d=${encodeURIComponent(driverName)}&di=${encodeURIComponent(driverId)}`}>Back to Asset Card</Link>
               </Button>
             </div>
           </div>

@@ -197,6 +197,30 @@ export default function MobileMachine() {
   const [activeDriver, setActiveDriver] = useState<ActiveDriverSession | null>(() => getActiveDriverSession());
   const [driverModalOpen, setDriverModalOpen] = useState(false);
 
+  // QR encoded driver from scan URL (?d=...&di=...)
+  const [qrDriver, setQrDriver] = useState<{ id?: string | null; name: string } | null>(() => {
+    if (typeof window === "undefined") return null;
+    const searchParams = new URLSearchParams(window.location.search);
+    const dName = searchParams.get("d") || searchParams.get("driverName");
+    const dId = searchParams.get("di") || searchParams.get("driverId");
+    return dName ? { id: dId || null, name: dName } : null;
+  });
+
+  // Dynamic pre-trip inspection link preserving vehicle & driver metadata
+  const inspectUrl = useMemo(() => {
+    if (!id) return "/";
+    const params = new URLSearchParams();
+    const dId = activeDriver?.id || qrDriver?.id;
+    const dName = activeDriver?.full_name || qrDriver?.name;
+    if (dId) params.set("driverId", dId);
+    if (dName) params.set("driverName", dName);
+    if (machine?.name) params.set("n", machine.name);
+    if (machine?.plate_number) params.set("p", machine.plate_number);
+    if (machine?.organisation_id) params.set("o", machine.organisation_id);
+    const qStr = params.toString();
+    return `/m/${id}/inspect${qStr ? `?${qStr}` : ""}`;
+  }, [id, machine, activeDriver, qrDriver]);
+
   // Asset category check: fleet asset (Vehicle, Trailer, Truck, or with plate number) vs factory plant machine
   const isFleetAsset = useMemo(() => {
     if (!machine) return false;
@@ -467,10 +491,12 @@ export default function MobileMachine() {
       setReporterName(profile.full_name ?? "");
       setReporterPhone(profile.phone ?? "");
     } else if (activeDriver) {
-      if (!reporterName && activeDriver.full_name) setReporterName(activeDriver.full_name);
-      if (!reporterPhone && activeDriver.phone) setReporterPhone(activeDriver.phone);
+      if (activeDriver.full_name) setReporterName(activeDriver.full_name);
+      if (activeDriver.phone) setReporterPhone(activeDriver.phone);
+    } else if (qrDriver) {
+      if (!reporterName && qrDriver.name) setReporterName(qrDriver.name);
     }
-  }, [user, isOwnOrg, profile, activeDriver]);
+  }, [user, isOwnOrg, profile, activeDriver, qrDriver]);
 
   const [roadworthiness, setRoadworthiness] = useState<{
     state: "fit" | "due" | "grounded";
@@ -549,6 +575,13 @@ export default function MobileMachine() {
     const paramName = searchParams.get("n");
     const paramOrg = searchParams.get("o");
     const paramLogo = searchParams.get("ol");
+    const paramDriver = searchParams.get("d") || searchParams.get("driverName");
+    const paramDriverId = searchParams.get("di") || searchParams.get("driverId");
+
+    if (paramDriver) {
+      setQrDriver({ id: paramDriverId || null, name: paramDriver });
+    }
+
     const cachedStr = localStorage.getItem(`mc_machine_cache_${id}`);
     let initialMachine: any = null;
 
@@ -1028,8 +1061,12 @@ export default function MobileMachine() {
                     <User className="h-5 w-5" />
                   </div>
                   <div className="min-w-0">
-                    <span className="text-xs font-semibold text-foreground block truncate">{t.whoIsDriving}</span>
-                    <span className="text-[11px] text-muted-foreground block truncate">{t.driverCheckInPrompt}</span>
+                    <span className="text-xs font-semibold text-foreground block truncate">
+                      {qrDriver ? `Assigned: ${qrDriver.name}` : t.whoIsDriving}
+                    </span>
+                    <span className="text-[11px] text-muted-foreground block truncate">
+                      {qrDriver ? "Tap check-in to confirm duty" : t.driverCheckInPrompt}
+                    </span>
                   </div>
                 </div>
               )}
@@ -1087,7 +1124,7 @@ export default function MobileMachine() {
             <div className="grid grid-cols-2 gap-2.5">
               {/* Tile 1: Pre-Trip Inspection */}
               <Link
-                to={`/m/${machine.id}/inspect`}
+                to={inspectUrl}
                 className={`flex flex-col justify-between p-3.5 rounded-2xl border transition-all text-left group ${
                   roadworthiness.state === "fit"
                     ? "border-emerald-500/30 bg-emerald-500/5 hover:bg-emerald-500/10"
@@ -1172,7 +1209,7 @@ export default function MobileMachine() {
         ) : (
           /* Standard Pre-start inspection link for fixed factory machines */
           <Link
-            to={`/m/${machine.id}/inspect`}
+            to={inspectUrl}
             className="flex items-center justify-between rounded-2xl border border-primary/30 bg-primary-soft p-4 text-sm font-medium text-primary hover:border-primary/50"
           >
             <span className="flex items-center gap-2">
@@ -1698,13 +1735,22 @@ export default function MobileMachine() {
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-2 pt-2">
-            <Button asChild className="w-full h-11 text-sm font-semibold">
+            <Button
+              className="w-full h-11 text-sm font-semibold gap-2"
+              onClick={() => {
+                setAuthPromptOpen(false);
+                setDriverModalOpen(true);
+              }}
+            >
+              <UserCheck className="h-4 w-4" /> Fast Driver PIN Check-In
+            </Button>
+            <Button asChild variant="outline" className="w-full h-11 text-sm font-semibold">
               <Link to={`/login?next=/m/${machine?.id || ""}`}>
-                <LogIn className="mr-2 h-4 w-4" /> Sign In as Driver
+                <LogIn className="mr-2 h-4 w-4" /> Sign In with Password / Email
               </Link>
             </Button>
-            <Button variant="outline" className="w-full" onClick={() => setAuthPromptOpen(false)}>
-              Close
+            <Button variant="ghost" className="w-full text-xs text-muted-foreground" onClick={() => setAuthPromptOpen(false)}>
+              Cancel
             </Button>
           </div>
         </DialogContent>
@@ -1746,6 +1792,7 @@ export default function MobileMachine() {
           open={tripOpen}
           onOpenChange={setTripOpen}
           machineId={machine.id}
+          defaultDriverId={activeDriver?.id || qrDriver?.id}
           onSaved={refreshMachineAndHistory}
         />
       )}

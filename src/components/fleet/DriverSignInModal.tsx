@@ -83,6 +83,8 @@ export function saveActiveDriverSession(driver: FleetDriver): ActiveDriverSessio
   };
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(session));
+    localStorage.setItem("mc_last_driver_id", driver.id);
+    localStorage.setItem("mc_last_driver_name", driver.full_name);
   } catch {}
   return session;
 }
@@ -91,6 +93,8 @@ export function clearActiveDriverSession() {
   if (typeof window === "undefined") return;
   try {
     localStorage.removeItem(STORAGE_KEY);
+    localStorage.removeItem("mc_last_driver_id");
+    localStorage.removeItem("mc_last_driver_name");
   } catch {}
 }
 
@@ -322,15 +326,26 @@ export function DriverSignInModal({
   }, [open, organisationId]);
 
   const filtered = useMemo(() => {
+    let list = drivers;
     const q = search.trim().toLowerCase();
-    if (!q) return drivers;
-    return drivers.filter((d) =>
-      d.full_name.toLowerCase().includes(q) ||
-      (d.phone || "").toLowerCase().includes(q) ||
-      (d.driver_code || "").toLowerCase().includes(q) ||
-      (d.assigned_vehicle || "").toLowerCase().includes(q)
-    );
-  }, [drivers, search]);
+    if (q) {
+      list = list.filter((d) =>
+        d.full_name.toLowerCase().includes(q) ||
+        (d.phone || "").toLowerCase().includes(q) ||
+        (d.driver_code || "").toLowerCase().includes(q) ||
+        (d.assigned_vehicle || "").toLowerCase().includes(q)
+      );
+    }
+    if (currentVehiclePlate) {
+      const cleanPlate = currentVehiclePlate.trim().toLowerCase();
+      list = [...list].sort((a, b) => {
+        const aAssigned = a.assigned_vehicle?.trim().toLowerCase() === cleanPlate ? 1 : 0;
+        const bAssigned = b.assigned_vehicle?.trim().toLowerCase() === cleanPlate ? 1 : 0;
+        return bAssigned - aAssigned;
+      });
+    }
+    return list;
+  }, [drivers, search, currentVehiclePlate]);
 
   const handleSelect = (driver: FleetDriver) => {
     const session = saveActiveDriverSession(driver);

@@ -6,11 +6,13 @@ import { Button } from "@/components/ui/button";
 import { useI18n } from "@/i18n/I18nProvider";
 import { toast } from "sonner";
 import { SearchableDriverSelect } from "@/components/fleet/SearchableDriverSelect";
+import { getActiveDriverSession } from "@/components/fleet/DriverSignInModal";
 
 interface Props {
   open: boolean;
   onOpenChange: (v: boolean) => void;
   machineId: string;
+  defaultDriverId?: string | null;
   onSaved?: () => void;
 }
 
@@ -21,7 +23,7 @@ const T = {
   sw: { title: "Anza safari", driver: "Dereva", purpose: "Kusudi (si lazima)", destination: "Mahali unakoenda (si lazima)", startOdo: "Odometa ya kuanzia (km)", start: "Anza safari", starting: "Inaanza…", started: "Safari imeanza", noDrivers: "Hakuna dereva aliyepo — ongeza dereva chini ya Meli → Madereva kwanza." },
 };
 
-export function QuickStartTripDialog({ open, onOpenChange, machineId, onSaved }: Props) {
+export function QuickStartTripDialog({ open, onOpenChange, machineId, defaultDriverId, onSaved }: Props) {
   const { profile, user } = useAuth();
   const { lang } = useI18n();
   const t = T[lang];
@@ -33,7 +35,9 @@ export function QuickStartTripDialog({ open, onOpenChange, machineId, onSaved }:
 
   useEffect(() => {
     if (!open) return;
-    setForm({ driver_id: "", purpose: "", destination: "", start_odo: "" });
+    const session = getActiveDriverSession();
+    const resolvedDriver = defaultDriverId || session?.id || "";
+    setForm({ driver_id: resolvedDriver, purpose: "", destination: "", start_odo: "" });
     supabase.from("drivers").select("id, full_name").eq("status", "active").order("full_name").then(({ data }) => setDrivers((data ?? []) as Driver[]));
     supabase.from("machines").select("current_odometer_km, current_hours").eq("id", machineId).maybeSingle().then(({ data }: any) => {
       const odo = data?.current_odometer_km ?? data?.current_hours;
@@ -42,7 +46,7 @@ export function QuickStartTripDialog({ open, onOpenChange, machineId, onSaved }:
         setForm((f: any) => ({ ...f, start_odo: String(odo) }));
       }
     });
-  }, [open, machineId]);
+  }, [open, machineId, defaultDriverId]);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();

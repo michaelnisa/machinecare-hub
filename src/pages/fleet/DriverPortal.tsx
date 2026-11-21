@@ -813,7 +813,7 @@ export default function DriverPortal() {
               </div>
               {assignedVehicle && (
                 <Link
-                  to={`/m/${assignedVehicle.id}`}
+                  to={`/m/${assignedVehicle.id}?d=${encodeURIComponent(activeDriver.full_name)}&di=${encodeURIComponent(activeDriver.id)}`}
                   className="text-xs font-semibold text-primary flex items-center gap-1 hover:underline"
                 >
                   <QrCode className="h-3.5 w-3.5" />
@@ -956,7 +956,7 @@ export default function DriverPortal() {
                       type="button"
                       variant="outline"
                       className="h-14 flex-col gap-1 items-start p-3 border-border bg-card hover:bg-muted/50"
-                      onClick={() => navigate(`/m/${assignedVehicle.id}/inspect`)}
+                      onClick={() => navigate(`/m/${assignedVehicle.id}/inspect?driverId=${encodeURIComponent(activeDriver.id)}&driverName=${encodeURIComponent(activeDriver.full_name)}`)}
                     >
                       <div className="flex items-center gap-1.5 text-primary">
                         <ClipboardCheck className="h-4 w-4" />
@@ -1012,7 +1012,7 @@ export default function DriverPortal() {
                       size="sm"
                       variant="outline"
                       className="gap-1.5 text-xs"
-                      onClick={() => navigate(`/m/${assignedVehicle.id}`)}
+                      onClick={() => navigate(`/m/${assignedVehicle.id}?d=${encodeURIComponent(activeDriver.full_name)}&di=${encodeURIComponent(activeDriver.id)}`)}
                     >
                       <Truck className="h-3.5 w-3.5 text-primary" />
                       <span>{t.scanQr}</span>

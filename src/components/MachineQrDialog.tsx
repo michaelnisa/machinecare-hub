@@ -14,6 +14,7 @@ import {
   Truck,
   QrCode,
   ShieldCheck,
+  User,
 } from "lucide-react";
 import { toast } from "sonner";
 import { escapeHtml } from "@/lib/escapeHtml";
@@ -39,6 +40,8 @@ interface Props {
   year?: number | null;
   serialNumber?: string | null;
   vin?: string | null;
+  assignedDriverName?: string | null;
+  assignedDriverId?: string | null;
 }
 
 // Safely loads a remote image URL to a base64 Data URL for jsPDF & Print
@@ -91,6 +94,8 @@ export function MachineQrDialog({
   year: initialYear,
   serialNumber: initialSerialNumber,
   vin: initialVin,
+  assignedDriverName: initialAssignedDriverName,
+  assignedDriverId: initialAssignedDriverId,
 }: Props) {
   const { organisation } = useAuth();
   const qrCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -106,6 +111,8 @@ export function MachineQrDialog({
   const [serialNumber, setSerialNumber] = useState(initialSerialNumber);
   const [vin, setVin] = useState(initialVin);
   const [currentHours, setCurrentHours] = useState(initialCurrentHours);
+  const [assignedDriverName, setAssignedDriverName] = useState(initialAssignedDriverName);
+  const [assignedDriverId, setAssignedDriverId] = useState(initialAssignedDriverId);
   const [qrEnabled, setQrEnabled] = useState(initialQrEnabled);
 
   const [toggling, setToggling] = useState(false);
@@ -129,6 +136,8 @@ export function MachineQrDialog({
     setSerialNumber(initialSerialNumber);
     setVin(initialVin);
     setCurrentHours(initialCurrentHours);
+    setAssignedDriverName(initialAssignedDriverName);
+    setAssignedDriverId(initialAssignedDriverId);
     setQrEnabled(initialQrEnabled);
   }, [
     initialMachineName,
@@ -141,6 +150,8 @@ export function MachineQrDialog({
     initialSerialNumber,
     initialVin,
     initialCurrentHours,
+    initialAssignedDriverName,
+    initialAssignedDriverId,
     initialQrEnabled,
   ]);
 
@@ -173,6 +184,23 @@ export function MachineQrDialog({
           else if (data.current_hours != null) setCurrentHours(data.current_hours);
           if (data.qr_enabled !== undefined) setQrEnabled(data.qr_enabled);
         }
+
+        // Auto-fetch active driver from in-progress trip if not explicitly provided
+        if (!initialAssignedDriverName && machineId) {
+          const { data: tripData } = await (supabase as any)
+            .from("trips")
+            .select("driver_id, driver:drivers(full_name)")
+            .eq("machine_id", machineId)
+            .eq("status", "in_progress")
+            .order("start_at", { ascending: false })
+            .limit(1)
+            .maybeSingle();
+
+          if (tripData?.driver?.full_name && isMounted) {
+            setAssignedDriverName(tripData.driver.full_name);
+            if (tripData.driver_id) setAssignedDriverId(tripData.driver_id);
+          }
+        }
       } catch (e) {
         // Non-blocking fallback
       }
@@ -181,7 +209,7 @@ export function MachineQrDialog({
     return () => {
       isMounted = false;
     };
-  }, [open, machineId]);
+  }, [open, machineId, initialAssignedDriverName]);
 
   // Build clean mobile URL
   const queryParams = new URLSearchParams();
@@ -192,6 +220,8 @@ export function MachineQrDialog({
   if (category) queryParams.set("c", category);
   if (effectiveOrgName) queryParams.set("o", effectiveOrgName);
   if (effectiveOrgLogo) queryParams.set("ol", effectiveOrgLogo);
+  if (assignedDriverName) queryParams.set("d", assignedDriverName);
+  if (assignedDriverId) queryParams.set("di", assignedDriverId);
 
   const queryString = queryParams.toString();
   const url = `${typeof window !== "undefined" ? window.location.origin : ""}/m/${machineId}${
@@ -429,6 +459,20 @@ export function MachineQrDialog({
         curY += 8;
       }
 
+      if (assignedDriverName) {
+        pdf.setFont("helvetica", "bold");
+        pdf.setFontSize(8.5);
+        const dText = `DRIVER: ${assignedDriverName.toUpperCase()}`;
+        const dW = pdf.getTextWidth(dText) + 6;
+        pdf.setFillColor(236, 253, 245);
+        pdf.setDrawColor(167, 243, 208);
+        pdf.setLineWidth(0.3);
+        pdf.roundedRect(startX + (tagW - dW) / 2, curY, dW, 5.2, 1.5, 1.5, "FD");
+        pdf.setTextColor(5, 150, 105);
+        pdf.text(dText, startX + tagW / 2, curY + 3.7, { align: "center" });
+        curY += 7.5;
+      }
+
       // 7. Make / Model / Year / S/N
       if (metaLineStr) {
         pdf.setFont("helvetica", "normal");
@@ -522,6 +566,7 @@ export function MachineQrDialog({
     const safeName = escapeHtml(machineName || "Fleet Asset");
     const safePlate = plateNumber ? escapeHtml(plateNumber) : "";
     const safeReg = registrationNumber ? escapeHtml(registrationNumber) : "";
+    const safeDriver = assignedDriverName ? escapeHtml(assignedDriverName) : "";
     const safeMakeModel = [make, model].filter(Boolean).join(" ");
     const safeCat = escapeHtml(category || "Vehicle");
     const logoSrc = effectiveOrgLogo ? escapeHtml(effectiveOrgLogo) : "";
@@ -643,6 +688,16 @@ export function MachineQrDialog({
       padding: 5px 10px;
       border-radius: 6px;
     }
+    .driver-badge {
+      background: #ecfdf5;
+      color: #059669;
+      border: 1px solid #a7f3d0;
+      font-family: monospace;
+      font-weight: 700;
+      font-size: 12px;
+      padding: 5px 10px;
+      border-radius: 6px;
+    }
     .meta-line {
       font-size: 12px;
       color: #475569;
@@ -727,6 +782,7 @@ export function MachineQrDialog({
       <div class="identifiers">
         ${safePlate ? `<div class="plate-badge">PLATE: ${safePlate}</div>` : ""}
         ${safeReg ? `<div class="code-badge">UNIT: ${safeReg}</div>` : ""}
+        ${safeDriver ? `<div class="driver-badge">DRIVER: ${safeDriver}</div>` : ""}
       </div>
 
       ${
@@ -847,7 +903,7 @@ export function MachineQrDialog({
                 {machineName}
               </h3>
 
-              {/* License Plate & Unit Number Badges */}
+              {/* License Plate, Unit Number & Driver Badges */}
               <div className="flex flex-wrap items-center justify-center gap-1.5 mb-2.5">
                 {plateNumber && (
                   <span className="inline-flex items-center gap-1 bg-slate-950 text-white font-mono font-black text-xs px-2.5 py-1 rounded shadow-sm border border-slate-800 tracking-wider">
@@ -858,6 +914,12 @@ export function MachineQrDialog({
                 {registrationNumber && (
                   <span className="inline-flex items-center gap-1 bg-slate-100 text-slate-800 font-mono font-bold text-[11px] px-2 py-0.5 rounded border border-slate-300">
                     UNIT: {registrationNumber}
+                  </span>
+                )}
+                {assignedDriverName && (
+                  <span className="inline-flex items-center gap-1 bg-emerald-50 text-emerald-800 font-mono font-bold text-[11px] px-2 py-0.5 rounded border border-emerald-300">
+                    <User className="h-3 w-3 text-emerald-600" />
+                    DRIVER: {assignedDriverName}
                   </span>
                 )}
               </div>

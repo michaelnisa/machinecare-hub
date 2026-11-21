@@ -2453,6 +2453,8 @@ export default function FleetVehicleDetail() {
         vin={vehicle.vin}
         organisationName={organisation?.name}
         organisationLogoUrl={organisation?.logo_url}
+        assignedDriverName={currentDriver?.driver?.full_name}
+        assignedDriverId={currentDriver?.driver?.id}
       />
 
       {/* Update Odometer Modal */}

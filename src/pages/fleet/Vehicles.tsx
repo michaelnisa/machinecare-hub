@@ -1201,6 +1201,7 @@ export default function Vehicles() {
           vin={(qrMachine as any).vin}
           organisationName={organisation?.name}
           organisationLogoUrl={organisation?.logo_url}
+          assignedDriverName={currentDriver.get(qrMachine.id)?.name}
         />
       )}
 
