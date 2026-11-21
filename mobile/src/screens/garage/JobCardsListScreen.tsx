@@ -126,7 +126,7 @@ export const JobCardsListScreen: React.FC<JobCardsListScreenProps> = ({ onOpenDe
       {/* List */}
       <FlatList
         data={filtered}
-        keyExtractor={(item) => item.id}
+        keyExtractor={(item: any) => item.id}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.blue} />}
         contentContainerStyle={styles.listContent}
         ListEmptyComponent={
@@ -136,7 +136,7 @@ export const JobCardsListScreen: React.FC<JobCardsListScreenProps> = ({ onOpenDe
             <Text style={styles.emptySub}>Hakuna kazi zinazofanana na kigezo ulichochagua.</Text>
           </View>
         }
-        renderItem={({ item }) => {
+        renderItem={({ item }: { item: any }) => {
           const truckLabel = item.machines?.plate_number || item.machines?.name || "Vehicle";
           const woCode = item.wo_number ? `WO-${item.wo_year || 2026}-${String(item.wo_number).padStart(3, "0")}` : "WO";
 

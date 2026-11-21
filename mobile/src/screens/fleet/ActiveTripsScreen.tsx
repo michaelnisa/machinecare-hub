@@ -152,7 +152,7 @@ export const ActiveTripsScreen: React.FC<ActiveTripsScreenProps> = ({ onBack }) 
       {/* Trip List */}
       <FlatList
         data={filtered}
-        keyExtractor={(item) => item.id}
+        keyExtractor={(item: any) => item.id}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
         contentContainerStyle={styles.listContent}
         ListEmptyComponent={
@@ -164,7 +164,7 @@ export const ActiveTripsScreen: React.FC<ActiveTripsScreenProps> = ({ onBack }) 
             </Text>
           </View>
         }
-        renderItem={({ item }) => {
+        renderItem={({ item }: { item: any }) => {
           const truck = item.machines;
           const plate = truck?.plate_number || truck?.name || "TRUCK";
           const isOngoing = item.status === "in_progress" || item.status === "active";

@@ -111,11 +111,15 @@ export const QuickFuelLogScreen: React.FC<QuickFuelLogScreenProps> = ({ onBack, 
       });
 
       if (error) {
-        console.warn("Direct insert fuel log error, queueing receipt:", error);
         await queueReceipt({
-          amountTzs: costNum,
+          id: `fuel-${Date.now()}`,
+          tripId: "",
+          vehicleId: selectedVehicleId,
+          title: `Fuel: ${station}`,
           category: "fuel",
-          vendorName: station,
+          amount: costNum,
+          currency: "TZS",
+          notes: `${fuelLitres}L at ${station}. Odo: ${odometer || "N/A"}`,
           capturedAt: new Date().toISOString(),
         });
         Alert.alert("Imehifadhiwa Offline", "Taarifa za mafuta zimehifadhiwa na zitatumwa mtandao ukipatikana.");
@@ -200,7 +204,7 @@ export const QuickFuelLogScreen: React.FC<QuickFuelLogScreenProps> = ({ onBack, 
               placeholderTextColor={colors.textDim}
               keyboardType="numeric"
               value={fuelLitres}
-              onChangeText={(text) => {
+              onChangeText={(text: string) => {
                 setFuelLitres(text);
                 // Estimate cost at approx 3,250 TZS/L if empty
                 if (text && (!fuelCost || fuelCost === "0")) {

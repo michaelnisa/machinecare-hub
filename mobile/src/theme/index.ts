@@ -1,6 +1,7 @@
 export const colors = {
   background: "#090D16",
   card: "#111827",
+  surface: "#111827",
   cardSecondary: "#1A2234",
   border: "#232F45",
   borderLight: "#2E3D57",
@@ -9,6 +10,8 @@ export const colors = {
   primary: "#10B981", // Emerald 500
   primaryDark: "#059669",
   primarySoft: "rgba(16, 185, 129, 0.14)",
+  emerald: "#10B981",
+  emeraldSoft: "rgba(16, 185, 129, 0.14)",
 
   blue: "#3B82F6",
   blueSoft: "rgba(59, 130, 246, 0.14)",

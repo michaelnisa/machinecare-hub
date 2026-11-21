@@ -99,7 +99,7 @@ export const VehicleQrLookupScreen: React.FC<VehicleQrLookupScreenProps> = ({
       if (machineErr) throw machineErr;
 
       if (!machineData) {
-        Alert.alert("Gari Halikupatikana", `Hakuna gari linalolingana na "${q}". Jaribu plate nyingine.`);
+        Alert.alert("Gari Halikupatikana", `Hakuna gari linalolingana na "${parsed.value}". Jaribu plate nyingine.`);
         return;
       }
 

@@ -192,10 +192,10 @@ export const LiveFleetMapScreen: React.FC<LiveFleetMapScreenProps> = ({ onNaviga
       {/* Vehicle List */}
       <FlatList
         data={filtered}
-        keyExtractor={(item) => item.id}
+        keyExtractor={(item: any) => item.id}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
         contentContainerStyle={styles.listContent}
-        renderItem={({ item }) => {
+        renderItem={({ item }: { item: any }) => {
           const state = computeTelemetryState(item);
           const speed = item.telematics_speed || 0;
           const plate = item.plate_number || item.name;
