@@ -32,7 +32,7 @@ export const JobCardsListScreen: React.FC<JobCardsListScreenProps> = ({ onOpenDe
           proposed_remedy,
           created_at,
           machine_id,
-          machines:machine_id (id, name, plate_number, vehicle_code)
+          machines:machine_id (id, name, plate_number, registration_number)
         `)
         .order("created_at", { ascending: false })
         .limit(30);

@@ -12,7 +12,7 @@ interface ReceiptSnapperScreenProps {
 }
 
 export const ReceiptSnapperScreen: React.FC<ReceiptSnapperScreenProps> = ({ onBack, onSuccess }) => {
-  const { driverVehicle } = useAuth();
+  const { driverVehicle, user } = useAuth();
   const { queueReceipt } = useOfflineSync();
 
   const [category, setCategory] = useState<"fuel" | "toll" | "parking" | "fine" | "repair" | "other">("toll");
@@ -60,6 +60,8 @@ export const ReceiptSnapperScreen: React.FC<ReceiptSnapperScreenProps> = ({ onBa
         id: "rec-" + Date.now(),
         tripId: "active-trip",
         vehicleId: driverVehicle?.vehicleId || "unknown-truck",
+        organisationId: driverVehicle?.organisationId || undefined,
+        driverId: user?.id || undefined,
         title: finalTitle,
         category,
         amount: numAmt,

@@ -41,11 +41,25 @@ export const RoadsideSosScreen: React.FC<RoadsideSosScreenProps> = ({ onBack, on
       const sosTitle = `🚨 EMERGENCY ROADSIDE BREAKDOWN: ${driverVehicle.plateNumber} · ${selectedIssue?.label}`;
       const sosDesc = `[ROADSIDE SOS BEACON]: Location: ${currentLocation}. Issue: ${selectedIssue?.label} (${selectedIssue?.swahili}). Details: ${description || "Immediate mechanical recovery requested."}. Driver: ${user?.user_metadata?.full_name || "Driver"}.`;
 
+      let orgId = driverVehicle.organisationId;
+      if (!orgId) {
+        const { data: mData } = await supabase
+          .from("machines")
+          .select("organisation_id")
+          .eq("id", driverVehicle.vehicleId)
+          .maybeSingle();
+        orgId = mData?.organisation_id || "00000000-0000-0000-0000-000000000000";
+      }
+
       const { error } = await supabase.from("fault_reports").insert({
         machine_id: driverVehicle.vehicleId,
+        organisation_id: orgId,
         reporter_name: user?.user_metadata?.full_name || "Emergency Driver SOS",
+        reporter_phone: user?.phone || "0700000000",
+        severity: "critical",
         description: sosDesc,
         status: "open",
+        created_at: new Date().toISOString(),
       });
 
       if (error) throw error;

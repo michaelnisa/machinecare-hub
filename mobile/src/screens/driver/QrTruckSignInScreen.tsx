@@ -6,6 +6,8 @@ import { colors, radii, spacing } from "../../theme";
 import { Card } from "../../components/Card";
 import { QrCode, Truck, Check, ArrowLeft, Search } from "lucide-react-native";
 
+import { parseVehicleQrOrInput } from "../../utils/qrParser";
+
 interface QrTruckSignInScreenProps {
   onBack: () => void;
   onSuccess: () => void;
@@ -18,18 +20,23 @@ export const QrTruckSignInScreen: React.FC<QrTruckSignInScreenProps> = ({ onBack
   const [matchedVehicle, setMatchedVehicle] = useState<any | null>(null);
 
   const searchVehicle = async (term: string) => {
-    const q = term.trim().toUpperCase();
-    if (!q) return;
+    const parsed = parseVehicleQrOrInput(term);
+    if (!parsed.value) return;
 
     setLoading(true);
     try {
-      // Look up by vehicle_code, plate_number, or name
-      const { data, error } = await supabase
+      let query = supabase
         .from("machines")
-        .select("id, name, plate_number, vehicle_code, make, model, current_odometer_km, notes")
-        .or(`vehicle_code.ilike.%${q}%,plate_number.ilike.%${q}%,name.ilike.%${q}%`)
-        .limit(1)
-        .maybeSingle();
+        .select("id, name, plate_number, registration_number, serial_number, make, model, current_odometer_km, organisation_id, trailer_plate, notes");
+
+      if (parsed.type === "uuid") {
+        query = query.eq("id", parsed.value);
+      } else {
+        const q = parsed.value.toUpperCase();
+        query = query.or(`plate_number.ilike.%${q}%,name.ilike.%${q}%,registration_number.ilike.%${q}%,serial_number.ilike.%${q}%`);
+      }
+
+      const { data, error } = await query.limit(1).maybeSingle();
 
       if (error) throw error;
       if (data) {
@@ -41,7 +48,7 @@ export const QrTruckSignInScreen: React.FC<QrTruckSignInScreenProps> = ({ onBack
         }
         setMatchedVehicle({ ...data, meta });
       } else {
-        Alert.alert("Vehicle Not Found", `No active vehicle matched "${q}". Please check the plate or ID.`);
+        Alert.alert("Gari Halikupatikana", `Hakuna gari linalolingana na "${parsed.value}". Tafadhali hakiki QR code au namba ya gari.`);
       }
     } catch (e: any) {
       Alert.alert("Search Error", e.message || "Failed to search vehicle.");
@@ -53,18 +60,23 @@ export const QrTruckSignInScreen: React.FC<QrTruckSignInScreenProps> = ({ onBack
   const handleConfirmPair = async () => {
     if (!matchedVehicle) return;
 
+    const truckPlate = matchedVehicle.plate_number || matchedVehicle.registration_number || matchedVehicle.name;
+    const truckCode = matchedVehicle.registration_number || matchedVehicle.serial_number || "TRK";
+
     await pairDriverVehicle({
       vehicleId: matchedVehicle.id,
-      plateNumber: matchedVehicle.plate_number || matchedVehicle.name,
-      vehicleCode: matchedVehicle.vehicle_code || "TRK",
+      plateNumber: truckPlate,
+      vehicleCode: truckCode,
+      registrationNumber: matchedVehicle.registration_number,
       name: matchedVehicle.name,
       makeModel: [matchedVehicle.make, matchedVehicle.model].filter(Boolean).join(" "),
-      linkedTrailerPlate: matchedVehicle.meta?.linked_trailer_plate || null,
+      linkedTrailerPlate: matchedVehicle.trailer_plate || matchedVehicle.meta?.linked_trailer_plate || null,
       odometerKm: matchedVehicle.current_odometer_km,
+      organisationId: matchedVehicle.organisation_id,
       pairedAt: new Date().toISOString(),
     });
 
-    Alert.alert("Coupled Successfully!", `You are now operating ${matchedVehicle.plateNumber || matchedVehicle.name}.`);
+    Alert.alert("Coupled Successfully!", `Umeunganishwa na gari ${truckPlate}. Karibu kazini!`);
     onSuccess();
   };
 
@@ -121,7 +133,7 @@ export const QrTruckSignInScreen: React.FC<QrTruckSignInScreenProps> = ({ onBack
                   {matchedVehicle.plate_number || matchedVehicle.name}
                 </Text>
                 <Text style={styles.matchCode}>
-                  ID: {matchedVehicle.vehicle_code} · {matchedVehicle.make} {matchedVehicle.model}
+                  ID: {matchedVehicle.registration_number || matchedVehicle.serial_number || "TRK"} · {[matchedVehicle.make, matchedVehicle.model].filter(Boolean).join(" ")}
                 </Text>
               </View>
             </View>

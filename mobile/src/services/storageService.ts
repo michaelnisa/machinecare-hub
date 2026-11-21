@@ -3,6 +3,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 const KEYS = {
   ACTIVE_ROLE: "mc_mobile_active_role",
   DRIVER_VEHICLE: "mc_mobile_driver_vehicle",
+  SAVED_PROFILE: "mc_mobile_saved_profile",
   OFFLINE_RECEIPTS: "mc_mobile_offline_receipts_queue",
   OFFLINE_INSPECTIONS: "mc_mobile_offline_inspections_queue",
   CACHED_JOB_CARDS: "mc_mobile_cached_job_cards",
@@ -15,10 +16,12 @@ export interface DriverVehicleBinding {
   vehicleId: string;
   plateNumber: string;
   vehicleCode: string;
+  registrationNumber?: string | null;
   name: string;
   makeModel?: string;
   linkedTrailerPlate?: string | null;
   odometerKm?: number | null;
+  organisationId?: string | null;
   pairedAt: string;
 }
 
@@ -26,6 +29,8 @@ export interface OfflineReceiptItem {
   id: string;
   tripId: string;
   vehicleId: string;
+  organisationId?: string;
+  driverId?: string;
   title: string;
   category: "fuel" | "toll" | "parking" | "fine" | "repair" | "other";
   amount: number;
@@ -39,8 +44,10 @@ export interface OfflineReceiptItem {
 export interface OfflineInspectionItem {
   id: string;
   vehicleId: string;
+  organisationId?: string;
   driverId?: string;
   inspectorName: string;
+  inspectorPhone?: string;
   tyresOk: boolean;
   oilCoolantOk: boolean;
   brakesOk: boolean;
@@ -124,5 +131,23 @@ export const storageService = {
     const list = await this.getOfflineInspections();
     const remaining = list.filter((x) => !syncedIds.includes(x.id));
     await AsyncStorage.setItem(KEYS.OFFLINE_INSPECTIONS, JSON.stringify(remaining));
+  },
+
+  // Saved Profile & Org metadata
+  async getSavedProfile(): Promise<any | null> {
+    try {
+      const raw = await AsyncStorage.getItem(KEYS.SAVED_PROFILE);
+      return raw ? JSON.parse(raw) : null;
+    } catch {
+      return null;
+    }
+  },
+
+  async setSavedProfile(profile: any | null): Promise<void> {
+    if (profile) {
+      await AsyncStorage.setItem(KEYS.SAVED_PROFILE, JSON.stringify(profile));
+    } else {
+      await AsyncStorage.removeItem(KEYS.SAVED_PROFILE);
+    }
   },
 };

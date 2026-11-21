@@ -7,6 +7,7 @@ import { OfflineBanner } from "../components/OfflineBanner";
 
 // Common
 import { RoleSelectScreen } from "../screens/common/RoleSelectScreen";
+import { LoginScreen } from "../screens/common/LoginScreen";
 
 // Driver Screens
 import { DriverHomeScreen } from "../screens/driver/DriverHomeScreen";
@@ -33,6 +34,7 @@ import { GpsDiagnosticScreen } from "../screens/telematics/GpsDiagnosticScreen";
 export const RootNavigator: React.FC = () => {
   const { role } = useAuth();
   const [showRolePicker, setShowRolePicker] = useState(false);
+  const [showLogin, setShowLogin] = useState(false);
   const [currentScreen, setCurrentScreen] = useState<string>("home");
   const [screenParams, setScreenParams] = useState<any>({});
 
@@ -53,7 +55,17 @@ export const RootNavigator: React.FC = () => {
   };
 
   const renderActiveScreen = () => {
-    // 1. Role Picker Modal / Screen
+    // 1. Login Screen
+    if (showLogin) {
+      return (
+        <LoginScreen
+          onSuccess={() => setShowLogin(false)}
+          onSkipToField={() => setShowLogin(false)}
+        />
+      );
+    }
+
+    // 2. Role Picker Modal / Screen
     if (showRolePicker) {
       return (
         <RoleSelectScreen
@@ -65,7 +77,7 @@ export const RootNavigator: React.FC = () => {
       );
     }
 
-    // 2. Driver Persona
+    // 3. Driver Persona
     if (role === "driver") {
       switch (currentScreen) {
         case "QrTruckSignIn":
@@ -105,7 +117,7 @@ export const RootNavigator: React.FC = () => {
       }
     }
 
-    // 3. Garage & Workshop Persona
+    // 4. Garage & Workshop Persona
     if (role === "mechanic") {
       switch (currentScreen) {
         case "JobCardDetail":
@@ -144,7 +156,7 @@ export const RootNavigator: React.FC = () => {
       }
     }
 
-    // 4. Fleet & Logistics Dispatcher Persona
+    // 5. Fleet & Logistics Dispatcher Persona
     if (role === "dispatcher") {
       switch (currentScreen) {
         case "ActiveTrips":
@@ -160,7 +172,7 @@ export const RootNavigator: React.FC = () => {
       }
     }
 
-    // 5. GPS & Telematics Technician Persona
+    // 6. GPS & Telematics Technician Persona
     if (role === "telematics") {
       switch (currentScreen) {
         case "GpsDiagnostic":
@@ -195,6 +207,7 @@ export const RootNavigator: React.FC = () => {
       <StatusBar barStyle="light-content" backgroundColor={colors.background} />
       <Header
         onSwitchRolePress={() => setShowRolePicker((prev) => !prev)}
+        onOpenLogin={() => setShowLogin(true)}
       />
       <OfflineBanner />
       <View style={styles.content}>{renderActiveScreen()}</View>

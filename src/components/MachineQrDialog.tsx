@@ -951,10 +951,10 @@ export function MachineQrDialog({
 
               {/* Call to Action Text */}
               <p className="text-xs font-black uppercase text-slate-900 tracking-wide mb-0.5">
-                Scan With Phone Camera
+                Scan With MachineCare App or Camera
               </p>
               <p className="text-[10.5px] text-slate-500 font-medium leading-tight max-w-[260px] mx-auto mb-2">
-                Daily Inspection · Maintenance Log · Report Faults
+                Driver QR Coupling · 60s Walkaround · Garage Job Cards
               </p>
 
               {/* Footer */}

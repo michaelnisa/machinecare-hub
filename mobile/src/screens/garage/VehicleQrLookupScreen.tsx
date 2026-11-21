@@ -26,6 +26,8 @@ import {
   ShieldAlert,
 } from "lucide-react-native";
 
+import { parseVehicleQrOrInput } from "../../utils/qrParser";
+
 interface VehicleQrLookupScreenProps {
   onBack: () => void;
   onOpenJobCard?: (woId: string) => void;
@@ -44,8 +46,9 @@ export const VehicleQrLookupScreen: React.FC<VehicleQrLookupScreenProps> = ({
   const [faults, setFaults] = useState<any[]>([]);
 
   const handleSearch = async (termToSearch?: string) => {
-    const q = (termToSearch || searchTerm).trim().toUpperCase();
-    if (!q) {
+    const raw = termToSearch || searchTerm;
+    const parsed = parseVehicleQrOrInput(raw);
+    if (!parsed.value) {
       Alert.alert("Ingiza Nambari", "Tafadhali ingiza namba ya gari, QR code au chassis number.");
       return;
     }
@@ -57,10 +60,11 @@ export const VehicleQrLookupScreen: React.FC<VehicleQrLookupScreenProps> = ({
       setFaults([]);
 
       // 1. Fetch Machine
-      const { data: machineData, error: machineErr } = await supabase
+      let query = supabase
         .from("machines")
         .select(`
           id,
+          organisation_id,
           name,
           plate_number,
           registration_number,
@@ -79,8 +83,16 @@ export const VehicleQrLookupScreen: React.FC<VehicleQrLookupScreenProps> = ({
           telematics_battery_volt,
           telematics_last_at,
           telematics_speed
-        `)
-        .or(`plate_number.ilike.%${q}%,name.ilike.%${q}%,registration_number.ilike.%${q}%,serial_number.ilike.%${q}%,vin.ilike.%${q}%`)
+        `);
+
+      if (parsed.type === "uuid") {
+        query = query.eq("id", parsed.value);
+      } else {
+        const q = parsed.value.toUpperCase();
+        query = query.or(`plate_number.ilike.%${q}%,name.ilike.%${q}%,registration_number.ilike.%${q}%,serial_number.ilike.%${q}%,vin.ilike.%${q}%`);
+      }
+
+      const { data: machineData, error: machineErr } = await query
         .limit(1)
         .maybeSingle();
 
