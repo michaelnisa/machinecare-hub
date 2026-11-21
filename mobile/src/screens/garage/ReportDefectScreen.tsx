@@ -110,14 +110,20 @@ export const ReportDefectScreen: React.FC<ReportDefectScreenProps> = ({
 
       if (faultError) {
         console.warn("Fault report direct insert error, queueing offline:", faultError);
-        // Queue offline
         await queueInspection({
+          id: "def-" + Date.now(),
           vehicleId: targetMachineId,
-          vehiclePlate: plate.trim(),
-          items: [{ key: category, pass: false, defectNote: description.trim() }],
-          completedAt: new Date().toISOString(),
-          allPassed: false,
-          poshoConfirmed: false,
+          organisationId: targetOrgId,
+          inspectorName: reporterName.trim() || "Workshop Mechanic",
+          inspectorPhone: reporterPhone.trim() || "0700000000",
+          tyresOk: category !== "Suspension & Tyres",
+          oilCoolantOk: category !== "Engine & Cooling",
+          brakesOk: category !== "Braking System",
+          lightsOk: category !== "Electrical & Battery",
+          trailerLockOk: category !== "Chassis & Trailer Pin",
+          defectNotes: `[${category}] ${description.trim()}`,
+          odometerKm: Number(odometer) || 0,
+          recordedAt: new Date().toISOString(),
         });
 
         Alert.alert(

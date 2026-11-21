@@ -37,8 +37,10 @@ export const PreStartInspectionScreen: React.FC<PreStartInspectionScreenProps> =
       await queueInspection({
         id: "ins-" + Date.now(),
         vehicleId: driverVehicle.vehicleId,
+        organisationId: driverVehicle.organisationId,
         driverId: user?.id,
         inspectorName: user?.user_metadata?.full_name || "Commercial Driver",
+        inspectorPhone: user?.phone || "0700000000",
         tyresOk,
         oilCoolantOk,
         brakesOk,
