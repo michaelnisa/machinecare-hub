@@ -64,18 +64,24 @@ export const GpsDiagnosticScreen: React.FC<GpsDiagnosticScreenProps> = ({
       if (plate) {
         const { data } = await supabase
           .from("machines")
-          .select("telematics_imei, telematics_ignition, telematics_battery_volt, telematics_latitude, telematics_longitude, telematics_last_at")
+          .select("telematics_imei, telematics_ignition, telematics_battery_volt, telematics_latitude, telematics_longitude, telematics_last_at, notes")
           .or(`plate_number.ilike.%${plate}%,name.ilike.%${plate}%`)
           .limit(1)
           .maybeSingle();
 
         if (data) {
+          let notesMeta: any = {};
+          try {
+            if ((data as any).notes) notesMeta = JSON.parse((data as any).notes);
+          } catch {}
+          const tMeta = notesMeta?.telematics || {};
+
           setTelemetry((prev) => ({
             ...prev,
-            ignition: data.telematics_ignition ?? prev.ignition,
-            batteryVolt: data.telematics_battery_volt ?? prev.batteryVolt,
-            latitude: data.telematics_latitude ?? prev.latitude,
-            longitude: data.telematics_longitude ?? prev.longitude,
+            ignition: data.telematics_ignition ?? tMeta.ignition ?? prev.ignition,
+            batteryVolt: data.telematics_battery_volt ?? tMeta.battery_volt ?? prev.batteryVolt,
+            latitude: data.telematics_latitude ?? tMeta.latitude ?? prev.latitude,
+            longitude: data.telematics_longitude ?? tMeta.longitude ?? prev.longitude,
             lastPing: data.telematics_last_at ? new Date(data.telematics_last_at).toLocaleTimeString() : "Just now",
           }));
         }

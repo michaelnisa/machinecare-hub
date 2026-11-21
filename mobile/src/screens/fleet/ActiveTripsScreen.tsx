@@ -34,6 +34,7 @@ interface ActiveTripsScreenProps {
 export const ActiveTripsScreen: React.FC<ActiveTripsScreenProps> = ({ onBack }) => {
   const [trips, setTrips] = useState<any[]>([]);
   const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -64,7 +65,7 @@ export const ActiveTripsScreen: React.FC<ActiveTripsScreenProps> = ({ onBack }) 
           )
         `)
         .order("created_at", { ascending: false })
-        .limit(25);
+        .limit(30);
 
       if (!error && data) {
         setTrips(data);
@@ -117,6 +118,15 @@ export const ActiveTripsScreen: React.FC<ActiveTripsScreenProps> = ({ onBack }) 
   };
 
   const filtered = trips.filter((t) => {
+    if (statusFilter !== "all") {
+      if (statusFilter === "in_progress") {
+        if (t.status !== "in_progress" && t.status !== "active") return false;
+      } else if (statusFilter === "dispatched") {
+        if (t.status !== "dispatched" && t.status !== "pending") return false;
+      } else if (statusFilter === "completed") {
+        if (t.status !== "completed") return false;
+      }
+    }
     if (!search.trim()) return true;
     const q = search.toLowerCase();
     const truck = t.machines?.plate_number || t.machines?.name || "";
@@ -135,7 +145,7 @@ export const ActiveTripsScreen: React.FC<ActiveTripsScreenProps> = ({ onBack }) 
         <Text style={styles.headerTitle}>Highway Trips & Corridors</Text>
       </View>
 
-      {/* Search Input */}
+      {/* Search & Filter Section */}
       <View style={styles.searchSection}>
         <View style={styles.searchRow}>
           <Search size={16} color={colors.textMuted} />
@@ -146,6 +156,30 @@ export const ActiveTripsScreen: React.FC<ActiveTripsScreenProps> = ({ onBack }) 
             value={search}
             onChangeText={setSearch}
           />
+        </View>
+
+        <View style={styles.filterRow}>
+          {[
+            { id: "all", label: "ZOTE" },
+            { id: "in_progress", label: "NJIANI" },
+            { id: "dispatched", label: "DISPATCHED" },
+            { id: "completed", label: "COMPLETED" },
+          ].map((item) => (
+            <TouchableOpacity
+              key={item.id}
+              style={[styles.filterPill, statusFilter === item.id && styles.filterPillActive]}
+              onPress={() => setStatusFilter(item.id)}
+            >
+              <Text
+                style={[
+                  styles.filterPillText,
+                  statusFilter === item.id && styles.filterPillTextActive,
+                ]}
+              >
+                {item.label}
+              </Text>
+            </TouchableOpacity>
+          ))}
         </View>
       </View>
 
@@ -285,6 +319,32 @@ const styles = StyleSheet.create({
     color: colors.text,
     fontSize: 13,
     paddingVertical: 8,
+  },
+  filterRow: {
+    flexDirection: "row",
+    gap: spacing.xs,
+    marginTop: spacing.sm,
+  },
+  filterPill: {
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 5,
+    borderRadius: radii.sm,
+    backgroundColor: colors.background,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  filterPillActive: {
+    backgroundColor: colors.primary,
+    borderColor: colors.primary,
+  },
+  filterPillText: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: colors.textMuted,
+  },
+  filterPillTextActive: {
+    color: "#FFF",
+    fontWeight: "800",
   },
   listContent: {
     padding: spacing.md,

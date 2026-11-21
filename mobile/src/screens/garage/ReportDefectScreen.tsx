@@ -79,7 +79,7 @@ export const ReportDefectScreen: React.FC<ReportDefectScreenProps> = ({
       const { data: mData } = await supabase
         .from("machines")
         .select("id, organisation_id")
-        .or(`plate_number.ilike.%${plate.trim()}%,name.ilike.%${plate.trim()}%`)
+        .or(`plate_number.ilike.%${plate.trim()}%,name.ilike.%${plate.trim()}%,registration_number.ilike.%${plate.trim()}%`)
         .limit(1)
         .maybeSingle();
 
@@ -88,9 +88,12 @@ export const ReportDefectScreen: React.FC<ReportDefectScreenProps> = ({
         targetOrgId = mData.organisation_id || targetOrgId;
       }
 
-      if (!targetMachineId) {
-        // Fallback dummy machine ID if not found so offline queue doesn't fail
-        targetMachineId = "00000000-0000-0000-0000-000000000000";
+      if (!targetMachineId || targetMachineId === "00000000-0000-0000-0000-000000000000") {
+        Alert.alert(
+          "Gari Halikupatikana",
+          `Hakuna gari linalolingana na "${plate.trim()}". Tafadhali hakikisha plate number au chagua gari sahihi.`
+        );
+        return;
       }
 
       const faultPayload = {

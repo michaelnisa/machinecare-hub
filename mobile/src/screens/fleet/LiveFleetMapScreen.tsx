@@ -56,7 +56,8 @@ export const LiveFleetMapScreen: React.FC<LiveFleetMapScreenProps> = ({ onNaviga
           telematics_battery_volt,
           telematics_latitude,
           telematics_longitude,
-          telematics_last_at
+          telematics_last_at,
+          notes
         `)
         .order("plate_number", { ascending: true });
 
@@ -84,8 +85,15 @@ export const LiveFleetMapScreen: React.FC<LiveFleetMapScreenProps> = ({ onNaviga
   };
 
   const computeTelemetryState = (v: any): "moving" | "idle" | "stopped" => {
-    const speed = v.telematics_speed || 0;
-    const ignition = v.telematics_ignition;
+    let tMeta: any = {};
+    if (v.notes) {
+      try {
+        const parsed = JSON.parse(v.notes);
+        tMeta = parsed?.telematics || {};
+      } catch {}
+    }
+    const speed = v.telematics_speed ?? tMeta.speed ?? 0;
+    const ignition = v.telematics_ignition ?? tMeta.ignition;
     if (speed > 3) return "moving";
     if (ignition) return "idle";
     return "stopped";

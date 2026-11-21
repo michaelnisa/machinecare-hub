@@ -13,6 +13,7 @@ import {
 } from "react-native";
 import { useAuth } from "../../context/AuthContext";
 import { supabase } from "../../config/supabase";
+import { storageService } from "../../services/storageService";
 import { colors, radii, spacing } from "../../theme";
 import { Card } from "../../components/Card";
 import { StatusBadge } from "../../components/StatusBadge";
@@ -173,7 +174,7 @@ export const DriverHomeScreen: React.FC<DriverHomeScreenProps> = ({ onNavigate }
             });
           }
 
-          // Fetch itemized expenses for this trip
+          // Fetch itemized expenses for this trip from Supabase
           const { data: expData } = await (supabase as any)
             .from("trip_expenses")
             .select("id, expense_type, title, amount, currency, reference_number, occurred_at")
@@ -181,7 +182,20 @@ export const DriverHomeScreen: React.FC<DriverHomeScreenProps> = ({ onNavigate }
             .order("occurred_at", { ascending: false })
             .limit(10);
 
-          setTripExpenses(expData || []);
+          // Also merge any offline queued receipts for this trip/vehicle
+          const offlineReceipts = await storageService.getOfflineReceipts();
+          const pendingForTrip = offlineReceipts.map((o) => ({
+            id: o.id,
+            expense_type: o.category,
+            title: o.title,
+            amount: o.amount,
+            currency: o.currency || "TZS",
+            reference_number: o.receiptNo || "Offline",
+            occurred_at: o.recordedAt,
+            isOffline: true,
+          }));
+
+          setTripExpenses([...pendingForTrip, ...(expData || [])]);
         } else if (dispatched) {
           setActiveTrip(null);
           setPendingTrip(dispatched);
@@ -558,7 +572,14 @@ export const DriverHomeScreen: React.FC<DriverHomeScreenProps> = ({ onNavigate }
               {tripExpenses.slice(0, 3).map((exp) => (
                 <View key={exp.id} style={styles.receiptRow}>
                   <View style={{ flex: 1 }}>
-                    <Text style={styles.receiptRowTitle}>{exp.title}</Text>
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+                      <Text style={styles.receiptRowTitle}>{exp.title}</Text>
+                      {exp.isOffline && (
+                        <Text style={{ fontSize: 9, fontWeight: "800", color: colors.amber }}>
+                          • OFFLINE
+                        </Text>
+                      )}
+                    </View>
                     <Text style={styles.receiptRowMeta}>
                       [{exp.expense_type?.toUpperCase()}] • {new Date(exp.occurred_at).toLocaleDateString()}
                     </Text>

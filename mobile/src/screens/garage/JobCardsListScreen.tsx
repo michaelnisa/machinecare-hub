@@ -58,7 +58,13 @@ export const JobCardsListScreen: React.FC<JobCardsListScreenProps> = ({ onOpenDe
   };
 
   const filtered = workOrders.filter((w) => {
-    if (filter !== "all" && w.status !== filter) return false;
+    if (filter !== "all") {
+      if (filter === "completed") {
+        if (w.status !== "done" && w.status !== "completed" && w.status !== "closed") return false;
+      } else if (w.status !== filter) {
+        return false;
+      }
+    }
     if (!search.trim()) return true;
     const q = search.toLowerCase();
     const truck = w.machines?.plate_number || w.machines?.name || "";

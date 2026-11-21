@@ -27,7 +27,7 @@ export default function FieldAppHub() {
   const [copiedUrl, setCopiedUrl] = useState(false);
   const [copiedCode, setCopiedCode] = useState(false);
 
-  const supabaseUrl = "https://hvihfqlzwblsytdvkanz.supabase.co";
+  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || "https://hvihfqlzwblsytdvkanz.supabase.co";
   const orgName = organisation?.name || "Logistixware Logistics Limited";
   const orgId = organisation?.id || "df6b0c4b-e56b-4694-838a-0381eb480043";
 

@@ -95,7 +95,24 @@ export const syncEngine = {
               syncedIds.push(r.id);
               result.receiptsSynced++;
             } else {
-              result.errors.push(`Receipt error (${r.title}): ${error.message}`);
+              // Fallback: If trip_expenses table fails, append expense to trip route_notes
+              const expenseNote = `[Expense ${r.category.toUpperCase()}]: ${r.title} (TZS ${r.amount.toLocaleString()})`;
+              const { data: tripData } = await supabase
+                .from("trips")
+                .select("route_notes")
+                .eq("id", targetTripId)
+                .maybeSingle();
+
+              const prevNotes = tripData?.route_notes || "";
+              await supabase
+                .from("trips")
+                .update({
+                  route_notes: prevNotes ? `${prevNotes}\n${expenseNote}` : expenseNote,
+                })
+                .eq("id", targetTripId);
+
+              syncedIds.push(r.id);
+              result.receiptsSynced++;
             }
           } else {
             // No active trip found yet: keep in offline queue until trip is dispatched
@@ -111,7 +128,7 @@ export const syncEngine = {
       }
     }
 
-    // 2. Sync Inspections to fault_reports
+    // 2. Sync Inspections to fault_reports & machines odometer
     const inspections = await storageService.getOfflineInspections();
     if (inspections.length > 0) {
       const syncedIds: string[] = [];
@@ -120,6 +137,7 @@ export const syncEngine = {
         try {
           const hasDefect = !ins.tyresOk || !ins.oilCoolantOk || !ins.brakesOk || !ins.lightsOk || !ins.trailerLockOk;
 
+          // Sync defect report to workshop if any check failed
           if (hasDefect && isUuid(ins.vehicleId)) {
             let targetOrgId = ins.organisationId || (await getMachineOrg(ins.vehicleId));
 
@@ -148,6 +166,14 @@ export const syncEngine = {
                 continue;
               }
             }
+          }
+
+          // Always synchronize latest vehicle odometer if provided
+          if (ins.odometerKm && ins.odometerKm > 0 && isUuid(ins.vehicleId)) {
+            await supabase
+              .from("machines")
+              .update({ current_odometer_km: ins.odometerKm })
+              .eq("id", ins.vehicleId);
           }
 
           syncedIds.push(ins.id);

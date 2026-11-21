@@ -120,7 +120,7 @@ export const QuickFuelLogScreen: React.FC<QuickFuelLogScreenProps> = ({ onBack, 
           amount: costNum,
           currency: "TZS",
           notes: `${fuelLitres}L at ${station}. Odo: ${odometer || "N/A"}`,
-          capturedAt: new Date().toISOString(),
+          recordedAt: new Date().toISOString(),
         });
         Alert.alert("Imehifadhiwa Offline", "Taarifa za mafuta zimehifadhiwa na zitatumwa mtandao ukipatikana.");
       } else {

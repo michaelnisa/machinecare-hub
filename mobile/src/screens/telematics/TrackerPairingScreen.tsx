@@ -53,7 +53,7 @@ export const TrackerPairingScreen: React.FC<TrackerPairingScreenProps> = ({
       try {
         const { data } = await supabase
           .from("machines")
-          .select("id, name, plate_number, telematics_imei, make, model")
+          .select("id, name, plate_number, telematics_imei, make, model, notes")
           .order("plate_number", { ascending: true })
           .limit(60);
 
@@ -92,11 +92,23 @@ export const TrackerPairingScreen: React.FC<TrackerPairingScreenProps> = ({
     try {
       setPairing(true);
 
+      // Update both column and notes JSON for complete compatibility
+      let notesObj: any = {};
+      try {
+        if (matchedVehicle.notes) notesObj = JSON.parse(matchedVehicle.notes);
+      } catch {}
+      notesObj.telematics_imei = cleanImei;
+      notesObj.telematics = {
+        ...(notesObj.telematics || {}),
+        imei: cleanImei,
+      };
+
       const { error } = await supabase
         .from("machines")
         .update({
           telematics_imei: cleanImei,
           telematics_last_at: new Date().toISOString(),
+          notes: JSON.stringify(notesObj),
         })
         .eq("id", matchedVehicle.id);
 

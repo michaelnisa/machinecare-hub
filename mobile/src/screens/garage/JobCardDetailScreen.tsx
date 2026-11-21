@@ -78,6 +78,7 @@ export const JobCardDetailScreen: React.FC<JobCardDetailScreenProps> = ({ woId, 
           proposed_remedy,
           actual_work_done,
           technician_comment,
+          remarks,
           created_at,
           started_at,
           completed_at,
@@ -97,9 +98,23 @@ export const JobCardDetailScreen: React.FC<JobCardDetailScreenProps> = ({ woId, 
 
       if (!error && data) {
         setWo(data);
-        setStatus(data.status || "in_progress");
+        const mappedStatus = (data.status === "done" || data.status === "closed") ? "completed" : (data.status || "in_progress");
+        setStatus(mappedStatus);
         setActualWorkDone(data.actual_work_done || "");
         setTechnicianComment(data.technician_comment || "");
+
+        // Restore spare parts and checklist tasks from remarks if present
+        if (data.remarks) {
+          try {
+            const meta = JSON.parse(data.remarks);
+            if (Array.isArray(meta.parts) && meta.parts.length > 0) {
+              setParts(meta.parts);
+            }
+            if (Array.isArray(meta.tasks) && meta.tasks.length > 0) {
+              setTasks(meta.tasks);
+            }
+          } catch {}
+        }
       }
     } catch (e) {
       console.warn("Failed to load work order detail:", e);
@@ -143,18 +158,35 @@ export const JobCardDetailScreen: React.FC<JobCardDetailScreenProps> = ({ woId, 
     try {
       setSaving(true);
       const nextStatus = targetStatus || status;
+      const dbStatus = nextStatus === "completed" ? "done" : nextStatus;
+
+      // Preserve existing metadata in remarks while persisting parts and tasks
+      let existingMeta: any = {};
+      try {
+        if (wo?.remarks) existingMeta = JSON.parse(wo.remarks);
+      } catch {}
+
+      const updatedMeta = {
+        ...existingMeta,
+        parts,
+        tasks,
+        technician_name: wo?.assignee_name || "Workshop Mechanic",
+        last_updated_via: "mobile_job_card",
+      };
 
       const updatePayload: any = {
-        status: nextStatus,
+        status: dbStatus,
         actual_work_done: actualWorkDone,
         technician_comment: technicianComment,
+        remarks: JSON.stringify(updatedMeta),
         updated_at: new Date().toISOString(),
       };
 
-      if (nextStatus === "in_progress" && !wo?.started_at) {
+      if (dbStatus === "in_progress" && !wo?.started_at) {
         updatePayload.started_at = new Date().toISOString();
       }
-      if (nextStatus === "completed") {
+      if (dbStatus === "done") {
+        updatePayload.finished_at = new Date().toISOString();
         updatePayload.completed_at = new Date().toISOString();
       }
 
