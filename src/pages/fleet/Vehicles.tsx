@@ -1235,7 +1235,8 @@ export function VehicleDialog({
   existingCount?: number;
   onSaved: (createdRecord?: any) => void;
 }) {
-  const { profile, user } = useAuth();
+  const { profile, user, organisation } = useAuth();
+  const isEnterprise = isEnterpriseFleet(organisation);
   const { t } = useI18n();
   const [submitting, setSubmitting] = useState(false);
   const [form, setForm] = useState<typeof EMPTY_FORM>(EMPTY_FORM);
