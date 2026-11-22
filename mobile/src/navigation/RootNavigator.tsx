@@ -8,6 +8,9 @@ import { OfflineBanner } from "../components/OfflineBanner";
 // Common
 import { RoleSelectScreen } from "../screens/common/RoleSelectScreen";
 import { LoginScreen } from "../screens/common/LoginScreen";
+import { OnboardingScreen } from "../screens/common/OnboardingScreen";
+import { ActivityIndicator, Text } from "react-native";
+import { Truck } from "lucide-react-native";
 
 // Driver Screens
 import { DriverHomeScreen } from "../screens/driver/DriverHomeScreen";
@@ -32,9 +35,19 @@ import { TrackerPairingScreen } from "../screens/telematics/TrackerPairingScreen
 import { GpsDiagnosticScreen } from "../screens/telematics/GpsDiagnosticScreen";
 
 export const RootNavigator: React.FC = () => {
-  const { role } = useAuth();
+  const {
+    user,
+    role,
+    isLoading,
+    hasCompletedOnboarding,
+    isFieldMode,
+    completeOnboarding,
+    enterFieldMode,
+  } = useAuth();
+
   const [showRolePicker, setShowRolePicker] = useState(false);
   const [showLogin, setShowLogin] = useState(false);
+  const [showOnboarding, setShowOnboarding] = useState(false);
   const [currentScreen, setCurrentScreen] = useState<string>("home");
   const [screenParams, setScreenParams] = useState<any>({});
 
@@ -54,18 +67,61 @@ export const RootNavigator: React.FC = () => {
     setScreenParams({});
   };
 
+  // 1. Loading Splash
+  if (isLoading) {
+    return (
+      <View style={styles.splashContainer}>
+        <View style={styles.splashIconCircle}>
+          <Truck size={42} color="#FFF" />
+        </View>
+        <Text style={styles.splashTitle}>MachineCare Hub</Text>
+        <Text style={styles.splashSub}>Fleet, Garage & Telematics Field Companion</Text>
+        <ActivityIndicator size="small" color={colors.primary} style={{ marginTop: 24 }} />
+      </View>
+    );
+  }
+
+  // 2. Onboarding Gate (First Launch or User Revisit)
+  if (!hasCompletedOnboarding || showOnboarding) {
+    return (
+      <OnboardingScreen
+        onComplete={async () => {
+          setShowOnboarding(false);
+          await completeOnboarding();
+        }}
+        onFieldMode={async () => {
+          setShowOnboarding(false);
+          await completeOnboarding();
+          await enterFieldMode();
+        }}
+      />
+    );
+  }
+
+  // 3. Authentication Gate: If not signed in and not explicitly in Field Mode
+  if (!user && !isFieldMode) {
+    return (
+      <LoginScreen
+        onSuccess={() => {}}
+        onSkipToField={enterFieldMode}
+        onRevisitOnboarding={() => setShowOnboarding(true)}
+      />
+    );
+  }
+
   const renderActiveScreen = () => {
-    // 1. Login Screen
+    // A. Explicit Login Modal (e.g. from Field Mode Header button)
     if (showLogin) {
       return (
         <LoginScreen
           onSuccess={() => setShowLogin(false)}
           onSkipToField={() => setShowLogin(false)}
+          onRevisitOnboarding={() => setShowOnboarding(true)}
         />
       );
     }
 
-    // 2. Role Picker Modal / Screen
+    // B. Role Picker Modal / Screen
     if (showRolePicker) {
       return (
         <RoleSelectScreen
@@ -222,5 +278,33 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
+  },
+  splashContainer: {
+    flex: 1,
+    backgroundColor: colors.background,
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 24,
+  },
+  splashIconCircle: {
+    width: 88,
+    height: 88,
+    borderRadius: 44,
+    backgroundColor: colors.primary,
+    justifyContent: "center",
+    alignItems: "center",
+    marginBottom: 16,
+  },
+  splashTitle: {
+    fontSize: 24,
+    fontWeight: "900",
+    color: colors.text,
+    letterSpacing: -0.5,
+  },
+  splashSub: {
+    fontSize: 13,
+    color: colors.textMuted,
+    marginTop: 4,
+    textAlign: "center",
   },
 });

@@ -1,5 +1,5 @@
 import React from "react";
-import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
+import { View, Text, TouchableOpacity, StyleSheet, Alert } from "react-native";
 import { useAuth } from "../context/AuthContext";
 import { colors, radii, spacing } from "../theme";
 import { Users, Truck, Wrench, Navigation, Radio, LogIn, LogOut, Building2 } from "lucide-react-native";
@@ -12,6 +12,21 @@ interface HeaderProps {
 
 export const Header: React.FC<HeaderProps> = ({ title, onSwitchRolePress, onOpenLogin }) => {
   const { role, user, organisation, signOut } = useAuth();
+
+  const handleSignOutPress = () => {
+    Alert.alert(
+      "Ondoka Kwenye Akaunti (Sign Out)",
+      `Je, una uhakika unataka kuondoka kwenye akaunti ya ${organisation?.name || "MachineCare"}?`,
+      [
+        { text: "Hapana (Cancel)", style: "cancel" },
+        {
+          text: "Ndio, Ondoka",
+          style: "destructive",
+          onPress: signOut,
+        },
+      ]
+    );
+  };
 
   const getRoleMeta = () => {
     switch (role) {
@@ -58,10 +73,10 @@ export const Header: React.FC<HeaderProps> = ({ title, onSwitchRolePress, onOpen
         {user ? (
           <TouchableOpacity
             style={styles.authBtn}
-            onPress={signOut}
+            onPress={handleSignOutPress}
             activeOpacity={0.7}
           >
-            <LogOut size={14} color={colors.textMuted} />
+            <LogOut size={14} color={colors.rose} />
           </TouchableOpacity>
         ) : (
           <TouchableOpacity

@@ -9,10 +9,15 @@ interface AuthContextType {
   role: MobileRole;
   driverVehicle: DriverVehicleBinding | null;
   isLoading: boolean;
+  hasCompletedOnboarding: boolean;
+  isFieldMode: boolean;
   signInWithEmail: (email: string, pass: string) => Promise<{ error?: any }>;
   switchRole: (newRole: MobileRole) => Promise<void>;
   pairDriverVehicle: (binding: DriverVehicleBinding) => Promise<void>;
   unpairDriverVehicle: () => Promise<void>;
+  completeOnboarding: () => Promise<void>;
+  enterFieldMode: () => Promise<void>;
+  exitFieldMode: () => Promise<void>;
   signOut: () => Promise<void>;
 }
 
@@ -23,10 +28,15 @@ const AuthContext = createContext<AuthContextType>({
   role: "driver",
   driverVehicle: null,
   isLoading: true,
+  hasCompletedOnboarding: false,
+  isFieldMode: false,
   signInWithEmail: async () => ({}),
   switchRole: async () => {},
   pairDriverVehicle: async () => {},
   unpairDriverVehicle: async () => {},
+  completeOnboarding: async () => {},
+  enterFieldMode: async () => {},
+  exitFieldMode: async () => {},
   signOut: async () => {},
 });
 
@@ -37,8 +47,45 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [role, setRole] = useState<MobileRole>("driver");
   const [driverVehicle, setDriverVehicle] = useState<DriverVehicleBinding | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [hasCompletedOnboarding, setHasCompletedOnboarding] = useState(false);
+  const [isFieldMode, setIsFieldMode] = useState(false);
 
-  const fetchUserProfile = async (userId: string) => {
+  const autoDetectAndSetRole = async (userEmail?: string, userRole?: string) => {
+    try {
+      if (userEmail) {
+        const { data: driverMatch } = await supabase
+          .from("drivers")
+          .select("id, name")
+          .eq("email", userEmail)
+          .limit(1)
+          .maybeSingle();
+
+        if (driverMatch) {
+          setRole("driver");
+          await storageService.setActiveRole("driver");
+          return;
+        }
+      }
+
+      if (userRole) {
+        const r = userRole.toLowerCase();
+        if (r.includes("mechanic") || r.includes("technician") || r.includes("workshop")) {
+          setRole("mechanic");
+          await storageService.setActiveRole("mechanic");
+        } else if (r.includes("dispatcher") || r.includes("fleet") || r.includes("admin")) {
+          setRole("dispatcher");
+          await storageService.setActiveRole("dispatcher");
+        } else if (r.includes("telematics") || r.includes("gps")) {
+          setRole("telematics");
+          await storageService.setActiveRole("telematics");
+        }
+      }
+    } catch (e) {
+      console.warn("Auto detect role error:", e);
+    }
+  };
+
+  const fetchUserProfile = async (userId: string, userEmail?: string) => {
     try {
       const { data, error } = await supabase
         .from("profiles")
@@ -59,6 +106,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           setOrganisation(org);
         }
         await storageService.setSavedProfile({ profile: data, organisation: org });
+        await autoDetectAndSetRole(userEmail, data.role);
       }
     } catch (e) {
       console.warn("Failed to fetch user profile:", e);
@@ -68,13 +116,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => {
     async function init() {
       try {
-        const savedRole = await storageService.getActiveRole();
-        setRole(savedRole);
+        const [savedOnboarding, savedFieldMode, savedRole, savedBinding, savedProf] = await Promise.all([
+          storageService.hasCompletedOnboarding(),
+          storageService.isFieldModeEnabled(),
+          storageService.getActiveRole(),
+          storageService.getDriverVehicle(),
+          storageService.getSavedProfile(),
+        ]);
 
-        const savedBinding = await storageService.getDriverVehicle();
+        setHasCompletedOnboarding(savedOnboarding);
+        setIsFieldMode(savedFieldMode);
+        setRole(savedRole);
         setDriverVehicle(savedBinding);
 
-        const savedProf = await storageService.getSavedProfile();
         if (savedProf) {
           setProfile(savedProf.profile);
           setOrganisation(savedProf.organisation);
@@ -85,7 +139,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setUser(currentUser);
 
         if (currentUser) {
-          await fetchUserProfile(currentUser.id);
+          await fetchUserProfile(currentUser.id, currentUser.email);
         }
       } catch (err) {
         console.warn("Failed to initialize mobile auth:", err);
@@ -100,7 +154,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const u = session?.user ?? null;
       setUser(u);
       if (u) {
-        await fetchUserProfile(u.id);
+        setIsFieldMode(false);
+        await storageService.setFieldMode(false);
+        await fetchUserProfile(u.id, u.email);
       } else {
         setProfile(null);
         setOrganisation(null);
@@ -121,8 +177,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       });
       if (error) return { error };
       setUser(data.user);
+      setIsFieldMode(false);
+      await storageService.setFieldMode(false);
       if (data.user) {
-        await fetchUserProfile(data.user.id);
+        await fetchUserProfile(data.user.id, data.user.email);
       }
       return {};
     } catch (err: any) {
@@ -149,13 +207,29 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     await storageService.setDriverVehicle(null);
   };
 
+  const completeOnboarding = async () => {
+    setHasCompletedOnboarding(true);
+    await storageService.setCompletedOnboarding(true);
+  };
+
+  const enterFieldMode = async () => {
+    setIsFieldMode(true);
+    await storageService.setFieldMode(true);
+  };
+
+  const exitFieldMode = async () => {
+    setIsFieldMode(false);
+    await storageService.setFieldMode(false);
+  };
+
   const signOut = async () => {
     await supabase.auth.signOut();
     await unpairDriverVehicle();
+    await storageService.clearAllAuth();
     setUser(null);
     setProfile(null);
     setOrganisation(null);
-    await storageService.setSavedProfile(null);
+    setIsFieldMode(false);
   };
 
   return (

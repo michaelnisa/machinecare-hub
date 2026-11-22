@@ -1,8 +1,9 @@
 {
   "expo": {
-    "name": "MachineCare Mobile",
-    "slug": "machinecare-mobile",
+    "name": "MachineCare Hub",
+    "slug": "machinecare-hub",
     "version": "1.0.0",
+    "description": "Field Companion App for Commercial Drivers, Workshop Mechanics, Highway Dispatchers, and Telematics Technicians.",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
@@ -16,14 +17,14 @@
     ],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.machinecare.mobile"
+      "bundleIdentifier": "com.machinecare.hub"
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#090d16"
       },
-      "package": "com.machinecare.mobile",
+      "package": "com.machinecare.hub",
       "permissions": [
         "CAMERA",
         "ACCESS_FINE_LOCATION",

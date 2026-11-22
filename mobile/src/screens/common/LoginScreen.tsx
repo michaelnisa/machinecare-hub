@@ -22,17 +22,26 @@ import {
   Truck,
   Building2,
   Users,
+  Eye,
+  EyeOff,
+  HelpCircle,
 } from "lucide-react-native";
 
 interface LoginScreenProps {
   onSuccess: () => void;
   onSkipToField: () => void;
+  onRevisitOnboarding?: () => void;
 }
 
-export const LoginScreen: React.FC<LoginScreenProps> = ({ onSuccess, onSkipToField }) => {
+export const LoginScreen: React.FC<LoginScreenProps> = ({
+  onSuccess,
+  onSkipToField,
+  onRevisitOnboarding,
+}) => {
   const { signInWithEmail } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
 
   const handleLogin = async () => {
@@ -72,7 +81,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onSuccess, onSkipToFie
             <Truck size={32} color="#FFF" />
           </View>
           <Text style={styles.brandTitle}>MachineCare Hub</Text>
-          <Text style={styles.brandSubtitle}>Fleet, Garage & Telematics Field Portal</Text>
+          <Text style={styles.brandSubtitle}>Fleet, Garage & Telematics Field Companion</Text>
         </View>
 
         {/* Login Form */}
@@ -103,13 +112,23 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onSuccess, onSkipToFie
             <View style={styles.inputRow}>
               <Lock size={18} color={colors.textMuted} />
               <TextInput
-                style={styles.input}
+                style={[styles.input, { flex: 1 }]}
                 placeholder="••••••••"
                 placeholderTextColor={colors.textDim}
-                secureTextEntry
+                secureTextEntry={!showPassword}
                 value={password}
                 onChangeText={setPassword}
               />
+              <TouchableOpacity
+                onPress={() => setShowPassword(!showPassword)}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
+                {showPassword ? (
+                  <EyeOff size={18} color={colors.textMuted} />
+                ) : (
+                  <Eye size={18} color={colors.textMuted} />
+                )}
+              </TouchableOpacity>
             </View>
           </View>
 
@@ -165,6 +184,19 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onSuccess, onSkipToFie
           </View>
           <ArrowRight size={16} color={colors.primary} />
         </TouchableOpacity>
+
+        {onRevisitOnboarding && (
+          <TouchableOpacity
+            style={styles.onboardingBtn}
+            onPress={onRevisitOnboarding}
+            activeOpacity={0.7}
+          >
+            <HelpCircle size={15} color={colors.textMuted} />
+            <Text style={styles.onboardingBtnText}>
+              Tazama Mwongozo wa Awali (Onboarding Walkthrough)
+            </Text>
+          </TouchableOpacity>
+        )}
 
         {/* Cloud Status Footer */}
         <View style={styles.footerInfo}>
@@ -325,6 +357,18 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: colors.textMuted,
     marginTop: 2,
+  },
+  onboardingBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    paddingVertical: spacing.sm,
+  },
+  onboardingBtnText: {
+    fontSize: 12,
+    color: colors.textMuted,
+    fontWeight: "600",
   },
   footerInfo: {
     flexDirection: "row",

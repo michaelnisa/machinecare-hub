@@ -107,8 +107,8 @@ mobile/
 │   ├── navigation/
 │   │   └── RootNavigator.tsx   # Dynamic router responding to active role
 │   ├── screens/
-│   │   ├── common/             # RoleSelectScreen
-│   │   ├── driver/             # 4 driver screens + dashboard
+│   │   ├── common/             # OnboardingScreen, LoginScreen, RoleSelectScreen
+│   │   ├── driver/             # 4 driver screens + active trip dashboard
 │   │   ├── garage/             # 4 workshop & job card screens
 │   │   ├── fleet/              # 3 dispatcher & fuel screens
 │   │   └── telematics/         # 2 GPS pairing & diagnostic screens

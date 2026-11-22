@@ -4,6 +4,8 @@ const KEYS = {
   ACTIVE_ROLE: "mc_mobile_active_role",
   DRIVER_VEHICLE: "mc_mobile_driver_vehicle",
   SAVED_PROFILE: "mc_mobile_saved_profile",
+  ONBOARDING_COMPLETED: "mc_mobile_onboarding_completed",
+  FIELD_MODE: "mc_mobile_field_mode",
   OFFLINE_RECEIPTS: "mc_mobile_offline_receipts_queue",
   OFFLINE_INSPECTIONS: "mc_mobile_offline_inspections_queue",
   CACHED_JOB_CARDS: "mc_mobile_cached_job_cards",
@@ -149,5 +151,41 @@ export const storageService = {
     } else {
       await AsyncStorage.removeItem(KEYS.SAVED_PROFILE);
     }
+  },
+
+  // Onboarding lifecycle
+  async hasCompletedOnboarding(): Promise<boolean> {
+    try {
+      const val = await AsyncStorage.getItem(KEYS.ONBOARDING_COMPLETED);
+      return val === "true";
+    } catch {
+      return false;
+    }
+  },
+
+  async setCompletedOnboarding(completed: boolean): Promise<void> {
+    await AsyncStorage.setItem(KEYS.ONBOARDING_COMPLETED, completed ? "true" : "false");
+  },
+
+  // Field Mode (Bypass login for offline QR scans)
+  async isFieldModeEnabled(): Promise<boolean> {
+    try {
+      const val = await AsyncStorage.getItem(KEYS.FIELD_MODE);
+      return val === "true";
+    } catch {
+      return false;
+    }
+  },
+
+  async setFieldMode(enabled: boolean): Promise<void> {
+    await AsyncStorage.setItem(KEYS.FIELD_MODE, enabled ? "true" : "false");
+  },
+
+  async clearAllAuth(): Promise<void> {
+    await AsyncStorage.multiRemove([
+      KEYS.SAVED_PROFILE,
+      KEYS.FIELD_MODE,
+      KEYS.DRIVER_VEHICLE,
+    ]);
   },
 };
