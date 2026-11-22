@@ -30,6 +30,7 @@ import {
 } from "lucide-react-native";
 
 interface DowntimeLogScreenProps {
+  initialLine?: string;
   onBack: () => void;
   onSuccess?: () => void;
 }
@@ -43,7 +44,7 @@ const REASONS = [
   { code: "cleaning_cip", label: "Cleaning / Usafi wa Mashine (CIP)", category: "planned", icon: Layers },
 ] as const;
 
-export const DowntimeLogScreen: React.FC<DowntimeLogScreenProps> = ({ onBack, onSuccess }) => {
+export const DowntimeLogScreen: React.FC<DowntimeLogScreenProps> = ({ initialLine, onBack, onSuccess }) => {
   const { organisation } = useAuth();
   const [machines, setMachines] = useState<PlantMachineItem[]>([]);
   const [selectedMachine, setSelectedMachine] = useState<PlantMachineItem | null>(null);
@@ -87,7 +88,7 @@ export const DowntimeLogScreen: React.FC<DowntimeLogScreenProps> = ({ onBack, on
         organisationId: organisation?.id,
         machineId: selectedMachine.id,
         machineName: selectedMachine.name,
-        productionLine: selectedMachine.location || "Line 1",
+        productionLine: initialLine || selectedMachine.location || "Line 1 - Bottling",
         reason: selectedReason.code,
         category: selectedReason.category,
         downtimeMinutes: mins,

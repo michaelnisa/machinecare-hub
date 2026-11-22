@@ -29,6 +29,7 @@ import {
 } from "lucide-react-native";
 
 interface ScrapLogScreenProps {
+  initialLine?: string;
   onBack: () => void;
   onSuccess?: () => void;
 }
@@ -42,7 +43,7 @@ const SCRAP_REASONS = [
   { code: "changeover_waste", label: "Mabaki ya Kubadili Laini (Changeover)", icon: Recycle },
 ] as const;
 
-export const ScrapLogScreen: React.FC<ScrapLogScreenProps> = ({ onBack, onSuccess }) => {
+export const ScrapLogScreen: React.FC<ScrapLogScreenProps> = ({ initialLine, onBack, onSuccess }) => {
   const { organisation } = useAuth();
   const [machines, setMachines] = useState<PlantMachineItem[]>([]);
   const [selectedMachine, setSelectedMachine] = useState<PlantMachineItem | null>(null);
@@ -92,7 +93,7 @@ export const ScrapLogScreen: React.FC<ScrapLogScreenProps> = ({ onBack, onSucces
         organisationId: organisation?.id,
         machineId: selectedMachine?.id,
         machineName: selectedMachine?.name,
-        productionLine: selectedMachine?.location || "Line 1",
+        productionLine: initialLine || selectedMachine?.location || "Line 1 - Bottling",
         reason: selectedReason.code,
         scrapUnits: qty,
         unit: selectedUnit,

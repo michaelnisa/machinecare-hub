@@ -158,10 +158,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
       Alert.alert("Nenosiri Dhaifu", "Nenosiri linatakiwa kuwa na herufi zisizopungua sita (6).");
       return;
     }
-    if (!companyName.trim()) {
-      Alert.alert("Jina la Kampuni Linahitajika", "Tafadhali ingiza jina la kiwanda, karakana, au kampuni yako.");
-      return;
-    }
+    const finalCompanyName = companyName.trim() || `${fullName.trim()} Operations`;
 
     try {
       setLoading(true);
@@ -169,7 +166,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
         email: email.trim(),
         password,
         fullName: fullName.trim(),
-        companyName: companyName.trim(),
+        companyName: finalCompanyName,
         industryProfile: selectedModule,
         roleTitle: selectedRoleTitle,
       });
@@ -180,11 +177,24 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
           res.error.message || "Imeshindwa kufungua akaunti. Tafadhali jaribu tena."
         );
       } else {
-        Alert.alert(
-          "Hongera! Karibu MachineCare",
-          `Akaunti yako ya ${companyName} imesajiliwa kikamilifu chini ya moduli ya "${activeModuleMeta.swahili}". Vipengele vyote vya moduli yako vimefunguliwa kiotomatiki!`
-        );
-        onSuccess();
+        if (res.data?.session) {
+          Alert.alert(
+            "Hongera! Karibu MachineCare",
+            `Akaunti yako ya ${finalCompanyName} imesajiliwa kikamilifu chini ya moduli ya "${activeModuleMeta.swahili}". Vipengele vyote vya moduli yako vimefunguliwa kiotomatiki!`
+          );
+          onSuccess();
+        } else {
+          Alert.alert(
+            "Akaunti Imefunguliwa! / Account Created",
+            `Akaunti yako imesajiliwa kikamilifu chini ya moduli ya "${activeModuleMeta.swahili}". Barua pepe ya uthibitisho imetumwa kwa ${email.trim()}. Tafadhali thibitisha kisha uingie.\n\nA confirmation link has been sent to your email. Please verify and log in.`,
+            [
+              {
+                text: "Ingia Sasa (Log In)",
+                onPress: () => setAuthMode("login"),
+              },
+            ]
+          );
+        }
       }
     } catch (e: any) {
       Alert.alert("Hitilafu", e.message || "Hitilafu imetokea wakati wa kusajili.");

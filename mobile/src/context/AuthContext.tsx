@@ -63,9 +63,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     userEmail?: string,
     userRole?: string,
     department?: string,
-    industryProfile?: string
+    industryProfile?: string,
+    forceOverride: boolean = false
   ) => {
     try {
+      // If we are not forcing override, respect user's manually chosen saved role
+      if (!forceOverride) {
+        const saved = await storageService.getActiveRole();
+        if (saved) {
+          setRole(saved);
+          return;
+        }
+      }
+
       const dept = (department || "").toLowerCase();
       const uRole = (userRole || "").toLowerCase();
       const ind = (industryProfile || "").toLowerCase();
@@ -147,7 +157,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const fetchUserProfile = async (userId: string, userEmail?: string) => {
+  const fetchUserProfile = async (
+    userId: string,
+    userEmail?: string,
+    forceOverride: boolean = false
+  ) => {
     try {
       const { data, error } = await supabase
         .from("profiles")
@@ -176,7 +190,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           .eq("user_id", userId);
         const assignedRole = userRoleRows?.[0]?.role;
 
-        await autoDetectAndSetRole(userEmail, assignedRole, data.department, org?.industry_profile);
+        await autoDetectAndSetRole(
+          userEmail,
+          assignedRole,
+          data.department,
+          org?.industry_profile,
+          forceOverride
+        );
       }
     } catch (e) {
       console.warn("Failed to fetch user profile:", e);
@@ -250,7 +270,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setIsFieldMode(false);
       await storageService.setFieldMode(false);
       if (data.user) {
-        await fetchUserProfile(data.user.id, data.user.email);
+        await fetchUserProfile(data.user.id, data.user.email, true);
       }
       return {};
     } catch (err: any) {
@@ -311,7 +331,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setUser(data.user);
         setIsFieldMode(false);
         await storageService.setFieldMode(false);
-        await fetchUserProfile(data.user.id, data.user.email);
+        await fetchUserProfile(data.user.id, data.user.email, true);
       }
 
       return { data };

@@ -1,5 +1,6 @@
 import { supabase } from "../config/supabase";
 import { storageService, OfflineReceiptItem, OfflineInspectionItem } from "./storageService";
+import { manufacturingService } from "./manufacturingService";
 
 export interface SyncResult {
   receiptsSynced: number;
@@ -196,20 +197,37 @@ export const syncEngine = {
     const downtimes = await storageService.getOfflineDowntimes();
     if (downtimes.length > 0) {
       const syncedDowntimeIds: string[] = [];
+      const today = new Date().toISOString().slice(0, 10);
       for (const dt of downtimes) {
         try {
           if (dt.organisationId) {
-            const { error } = await (supabase as any).from("production_downtime_events").insert({
-              organisation_id: dt.organisationId,
-              machine_id: isUuid(dt.machineId) ? dt.machineId : null,
-              reason: dt.reason,
-              downtime_minutes: dt.downtimeMinutes,
-              started_at: dt.recordedAt || new Date().toISOString(),
-              notes: dt.notes || `Synced from Mobile App [${dt.category}]`,
-            });
-            if (!error) {
-              syncedDowntimeIds.push(dt.id);
-              result.downtimesSynced++;
+            const kpi = await manufacturingService.getOrCreateTodayKpi(dt.organisationId, dt.productionLine || "Line 1");
+            const kpiId = kpi?.id;
+
+            if (kpiId && isUuid(kpiId)) {
+              const { error } = await (supabase as any).from("production_downtime_events").insert({
+                organisation_id: dt.organisationId,
+                production_kpi_id: kpiId,
+                machine_id: isUuid(dt.machineId) ? dt.machineId : null,
+                category: dt.category || "unplanned",
+                reason_code: dt.reason,
+                duration_minutes: dt.downtimeMinutes,
+                record_date: dt.recordedAt ? dt.recordedAt.slice(0, 10) : today,
+                notes: dt.notes || `Synced from Mobile App [${dt.category}]`,
+              });
+
+              if (!error) {
+                // Increment kpi accumulator
+                await supabase
+                  .from("production_kpis")
+                  .update({
+                    downtime_minutes: (Number(kpi.downtime_minutes) || 0) + dt.downtimeMinutes,
+                  })
+                  .eq("id", kpiId);
+
+                syncedDowntimeIds.push(dt.id);
+                result.downtimesSynced++;
+              }
             }
           }
         } catch (e: any) {
@@ -225,20 +243,36 @@ export const syncEngine = {
     const scraps = await storageService.getOfflineScraps();
     if (scraps.length > 0) {
       const syncedScrapIds: string[] = [];
+      const today = new Date().toISOString().slice(0, 10);
       for (const sc of scraps) {
         try {
           if (sc.organisationId) {
-            const { error } = await (supabase as any).from("production_scrap_events").insert({
-              organisation_id: sc.organisationId,
-              machine_id: isUuid(sc.machineId) ? sc.machineId : null,
-              reason: sc.reason,
-              scrap_units: sc.scrapUnits,
-              cost_impact: sc.costImpact,
-              notes: sc.notes || `Synced from Mobile App [${sc.unit}]`,
-            });
-            if (!error) {
-              syncedScrapIds.push(sc.id);
-              result.scrapsSynced++;
+            const kpi = await manufacturingService.getOrCreateTodayKpi(sc.organisationId, sc.productionLine || "Line 1");
+            const kpiId = kpi?.id;
+
+            if (kpiId && isUuid(kpiId)) {
+              const { error } = await (supabase as any).from("production_scrap_events").insert({
+                organisation_id: sc.organisationId,
+                production_kpi_id: kpiId,
+                machine_id: isUuid(sc.machineId) ? sc.machineId : null,
+                reason_code: sc.reason,
+                quantity: sc.scrapUnits,
+                record_date: sc.recordedAt ? sc.recordedAt.slice(0, 10) : today,
+                notes: sc.notes ? `[${sc.unit}] ${sc.notes}` : `[${sc.unit}] Cost: TZS ${sc.costImpact}`,
+              });
+
+              if (!error) {
+                // Increment kpi accumulator
+                await supabase
+                  .from("production_kpis")
+                  .update({
+                    scrap_units: (Number(kpi.scrap_units) || 0) + sc.scrapUnits,
+                  })
+                  .eq("id", kpiId);
+
+                syncedScrapIds.push(sc.id);
+                result.scrapsSynced++;
+              }
             }
           }
         } catch (e: any) {

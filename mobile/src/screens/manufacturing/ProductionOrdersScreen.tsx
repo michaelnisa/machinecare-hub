@@ -8,6 +8,8 @@ import {
   RefreshControl,
   ActivityIndicator,
   Alert,
+  Modal,
+  TextInput,
 } from "react-native";
 import { useAuth } from "../../context/AuthContext";
 import { colors, radii, spacing } from "../../theme";
@@ -25,6 +27,8 @@ import {
   Calendar,
   Zap,
   TrendingUp,
+  Plus,
+  Check,
 } from "lucide-react-native";
 
 interface ProductionOrdersScreenProps {
@@ -38,6 +42,11 @@ export const ProductionOrdersScreen: React.FC<ProductionOrdersScreenProps> = ({ 
   const [filter, setFilter] = useState<"all" | "in_progress" | "released">("all");
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+
+  // Batch Output Recording Modal
+  const [selectedPo, setSelectedPo] = useState<ProductionOrderSummary | null>(null);
+  const [outputUnits, setOutputUnits] = useState("500");
+  const [submittingOutput, setSubmittingOutput] = useState(false);
 
   const loadOrders = async () => {
     try {
@@ -58,6 +67,38 @@ export const ProductionOrdersScreen: React.FC<ProductionOrdersScreenProps> = ({ 
   const onRefresh = () => {
     setRefreshing(true);
     loadOrders();
+  };
+
+  const handleRecordBatchOutput = async () => {
+    if (!selectedPo) return;
+    const qty = parseInt(outputUnits, 10);
+    if (isNaN(qty) || qty <= 0) {
+      Alert.alert("Hitilafu", "Tafadhali ingiza idadi sahihi ya vipande vilivyozalishwa.");
+      return;
+    }
+
+    try {
+      setSubmittingOutput(true);
+      await manufacturingService.updatePoProgress(
+        organisation?.id || "",
+        selectedPo.id,
+        qty,
+        selectedPo.productionLine || "Line 1 - Bottling",
+        false
+      );
+
+      Alert.alert(
+        "Imefanikiwa",
+        `Vipande +${qty.toLocaleString()} vimerekodiwa kwa ajili ya ${selectedPo.product} (${selectedPo.poNumber}).`
+      );
+      setSelectedPo(null);
+      setOutputUnits("500");
+      loadOrders();
+    } catch {
+      Alert.alert("Hitilafu", "Imeshindwa kurekodi uzalishaji wa batch hii.");
+    } finally {
+      setSubmittingOutput(false);
+    }
   };
 
   const filtered = orders.filter((o) => {
@@ -209,12 +250,8 @@ export const ProductionOrdersScreen: React.FC<ProductionOrdersScreenProps> = ({ 
 
                   <TouchableOpacity
                     style={styles.actionBtn}
-                    onPress={() => {
-                      Alert.alert(
-                        "Rekodi Uzalishaji",
-                        `Ungependa kurekodi vipande vilivyozalishwa kwa ${item.product}?`
-                      );
-                    }}
+                    onPress={() => setSelectedPo(item)}
+                    activeOpacity={0.8}
                   >
                     <Zap size={13} color={colors.primary} />
                     <Text style={styles.actionBtnText}>Rekodi Output</Text>
@@ -225,6 +262,80 @@ export const ProductionOrdersScreen: React.FC<ProductionOrdersScreenProps> = ({ 
           })
         )}
       </ScrollView>
+
+      {/* Batch Output Modal */}
+      <Modal visible={selectedPo !== null} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <View style={[styles.modalIconBox, { backgroundColor: "rgba(59, 130, 246, 0.15)" }]}>
+                <Zap size={22} color={colors.blue} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.modalTitle} numberOfLines={1}>
+                  {selectedPo?.product}
+                </Text>
+                <Text style={styles.modalSub}>
+                  {selectedPo?.poNumber} · {selectedPo?.productionLine || "Line 1"}
+                </Text>
+              </View>
+            </View>
+
+            <Text style={styles.inputLabel}>Idadi ya Vipande Vilivyotengenezwa (Pieces)</Text>
+            <TextInput
+              style={styles.modalInput}
+              keyboardType="numeric"
+              value={outputUnits}
+              onChangeText={setOutputUnits}
+              placeholder="500"
+              placeholderTextColor={colors.textMuted}
+            />
+
+            <View style={styles.quickPresetRow}>
+              {["100", "250", "500", "1000", "2000"].map((preset) => (
+                <TouchableOpacity
+                  key={preset}
+                  style={[
+                    styles.presetBtn,
+                    outputUnits === preset && { borderColor: colors.blue, backgroundColor: "rgba(59, 130, 246, 0.2)" },
+                  ]}
+                  onPress={() => setOutputUnits(preset)}
+                >
+                  <Text
+                    style={[
+                      styles.presetBtnText,
+                      outputUnits === preset && { color: colors.blue, fontWeight: "800" },
+                    ]}
+                  >
+                    +{preset}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            <View style={styles.modalActionRow}>
+              <TouchableOpacity
+                style={styles.modalCancelBtn}
+                onPress={() => setSelectedPo(null)}
+                disabled={submittingOutput}
+              >
+                <Text style={styles.modalCancelBtnText}>Ghairi</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.modalSubmitBtn}
+                onPress={handleRecordBatchOutput}
+                disabled={submittingOutput}
+              >
+                {submittingOutput ? (
+                  <ActivityIndicator size="small" color="#FFF" />
+                ) : (
+                  <Text style={styles.modalSubmitBtnText}>Hifadhi Uzalishaji</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 };
@@ -419,5 +530,107 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
     marginTop: 4,
     textAlign: "center",
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.75)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: spacing.md,
+  },
+  modalContent: {
+    width: "100%",
+    backgroundColor: colors.card,
+    borderRadius: radii.xl,
+    padding: spacing.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  modalHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    marginBottom: spacing.md,
+  },
+  modalIconBox: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  modalTitle: {
+    fontSize: 16,
+    fontWeight: "800",
+    color: colors.text,
+  },
+  modalSub: {
+    fontSize: 12,
+    color: colors.textMuted,
+    marginTop: 2,
+  },
+  inputLabel: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: colors.textMuted,
+    marginBottom: spacing.xs,
+  },
+  modalInput: {
+    backgroundColor: colors.cardSecondary,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    color: colors.text,
+    fontSize: 20,
+    fontWeight: "800",
+    marginBottom: spacing.sm,
+  },
+  quickPresetRow: {
+    flexDirection: "row",
+    gap: 6,
+    marginBottom: spacing.lg,
+  },
+  presetBtn: {
+    flex: 1,
+    paddingVertical: 7,
+    borderRadius: radii.sm,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.cardSecondary,
+    alignItems: "center",
+  },
+  presetBtnText: {
+    fontSize: 11,
+    color: colors.textMuted,
+    fontWeight: "600",
+  },
+  modalActionRow: {
+    flexDirection: "row",
+    gap: spacing.sm,
+  },
+  modalCancelBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: "center",
+  },
+  modalCancelBtnText: {
+    color: colors.textMuted,
+    fontWeight: "700",
+  },
+  modalSubmitBtn: {
+    flex: 2,
+    backgroundColor: colors.blue,
+    paddingVertical: 12,
+    borderRadius: radii.md,
+    alignItems: "center",
+  },
+  modalSubmitBtnText: {
+    color: "#FFF",
+    fontWeight: "800",
   },
 });

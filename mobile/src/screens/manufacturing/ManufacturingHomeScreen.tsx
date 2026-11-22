@@ -43,6 +43,12 @@ export const ManufacturingHomeScreen: React.FC<ManufacturingHomeScreenProps> = (
 }) => {
   const { organisation, user } = useAuth();
   const [kpis, setKpis] = useState<ProductionKpiSummary | null>(null);
+  const [lines, setLines] = useState<string[]>([
+    "Line 1 - Bottling",
+    "Line 2 - Canning",
+    "Line 3 - Packaging",
+  ]);
+  const [selectedLine, setSelectedLine] = useState<string>("Line 1 - Bottling");
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -51,10 +57,17 @@ export const ManufacturingHomeScreen: React.FC<ManufacturingHomeScreenProps> = (
   const [outputUnits, setOutputUnits] = useState("500");
   const [submittingOutput, setSubmittingOutput] = useState(false);
 
-  const loadData = async () => {
+  const loadData = async (targetLine?: string) => {
+    const lineToQuery = targetLine || selectedLine;
     try {
-      const data = await manufacturingService.getTodayShiftKpis(organisation?.id);
-      setKpis(data);
+      const [kpiData, lineList] = await Promise.all([
+        manufacturingService.getTodayShiftKpis(organisation?.id, lineToQuery),
+        manufacturingService.getProductionLines(organisation?.id),
+      ]);
+      setKpis(kpiData);
+      if (lineList.length > 0) {
+        setLines(lineList);
+      }
     } catch (e) {
       console.warn("Failed to load shift KPIs:", e);
     } finally {
@@ -69,7 +82,7 @@ export const ManufacturingHomeScreen: React.FC<ManufacturingHomeScreenProps> = (
 
   const onRefresh = () => {
     setRefreshing(true);
-    loadData();
+    loadData(selectedLine);
   };
 
   const handleRecordOutput = async () => {
@@ -128,6 +141,32 @@ export const ManufacturingHomeScreen: React.FC<ManufacturingHomeScreenProps> = (
         <Text style={styles.headerSub}>
           Dashibodi ya sakafu ya kiwanda: Ufuatiliaji wa OEE, uzalishaji, na kuzuia upotevu.
         </Text>
+
+        {/* Production Lines Horizontal Selector */}
+        <View style={styles.lineContainer}>
+          <Text style={styles.lineLabel}>LAINI YA UZALISHAJI (ACTIVE LINE):</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.lineScroll}>
+            {lines.map((l) => {
+              const isSelected = selectedLine === l;
+              return (
+                <TouchableOpacity
+                  key={l}
+                  style={[styles.lineChip, isSelected && styles.lineChipActive]}
+                  onPress={() => {
+                    setSelectedLine(l);
+                    loadData(l);
+                  }}
+                  activeOpacity={0.8}
+                >
+                  <Layers size={13} color={isSelected ? colors.emerald : colors.textMuted} />
+                  <Text style={[styles.lineChipText, isSelected && styles.lineChipTextActive]}>
+                    {l}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+        </View>
       </View>
 
       {/* Main Shift Attainment Card */}
@@ -434,6 +473,44 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: colors.textMuted,
     marginTop: 2,
+  },
+  lineContainer: {
+    marginTop: spacing.sm,
+  },
+  lineLabel: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: colors.textMuted,
+    letterSpacing: 0.8,
+    marginBottom: 6,
+  },
+  lineScroll: {
+    flexDirection: "row",
+  },
+  lineChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: radii.full,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.cardSecondary,
+    marginRight: 6,
+  },
+  lineChipActive: {
+    borderColor: colors.emerald,
+    backgroundColor: "rgba(16, 185, 129, 0.15)",
+  },
+  lineChipText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: colors.textMuted,
+  },
+  lineChipTextActive: {
+    color: colors.emerald,
+    fontWeight: "800",
   },
   mainAttainmentCard: {
     padding: spacing.md,

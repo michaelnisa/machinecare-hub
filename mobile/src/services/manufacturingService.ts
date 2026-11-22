@@ -36,14 +36,75 @@ export interface PlantMachineItem {
   location?: string;
 }
 
+const isUuid = (str?: string): boolean => {
+  if (!str) return false;
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
+};
+
 export const manufacturingService = {
   /**
-   * Fetch today's shift KPIs for an organization
+   * Helper: Find or create today's KPI row for a specific line to provide a valid production_kpi_id foreign key
    */
-  async getTodayShiftKpis(orgId?: string): Promise<ProductionKpiSummary> {
+  async getOrCreateTodayKpi(orgId: string, line: string = "Line 1"): Promise<any> {
+    const today = new Date().toISOString().slice(0, 10);
+    try {
+      const { data: existing } = await supabase
+        .from("production_kpis")
+        .select("id, actual_units, target_units, scrap_units, downtime_minutes, production_line")
+        .eq("organisation_id", orgId)
+        .eq("record_date", today)
+        .eq("production_line", line)
+        .maybeSingle();
+
+      if (existing) {
+        return existing;
+      }
+
+      // If not exists for this specific line, check if any KPI exists for today
+      const { data: anyToday } = await supabase
+        .from("production_kpis")
+        .select("id, actual_units, target_units, scrap_units, downtime_minutes, production_line")
+        .eq("organisation_id", orgId)
+        .eq("record_date", today)
+        .limit(1)
+        .maybeSingle();
+
+      if (anyToday) {
+        return anyToday;
+      }
+
+      // Create a fresh KPI record for today
+      const { data: created, error } = await supabase
+        .from("production_kpis")
+        .insert({
+          organisation_id: orgId,
+          production_line: line,
+          record_date: today,
+          target_units: 12000,
+          actual_units: 0,
+          scrap_units: 0,
+          downtime_minutes: 0,
+          planned_minutes: 480,
+        })
+        .select("id, actual_units, target_units, scrap_units, downtime_minutes, production_line")
+        .maybeSingle();
+
+      if (!error && created) {
+        return created;
+      }
+      return { id: "mock_kpi_" + today, downtime_minutes: 0, scrap_units: 0, actual_units: 0 };
+    } catch {
+      return { id: "mock_kpi_" + today, downtime_minutes: 0, scrap_units: 0, actual_units: 0 };
+    }
+  },
+
+  /**
+   * Fetch today's shift KPIs for an organization and optional specific line
+   */
+  async getTodayShiftKpis(orgId?: string, selectedLine?: string): Promise<ProductionKpiSummary> {
     const today = new Date().toISOString().slice(0, 10);
     const fallback: ProductionKpiSummary = {
-      productionLine: "Line 1 - Bottling & Packaging",
+      productionLine: selectedLine || "Line 1 - Bottling",
       targetUnits: 12000,
       actualUnits: 9850,
       scrapUnits: 140,
@@ -58,11 +119,17 @@ export const manufacturingService = {
     try {
       if (!orgId) return fallback;
 
-      const { data, error } = await supabase
+      let query = supabase
         .from("production_kpis")
-        .select("target_units, actual_units, scrap_units, downtime_minutes, production_line")
+        .select("id, target_units, actual_units, scrap_units, downtime_minutes, production_line")
         .eq("organisation_id", orgId)
         .eq("record_date", today);
+
+      if (selectedLine) {
+        query = query.eq("production_line", selectedLine);
+      }
+
+      const { data, error } = await query;
 
       if (error || !data || data.length === 0) {
         return fallback;
@@ -85,7 +152,7 @@ export const manufacturingService = {
       const oee = Math.round((avail * perf * quality) / 10000);
 
       return {
-        productionLine: data[0]?.production_line || "Primary Plant Line",
+        productionLine: selectedLine || data[0]?.production_line || "Line 1 - Bottling",
         targetUnits: target,
         actualUnits: actual,
         scrapUnits: totalScrap,
@@ -98,6 +165,36 @@ export const manufacturingService = {
       };
     } catch {
       return fallback;
+    }
+  },
+
+  /**
+   * Fetch distinct production lines available in the plant
+   */
+  async getProductionLines(orgId?: string): Promise<string[]> {
+    const defaultLines = [
+      "Line 1 - Bottling",
+      "Line 2 - Canning",
+      "Line 3 - Packaging",
+      "Line 4 - Assembly",
+    ];
+
+    try {
+      if (!orgId) return defaultLines;
+
+      const { data } = await supabase
+        .from("production_kpis")
+        .select("production_line")
+        .eq("organisation_id", orgId)
+        .not("production_line", "is", null);
+
+      if (data && data.length > 0) {
+        const unique = Array.from(new Set(data.map((r) => r.production_line).filter(Boolean)));
+        if (unique.length > 0) return unique as string[];
+      }
+      return defaultLines;
+    } catch {
+      return defaultLines;
     }
   },
 
@@ -140,7 +237,7 @@ export const manufacturingService = {
         status: "released",
         priority: "urgent",
         dueDate: "2026-11-24",
-        productionLine: "Line 3 - Aseptic",
+        productionLine: "Line 3 - Packaging",
       },
     ];
 
@@ -153,7 +250,7 @@ export const manufacturingService = {
         .eq("organisation_id", orgId)
         .in("status", ["in_progress", "released", "draft"])
         .order("due_date", { ascending: true })
-        .limit(10);
+        .limit(15);
 
       if (error || !data || data.length === 0) {
         return fallback;
@@ -169,7 +266,7 @@ export const manufacturingService = {
         status: r.status || "in_progress",
         priority: r.priority || "normal",
         dueDate: r.due_date,
-        productionLine: r.production_line || "Main Plant",
+        productionLine: r.production_line || "Line 1 - Bottling",
       }));
     } catch {
       return fallback;
@@ -197,7 +294,7 @@ export const manufacturingService = {
         .select("id, name, serial_number, machine_type, status, current_location")
         .eq("organisation_id", orgId)
         .order("name", { ascending: true })
-        .limit(20);
+        .limit(30);
 
       if (error || !data || data.length === 0) {
         return fallback;
@@ -217,7 +314,7 @@ export const manufacturingService = {
   },
 
   /**
-   * Log Stoppage / Downtime Incident
+   * Log Stoppage / Downtime Incident with strict Postgres schema parity
    */
   async logDowntime(event: {
     organisationId?: string;
@@ -229,6 +326,7 @@ export const manufacturingService = {
     downtimeMinutes: number;
     notes?: string;
   }): Promise<{ success: boolean; offline?: boolean; error?: string }> {
+    const today = new Date().toISOString().slice(0, 10);
     const item: OfflineDowntimeItem = {
       id: "dt_" + Date.now(),
       organisationId: event.organisationId,
@@ -244,33 +342,63 @@ export const manufacturingService = {
 
     try {
       if (event.organisationId) {
-        const { error } = await (supabase as any)
-          .from("production_downtime_events")
-          .insert({
-            organisation_id: event.organisationId,
-            machine_id: event.machineId,
-            reason: event.reason,
-            downtime_minutes: event.downtimeMinutes,
-            started_at: new Date().toISOString(),
-            notes: event.notes || `Logged from Mobile Plant App [${event.category}]`,
-          });
+        // 1. Resolve or create today's KPI row to obtain valid production_kpi_id
+        const kpi = await this.getOrCreateTodayKpi(event.organisationId, event.productionLine || "Line 1");
+        const kpiId = kpi?.id;
 
-        if (!error) {
-          return { success: true };
+        if (kpiId && isUuid(kpiId)) {
+          // 2. Insert into production_downtime_events matching schema
+          const { error } = await (supabase as any)
+            .from("production_downtime_events")
+            .insert({
+              organisation_id: event.organisationId,
+              production_kpi_id: kpiId,
+              machine_id: isUuid(event.machineId) ? event.machineId : null,
+              category: event.category || "unplanned",
+              reason_code: event.reason,
+              duration_minutes: event.downtimeMinutes,
+              record_date: today,
+              notes: event.notes || `Logged from Mobile Plant App [${event.category}]`,
+            });
+
+          if (!error) {
+            // 3. Update downtime_minutes accumulator in production_kpis
+            await supabase
+              .from("production_kpis")
+              .update({
+                downtime_minutes: (Number(kpi.downtime_minutes) || 0) + event.downtimeMinutes,
+              })
+              .eq("id", kpiId);
+
+            // 4. Auto-trigger Work Order if machine breakdown is flagged
+            if (event.reason === "breakdown" && isUuid(event.machineId)) {
+              await (supabase as any).from("work_orders").insert({
+                organisation_id: event.organisationId,
+                machine_id: event.machineId,
+                title: `[Plant Breakdown] ${event.machineName || "Equipment"} (${today})`,
+                description: `Emergency breakdown reported from Mobile Plant Floor. Lost duration: ${event.downtimeMinutes} min. Notes: ${event.notes || "None"}`,
+                status: "open",
+                priority: "high",
+                work_type: "repair",
+              });
+            }
+
+            return { success: true };
+          }
         }
       }
 
       // Offline queue fallback
       await storageService.queueOfflineDowntime(item);
       return { success: true, offline: true };
-    } catch (e: any) {
+    } catch {
       await storageService.queueOfflineDowntime(item);
       return { success: true, offline: true };
     }
   },
 
   /**
-   * Log Defect / Scrap Event
+   * Log Defect / Scrap Event with strict Postgres schema parity
    */
   async logScrap(event: {
     organisationId?: string;
@@ -283,6 +411,7 @@ export const manufacturingService = {
     costImpact: number;
     notes?: string;
   }): Promise<{ success: boolean; offline?: boolean; error?: string }> {
+    const today = new Date().toISOString().slice(0, 10);
     const item: OfflineScrapItem = {
       id: "sc_" + Date.now(),
       organisationId: event.organisationId,
@@ -299,25 +428,39 @@ export const manufacturingService = {
 
     try {
       if (event.organisationId) {
-        const { error } = await (supabase as any)
-          .from("production_scrap_events")
-          .insert({
-            organisation_id: event.organisationId,
-            machine_id: event.machineId || null,
-            reason: event.reason,
-            scrap_units: event.scrapUnits,
-            cost_impact: event.costImpact,
-            notes: event.notes || `Logged from Mobile Plant App [${event.unit}]`,
-          });
+        const kpi = await this.getOrCreateTodayKpi(event.organisationId, event.productionLine || "Line 1");
+        const kpiId = kpi?.id;
 
-        if (!error) {
-          return { success: true };
+        if (kpiId && isUuid(kpiId)) {
+          const { error } = await (supabase as any)
+            .from("production_scrap_events")
+            .insert({
+              organisation_id: event.organisationId,
+              production_kpi_id: kpiId,
+              machine_id: isUuid(event.machineId) ? event.machineId : null,
+              reason_code: event.reason,
+              quantity: event.scrapUnits,
+              record_date: today,
+              notes: event.notes ? `[${event.unit}] ${event.notes}` : `[${event.unit}] Cost: TZS ${event.costImpact}`,
+            });
+
+          if (!error) {
+            // Update scrap accumulator in production_kpis
+            await supabase
+              .from("production_kpis")
+              .update({
+                scrap_units: (Number(kpi.scrap_units) || 0) + event.scrapUnits,
+              })
+              .eq("id", kpiId);
+
+            return { success: true };
+          }
         }
       }
 
       await storageService.queueOfflineScrap(item);
       return { success: true, offline: true };
-    } catch (e: any) {
+    } catch {
       await storageService.queueOfflineScrap(item);
       return { success: true, offline: true };
     }
@@ -334,33 +477,55 @@ export const manufacturingService = {
     try {
       if (!orgId) return { success: true };
 
-      const today = new Date().toISOString().slice(0, 10);
-      const { data: existing } = await supabase
-        .from("production_kpis")
-        .select("id, actual_units")
-        .eq("organisation_id", orgId)
-        .eq("record_date", today)
-        .eq("production_line", line)
-        .maybeSingle();
-
-      if (existing) {
+      const kpi = await this.getOrCreateTodayKpi(orgId, line);
+      if (kpi?.id && isUuid(kpi.id)) {
         await supabase
           .from("production_kpis")
           .update({
-            actual_units: (Number(existing.actual_units) || 0) + addedUnits,
+            actual_units: (Number(kpi.actual_units) || 0) + addedUnits,
           })
-          .eq("id", existing.id);
-      } else {
-        await supabase.from("production_kpis").insert({
-          organisation_id: orgId,
-          production_line: line,
-          record_date: today,
-          target_units: 10000,
-          actual_units: addedUnits,
-          scrap_units: 0,
-          downtime_minutes: 0,
-        });
+          .eq("id", kpi.id);
       }
+      return { success: true };
+    } catch {
+      return { success: true };
+    }
+  },
+
+  /**
+   * Update Production Order Batch Output and status
+   */
+  async updatePoProgress(
+    orgId: string,
+    poId: string,
+    addedUnits: number,
+    lineName: string = "Line 1",
+    markComplete: boolean = false
+  ): Promise<{ success: boolean }> {
+    try {
+      if (isUuid(poId)) {
+        const { data: po } = await (supabase as any)
+          .from("production_orders")
+          .select("quantity_produced, quantity_ordered")
+          .eq("id", poId)
+          .maybeSingle();
+
+        const newQty = (Number(po?.quantity_produced) || 0) + addedUnits;
+        const newStatus = markComplete || (po?.quantity_ordered && newQty >= po.quantity_ordered)
+          ? "completed"
+          : "in_progress";
+
+        await (supabase as any)
+          .from("production_orders")
+          .update({
+            quantity_produced: newQty,
+            status: newStatus,
+          })
+          .eq("id", poId);
+      }
+
+      // Also increment today's line KPI
+      await this.recordOutput(orgId, lineName, addedUnits);
       return { success: true };
     } catch {
       return { success: true };

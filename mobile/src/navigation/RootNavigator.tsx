@@ -144,9 +144,21 @@ export const RootNavigator: React.FC = () => {
     if (role === "manufacturing") {
       switch (currentScreen) {
         case "DowntimeLog":
-          return <DowntimeLogScreen onBack={goBack} onSuccess={goBack} />;
+          return (
+            <DowntimeLogScreen
+              initialLine={screenParams.productionLine}
+              onBack={goBack}
+              onSuccess={goBack}
+            />
+          );
         case "ScrapLog":
-          return <ScrapLogScreen onBack={goBack} onSuccess={goBack} />;
+          return (
+            <ScrapLogScreen
+              initialLine={screenParams.productionLine}
+              onBack={goBack}
+              onSuccess={goBack}
+            />
+          );
         case "ProductionOrders":
           return (
             <ProductionOrdersScreen

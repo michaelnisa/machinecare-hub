@@ -133,13 +133,17 @@ export const PlantMachineCheckScreen: React.FC<PlantMachineCheckScreenProps> = (
           .map((c) => c.title)
           .join(", ");
 
+        const isUuid = (str?: string) =>
+          str ? /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str) : false;
+
         await (supabase as any).from("work_orders").insert({
           organisation_id: organisation.id,
-          machine_id: selectedMachine.id,
+          machine_id: isUuid(selectedMachine.id) ? selectedMachine.id : null,
           title: `[Plant Defect] ${selectedMachine.name} - Pre-Shift Check Failed`,
           description: `Ukaguzi wa mashine umefeli kwenye: ${failedTitles}. Maelezo ya operator: ${defectNotes || "Hakuna maelezo ya ziada"}`,
           status: "open",
           priority: "high",
+          work_type: "repair",
         });
       }
 

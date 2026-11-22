@@ -21,6 +21,8 @@ export const colors = {
 
   rose: "#EF4444",
   roseSoft: "rgba(239, 68, 68, 0.14)",
+  red: "#EF4444",
+  redSoft: "rgba(239, 68, 68, 0.14)",
 
   purple: "#8B5CF6",
   purpleSoft: "rgba(139, 92, 246, 0.14)",
