@@ -3,7 +3,7 @@ import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from "react-nati
 import { useAuth } from "../../context/AuthContext";
 import { colors, radii, spacing } from "../../theme";
 import { MobileRole } from "../../services/storageService";
-import { Truck, Wrench, Navigation, Radio, ArrowRight, ShieldCheck } from "lucide-react-native";
+import { Truck, Wrench, Navigation, Radio, ArrowRight, ShieldCheck, Factory } from "lucide-react-native";
 
 interface RoleSelectScreenProps {
   onRoleSelected?: () => void;
@@ -21,6 +21,15 @@ export const RoleSelectScreen: React.FC<RoleSelectScreenProps> = ({ onRoleSelect
     color: string;
     bg: string;
   }[] = [
+    {
+      id: "manufacturing",
+      title: "Manufacturing & Plant Floor",
+      swahili: "Kiwanda, Uzalishaji & Mashine",
+      description: "OEE live line tracking, hourly output logging, rapid stoppage reporting & defect scrap intake.",
+      icon: Factory,
+      color: colors.emerald,
+      bg: "rgba(16, 185, 129, 0.15)",
+    },
     {
       id: "driver",
       title: "Commercial Fleet Driver",

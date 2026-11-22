@@ -18,6 +18,7 @@ import {
   Smartphone,
   ChevronRight,
   QrCode,
+  Factory,
 } from "lucide-react-native";
 
 interface OnboardingScreenProps {
@@ -26,6 +27,17 @@ interface OnboardingScreenProps {
 }
 
 const SLIDES = [
+  {
+    id: "manufacturing",
+    badge: "VIWANDA & SAKAFU YA UZALISHAJI",
+    title: "OEE & Ufuatiliaji wa Uzalishaji",
+    subtitle: "Plant Floor OEE, Downtime & Scrap",
+    description:
+      "Fuatilia vipande vilivyotengenezwa kwa wakati halisi, ripoti kusimama kwa mashine (downtime), rekodi upotevu wa mali (scrap), na fanya ukaguzi wa usalama wa mashine kabla ya kuanza shift.",
+    icon: Factory,
+    iconColor: colors.emerald,
+    highlight: "Usimamizi kamili wa OEE ya laini za uzalishaji kiwandani.",
+  },
   {
     id: "driver",
     badge: "MADEREVA WA UGA & MALORI",

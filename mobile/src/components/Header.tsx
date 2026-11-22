@@ -2,7 +2,7 @@ import React from "react";
 import { View, Text, TouchableOpacity, StyleSheet, Alert } from "react-native";
 import { useAuth } from "../context/AuthContext";
 import { colors, radii, spacing } from "../theme";
-import { Users, Truck, Wrench, Navigation, Radio, LogIn, LogOut, Building2 } from "lucide-react-native";
+import { Users, Truck, Wrench, Navigation, Radio, LogIn, LogOut, Building2, Factory } from "lucide-react-native";
 
 interface HeaderProps {
   title?: string;
@@ -30,6 +30,8 @@ export const Header: React.FC<HeaderProps> = ({ title, onSwitchRolePress, onOpen
 
   const getRoleMeta = () => {
     switch (role) {
+      case "manufacturing":
+        return { label: "PLANT / OEE", icon: Factory, color: colors.emerald };
       case "driver":
         return { label: "DRIVER", icon: Truck, color: colors.primary };
       case "mechanic":

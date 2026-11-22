@@ -12,6 +12,14 @@ interface AuthContextType {
   hasCompletedOnboarding: boolean;
   isFieldMode: boolean;
   signInWithEmail: (email: string, pass: string) => Promise<{ error?: any }>;
+  signUpWithEmail: (params: {
+    email: string;
+    password: string;
+    fullName: string;
+    companyName: string;
+    industryProfile: "manufacturing" | "fleet_logistics" | "garage" | "gps_tracking";
+    roleTitle?: string;
+  }) => Promise<{ error?: any; data?: any }>;
   switchRole: (newRole: MobileRole) => Promise<void>;
   pairDriverVehicle: (binding: DriverVehicleBinding) => Promise<void>;
   unpairDriverVehicle: () => Promise<void>;
@@ -31,6 +39,7 @@ const AuthContext = createContext<AuthContextType>({
   hasCompletedOnboarding: false,
   isFieldMode: false,
   signInWithEmail: async () => ({}),
+  signUpWithEmail: async () => ({}),
   switchRole: async () => {},
   pairDriverVehicle: async () => {},
   unpairDriverVehicle: async () => {},
@@ -50,8 +59,33 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [hasCompletedOnboarding, setHasCompletedOnboarding] = useState(false);
   const [isFieldMode, setIsFieldMode] = useState(false);
 
-  const autoDetectAndSetRole = async (userEmail?: string, userRole?: string) => {
+  const autoDetectAndSetRole = async (
+    userEmail?: string,
+    userRole?: string,
+    department?: string,
+    industryProfile?: string
+  ) => {
     try {
+      const dept = (department || "").toLowerCase();
+      const uRole = (userRole || "").toLowerCase();
+      const ind = (industryProfile || "").toLowerCase();
+
+      // 1. Manufacturing Priority Detection
+      if (
+        ind === "manufacturing" ||
+        dept.includes("manufacturing") ||
+        dept.includes("production") ||
+        dept.includes("plant") ||
+        uRole.includes("operator") ||
+        uRole.includes("manufacturing") ||
+        uRole.includes("production")
+      ) {
+        setRole("manufacturing");
+        await storageService.setActiveRole("manufacturing");
+        return;
+      }
+
+      // 2. Commercial Driver Detection (drivers table match)
       if (userEmail) {
         const { data: driverMatch } = await supabase
           .from("drivers")
@@ -67,18 +101,46 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       }
 
-      if (userRole) {
-        const r = userRole.toLowerCase();
-        if (r.includes("mechanic") || r.includes("technician") || r.includes("workshop")) {
-          setRole("mechanic");
-          await storageService.setActiveRole("mechanic");
-        } else if (r.includes("dispatcher") || r.includes("fleet") || r.includes("admin")) {
-          setRole("dispatcher");
-          await storageService.setActiveRole("dispatcher");
-        } else if (r.includes("telematics") || r.includes("gps")) {
-          setRole("telematics");
-          await storageService.setActiveRole("telematics");
-        }
+      // 3. Garage & Workshop Mechanic
+      if (
+        ind === "garage" ||
+        dept.includes("garage") ||
+        dept.includes("workshop") ||
+        dept.includes("maintenance") ||
+        uRole.includes("mechanic") ||
+        uRole.includes("technician")
+      ) {
+        setRole("mechanic");
+        await storageService.setActiveRole("mechanic");
+        return;
+      }
+
+      // 4. GPS & Telematics Technician
+      if (
+        ind === "gps_tracking" ||
+        dept.includes("telematics") ||
+        dept.includes("gps") ||
+        uRole.includes("telematics") ||
+        uRole.includes("gps")
+      ) {
+        setRole("telematics");
+        await storageService.setActiveRole("telematics");
+        return;
+      }
+
+      // 5. Fleet & Logistics Dispatcher / Manager
+      if (
+        ind === "fleet_logistics" ||
+        dept.includes("fleet") ||
+        dept.includes("logistics") ||
+        dept.includes("transport") ||
+        uRole.includes("dispatcher") ||
+        uRole.includes("fleet") ||
+        uRole.includes("admin")
+      ) {
+        setRole("dispatcher");
+        await storageService.setActiveRole("dispatcher");
+        return;
       }
     } catch (e) {
       console.warn("Auto detect role error:", e);
@@ -93,8 +155,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           id,
           organisation_id,
           full_name,
-          role,
-          organisations:organisation_id (id, name, logo_url)
+          department,
+          organisations:organisation_id (id, name, logo_url, industry_profile)
         `)
         .eq("id", userId)
         .maybeSingle();
@@ -106,7 +168,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           setOrganisation(org);
         }
         await storageService.setSavedProfile({ profile: data, organisation: org });
-        await autoDetectAndSetRole(userEmail, data.role);
+
+        // Query assigned user roles
+        const { data: userRoleRows } = await supabase
+          .from("user_roles")
+          .select("role")
+          .eq("user_id", userId);
+        const assignedRole = userRoleRows?.[0]?.role;
+
+        await autoDetectAndSetRole(userEmail, assignedRole, data.department, org?.industry_profile);
       }
     } catch (e) {
       console.warn("Failed to fetch user profile:", e);
@@ -188,6 +258,68 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  const signUpWithEmail = async (params: {
+    email: string;
+    password: string;
+    fullName: string;
+    companyName: string;
+    industryProfile: "manufacturing" | "fleet_logistics" | "garage" | "gps_tracking";
+    roleTitle?: string;
+  }) => {
+    try {
+      const company = params.companyName.trim() || "My Company";
+      const signupMetaData = {
+        full_name: params.fullName.trim(),
+        company_name: company,
+        organisation_name: company,
+        industry_profile: params.industryProfile,
+        department:
+          params.industryProfile === "manufacturing"
+            ? "production"
+            : params.industryProfile === "garage"
+            ? "workshop"
+            : "fleet",
+        role: params.roleTitle || "operator",
+      };
+
+      const { data, error } = await supabase.auth.signUp({
+        email: params.email.trim(),
+        password: params.password,
+        options: {
+          data: signupMetaData,
+        },
+      });
+
+      if (error) return { error };
+
+      // Set immediate role based on selected module
+      if (params.industryProfile === "manufacturing") {
+        setRole("manufacturing");
+        await storageService.setActiveRole("manufacturing");
+      } else if (params.industryProfile === "garage") {
+        setRole("mechanic");
+        await storageService.setActiveRole("mechanic");
+      } else if (params.industryProfile === "gps_tracking") {
+        setRole("telematics");
+        await storageService.setActiveRole("telematics");
+      } else if (params.industryProfile === "fleet_logistics") {
+        setRole("driver");
+        await storageService.setActiveRole("driver");
+      }
+
+      if (data?.session && data.user) {
+        setUser(data.user);
+        setIsFieldMode(false);
+        await storageService.setFieldMode(false);
+        await fetchUserProfile(data.user.id, data.user.email);
+      }
+
+      return { data };
+    } catch (err: any) {
+      return { error: err };
+    }
+  };
+
   const switchRole = async (newRole: MobileRole) => {
     setRole(newRole);
     await storageService.setActiveRole(newRole);
@@ -241,10 +373,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         role,
         driverVehicle,
         isLoading,
+        hasCompletedOnboarding,
+        isFieldMode,
         signInWithEmail,
+        signUpWithEmail,
         switchRole,
         pairDriverVehicle,
         unpairDriverVehicle,
+        completeOnboarding,
+        enterFieldMode,
+        exitFieldMode,
         signOut,
       }}
     >

@@ -34,6 +34,13 @@ import { QuickFuelLogScreen } from "../screens/fleet/QuickFuelLogScreen";
 import { TrackerPairingScreen } from "../screens/telematics/TrackerPairingScreen";
 import { GpsDiagnosticScreen } from "../screens/telematics/GpsDiagnosticScreen";
 
+// Manufacturing Screens
+import { ManufacturingHomeScreen } from "../screens/manufacturing/ManufacturingHomeScreen";
+import { DowntimeLogScreen } from "../screens/manufacturing/DowntimeLogScreen";
+import { ScrapLogScreen } from "../screens/manufacturing/ScrapLogScreen";
+import { ProductionOrdersScreen } from "../screens/manufacturing/ProductionOrdersScreen";
+import { PlantMachineCheckScreen } from "../screens/manufacturing/PlantMachineCheckScreen";
+
 export const RootNavigator: React.FC = () => {
   const {
     user,
@@ -75,7 +82,7 @@ export const RootNavigator: React.FC = () => {
           <Truck size={42} color="#FFF" />
         </View>
         <Text style={styles.splashTitle}>MachineCare Hub</Text>
-        <Text style={styles.splashSub}>Fleet, Garage & Telematics Field Companion</Text>
+        <Text style={styles.splashSub}>Manufacturing, Fleet, Garage & Telematics Companion</Text>
         <ActivityIndicator size="small" color={colors.primary} style={{ marginTop: 24 }} />
       </View>
     );
@@ -131,6 +138,31 @@ export const RootNavigator: React.FC = () => {
           }}
         />
       );
+    }
+
+    // 2. Manufacturing & Plant Floor Persona
+    if (role === "manufacturing") {
+      switch (currentScreen) {
+        case "DowntimeLog":
+          return <DowntimeLogScreen onBack={goBack} onSuccess={goBack} />;
+        case "ScrapLog":
+          return <ScrapLogScreen onBack={goBack} onSuccess={goBack} />;
+        case "ProductionOrders":
+          return (
+            <ProductionOrdersScreen
+              onBack={goBack}
+              onOpenOutput={() => navigateTo("home")}
+            />
+          );
+        case "PlantMachineCheck":
+          return <PlantMachineCheckScreen onBack={goBack} onSuccess={goBack} />;
+        default:
+          return (
+            <ManufacturingHomeScreen
+              onNavigate={(sc, p) => navigateTo(sc, p)}
+            />
+          );
+      }
     }
 
     // 3. Driver Persona

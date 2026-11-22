@@ -1,14 +1,21 @@
 # MachineCare Hub - Field Mobile App
 
-A specialized multi-persona React Native mobile application for commercial fleet drivers, workshop mechanics, logistics dispatchers, and GPS telematics field technicians. Designed with offline-first architecture for remote African highway corridors and heavy industrial workshop yards.
+A specialized multi-persona React Native mobile application for plant manufacturing operators, commercial fleet drivers, workshop mechanics, logistics dispatchers, and GPS telematics field technicians. Designed with offline-first architecture for remote African highway corridors, steel-clad manufacturing plants, and heavy industrial workshop yards.
 
 ---
 
-## 📱 4 Field Personas in 1 App
+## 📱 5 Field Personas in 1 Modular App
 
-The app features a top navigation badge that lets personnel switch between 4 dedicated roles:
+The app automatically detects the user's registered industry module upon sign-in or registration and brings up their dedicated tools:
 
-### 1. 🚛 Commercial Fleet Driver (`DRIVER`)
+### 1. 🏭 Plant Floor & Manufacturing (`PLANT / OEE`)
+- **Live Shift OEE & Output Tracking**: Real-time monitoring of Shift Target vs Actual units, attainment percentage, and OEE indicators (Availability, Performance, Quality).
+- **Rapid Downtime / Stoppage Logging**: Instant plant floor reporting for machine breakdowns, lack of raw materials, power/utility cuts, and changeovers with offline queueing.
+- **Scrap & Defect Waste Recording**: Capture defect categories (giveaway/overfill, underweight reject, label defect, damaged packaging) with units and estimated TZS loss.
+- **Production Orders (Batches)**: View active POs, planned targets, batch codes, and log output units right from the production line.
+- **Pre-Shift Machinery Safety Walkaround**: Emergency stop check, interlocking guards, lubrication levels, temperature/vibration, and auto-creation of workshop maintenance tickets on failure.
+
+### 2. 🚛 Commercial Fleet Driver (`DRIVER`)
 - **1-Tap QR Truck Coupling**: Camera barcode scanner or manual plate entry to couple driver to truck & linked trailer.
 - **60-Second Walkaround Inspection**: Pre-start checklist (Tyres, Oil & Coolant, Air Brakes, Lights, Kingpin Trailer Lock) with offline queueing.
 - **Road Receipt Snapper (Safari Float)**: Snap receipts for weighbridges, road tolls, parking, and transit fuel with instant TZS currency logging.

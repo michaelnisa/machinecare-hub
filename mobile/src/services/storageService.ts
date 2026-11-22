@@ -8,11 +8,13 @@ const KEYS = {
   FIELD_MODE: "mc_mobile_field_mode",
   OFFLINE_RECEIPTS: "mc_mobile_offline_receipts_queue",
   OFFLINE_INSPECTIONS: "mc_mobile_offline_inspections_queue",
+  OFFLINE_DOWNTIME: "mc_mobile_offline_downtime_queue",
+  OFFLINE_SCRAP: "mc_mobile_offline_scrap_queue",
   CACHED_JOB_CARDS: "mc_mobile_cached_job_cards",
   CACHED_FLEET_GPS: "mc_mobile_cached_fleet_gps",
 };
 
-export type MobileRole = "driver" | "mechanic" | "dispatcher" | "telematics";
+export type MobileRole = "driver" | "mechanic" | "dispatcher" | "telematics" | "manufacturing";
 
 export interface DriverVehicleBinding {
   vehicleId: string;
@@ -57,6 +59,33 @@ export interface OfflineInspectionItem {
   trailerLockOk: boolean;
   defectNotes?: string;
   odometerKm: number;
+  recordedAt: string;
+}
+
+export interface OfflineDowntimeItem {
+  id: string;
+  organisationId?: string;
+  machineId: string;
+  machineName?: string;
+  productionLine?: string;
+  reason: string;
+  category: "unplanned" | "planned";
+  downtimeMinutes: number;
+  notes?: string;
+  recordedAt: string;
+}
+
+export interface OfflineScrapItem {
+  id: string;
+  organisationId?: string;
+  machineId?: string;
+  machineName?: string;
+  productionLine?: string;
+  reason: string;
+  scrapUnits: number;
+  unit: string;
+  costImpact: number;
+  notes?: string;
   recordedAt: string;
 }
 
@@ -133,6 +162,50 @@ export const storageService = {
     const list = await this.getOfflineInspections();
     const remaining = list.filter((x) => !syncedIds.includes(x.id));
     await AsyncStorage.setItem(KEYS.OFFLINE_INSPECTIONS, JSON.stringify(remaining));
+  },
+
+  // Offline Manufacturing Downtimes
+  async getOfflineDowntimes(): Promise<OfflineDowntimeItem[]> {
+    try {
+      const raw = await AsyncStorage.getItem(KEYS.OFFLINE_DOWNTIME);
+      return raw ? JSON.parse(raw) : [];
+    } catch {
+      return [];
+    }
+  },
+
+  async queueOfflineDowntime(item: OfflineDowntimeItem): Promise<void> {
+    const list = await this.getOfflineDowntimes();
+    list.push(item);
+    await AsyncStorage.setItem(KEYS.OFFLINE_DOWNTIME, JSON.stringify(list));
+  },
+
+  async clearOfflineDowntimes(syncedIds: string[]): Promise<void> {
+    const list = await this.getOfflineDowntimes();
+    const remaining = list.filter((x) => !syncedIds.includes(x.id));
+    await AsyncStorage.setItem(KEYS.OFFLINE_DOWNTIME, JSON.stringify(remaining));
+  },
+
+  // Offline Manufacturing Scraps
+  async getOfflineScraps(): Promise<OfflineScrapItem[]> {
+    try {
+      const raw = await AsyncStorage.getItem(KEYS.OFFLINE_SCRAP);
+      return raw ? JSON.parse(raw) : [];
+    } catch {
+      return [];
+    }
+  },
+
+  async queueOfflineScrap(item: OfflineScrapItem): Promise<void> {
+    const list = await this.getOfflineScraps();
+    list.push(item);
+    await AsyncStorage.setItem(KEYS.OFFLINE_SCRAP, JSON.stringify(list));
+  },
+
+  async clearOfflineScraps(syncedIds: string[]): Promise<void> {
+    const list = await this.getOfflineScraps();
+    const remaining = list.filter((x) => !syncedIds.includes(x.id));
+    await AsyncStorage.setItem(KEYS.OFFLINE_SCRAP, JSON.stringify(remaining));
   },
 
   // Saved Profile & Org metadata

@@ -4,6 +4,8 @@ import { storageService, OfflineReceiptItem, OfflineInspectionItem } from "./sto
 export interface SyncResult {
   receiptsSynced: number;
   inspectionsSynced: number;
+  downtimesSynced: number;
+  scrapsSynced: number;
   errors: string[];
 }
 
@@ -17,6 +19,8 @@ export const syncEngine = {
     const result: SyncResult = {
       receiptsSynced: 0,
       inspectionsSynced: 0,
+      downtimesSynced: 0,
+      scrapsSynced: 0,
       errors: [],
     };
 
@@ -185,6 +189,64 @@ export const syncEngine = {
 
       if (syncedIds.length > 0) {
         await storageService.clearOfflineInspections(syncedIds);
+      }
+    }
+
+    // 3. Sync Manufacturing Downtime Events
+    const downtimes = await storageService.getOfflineDowntimes();
+    if (downtimes.length > 0) {
+      const syncedDowntimeIds: string[] = [];
+      for (const dt of downtimes) {
+        try {
+          if (dt.organisationId) {
+            const { error } = await (supabase as any).from("production_downtime_events").insert({
+              organisation_id: dt.organisationId,
+              machine_id: isUuid(dt.machineId) ? dt.machineId : null,
+              reason: dt.reason,
+              downtime_minutes: dt.downtimeMinutes,
+              started_at: dt.recordedAt || new Date().toISOString(),
+              notes: dt.notes || `Synced from Mobile App [${dt.category}]`,
+            });
+            if (!error) {
+              syncedDowntimeIds.push(dt.id);
+              result.downtimesSynced++;
+            }
+          }
+        } catch (e: any) {
+          result.errors.push(`Downtime sync error: ${e?.message || e}`);
+        }
+      }
+      if (syncedDowntimeIds.length > 0) {
+        await storageService.clearOfflineDowntimes(syncedDowntimeIds);
+      }
+    }
+
+    // 4. Sync Manufacturing Scrap Events
+    const scraps = await storageService.getOfflineScraps();
+    if (scraps.length > 0) {
+      const syncedScrapIds: string[] = [];
+      for (const sc of scraps) {
+        try {
+          if (sc.organisationId) {
+            const { error } = await (supabase as any).from("production_scrap_events").insert({
+              organisation_id: sc.organisationId,
+              machine_id: isUuid(sc.machineId) ? sc.machineId : null,
+              reason: sc.reason,
+              scrap_units: sc.scrapUnits,
+              cost_impact: sc.costImpact,
+              notes: sc.notes || `Synced from Mobile App [${sc.unit}]`,
+            });
+            if (!error) {
+              syncedScrapIds.push(sc.id);
+              result.scrapsSynced++;
+            }
+          }
+        } catch (e: any) {
+          result.errors.push(`Scrap sync error: ${e?.message || e}`);
+        }
+      }
+      if (syncedScrapIds.length > 0) {
+        await storageService.clearOfflineScraps(syncedScrapIds);
       }
     }
 
