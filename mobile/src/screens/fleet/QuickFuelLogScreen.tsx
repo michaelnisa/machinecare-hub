@@ -11,6 +11,7 @@ import {
 } from "react-native";
 import { supabase } from "../../config/supabase";
 import { useOfflineSync } from "../../context/OfflineSyncContext";
+import { useAuth } from "../../context/AuthContext";
 import { colors, radii, spacing } from "../../theme";
 import { Card } from "../../components/Card";
 import {
@@ -40,6 +41,7 @@ const STATIONS = [
 
 export const QuickFuelLogScreen: React.FC<QuickFuelLogScreenProps> = ({ onBack, onSuccess }) => {
   const { queueReceipt } = useOfflineSync();
+  const { user, organisation } = useAuth();
   const [vehicles, setVehicles] = useState<any[]>([]);
   const [selectedVehicleId, setSelectedVehicleId] = useState("");
   const [selectedPlate, setSelectedPlate] = useState("");
@@ -84,6 +86,10 @@ export const QuickFuelLogScreen: React.FC<QuickFuelLogScreenProps> = ({ onBack, 
   };
 
   const handleSubmit = async () => {
+    if (!selectedVehicleId) {
+      Alert.alert("Chagua Gari", "Tafadhali chagua gari husika kwanza.");
+      return;
+    }
     if (!fuelLitres.trim() || Number(fuelLitres) <= 0) {
       Alert.alert("Ingiza Mafuta", "Tafadhali weka kiwango cha mafuta (Litres).");
       return;
@@ -107,6 +113,7 @@ export const QuickFuelLogScreen: React.FC<QuickFuelLogScreenProps> = ({ onBack, 
         station: station,
         odometer: odoNum,
         notes: notes.trim() || `Fuel logged for ${selectedPlate}`,
+        created_by: user?.id || null,
         recorded_at: new Date().toISOString(),
       });
 
@@ -115,6 +122,8 @@ export const QuickFuelLogScreen: React.FC<QuickFuelLogScreenProps> = ({ onBack, 
           id: `fuel-${Date.now()}`,
           tripId: "",
           vehicleId: selectedVehicleId,
+          organisationId: organisation?.id,
+          driverId: user?.id,
           title: `Fuel: ${station}`,
           category: "fuel",
           amount: costNum,

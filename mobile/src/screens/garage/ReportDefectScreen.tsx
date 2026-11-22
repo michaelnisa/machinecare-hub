@@ -10,6 +10,7 @@ import {
   Alert,
 } from "react-native";
 import { supabase } from "../../config/supabase";
+import { useAuth } from "../../context/AuthContext";
 import { useOfflineSync } from "../../context/OfflineSyncContext";
 import { colors, radii, spacing } from "../../theme";
 import { Card } from "../../components/Card";
@@ -48,11 +49,12 @@ export const ReportDefectScreen: React.FC<ReportDefectScreenProps> = ({
   onBack,
   onSuccess,
 }) => {
+  const { organisation, user } = useAuth();
   const { queueInspection } = useOfflineSync();
   const [plate, setPlate] = useState(initialPlate || "");
   const [vehicleId, setVehicleId] = useState(initialVehicleId || "");
-  const [reporterName, setReporterName] = useState("Karakana Mechanic");
-  const [reporterPhone, setReporterPhone] = useState("");
+  const [reporterName, setReporterName] = useState(user?.user_metadata?.full_name || "Karakana Mechanic");
+  const [reporterPhone, setReporterPhone] = useState(user?.user_metadata?.phone || "");
   const [odometer, setOdometer] = useState("");
   const [severity, setSeverity] = useState<"low" | "medium" | "high" | "critical">("high");
   const [category, setCategory] = useState("Braking System");
@@ -74,7 +76,7 @@ export const ReportDefectScreen: React.FC<ReportDefectScreenProps> = ({
 
       // Check if machine exists by plate
       let targetMachineId = vehicleId;
-      let targetOrgId = "00000000-0000-0000-0000-000000000000";
+      let targetOrgId = organisation?.id || null;
 
       const { data: mData } = await supabase
         .from("machines")
@@ -85,7 +87,14 @@ export const ReportDefectScreen: React.FC<ReportDefectScreenProps> = ({
 
       if (mData) {
         targetMachineId = mData.id;
-        targetOrgId = mData.organisation_id || targetOrgId;
+        if (mData.organisation_id) {
+          targetOrgId = mData.organisation_id;
+        }
+      }
+
+      if (!targetOrgId) {
+        const { data: anyOrg } = await supabase.from("organisations").select("id").limit(1).maybeSingle();
+        targetOrgId = anyOrg?.id || null;
       }
 
       if (!targetMachineId || targetMachineId === "00000000-0000-0000-0000-000000000000") {

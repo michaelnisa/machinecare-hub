@@ -14,7 +14,13 @@ interface OfflineSyncContextType {
 const OfflineSyncContext = createContext<OfflineSyncContextType>({
   isSyncing: false,
   pendingCount: 0,
-  triggerSync: async () => ({ receiptsSynced: 0, inspectionsSynced: 0, errors: [] }),
+  triggerSync: async () => ({
+    receiptsSynced: 0,
+    inspectionsSynced: 0,
+    downtimesSynced: 0,
+    scrapsSynced: 0,
+    errors: [],
+  }),
   queueReceipt: async () => {},
   queueInspection: async () => {},
   refreshPendingCount: async () => {},
@@ -25,9 +31,13 @@ export const OfflineSyncProvider: React.FC<{ children: React.ReactNode }> = ({ c
   const [pendingCount, setPendingCount] = useState(0);
 
   const refreshPendingCount = async () => {
-    const receipts = await storageService.getOfflineReceipts();
-    const inspections = await storageService.getOfflineInspections();
-    setPendingCount(receipts.length + inspections.length);
+    const [receipts, inspections, downtimes, scraps] = await Promise.all([
+      storageService.getOfflineReceipts(),
+      storageService.getOfflineInspections(),
+      storageService.getOfflineDowntimes(),
+      storageService.getOfflineScraps(),
+    ]);
+    setPendingCount(receipts.length + inspections.length + downtimes.length + scraps.length);
   };
 
   useEffect(() => {

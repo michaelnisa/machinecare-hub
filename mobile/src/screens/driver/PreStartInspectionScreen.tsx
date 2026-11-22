@@ -12,7 +12,7 @@ interface PreStartInspectionScreenProps {
 }
 
 export const PreStartInspectionScreen: React.FC<PreStartInspectionScreenProps> = ({ onBack, onSuccess }) => {
-  const { driverVehicle, user } = useAuth();
+  const { driverVehicle, user, organisation } = useAuth();
   const { queueInspection } = useOfflineSync();
 
   const [tyresOk, setTyresOk] = useState(true);
@@ -37,7 +37,7 @@ export const PreStartInspectionScreen: React.FC<PreStartInspectionScreenProps> =
       await queueInspection({
         id: "ins-" + Date.now(),
         vehicleId: driverVehicle.vehicleId,
-        organisationId: driverVehicle.organisationId,
+        organisationId: driverVehicle.organisationId || organisation?.id || undefined,
         driverId: user?.id,
         inspectorName: user?.user_metadata?.full_name || "Commercial Driver",
         inspectorPhone: user?.phone || "0700000000",

@@ -12,7 +12,7 @@ interface RoadsideSosScreenProps {
 }
 
 export const RoadsideSosScreen: React.FC<RoadsideSosScreenProps> = ({ onBack, onSuccess }) => {
-  const { driverVehicle, user } = useAuth();
+  const { driverVehicle, user, organisation } = useAuth();
 
   const [issueType, setIssueType] = useState("tyre_blowout");
   const [description, setDescription] = useState("");
@@ -30,7 +30,7 @@ export const RoadsideSosScreen: React.FC<RoadsideSosScreenProps> = ({ onBack, on
   ];
 
   const handleBroadcastSos = async () => {
-    if (!driverVehicle) {
+    if (!driverVehicle || !driverVehicle.vehicleId) {
       Alert.alert("Gari Halijatambuliwa", "Tafadhali unganisha namba ya gari kwanza kabla ya kutuma SOS.");
       return;
     }
@@ -41,14 +41,20 @@ export const RoadsideSosScreen: React.FC<RoadsideSosScreenProps> = ({ onBack, on
       const sosTitle = `🚨 EMERGENCY ROADSIDE BREAKDOWN: ${driverVehicle.plateNumber} · ${selectedIssue?.label}`;
       const sosDesc = `[ROADSIDE SOS BEACON]: Location: ${currentLocation}. Issue: ${selectedIssue?.label} (${selectedIssue?.swahili}). Details: ${description || "Immediate mechanical recovery requested."}. Driver: ${user?.user_metadata?.full_name || "Driver"}.`;
 
-      let orgId = driverVehicle.organisationId;
+      let orgId = driverVehicle.organisationId || organisation?.id;
       if (!orgId) {
         const { data: mData } = await supabase
           .from("machines")
           .select("organisation_id")
           .eq("id", driverVehicle.vehicleId)
           .maybeSingle();
-        orgId = mData?.organisation_id || "00000000-0000-0000-0000-000000000000";
+        if (mData?.organisation_id) {
+          orgId = mData.organisation_id;
+        }
+      }
+      if (!orgId) {
+        const { data: anyOrg } = await supabase.from("organisations").select("id").limit(1).maybeSingle();
+        orgId = anyOrg?.id || null;
       }
 
       const { error } = await supabase.from("fault_reports").insert({
