@@ -12,9 +12,21 @@ const KEYS = {
   OFFLINE_SCRAP: "mc_mobile_offline_scrap_queue",
   CACHED_JOB_CARDS: "mc_mobile_cached_job_cards",
   CACHED_FLEET_GPS: "mc_mobile_cached_fleet_gps",
+  ACTIVE_DRIVER_SESSION: "mc_mobile_active_driver_session",
 };
 
 export type MobileRole = "driver" | "mechanic" | "dispatcher" | "telematics" | "manufacturing";
+
+export interface DriverSession {
+  id: string;
+  fullName: string;
+  phone?: string | null;
+  driverCode?: string | null;
+  email?: string | null;
+  assignedVehicle?: string | null;
+  organisationId?: string | null;
+  signedInAt: string;
+}
 
 export interface DriverVehicleBinding {
   vehicleId: string;
@@ -254,11 +266,30 @@ export const storageService = {
     await AsyncStorage.setItem(KEYS.FIELD_MODE, enabled ? "true" : "false");
   },
 
+  // Active Driver Session (Web-Shared Driver Portal Auth)
+  async getDriverSession(): Promise<DriverSession | null> {
+    try {
+      const raw = await AsyncStorage.getItem(KEYS.ACTIVE_DRIVER_SESSION);
+      return raw ? JSON.parse(raw) : null;
+    } catch {
+      return null;
+    }
+  },
+
+  async setDriverSession(session: DriverSession | null): Promise<void> {
+    if (session) {
+      await AsyncStorage.setItem(KEYS.ACTIVE_DRIVER_SESSION, JSON.stringify(session));
+    } else {
+      await AsyncStorage.removeItem(KEYS.ACTIVE_DRIVER_SESSION);
+    }
+  },
+
   async clearAllAuth(): Promise<void> {
     await AsyncStorage.multiRemove([
       KEYS.SAVED_PROFILE,
       KEYS.FIELD_MODE,
       KEYS.DRIVER_VEHICLE,
+      KEYS.ACTIVE_DRIVER_SESSION,
     ]);
   },
 };

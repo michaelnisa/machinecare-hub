@@ -74,17 +74,29 @@ export const DriverHomeScreen: React.FC<DriverHomeScreenProps> = ({ onNavigate }
     try {
       setLoading(true);
 
-      // 1. Resolve Driver ID if user has driver record
+      // 1. Resolve Driver ID from saved driver session or shared drivers table
       let resolvedDriverId: string | null = null;
-      if (user?.email || user?.phone) {
-        const { data: dData } = await supabase
+      const savedDriver = await storageService.getDriverSession();
+      if (savedDriver?.id) {
+        resolvedDriverId = savedDriver.id;
+      } else if (user?.email || user?.phone || user?.id) {
+        const { data: dList } = await supabase
           .from("drivers")
-          .select("id, full_name, phone, licence_number")
-          .or(`email.ilike.%${user.email || ""}%${user.phone ? `,phone.ilike.%${user.phone}%` : ""}`)
-          .limit(1)
-          .maybeSingle();
+          .select("id, full_name, phone, notes, status")
+          .eq("status", "active")
+          .limit(50);
 
-        if (dData) resolvedDriverId = dData.id;
+        if (dList && dList.length > 0) {
+          const match = dList.find((d) => {
+            if (d.id === user.id) return true;
+            const notesStr = typeof d.notes === "string" ? d.notes : JSON.stringify(d.notes || {});
+            if (user.email && notesStr.toLowerCase().includes(user.email.toLowerCase())) return true;
+            if (user.phone && d.phone && d.phone.includes(user.phone)) return true;
+            if (user.user_metadata?.full_name && d.full_name?.toLowerCase() === user.user_metadata.full_name.toLowerCase()) return true;
+            return false;
+          });
+          if (match) resolvedDriverId = match.id;
+        }
       }
 
       // 2. Query Active & Dispatched Trips

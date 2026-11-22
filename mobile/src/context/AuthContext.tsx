@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
 import { supabase } from "../config/supabase";
-import { storageService, MobileRole, DriverVehicleBinding } from "../services/storageService";
+import { storageService, MobileRole, DriverVehicleBinding, DriverSession } from "../services/storageService";
+import { driverAuthService, ParsedDriver } from "../services/driverAuthService";
 
 interface AuthContextType {
   user: any | null;
@@ -12,6 +13,14 @@ interface AuthContextType {
   hasCompletedOnboarding: boolean;
   isFieldMode: boolean;
   signInWithEmail: (email: string, pass: string) => Promise<{ error?: any }>;
+  signInDriverWithPin: (identifier: string, pin: string) => Promise<{
+    success: boolean;
+    driver?: DriverSession;
+    needsPinSetup?: boolean;
+    rawDriver?: ParsedDriver;
+    error?: string;
+  }>;
+  setupDriverPin: (driverId: string, newPin: string) => Promise<{ success: boolean; error?: string }>;
   signUpWithEmail: (params: {
     email: string;
     password: string;
@@ -19,6 +28,7 @@ interface AuthContextType {
     companyName: string;
     industryProfile: "manufacturing" | "fleet_logistics" | "garage" | "gps_tracking";
     roleTitle?: string;
+    phone?: string;
   }) => Promise<{ error?: any; data?: any }>;
   switchRole: (newRole: MobileRole) => Promise<void>;
   pairDriverVehicle: (binding: DriverVehicleBinding) => Promise<void>;
@@ -39,6 +49,8 @@ const AuthContext = createContext<AuthContextType>({
   hasCompletedOnboarding: false,
   isFieldMode: false,
   signInWithEmail: async () => ({}),
+  signInDriverWithPin: async () => ({ success: false }),
+  setupDriverPin: async () => ({ success: false }),
   signUpWithEmail: async () => ({}),
   switchRole: async () => {},
   pairDriverVehicle: async () => {},
@@ -95,16 +107,38 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return;
       }
 
-      // 2. Commercial Driver Detection (drivers table match)
-      if (userEmail) {
-        const { data: driverMatch } = await supabase
+      // 2. Commercial Driver Detection (drivers table match or driver role)
+      if (userEmail || uRole.includes("driver") || dept.includes("driver")) {
+        const { data: driverRows } = await supabase
           .from("drivers")
-          .select("id, name")
-          .eq("email", userEmail)
-          .limit(1)
-          .maybeSingle();
+          .select("id, full_name, phone, notes, status, organisation_id")
+          .eq("status", "active")
+          .limit(50);
 
-        if (driverMatch) {
+        if (driverRows && driverRows.length > 0) {
+          const dMatch = driverRows.find((d) => {
+            const notesStr = typeof d.notes === "string" ? d.notes : JSON.stringify(d.notes || {});
+            return (
+              (userEmail && notesStr.toLowerCase().includes(userEmail.toLowerCase())) ||
+              (userEmail && d.phone && userEmail.includes(d.phone))
+            );
+          });
+
+          if (dMatch || uRole.includes("driver") || dept.includes("driver")) {
+            setRole("driver");
+            await storageService.setActiveRole("driver");
+            if (dMatch) {
+              await storageService.setDriverSession({
+                id: dMatch.id,
+                fullName: dMatch.full_name,
+                phone: dMatch.phone,
+                organisationId: dMatch.organisation_id,
+                signedInAt: new Date().toISOString(),
+              });
+            }
+            return;
+          }
+        } else if (uRole.includes("driver") || dept.includes("driver")) {
           setRole("driver");
           await storageService.setActiveRole("driver");
           return;
@@ -206,12 +240,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => {
     async function init() {
       try {
-        const [savedOnboarding, savedFieldMode, savedRole, savedBinding, savedProf] = await Promise.all([
+        const [savedOnboarding, savedFieldMode, savedRole, savedBinding, savedProf, savedDriverSession] = await Promise.all([
           storageService.hasCompletedOnboarding(),
           storageService.isFieldModeEnabled(),
           storageService.getActiveRole(),
           storageService.getDriverVehicle(),
           storageService.getSavedProfile(),
+          storageService.getDriverSession(),
         ]);
 
         setHasCompletedOnboarding(savedOnboarding);
@@ -226,10 +261,25 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
         const { data } = await supabase.auth.getSession();
         const currentUser = data.session?.user ?? null;
-        setUser(currentUser);
 
         if (currentUser) {
+          setUser(currentUser);
           await fetchUserProfile(currentUser.id, currentUser.email);
+        } else if (savedDriverSession) {
+          // Re-hydrate active driver session matching WebApp Driver Portal
+          setUser({
+            id: savedDriverSession.id,
+            email: savedDriverSession.email || `${savedDriverSession.driverCode || "driver"}@machinecare.local`,
+            user_metadata: {
+              full_name: savedDriverSession.fullName,
+              phone: savedDriverSession.phone,
+              driver_code: savedDriverSession.driverCode,
+            },
+            isDriverPortalAuth: true,
+          });
+          setRole("driver");
+        } else {
+          setUser(null);
         }
       } catch (err) {
         console.warn("Failed to initialize mobile auth:", err);
@@ -285,6 +335,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     companyName: string;
     industryProfile: "manufacturing" | "fleet_logistics" | "garage" | "gps_tracking";
     roleTitle?: string;
+    phone?: string;
   }) => {
     try {
       const company = params.companyName.trim() || "My Company";
@@ -325,6 +376,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       } else if (params.industryProfile === "fleet_logistics") {
         setRole("driver");
         await storageService.setActiveRole("driver");
+
+        // Two-way sync: Ensure driver record is created in Supabase drivers table
+        // so Fleet Managers on the WebApp can immediately see, assign trucks & dispatch!
+        await driverAuthService.ensureDriverRecord({
+          fullName: params.fullName,
+          email: params.email,
+          phone: params.phone,
+          driverPin: "1234",
+        });
       }
 
       if (data?.session && data.user) {
@@ -338,6 +398,62 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } catch (err: any) {
       return { error: err };
     }
+  };
+
+  /**
+   * Direct Driver Portal Sign-In via Driver Code / Phone + PIN
+   * Shares credentials 1:1 with WebApp Driver Portal
+   */
+  const signInDriverWithPin = async (identifier: string, pin: string) => {
+    try {
+      const res = await driverAuthService.loginDriverWithPin(identifier, pin);
+      if (!res.success) {
+        return res;
+      }
+
+      if (res.driver) {
+        await storageService.setDriverSession(res.driver);
+        if (res.vehicleBinding) {
+          await pairDriverVehicle(res.vehicleBinding);
+        }
+        setRole("driver");
+        await storageService.setActiveRole("driver");
+        setIsFieldMode(false);
+        await storageService.setFieldMode(false);
+
+        setUser({
+          id: res.driver.id,
+          email: res.driver.email || `${res.driver.driverCode || "driver"}@machinecare.local`,
+          user_metadata: {
+            full_name: res.driver.fullName,
+            phone: res.driver.phone,
+            driver_code: res.driver.driverCode,
+          },
+          isDriverPortalAuth: true,
+        });
+
+        // Load organisation if driver belongs to one
+        if (res.driver.organisationId) {
+          const { data: orgData } = await supabase
+            .from("organisations")
+            .select("id, name, logo_url, industry_profile")
+            .eq("id", res.driver.organisationId)
+            .maybeSingle();
+          if (orgData) {
+            setOrganisation(orgData);
+            await storageService.setSavedProfile({ organisation: orgData });
+          }
+        }
+      }
+
+      return { success: true, driver: res.driver };
+    } catch (err: any) {
+      return { success: false, error: err?.message || "Failed to log in driver" };
+    }
+  };
+
+  const setupDriverPin = async (driverId: string, newPin: string) => {
+    return driverAuthService.setDriverPin(driverId, newPin);
   };
 
   const switchRole = async (newRole: MobileRole) => {
@@ -377,6 +493,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const signOut = async () => {
     await supabase.auth.signOut();
     await unpairDriverVehicle();
+    await storageService.setDriverSession(null);
     await storageService.clearAllAuth();
     setUser(null);
     setProfile(null);
@@ -396,6 +513,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         hasCompletedOnboarding,
         isFieldMode,
         signInWithEmail,
+        signInDriverWithPin,
+        setupDriverPin,
         signUpWithEmail,
         switchRole,
         pairDriverVehicle,

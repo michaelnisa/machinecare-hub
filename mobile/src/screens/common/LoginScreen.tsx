@@ -10,6 +10,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
+  Modal,
 } from "react-native";
 import { useAuth } from "../../context/AuthContext";
 import { colors, radii, spacing } from "../../theme";
@@ -32,6 +33,8 @@ import {
   User,
   CheckCircle,
   Sparkles,
+  Phone,
+  KeyRound,
 } from "lucide-react-native";
 
 interface LoginScreenProps {
@@ -40,7 +43,7 @@ interface LoginScreenProps {
   onRevisitOnboarding?: () => void;
 }
 
-type AuthMode = "login" | "register";
+type AuthMode = "login" | "driver_pin" | "register";
 type IndustryModule = "manufacturing" | "fleet_logistics" | "garage" | "gps_tracking";
 
 interface ModuleOption {
@@ -97,15 +100,31 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
   onSkipToField,
   onRevisitOnboarding,
 }) => {
-  const { signInWithEmail, signUpWithEmail } = useAuth();
+  const { signInWithEmail, signUpWithEmail, signInDriverWithPin, setupDriverPin } = useAuth();
   const [authMode, setAuthMode] = useState<AuthMode>("login");
 
-  // Form Fields
+  // Form Fields - Email Login
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+
+  // Form Fields - Driver PIN Login (Web-Shared Portal)
+  const [driverIdentifier, setDriverIdentifier] = useState("");
+  const [driverPin, setDriverPin] = useState("");
+  const [showDriverPin, setShowDriverPin] = useState(false);
+
+  // PIN Setup Modal State (First-time drivers without a PIN)
+  const [pinSetupOpen, setPinSetupOpen] = useState(false);
+  const [setupDriverId, setSetupDriverId] = useState("");
+  const [setupDriverName, setSetupDriverName] = useState("");
+  const [newPin, setNewPin] = useState("");
+  const [confirmPin, setConfirmPin] = useState("");
+  const [savingPin, setSavingPin] = useState(false);
+
+  // Form Fields - Register
   const [fullName, setFullName] = useState("");
   const [companyName, setCompanyName] = useState("");
+  const [driverPhone, setDriverPhone] = useState("");
   const [selectedModule, setSelectedModule] = useState<IndustryModule>("manufacturing");
   const [selectedRoleTitle, setSelectedRoleTitle] = useState("Plant Operator");
   const [loading, setLoading] = useState(false);
@@ -145,6 +164,79 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
     }
   };
 
+  const handleDriverLogin = async () => {
+    if (!driverIdentifier.trim()) {
+      Alert.alert(
+        "Ingiza Taarifa za Dereva",
+        "Tafadhali ingiza Namba ya Simu (e.g. 0712345678), Namba ya Dereva (e.g. DRV-001), au Barua Pepe."
+      );
+      return;
+    }
+    if (!driverPin.trim()) {
+      Alert.alert("Ingiza PIN ya Dereva", "Tafadhali ingiza PIN yako ya tarakimu 4 (e.g. 1234).");
+      return;
+    }
+
+    try {
+      setLoading(true);
+      const res = await signInDriverWithPin(driverIdentifier, driverPin);
+
+      if (res.needsPinSetup && res.rawDriver) {
+        setSetupDriverId(res.rawDriver.id);
+        setSetupDriverName(res.rawDriver.fullName);
+        setPinSetupOpen(true);
+        return;
+      }
+
+      if (!res.success) {
+        Alert.alert("Hitilafu ya Kuingia", res.error || "Imeshindwa kuthibitisha dereva.");
+      } else {
+        Alert.alert(
+          "Karibu Kwenye Lori!",
+          `Akaunti ya dereva ${res.driver?.fullName || ""} imethibitishwa kikamilifu kutoka kwenye mfumo wa MachineCare. Lori lako na safari ziko tayari!`
+        );
+        onSuccess();
+      }
+    } catch (e: any) {
+      Alert.alert("Hitilafu", e?.message || "Hitilafu imetokea wakati wa kuingia kama dereva.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSavePinAndSignIn = async () => {
+    if (!newPin || newPin.length < 4) {
+      Alert.alert("PIN Fupi", "PIN inatakiwa kuwa na angalau tarakimu nne (4).");
+      return;
+    }
+    if (newPin !== confirmPin) {
+      Alert.alert("PIN Hazifanani", "PIN mpya na uthibitisho haviendani.");
+      return;
+    }
+
+    try {
+      setSavingPin(true);
+      const res = await setupDriverPin(setupDriverId, newPin);
+      if (!res.success) {
+        Alert.alert("Hitilafu", res.error || "Imeshindwa kuhifadhi PIN.");
+      } else {
+        setPinSetupOpen(false);
+        setDriverPin(newPin);
+        const loginRes = await signInDriverWithPin(driverIdentifier, newPin);
+        if (loginRes.success) {
+          Alert.alert("Hongera!", `PIN ya dereva imewekwa kikamilifu. Karibu ${setupDriverName}!`);
+          onSuccess();
+        } else {
+          Alert.alert("PIN Imewekwa", "PIN imehifadhiwa. Sasa unaweza kubonyeza 'Ingia Kwenye Lori'.");
+        }
+      }
+    } catch (e: any) {
+      Alert.alert("Hitilafu", e?.message || "Hitilafu imetokea wakati wa kuweka PIN.");
+    } finally {
+      setSavingPin(false);
+    }
+  };
+
   const handleRegister = async () => {
     if (!fullName.trim()) {
       Alert.alert("Jina Kamili Linahitajika", "Tafadhali ingiza jina lako kamili.");
@@ -169,6 +261,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
         companyName: finalCompanyName,
         industryProfile: selectedModule,
         roleTitle: selectedRoleTitle,
+        phone: driverPhone.trim() || undefined,
       });
 
       if (res.error) {
@@ -228,7 +321,17 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
             activeOpacity={0.8}
           >
             <Text style={[styles.modeTabText, authMode === "login" && styles.modeTabTextActive]}>
-              Ingia (Sign In)
+              Ingia (Email)
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.modeTab, authMode === "driver_pin" && styles.modeTabActive]}
+            onPress={() => setAuthMode("driver_pin")}
+            activeOpacity={0.8}
+          >
+            <Text style={[styles.modeTabText, authMode === "driver_pin" && styles.modeTabTextActive]}>
+              Dereva (PIN)
             </Text>
           </TouchableOpacity>
 
@@ -238,13 +341,13 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
             activeOpacity={0.8}
           >
             <Text style={[styles.modeTabText, authMode === "register" && styles.modeTabTextActive]}>
-              Jisajili (Register)
+              Jisajili
             </Text>
           </TouchableOpacity>
         </View>
 
         {/* ============================================================== */}
-        {/* FORM: SIGN IN MODE */}
+        {/* FORM: SIGN IN MODE (EMAIL & PASSWORD) */}
         {/* ============================================================== */}
         {authMode === "login" && (
           <Card style={styles.card}>
@@ -336,6 +439,107 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
         )}
 
         {/* ============================================================== */}
+        {/* FORM: DRIVER PIN MODE (SHARED WITH WEBAPP FLEET DRIVERS) */}
+        {/* ============================================================== */}
+        {authMode === "driver_pin" && (
+          <Card style={styles.card}>
+            <View style={styles.driverBadgeRow}>
+              <View style={styles.driverBadge}>
+                <Truck size={14} color={colors.primary} />
+                <Text style={styles.driverBadgeText}>PORTAL YA MADEREVA WA UGA (WEB-SHARED)</Text>
+              </View>
+            </View>
+
+            <Text style={styles.formTitle}>Ingia Kwenye Lori Lako</Text>
+            <Text style={styles.formSub}>
+              Tumia Namba ya Simu au Namba ya Dereva (Driver Code) uliyosajiliwa nayo kwenye tovuti ya MachineCare (Webapp Drivers).
+            </Text>
+
+            <View style={styles.inputContainer}>
+              <Text style={styles.inputLabel}>Namba ya Simu au Code ya Dereva</Text>
+              <View style={styles.inputRow}>
+                <Phone size={18} color={colors.textMuted} />
+                <TextInput
+                  style={styles.input}
+                  placeholder="mf. 0712345678 au DRV-001"
+                  placeholderTextColor={colors.textDim}
+                  autoCapitalize="none"
+                  value={driverIdentifier}
+                  onChangeText={setDriverIdentifier}
+                />
+              </View>
+            </View>
+
+            <View style={styles.inputContainer}>
+              <Text style={styles.inputLabel}>PIN ya Dereva (Driver PIN - Tarakimu 4)</Text>
+              <View style={styles.inputRow}>
+                <KeyRound size={18} color={colors.textMuted} />
+                <TextInput
+                  style={[styles.input, { flex: 1 }]}
+                  placeholder="••••"
+                  placeholderTextColor={colors.textDim}
+                  keyboardType="numeric"
+                  maxLength={6}
+                  secureTextEntry={!showDriverPin}
+                  value={driverPin}
+                  onChangeText={setDriverPin}
+                />
+                <TouchableOpacity
+                  onPress={() => setShowDriverPin(!showDriverPin)}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                >
+                  {showDriverPin ? (
+                    <EyeOff size={18} color={colors.textMuted} />
+                  ) : (
+                    <Eye size={18} color={colors.textMuted} />
+                  )}
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            <TouchableOpacity
+              style={styles.submitBtn}
+              onPress={handleDriverLogin}
+              disabled={loading}
+              activeOpacity={0.8}
+            >
+              {loading ? (
+                <ActivityIndicator color="#FFF" size="small" />
+              ) : (
+                <>
+                  <Truck size={18} color="#FFF" />
+                  <Text style={styles.submitBtnText}>Ingia Kwenye Lori / Sign In to Truck</Text>
+                  <ArrowRight size={16} color="#FFF" />
+                </>
+              )}
+            </TouchableOpacity>
+
+            {/* Quick Demo Drivers */}
+            <View style={styles.quickFillRow}>
+              <Text style={styles.quickFillLabel}>Madereva Waliosajiliwa Webapp:</Text>
+              <TouchableOpacity
+                onPress={() => {
+                  setDriverIdentifier("0712000111");
+                  setDriverPin("1234");
+                }}
+                style={styles.fillChip}
+              >
+                <Text style={styles.fillChipText}>Majaliwa (0712 000 111 / 1234)</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => {
+                  setDriverIdentifier("DRV-001");
+                  setDriverPin("1234");
+                }}
+                style={styles.fillChip}
+              >
+                <Text style={styles.fillChipText}>DRV-001 (PIN: 1234)</Text>
+              </TouchableOpacity>
+            </View>
+          </Card>
+        )}
+
+        {/* ============================================================== */}
         {/* FORM: REGISTER / SIGN UP MODE */}
         {/* ============================================================== */}
         {authMode === "register" && (
@@ -418,6 +622,27 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
                 </TouchableOpacity>
               </View>
             </View>
+
+            {/* Driver Phone & WebApp Roster Notice */}
+            {selectedModule === "fleet_logistics" && (
+              <View style={styles.inputContainer}>
+                <Text style={styles.inputLabel}>Namba ya Simu (Inayounganishwa na Webapp Drivers)</Text>
+                <View style={styles.inputRow}>
+                  <Phone size={18} color={colors.textMuted} />
+                  <TextInput
+                    style={styles.input}
+                    placeholder="mf. 0712345678"
+                    placeholderTextColor={colors.textDim}
+                    keyboardType="phone-pad"
+                    value={driverPhone}
+                    onChangeText={setDriverPhone}
+                  />
+                </View>
+                <Text style={{ fontSize: 11, color: colors.primary, marginTop: 2 }}>
+                  ✓ Taarifa za dereva zitasawazishwa moja kwa moja na mfumo wa Webapp (Fleet Drivers).
+                </Text>
+              </View>
+            )}
 
             {/* Operational Module Selection */}
             <Text style={[styles.inputLabel, { marginTop: spacing.xs }]}>
@@ -554,6 +779,83 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
             Imeunganishwa na MachineCare Cloud Backend (Supabase)
           </Text>
         </View>
+
+        {/* PIN Setup Modal for First-Time Drivers */}
+        <Modal
+          visible={pinSetupOpen}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setPinSetupOpen(false)}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContent}>
+              <View style={styles.modalHeader}>
+                <KeyRound size={28} color={colors.primary} />
+                <Text style={styles.modalTitle}>Weka PIN ya Dereva</Text>
+                <Text style={styles.modalSub}>
+                  Karibu {setupDriverName}! Hii ni mara yako ya kwanza kuingia. Tafadhali weka PIN yako ya tarakimu 4 utakayotumia kuingia kwenye mfumo wa gari.
+                </Text>
+              </View>
+
+              <View style={styles.inputContainer}>
+                <Text style={styles.inputLabel}>PIN Mpya (Tarakimu 4)</Text>
+                <View style={styles.inputRow}>
+                  <KeyRound size={18} color={colors.textMuted} />
+                  <TextInput
+                    style={styles.input}
+                    placeholder="e.g. 1234"
+                    placeholderTextColor={colors.textDim}
+                    keyboardType="numeric"
+                    maxLength={6}
+                    secureTextEntry
+                    value={newPin}
+                    onChangeText={setNewPin}
+                  />
+                </View>
+              </View>
+
+              <View style={styles.inputContainer}>
+                <Text style={styles.inputLabel}>Thibitisha PIN Mpya</Text>
+                <View style={styles.inputRow}>
+                  <KeyRound size={18} color={colors.textMuted} />
+                  <TextInput
+                    style={styles.input}
+                    placeholder="e.g. 1234"
+                    placeholderTextColor={colors.textDim}
+                    keyboardType="numeric"
+                    maxLength={6}
+                    secureTextEntry
+                    value={confirmPin}
+                    onChangeText={setConfirmPin}
+                  />
+                </View>
+              </View>
+
+              <TouchableOpacity
+                style={styles.submitBtn}
+                onPress={handleSavePinAndSignIn}
+                disabled={savingPin}
+                activeOpacity={0.8}
+              >
+                {savingPin ? (
+                  <ActivityIndicator color="#FFF" size="small" />
+                ) : (
+                  <>
+                    <CheckCircle size={18} color="#FFF" />
+                    <Text style={styles.submitBtnText}>Hifadhi PIN & Ingia Kwenye Lori</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={{ marginTop: 12, alignItems: "center" }}
+                onPress={() => setPinSetupOpen(false)}
+              >
+                <Text style={{ color: colors.textMuted, fontSize: 13 }}>Ghairi (Cancel)</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </Modal>
       </ScrollView>
     </KeyboardAvoidingView>
   );
@@ -820,5 +1122,58 @@ const styles = StyleSheet.create({
   footerText: {
     fontSize: 11,
     color: colors.textMuted,
+  },
+  driverBadgeRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 4,
+  },
+  driverBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    backgroundColor: colors.primarySoft,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 4,
+    borderRadius: radii.full,
+  },
+  driverBadgeText: {
+    fontSize: 10,
+    fontWeight: "900",
+    color: colors.primary,
+    letterSpacing: 0.5,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.8)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: spacing.md,
+  },
+  modalContent: {
+    width: "100%",
+    maxWidth: 420,
+    backgroundColor: colors.surface,
+    borderRadius: radii.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: spacing.lg,
+    gap: spacing.md,
+  },
+  modalHeader: {
+    alignItems: "center",
+    gap: 6,
+    marginBottom: spacing.xs,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: "900",
+    color: colors.text,
+  },
+  modalSub: {
+    fontSize: 12,
+    color: colors.textMuted,
+    textAlign: "center",
+    lineHeight: 17,
   },
 });
