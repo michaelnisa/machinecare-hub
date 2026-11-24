@@ -358,7 +358,7 @@ export function Sidebar() {
           { to: "/fleet/tyres", label: "Tyres", icon: CircleDot },
           { to: "/fuel", label: t.nav.fuel, icon: Fuel },
           { to: "/fleet/inspections", label: "Inspections", icon: CheckCircle2 },
-          { to: "/field-app", label: "Field Mobile App", icon: Smartphone },
+          ...(!isLogistix ? [{ to: "/field-app", label: "Field Mobile App", icon: Smartphone }] : []),
         ],
       },
       {
@@ -432,7 +432,7 @@ export function Sidebar() {
           { to: "/fuel", label: "Fuel & Bowser Logs", icon: Fuel },
           { to: "/fleet/inspections", label: "Pre-Trip Inspections", icon: CheckCircle2 },
           { to: "/fleet/documents", label: "Fleet Compliance & Docs", icon: FileText },
-          { to: "/field-app", label: "Field Mobile App", icon: Smartphone },
+          ...(!isLogistix ? [{ to: "/field-app", label: "Field Mobile App", icon: Smartphone }] : []),
         ],
       },
       {
@@ -513,7 +513,7 @@ export function Sidebar() {
         ],
       },
     ],
-    [isAdmin],
+    [isAdmin, isLogistix],
   );
 
   // Workshop/Garage nav — a fully separate product experience from
