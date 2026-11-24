@@ -52,11 +52,13 @@ import {
 } from "@/services/complaintsService";
 import { isEnterpriseFleet } from "@/lib/fleetTiers";
 import { toast } from "sonner";
+import { ExecutiveReportDocument } from "./ExecutiveReportDocument";
 
 export default function ExecutiveReports() {
   const { organisation, profile } = useAuth();
   const [loading, setLoading] = useState(true);
   const [activeFrequency, setActiveFrequency] = useState<"daily" | "weekly" | "monthly">("weekly");
+  const [viewMode, setViewMode] = useState<"dashboard" | "document">("dashboard");
 
   const [vehicles, setVehicles] = useState<any[]>([]);
   const [workOrders, setWorkOrders] = useState<any[]>([]);
@@ -448,6 +450,28 @@ export default function ExecutiveReports() {
 
   if (loading) return <PageLoader />;
 
+  if (viewMode === "document") {
+    return (
+      <ExecutiveReportDocument
+        companyDisplayName={companyDisplayName}
+        activeFrequency={activeFrequency}
+        totalFleetCost={totalFleetCost}
+        cpkVehicleAnalytics={cpkVehicleAnalytics}
+        componentDistribution={componentDistribution}
+        technicianPartsIssuance={technicianPartsIssuance}
+        monthlySparesConsumption={monthlySparesConsumption}
+        warrantyRegistry={warrantyRegistry}
+        contractorPerformance={contractorPerformance}
+        vehicles={vehicles}
+        workOrders={workOrders}
+        partsIssuanceHistory={partsIssuanceHistory}
+        onToggleViewMode={() => setViewMode("dashboard")}
+        onPrint={() => window.print()}
+        onExportCsv={handleExportCsv}
+      />
+    );
+  }
+
   return (
     <div className="space-y-6 animate-fade-in pb-16">
       {/* Top Header Banner */}
@@ -480,6 +504,34 @@ export default function ExecutiveReports() {
 
         {/* Action Controls & Multi-Format Exporters */}
         <div className="flex flex-wrap items-center gap-2">
+          {/* Mode Switcher */}
+          <div className="flex items-center bg-muted/80 p-0.5 rounded-lg border border-border text-xs mr-1">
+            <button
+              type="button"
+              onClick={() => setViewMode("dashboard")}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md font-semibold transition-all ${
+                viewMode === "dashboard"
+                  ? "bg-card text-foreground shadow-xs"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              <LayoutDashboard className="h-3.5 w-3.5" />
+              Dashboard
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode("document")}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md font-semibold transition-all ${
+                viewMode === "document"
+                  ? "bg-card text-foreground shadow-xs"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              <FileText className="h-3.5 w-3.5 text-primary" />
+              Document View
+            </button>
+          </div>
+
           {/* Clean All Test Data */}
           <Button
             variant="outline"
@@ -489,7 +541,7 @@ export default function ExecutiveReports() {
             title="Clean all local mock data, test complaints, and cached fixtures"
           >
             <Trash2 className="h-3.5 w-3.5 text-rose-600" />
-            Clean All Test Data
+            Clean Test Data
           </Button>
 
           {/* Slide 23: Scheduled Digest Simulator */}
@@ -501,18 +553,21 @@ export default function ExecutiveReports() {
             title="Slide 23: Generate scheduled automated report dispatch"
           >
             <Send className="h-3.5 w-3.5" />
-            Send Scheduled Digest (Slide 23)
+            Scheduled Digest
           </Button>
 
           {/* Slide 22: PDF / Print */}
           <Button
             variant="outline"
             size="sm"
-            onClick={() => window.print()}
+            onClick={() => {
+              setViewMode("document");
+              setTimeout(() => window.print(), 100);
+            }}
             className="gap-1.5 text-xs font-semibold"
           >
             <Printer className="h-3.5 w-3.5" />
-            Print / PDF
+            Print Document
           </Button>
 
           {/* Slide 22: CSV / Excel */}
@@ -522,7 +577,7 @@ export default function ExecutiveReports() {
             className="gap-1.5 bg-primary text-primary-foreground text-xs font-semibold shadow-xs"
           >
             <Download className="h-3.5 w-3.5" />
-            Export Excel / CSV
+            Export CSV
           </Button>
         </div>
       </div>

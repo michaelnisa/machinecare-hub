@@ -3,10 +3,12 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { PageLoader, EmptyState } from "@/components/PageLoader";
-import { FileBarChart, Download } from "lucide-react";
+import { FileBarChart, Download, Printer, LayoutDashboard, FileText, Wrench, DollarSign, Users, Truck, ShoppingCart, Calendar, CheckCircle2 } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { formatMoney, formatNumber } from "@/lib/format";
 import { invoiceTotal } from "@/lib/garage-money";
+import { ReportDocumentWrapper } from "@/components/reports/ReportDocumentWrapper";
 
 function monthBounds(yyyymm: string) {
   const [y, m] = yyyymm.split("-").map(Number);
@@ -28,6 +30,7 @@ export default function GarageReports() {
   const { profile, organisation } = useAuth();
   const [loading, setLoading] = useState(true);
   const [month, setMonth] = useState(() => new Date().toISOString().slice(0, 7));
+  const [viewMode, setViewMode] = useState<"dashboard" | "document">("dashboard");
   const [jobs, setJobs] = useState<any[]>([]);
   const [allOpenJobs, setAllOpenJobs] = useState<any[]>([]);
   const [invoices, setInvoices] = useState<any[]>([]);
@@ -183,39 +186,369 @@ export default function GarageReports() {
 
   if (loading) return <PageLoader />;
 
-  return (
-    <div className="space-y-8 animate-fade-in">
-      <div className="hidden print:flex items-center justify-between border-b-2 border-slate-900 pb-4 mb-4">
-        <div className="flex items-center gap-3">
-          {organisation?.logo_url ? (
-            <img
-              src={organisation.logo_url}
-              alt={organisation.name || "Company Logo"}
-              className="h-12 w-auto max-w-[180px] object-contain"
-            />
-          ) : (
-            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary text-primary-foreground font-black text-xl">
-              {organisation?.name ? organisation.name.trim().charAt(0).toUpperCase() : "W"}
+  if (viewMode === "document") {
+    return (
+      <div className="space-y-6 animate-fade-in pb-16">
+        {/* Document Action Controls (hidden in print) */}
+        <div className="flex flex-wrap items-center justify-between gap-3 bg-card p-3 rounded-xl border border-border shadow-xs print:hidden">
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setViewMode("dashboard")}
+              className="gap-1.5 font-semibold text-xs"
+            >
+              <LayoutDashboard className="h-3.5 w-3.5 text-muted-foreground" />
+              Interactive Dashboard
+            </Button>
+            <div className="h-5 w-px bg-border" />
+            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <Calendar className="h-3.5 w-3.5" />
+              <span>Month:</span>
             </div>
-          )}
-          <div>
-            <h1 className="text-2xl font-bold text-slate-900">{organisation?.name ?? "Workshop"} — Monthly Workshop Report</h1>
-            <p className="text-xs text-slate-600">Month: {month}</p>
+            <input
+              type="month"
+              value={month}
+              onChange={(e) => setMonth(e.target.value)}
+              className="h-8 rounded-md border border-input bg-background px-2.5 text-xs font-medium"
+            />
+          </div>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => window.print()}
+              className="gap-1.5 text-xs font-semibold border-primary/30 text-primary hover:bg-primary/5"
+            >
+              <Printer className="h-3.5 w-3.5 text-primary" />
+              Print / Save PDF
+            </Button>
+            <Button size="sm" onClick={exportCSV} className="gap-1.5 text-xs font-semibold">
+              <Download className="h-3.5 w-3.5" />
+              Export CSV
+            </Button>
           </div>
         </div>
-      </div>
 
-      <div className="flex flex-wrap items-start justify-between gap-3">
+        {/* Formal Document Container */}
+        <ReportDocumentWrapper
+          title="Workshop Commercial & Repair Performance Statement"
+          subtitle={`Consolidated commercial repair billing, job card execution, technician labor output, and spare parts procurement for ${month}.`}
+          documentNumber={`REF-WKS-${month.replace("-", "")}-001`}
+          classification="OFFICIAL WORKSHOP STATEMENT"
+          dateGenerated={new Date().toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" })}
+          periodBanner={`Billing Cycle: ${month} · Automotive Workshop & Commercial Repair Bays`}
+          metadata={[
+            { label: "Billing Cycle", value: month },
+            { label: "Completed Jobs", value: `${stats.completed} Closed (${allOpenJobs.length} Open)` },
+            { label: "Total Invoiced Revenue", value: formatMoney(stats.revenue) },
+            { label: "Parts Revenue", value: formatMoney(stats.partsRevenue) },
+            { label: "Labour Revenue", value: formatMoney(stats.labourRevenue) },
+            { label: "Estimated Gross Profit", value: formatMoney(stats.profit) },
+            { label: "Outstanding Receivables", value: formatMoney(stats.outstanding) },
+            { label: "Realized Collections", value: formatMoney(stats.collected) },
+          ]}
+          signers={[
+            { role: "Prepared By", name: profile?.full_name || "Workshop Service Advisor", title: "Commercial Workshop Supervisor" },
+            { role: "Reviewed By", name: "Technical Workshop Manager", title: "Head of Garage Operations" },
+            { role: "Approved By", name: "Managing Director", title: "Commercial Operations & Finance VP" },
+          ]}
+        >
+          {/* Section 1: Financial Performance Summary */}
+          <section className="mb-8">
+            <div className="flex items-center gap-2 border-b-2 border-slate-900 pb-2 mb-4">
+              <DollarSign className="h-5 w-5 text-slate-800" />
+              <h2 className="text-base font-bold uppercase tracking-wider text-slate-900">
+                1. Commercial Billing & Profitability Summary
+              </h2>
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="p-4 rounded-lg border border-slate-300 bg-slate-50/70">
+                <div className="text-[11px] uppercase tracking-wider font-semibold text-slate-500">Gross Invoiced Revenue</div>
+                <div className="text-2xl font-black text-slate-900 mt-1">{formatMoney(stats.revenue)}</div>
+                <div className="text-xs text-slate-600 mt-0.5">{invoices.length} invoices issued</div>
+              </div>
+              <div className="p-4 rounded-lg border border-slate-300 bg-slate-50/70">
+                <div className="text-[11px] uppercase tracking-wider font-semibold text-slate-500">Parts Billings</div>
+                <div className="text-2xl font-black text-slate-900 mt-1">{formatMoney(stats.partsRevenue)}</div>
+                <div className="text-xs text-slate-600 mt-0.5">Spares & consumables markup</div>
+              </div>
+              <div className="p-4 rounded-lg border border-slate-300 bg-slate-50/70">
+                <div className="text-[11px] uppercase tracking-wider font-semibold text-slate-500">Technician Labour</div>
+                <div className="text-2xl font-black text-slate-900 mt-1">{formatMoney(stats.labourRevenue)}</div>
+                <div className="text-xs text-slate-600 mt-0.5">Billed mechanic workshop hours</div>
+              </div>
+              <div className="p-4 rounded-lg border border-slate-300 bg-slate-50/70">
+                <div className="text-[11px] uppercase tracking-wider font-semibold text-slate-500">Estimated Gross Margin</div>
+                <div className={`text-2xl font-black mt-1 ${stats.profit >= 0 ? "text-emerald-700" : "text-rose-700"}`}>
+                  {formatMoney(stats.profit)}
+                </div>
+                <div className="text-xs text-slate-600 mt-0.5">Net parts, labor & other costs</div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-3">
+              <div className="p-3.5 rounded-lg border border-slate-300 bg-slate-50/50 flex items-center justify-between">
+                <div>
+                  <div className="text-[11px] uppercase tracking-wider font-semibold text-slate-500">Cash Collections Realized</div>
+                  <div className="text-lg font-bold text-slate-900 mt-0.5">{formatMoney(stats.collected)}</div>
+                </div>
+                <span className="text-[11px] font-semibold text-emerald-800 bg-emerald-100 px-2 py-0.5 rounded border border-emerald-300">
+                  Cleared Funds
+                </span>
+              </div>
+              <div className="p-3.5 rounded-lg border border-slate-300 bg-slate-50/50 flex items-center justify-between">
+                <div>
+                  <div className="text-[11px] uppercase tracking-wider font-semibold text-slate-500">Outstanding Receivables</div>
+                  <div className="text-lg font-bold text-slate-900 mt-0.5">{formatMoney(stats.outstanding)}</div>
+                </div>
+                <span className="text-[11px] font-semibold text-amber-800 bg-amber-100 px-2 py-0.5 rounded border border-amber-300">
+                  Uncollected AR
+                </span>
+              </div>
+            </div>
+          </section>
+
+          {/* Section 2: Top Clients & Serviced Fleet */}
+          <section className="mb-8">
+            <div className="flex items-center gap-2 border-b-2 border-slate-900 pb-2 mb-4">
+              <Users className="h-5 w-5 text-slate-800" />
+              <h2 className="text-base font-bold uppercase tracking-wider text-slate-900">
+                2. Key Account Revenue & Vehicle Utilisation
+              </h2>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Top Customers */}
+              <div className="border border-slate-300 rounded-lg overflow-hidden">
+                <div className="bg-slate-100 border-b border-slate-300 px-4 py-2 font-bold text-[11px] uppercase tracking-wider text-slate-700">
+                  Top Commercial Accounts
+                </div>
+                {topCustomers.length === 0 ? (
+                  <div className="p-4 text-center text-xs text-slate-500">No account billing recorded.</div>
+                ) : (
+                  <table className="w-full text-xs text-slate-800">
+                    <tbody className="divide-y divide-slate-200">
+                      {topCustomers.map((c, idx) => (
+                        <tr key={c.name} className="hover:bg-slate-50">
+                          <td className="px-4 py-2.5 text-slate-500 w-8">{idx + 1}.</td>
+                          <td className="px-4 py-2.5 font-semibold text-slate-900">{c.name}</td>
+                          <td className="px-4 py-2.5 text-right font-bold text-slate-900">{formatMoney(c.revenue)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+
+              {/* Top Vehicles */}
+              <div className="border border-slate-300 rounded-lg overflow-hidden">
+                <div className="bg-slate-100 border-b border-slate-300 px-4 py-2 font-bold text-[11px] uppercase tracking-wider text-slate-700">
+                  Top Serviced Fleet Units
+                </div>
+                {topVehicles.length === 0 ? (
+                  <div className="p-4 text-center text-xs text-slate-500">No vehicle repair billing recorded.</div>
+                ) : (
+                  <table className="w-full text-xs text-slate-800">
+                    <tbody className="divide-y divide-slate-200">
+                      {topVehicles.map((v, idx) => (
+                        <tr key={v.label} className="hover:bg-slate-50">
+                          <td className="px-4 py-2.5 text-slate-500 w-8">{idx + 1}.</td>
+                          <td className="px-4 py-2.5 font-semibold text-slate-900">{v.label}</td>
+                          <td className="px-4 py-2.5 text-right font-bold text-slate-900">{formatMoney(v.revenue)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            </div>
+          </section>
+
+          {/* Section 3: Mechanic Performance Scorecard */}
+          <section className="mb-8">
+            <div className="flex items-center gap-2 border-b-2 border-slate-900 pb-2 mb-4">
+              <Wrench className="h-5 w-5 text-slate-800" />
+              <h2 className="text-base font-bold uppercase tracking-wider text-slate-900">
+                3. Mechanic & Bay Productivity Scorecard
+              </h2>
+            </div>
+            {mechanicPerformance.length === 0 ? (
+              <div className="p-6 text-center text-sm text-slate-500 border border-slate-200 rounded-lg">
+                No technician job allocations recorded for this billing cycle.
+              </div>
+            ) : (
+              <div className="border border-slate-300 rounded-lg overflow-hidden">
+                <table className="w-full text-xs text-slate-800">
+                  <thead className="bg-slate-100 border-b border-slate-300 font-bold uppercase text-[10px] text-slate-700 tracking-wider">
+                    <tr>
+                      <th className="px-4 py-2.5 text-left">Mechanic Name</th>
+                      <th className="px-4 py-2.5 text-center">Active Jobs</th>
+                      <th className="px-4 py-2.5 text-center">Completed Jobs</th>
+                      <th className="px-4 py-2.5 text-center">Completion Rate</th>
+                      <th className="px-4 py-2.5 text-right">Invoiced Revenue</th>
+                      <th className="px-4 py-2.5 text-right">Avg Job Value</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-200">
+                    {mechanicPerformance.map((m) => (
+                      <tr key={m.id} className="hover:bg-slate-50">
+                        <td className="px-4 py-2.5 font-bold text-slate-900">{m.name}</td>
+                        <td className="px-4 py-2.5 text-center text-slate-600">{m.activeJobs}</td>
+                        <td className="px-4 py-2.5 text-center font-semibold text-slate-900">{m.completedJobs}</td>
+                        <td className="px-4 py-2.5 text-center">
+                          {m.completionRate !== null ? (
+                            <span className="inline-block px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-800 border border-slate-300">
+                              {m.completionRate}%
+                            </span>
+                          ) : (
+                            "—"
+                          )}
+                        </td>
+                        <td className="px-4 py-2.5 text-right font-bold text-slate-900">{formatMoney(m.revenue)}</td>
+                        <td className="px-4 py-2.5 text-right text-slate-600">
+                          {m.avgValue > 0 ? formatMoney(m.avgValue) : "—"}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot className="bg-slate-100 border-t border-slate-300 font-bold text-slate-900">
+                    <tr>
+                      <td className="px-4 py-2.5 uppercase">Consolidated Workshop Total</td>
+                      <td className="px-4 py-2.5 text-center">
+                        {mechanicPerformance.reduce((s, m) => s + m.activeJobs, 0)}
+                      </td>
+                      <td className="px-4 py-2.5 text-center">
+                        {mechanicPerformance.reduce((s, m) => s + m.completedJobs, 0)}
+                      </td>
+                      <td className="px-4 py-2.5 text-center">—</td>
+                      <td className="px-4 py-2.5 text-right">
+                        {formatMoney(mechanicPerformance.reduce((s, m) => s + m.revenue, 0))}
+                      </td>
+                      <td className="px-4 py-2.5 text-right">—</td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            )}
+          </section>
+
+          {/* Section 4: Spares Procurement & Supplier Spending */}
+          <section className="mb-6">
+            <div className="flex items-center gap-2 border-b-2 border-slate-900 pb-2 mb-4">
+              <ShoppingCart className="h-5 w-5 text-slate-800" />
+              <h2 className="text-base font-bold uppercase tracking-wider text-slate-900">
+                4. Spares Procurement & Supplier Outlays
+              </h2>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+              <div className="p-3.5 rounded-lg border border-slate-300 bg-slate-50/70">
+                <div className="text-[11px] uppercase tracking-wider font-semibold text-slate-500">Critical Low Stock Reorder Items</div>
+                <div className="text-xl font-black text-rose-700 mt-1">{formatNumber(lowStockCount)} parts</div>
+                <div className="text-xs text-slate-600 mt-0.5">Below designated safety inventory thresholds</div>
+              </div>
+              <div className="p-3.5 rounded-lg border border-slate-300 bg-slate-50/70">
+                <div className="text-[11px] uppercase tracking-wider font-semibold text-slate-500">Monthly Procurement Spend</div>
+                <div className="text-xl font-black text-slate-900 mt-1">
+                  {formatMoney(supplierSpend.reduce((s, r) => s + r.spend, 0))}
+                </div>
+                <div className="text-xs text-slate-600 mt-0.5">{purchaseOrders.length} purchase orders processed</div>
+              </div>
+            </div>
+
+            {supplierSpend.length > 0 && (
+              <div className="border border-slate-300 rounded-lg overflow-hidden">
+                <table className="w-full text-xs text-slate-800">
+                  <thead className="bg-slate-100 border-b border-slate-300 font-bold uppercase text-[10px] text-slate-700 tracking-wider">
+                    <tr>
+                      <th className="px-4 py-2 text-left">Vendor / Supplier Name</th>
+                      <th className="px-4 py-2 text-right">Invoiced Procurement Spend</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-200">
+                    {supplierSpend.map((s) => (
+                      <tr key={s.supplier} className="hover:bg-slate-50">
+                        <td className="px-4 py-2 font-medium text-slate-900">{s.supplier}</td>
+                        <td className="px-4 py-2 text-right font-bold text-slate-900">{formatMoney(s.spend)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </section>
+        </ReportDocumentWrapper>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-8 animate-fade-in pb-16">
+      {/* Header Bar */}
+      <div className="flex flex-wrap items-start justify-between gap-3 print:hidden border-b border-border pb-4">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Reports</h1>
-          <p className="text-sm text-muted-foreground">Revenue, jobs, and profitability for the selected month.</p>
+          <div className="flex items-center gap-2">
+            <h1 className="text-2xl font-bold tracking-tight">Workshop Commercial Reports</h1>
+            <Badge variant="outline" className="text-xs font-semibold bg-primary/10 text-primary border-primary/20">
+              Commercial Garage
+            </Badge>
+          </div>
+          <p className="text-sm text-muted-foreground mt-0.5">
+            Revenue, job turnaround, mechanic output & profitability for the selected billing cycle.
+          </p>
         </div>
-        <div className="flex gap-2">
-          <input type="month" value={month} onChange={(e) => setMonth(e.target.value)} className="h-10 rounded-md border border-input bg-background px-3 text-sm" />
-          <Button onClick={exportCSV}><Download className="mr-2 h-4 w-4" />Export CSV</Button>
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Mode Switcher */}
+          <div className="flex items-center bg-muted/80 p-0.5 rounded-lg border border-border text-xs mr-1">
+            <button
+              type="button"
+              onClick={() => setViewMode("dashboard")}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md font-semibold transition-all ${
+                viewMode === "dashboard"
+                  ? "bg-card text-foreground shadow-xs"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              <LayoutDashboard className="h-3.5 w-3.5" />
+              Dashboard
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode("document")}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md font-semibold transition-all ${
+                viewMode === "document"
+                  ? "bg-card text-foreground shadow-xs"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              <FileText className="h-3.5 w-3.5 text-primary" />
+              Document View
+            </button>
+          </div>
+
+          <input
+            type="month"
+            value={month}
+            onChange={(e) => setMonth(e.target.value)}
+            className="h-9 rounded-md border border-input bg-background px-3 text-xs font-medium"
+          />
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setViewMode("document")}
+            className="gap-1.5 font-semibold text-xs border-primary/30 text-primary hover:bg-primary/5"
+            title="Open formal printable workshop document view"
+          >
+            <Printer className="h-3.5 w-3.5" />
+            Formal Document
+          </Button>
+          <Button size="sm" onClick={exportCSV} className="gap-1.5 font-semibold text-xs">
+            <Download className="h-3.5 w-3.5" />
+            Export CSV
+          </Button>
         </div>
       </div>
 
+      {/* KPI Cards */}
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {[
           { label: "Revenue (invoiced)", value: formatMoney(stats.revenue) },
@@ -223,21 +556,35 @@ export default function GarageReports() {
           { label: "Outstanding (current)", value: formatMoney(stats.outstanding) },
           { label: "Average job value", value: formatMoney(stats.avgJobValue) },
         ].map((s) => (
-          <div key={s.label} className="rounded-xl border border-border bg-card p-4">
-            <div className="text-xs uppercase tracking-wide text-muted-foreground">{s.label}</div>
-            <div className="mt-1 text-2xl font-semibold">{s.value}</div>
-            {s.hint && <div className="text-xs text-muted-foreground">{s.hint}</div>}
+          <div key={s.label} className="rounded-xl border border-border bg-card p-4 shadow-2xs">
+            <div className="text-xs uppercase tracking-wide text-muted-foreground font-semibold">{s.label}</div>
+            <div className="mt-1 text-2xl font-bold">{s.value}</div>
+            {s.hint && <div className="text-xs text-muted-foreground mt-0.5">{s.hint}</div>}
           </div>
         ))}
       </div>
 
       <section>
-        <h2 className="mb-2 text-sm font-medium text-foreground">Revenue breakdown</h2>
+        <h2 className="mb-2 text-sm font-semibold text-foreground">Revenue breakdown</h2>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <div className="rounded-xl border border-border bg-card p-4"><div className="text-xs text-muted-foreground">Parts revenue</div><div className="mt-1 text-lg font-semibold">{formatMoney(stats.partsRevenue)}</div></div>
-          <div className="rounded-xl border border-border bg-card p-4"><div className="text-xs text-muted-foreground">Labour revenue</div><div className="mt-1 text-lg font-semibold">{formatMoney(stats.labourRevenue)}</div></div>
-          <div className="rounded-xl border border-border bg-card p-4"><div className="text-xs text-muted-foreground">Estimated gross profit</div><div className={`mt-1 text-lg font-semibold ${stats.profit < 0 ? "text-destructive" : ""}`}>{formatMoney(stats.profit)}</div></div>
-          <div className="rounded-xl border border-border bg-card p-4"><div className="text-xs text-muted-foreground">Collected this month</div><div className="mt-1 text-lg font-semibold">{formatMoney(stats.collected)}</div></div>
+          <div className="rounded-xl border border-border bg-card p-4 shadow-2xs">
+            <div className="text-xs text-muted-foreground font-semibold">Parts revenue</div>
+            <div className="mt-1 text-lg font-bold">{formatMoney(stats.partsRevenue)}</div>
+          </div>
+          <div className="rounded-xl border border-border bg-card p-4 shadow-2xs">
+            <div className="text-xs text-muted-foreground font-semibold">Labour revenue</div>
+            <div className="mt-1 text-lg font-bold">{formatMoney(stats.labourRevenue)}</div>
+          </div>
+          <div className="rounded-xl border border-border bg-card p-4 shadow-2xs">
+            <div className="text-xs text-muted-foreground font-semibold">Estimated gross profit</div>
+            <div className={`mt-1 text-lg font-bold ${stats.profit < 0 ? "text-destructive" : "text-emerald-600"}`}>
+              {formatMoney(stats.profit)}
+            </div>
+          </div>
+          <div className="rounded-xl border border-border bg-card p-4 shadow-2xs">
+            <div className="text-xs text-muted-foreground font-semibold">Collected this month</div>
+            <div className="mt-1 text-lg font-bold">{formatMoney(stats.collected)}</div>
+          </div>
         </div>
       </section>
 
@@ -246,63 +593,75 @@ export default function GarageReports() {
       ) : (
         <>
           <section>
-            <h2 className="mb-2 text-sm font-medium text-foreground">Top customers</h2>
-            <div className="overflow-hidden rounded-xl border border-border bg-card">
-              <table className="w-full text-sm"><tbody>
-                {topCustomers.map((c, idx) => (
-                  <tr key={c.name} className="border-t border-border first:border-t-0"><td className="px-5 py-3 text-muted-foreground">{idx + 1}.</td><td className="px-5 py-3">{c.name}</td><td className="px-5 py-3 text-right font-medium">{formatMoney(c.revenue)}</td></tr>
-                ))}
-              </tbody></table>
+            <h2 className="mb-2 text-sm font-semibold text-foreground">Top customers</h2>
+            <div className="overflow-hidden rounded-xl border border-border bg-card shadow-2xs">
+              <table className="w-full text-sm">
+                <tbody>
+                  {topCustomers.map((c, idx) => (
+                    <tr key={c.name} className="border-t border-border first:border-t-0 hover:bg-muted/30">
+                      <td className="px-5 py-3 text-muted-foreground w-8">{idx + 1}.</td>
+                      <td className="px-5 py-3 font-medium">{c.name}</td>
+                      <td className="px-5 py-3 text-right font-semibold">{formatMoney(c.revenue)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           </section>
 
           <section>
-            <h2 className="mb-2 text-sm font-medium text-foreground">Top vehicles</h2>
-            <div className="overflow-hidden rounded-xl border border-border bg-card">
-              <table className="w-full text-sm"><tbody>
-                {topVehicles.map((v, idx) => (
-                  <tr key={v.label} className="border-t border-border first:border-t-0"><td className="px-5 py-3 text-muted-foreground">{idx + 1}.</td><td className="px-5 py-3">{v.label}</td><td className="px-5 py-3 text-right font-medium">{formatMoney(v.revenue)}</td></tr>
-                ))}
-              </tbody></table>
+            <h2 className="mb-2 text-sm font-semibold text-foreground">Top vehicles</h2>
+            <div className="overflow-hidden rounded-xl border border-border bg-card shadow-2xs">
+              <table className="w-full text-sm">
+                <tbody>
+                  {topVehicles.map((v, idx) => (
+                    <tr key={v.label} className="border-t border-border first:border-t-0 hover:bg-muted/30">
+                      <td className="px-5 py-3 text-muted-foreground w-8">{idx + 1}.</td>
+                      <td className="px-5 py-3 font-medium">{v.label}</td>
+                      <td className="px-5 py-3 text-right font-semibold">{formatMoney(v.revenue)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           </section>
         </>
       )}
 
       <section>
-        <h2 className="mb-2 text-sm font-medium text-foreground">Mechanic performance</h2>
+        <h2 className="mb-2 text-sm font-semibold text-foreground">Mechanic performance</h2>
         {mechanicPerformance.length === 0 ? (
           <p className="text-sm text-muted-foreground">No jobs assigned to mechanics yet.</p>
         ) : (
-          <div className="overflow-hidden rounded-xl border border-border bg-card">
+          <div className="overflow-hidden rounded-xl border border-border bg-card shadow-2xs">
             <table className="w-full text-sm">
-              <thead className="text-left text-xs uppercase tracking-wide text-muted-foreground">
+              <thead className="text-left text-xs uppercase tracking-wide text-muted-foreground bg-muted/40">
                 <tr>
-                  <th className="px-5 py-3 font-medium">Mechanic</th>
-                  <th className="px-5 py-3 font-medium">Active</th>
-                  <th className="px-5 py-3 font-medium">Completed</th>
-                  <th className="px-5 py-3 font-medium">Completion %</th>
-                  <th className="px-5 py-3 font-medium text-right">Revenue</th>
-                  <th className="px-5 py-3 font-medium text-right">Avg job</th>
+                  <th className="px-5 py-3 font-semibold">Mechanic</th>
+                  <th className="px-5 py-3 font-semibold">Active</th>
+                  <th className="px-5 py-3 font-semibold">Completed</th>
+                  <th className="px-5 py-3 font-semibold">Completion %</th>
+                  <th className="px-5 py-3 font-semibold text-right">Revenue</th>
+                  <th className="px-5 py-3 font-semibold text-right">Avg job</th>
                 </tr>
               </thead>
-              <tbody>
+              <tbody className="divide-y divide-border">
                 {mechanicPerformance.map((m) => (
-                  <tr key={m.id} className="border-t border-border">
+                  <tr key={m.id} className="hover:bg-muted/30">
                     <td className="px-5 py-3 font-medium">{m.name}</td>
                     <td className="px-5 py-3 text-muted-foreground">{m.activeJobs}</td>
-                    <td className="px-5 py-3">{m.completedJobs}</td>
+                    <td className="px-5 py-3 font-medium">{m.completedJobs}</td>
                     <td className="px-5 py-3">
                       {m.completionRate !== null ? (
                         <div className="flex items-center gap-2">
                           <div className="h-1.5 w-16 rounded-full bg-muted overflow-hidden">
                             <div className="h-full rounded-full bg-primary" style={{ width: `${m.completionRate}%` }} />
                           </div>
-                          <span className="text-xs">{m.completionRate}%</span>
+                          <span className="text-xs font-medium">{m.completionRate}%</span>
                         </div>
                       ) : "—"}
                     </td>
-                    <td className="px-5 py-3 text-right font-medium">{formatMoney(m.revenue)}</td>
+                    <td className="px-5 py-3 text-right font-semibold">{formatMoney(m.revenue)}</td>
                     <td className="px-5 py-3 text-right text-muted-foreground">{m.avgValue > 0 ? formatMoney(m.avgValue) : "—"}</td>
                   </tr>
                 ))}
@@ -313,25 +672,35 @@ export default function GarageReports() {
       </section>
 
       <section className="grid gap-3 sm:grid-cols-2">
-        <div className="rounded-xl border border-border bg-card p-4">
-          <div className="text-xs uppercase tracking-wide text-muted-foreground">Low stock parts (current)</div>
-          <div className="mt-1 text-2xl font-semibold">{formatNumber(lowStockCount)}</div>
+        <div className="rounded-xl border border-border bg-card p-4 shadow-2xs">
+          <div className="text-xs uppercase tracking-wide text-muted-foreground font-semibold">Low stock parts (current)</div>
+          <div className="mt-1 text-2xl font-bold">{formatNumber(lowStockCount)}</div>
         </div>
-        <div className="rounded-xl border border-border bg-card p-4">
-          <div className="text-xs uppercase tracking-wide text-muted-foreground">Supplier spend this month</div>
-          <div className="mt-1 text-2xl font-semibold">{formatMoney(supplierSpend.reduce((s, r) => s + r.spend, 0))}</div>
+        <div className="rounded-xl border border-border bg-card p-4 shadow-2xs">
+          <div className="text-xs uppercase tracking-wide text-muted-foreground font-semibold">Supplier spend this month</div>
+          <div className="mt-1 text-2xl font-bold">{formatMoney(supplierSpend.reduce((s, r) => s + r.spend, 0))}</div>
         </div>
       </section>
 
       {supplierSpend.length > 0 && (
         <section>
-          <h2 className="mb-2 text-sm font-medium text-foreground">Supplier spending</h2>
-          <div className="overflow-hidden rounded-xl border border-border bg-card">
+          <h2 className="mb-2 text-sm font-semibold text-foreground">Supplier spending</h2>
+          <div className="overflow-hidden rounded-xl border border-border bg-card shadow-2xs">
             <table className="w-full text-sm">
-              <thead className="text-left text-xs uppercase tracking-wide text-muted-foreground"><tr><th className="px-5 py-3 font-medium">Supplier</th><th className="px-5 py-3 font-medium">Spend</th></tr></thead>
-              <tbody>{supplierSpend.map((s) => (
-                <tr key={s.supplier} className="border-t border-border"><td className="px-5 py-3 font-medium">{s.supplier}</td><td className="px-5 py-3">{formatMoney(s.spend)}</td></tr>
-              ))}</tbody>
+              <thead className="text-left text-xs uppercase tracking-wide text-muted-foreground bg-muted/40">
+                <tr>
+                  <th className="px-5 py-3 font-semibold">Supplier</th>
+                  <th className="px-5 py-3 font-semibold text-right">Spend</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {supplierSpend.map((s) => (
+                  <tr key={s.supplier} className="hover:bg-muted/30">
+                    <td className="px-5 py-3 font-medium">{s.supplier}</td>
+                    <td className="px-5 py-3 text-right font-semibold">{formatMoney(s.spend)}</td>
+                  </tr>
+                ))}
+              </tbody>
             </table>
           </div>
         </section>
