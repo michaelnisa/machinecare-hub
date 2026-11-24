@@ -399,7 +399,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
 
             {/* Quick Presets */}
             <View style={styles.quickFillRow}>
-              <Text style={styles.quickFillLabel}>Demo Accounts:</Text>
+              <Text style={styles.quickFillLabel}>Mfano wa Kuingia:</Text>
               <TouchableOpacity
                 onPress={() => {
                   setEmail("operator@example.com");
@@ -407,7 +407,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
                 }}
                 style={styles.fillChip}
               >
-                <Text style={styles.fillChipText}>Kiwanda Demo</Text>
+                <Text style={styles.fillChipText}>Kiwanda</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 onPress={() => {
@@ -416,7 +416,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
                 }}
                 style={styles.fillChip}
               >
-                <Text style={styles.fillChipText}>Logistixware</Text>
+                <Text style={styles.fillChipText}>Logistics</Text>
               </TouchableOpacity>
             </View>
 
