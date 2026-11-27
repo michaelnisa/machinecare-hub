@@ -25,7 +25,7 @@ export interface FleetTierCapabilities {
 
 /**
  * Checks if an organization is an Enterprise Fleet account.
- * Logistixware is strictly protected and ALWAYS returns false.
+ * Logistixware is enabled for Enterprise Fleet Departmental Architecture.
  */
 export function isEnterpriseFleet(
   org?: {
@@ -39,9 +39,9 @@ export function isEnterpriseFleet(
 ): boolean {
   if (!org) return false;
 
-  // Rule 1: Logistixware is strictly locked to Standard Edition
+  // Rule 1: Logistixware account is enabled for Enterprise Fleet Edition with Departmental Architecture & Procurement
   if (isLogistixwareAccount(org)) {
-    return false;
+    return true;
   }
 
   // Rule 2: Explicit enterprise plan

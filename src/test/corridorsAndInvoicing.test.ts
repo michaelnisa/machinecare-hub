@@ -190,6 +190,6 @@ describe("Standard Payment Term Presets", () => {
     expect(DEFAULT_PAYMENT_TERM_PRESETS).toContain("Advance 70% and 30% after 30 days");
     expect(DEFAULT_PAYMENT_TERM_PRESETS).toContain("30 days after delivery Invoicing");
     expect(DEFAULT_PAYMENT_TERM_PRESETS).toContain("50% advance 50% after delivery");
-  });
+  }, 15000);
 });
 

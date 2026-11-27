@@ -9,7 +9,6 @@ import {
   createFleetOrganization,
 } from "@/lib/admin";
 import { isEnterpriseFleet } from "@/lib/fleetTiers";
-import { isLogistixwareAccount } from "@/services/customerService";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -344,11 +343,6 @@ export function PlatformAdminOrgSwitcher({ compact = false }: { compact?: boolea
                         {isEnterpriseFleet(org) && (
                           <span className="text-[9px] px-1 rounded bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 font-bold border border-emerald-500/30">
                             ENTERPRISE
-                          </span>
-                        )}
-                        {isLogistixwareAccount(org) && (
-                          <span className="text-[9px] px-1 rounded bg-slate-500/15 text-slate-700 dark:text-slate-300 font-bold border border-slate-500/30">
-                            STANDARD
                           </span>
                         )}
                       </div>

@@ -383,6 +383,18 @@ export function Sidebar() {
         ],
       },
       inventoryNavGroup,
+      {
+        id: "fleet-procurement",
+        label: "Procurement Department",
+        items: [
+          { to: "/fleet/procurement", label: "Procurement Dashboard", icon: ShoppingCart },
+          { to: "/inventory/purchase-requests", label: "Purchase Requisitions", icon: FileText },
+          { to: "/inventory/purchase-orders", label: "Purchase Orders (POs)", icon: ClipboardList },
+          { to: "/fleet/approvals", label: "Approvals", icon: ShieldCheck },
+          { to: "/inventory/suppliers", label: "Supplier Directory", icon: Building2 },
+          { to: "/vendors", label: "Vendor SLA & Ratings", icon: Target },
+        ],
+      },
       fleetFinanceNavGroup,
       {
         id: "fleet-insights",
@@ -393,6 +405,7 @@ export function Sidebar() {
             label: "Fleet KPIs & Analytics",
             icon: Gauge,
           },
+          { to: "/fleet/reports", label: "Executive Reports", icon: FileBarChart },
           { to: "/reports", label: t.nav.reports, icon: FileBarChart },
         ],
       },
@@ -417,7 +430,7 @@ export function Sidebar() {
     [t, isAdmin, inventoryNavGroup, fleetFinanceNavGroup, isLogistix],
   );
 
-  // Enterprise Fleet 6-Department Architecture (Mega Beverages Blueprint)
+  // Enterprise Fleet 6-Department Architecture (Mega Beverages & Logistixware Blueprint)
   const enterpriseFleetGroups: NavGroup[] = useMemo(
     () => [
       {
@@ -462,6 +475,7 @@ export function Sidebar() {
           { to: "/inventory/reorder", label: "Min/Max Replenishment", icon: TrendingUp },
           { to: "/inventory/stock-counts", label: "Physical Stock Audits", icon: ClipboardCheck },
           { to: "/inventory/history", label: "Stock Movement Ledger", icon: History },
+          { to: "/inventory/reports", label: "Stock Valuation & Audit", icon: FileBarChart },
         ],
       },
       {
@@ -497,6 +511,7 @@ export function Sidebar() {
           { to: "/dashboard", label: "Executive Dashboard", icon: LayoutDashboard },
           { to: "/fleet/approvals", label: "Executive Approvals", icon: ShieldCheck },
           { to: "/fleet/reports", label: "Executive Reporting Center", icon: FileBarChart },
+          { to: "/reports", label: "Monthly Maintenance Reports", icon: FileText },
           { to: "/fleet/insights", label: "KPIs & Telematics Trends", icon: Gauge },
           { to: "/live", label: "Depot Command Live TV", icon: Tv },
         ],
