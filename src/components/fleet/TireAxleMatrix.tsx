@@ -141,7 +141,7 @@ export function TireAxleMatrix({ vehicle, tyres, className = "" }: TireAxleMatri
 
         <div className="flex items-center gap-2">
           <Button variant="outline" size="sm" asChild className="gap-1.5 text-xs">
-            <Link to={`/fleet/tyres`}>
+            <Link to={`/fleet/tyres?vehicle=${vehicle.id}&tab=chassis`}>
               <Disc className="h-3.5 w-3.5 text-primary" />
               Tyre Workshop Console
             </Link>
@@ -443,7 +443,7 @@ export function TireAxleMatrix({ vehicle, tyres, className = "" }: TireAxleMatri
             </div>
             <div className="flex items-center gap-2">
               <Button size="sm" variant="outline" asChild className="h-7 text-xs gap-1">
-                <Link to={`/fleet/tyres`}>
+                <Link to={`/fleet/tyres?vehicle=${vehicle.id}&tab=chassis&slot=${selectedSlot}`}>
                   <ArrowRightLeft className="h-3 w-3" /> Rotate / Swap Slot
                 </Link>
               </Button>
@@ -486,7 +486,7 @@ export function TireAxleMatrix({ vehicle, tyres, className = "" }: TireAxleMatri
                 This axle wheel hub currently has no tyre assigned.
               </span>
               <Button size="sm" asChild className="h-7 text-xs gap-1">
-                <Link to="/fleet/tyres">
+                <Link to={`/fleet/tyres?vehicle=${vehicle.id}&tab=chassis&fit=${selectedSlot}`}>
                   <Plus className="h-3 w-3" /> Fit Tyre to Slot
                 </Link>
               </Button>

@@ -952,7 +952,7 @@ export default function FleetVehicleDetail() {
               </div>
             </div>
             <Link
-              to="/fleet/tyres"
+              to={`/fleet/tyres?vehicle=${vehicle.id}&tab=chassis`}
               className="text-[11px] font-semibold text-primary hover:underline mt-2 text-left inline-flex items-center gap-1"
             >
               Manage tyre fitment →
@@ -1374,7 +1374,7 @@ export default function FleetVehicleDetail() {
               </div>
 
               <Button variant="outline" size="sm" asChild className="gap-1.5">
-                <Link to="/fleet/tyres">
+                <Link to={`/fleet/tyres?vehicle=${vehicle.id}&tab=chassis`}>
                   <Disc className="h-3.5 w-3.5 text-primary" /> Full Tyre Management
                 </Link>
               </Button>
@@ -1385,7 +1385,7 @@ export default function FleetVehicleDetail() {
                 <Disc className="h-8 w-8 text-muted-foreground mx-auto" />
                 <p className="text-sm text-muted-foreground">No tyres currently registered to this vehicle's axle positions.</p>
                 <Button variant="outline" size="sm" asChild>
-                  <Link to="/fleet/tyres">Fit Tyres in Tyre Module</Link>
+                  <Link to={`/fleet/tyres?vehicle=${vehicle.id}&tab=chassis`}>Fit Tyres in Tyre Module</Link>
                 </Button>
               </div>
             ) : (

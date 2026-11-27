@@ -209,6 +209,38 @@ const DEFAULT_ENTERPRISE_SPARES: Omit<CommercialSparePart, "organisation_id">[] 
     supplier_name: "TotalEnergies Tanzania",
   },
 
+  // Commercial Fleet Tyres (Slide 18)
+  {
+    id: "sp-tyre-01",
+    part_number: "TYRE-MICH-315",
+    name: "Michelin X Multiway 3D XZE 315/80R22.5 Steer / All-Position Commercial Tyre",
+    system_category: "Tyres & Wheels",
+    compatible_makes: ["Universal", "Scania", "Howo", "Shacman", "FAW"],
+    compatible_models: ["Heavy Commercial", "6x4", "4x2", "Steer Axle", "Front Steer"],
+    bin_location: "TYRE-RACK-01",
+    stock_quantity: 12,
+    min_reorder_level: 6,
+    max_capacity: 40,
+    unit_price_tzs: 1250000,
+    supplier_name: "Michelin Tyre Centre Dar es Salaam",
+    supplier_phone: "+255 22 211 4500",
+  },
+  {
+    id: "sp-tyre-02",
+    part_number: "TYRE-BDG-315",
+    name: "Bridgestone M729 315/80R22.5 Deep Traction Drive Commercial Tyre",
+    system_category: "Tyres & Wheels",
+    compatible_makes: ["Universal", "Scania", "Howo", "Shacman", "FAW"],
+    compatible_models: ["Heavy Commercial", "6x4", "Drive Axles", "Dual Wheel Hubs"],
+    bin_location: "TYRE-RACK-02",
+    stock_quantity: 18,
+    min_reorder_level: 8,
+    max_capacity: 60,
+    unit_price_tzs: 1180000,
+    supplier_name: "Bridgestone Tanzania Official Distributor",
+    supplier_phone: "+255 22 286 5000",
+  },
+
   // Workshop & Stationary Plant Equipment Spares (Slide 19: Generators, Compressors, Pumps, Forklifts)
   {
     id: "sp-gen-01",

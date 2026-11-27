@@ -44,6 +44,7 @@ import {
   Factory,
   Cog,
   Gauge,
+  CircleDot,
 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
@@ -892,6 +893,11 @@ export default function Vehicles() {
                               <MapPin className="h-3.5 w-3.5 text-emerald-600" />
                             </Link>
                           </Button>
+                          <Button variant="ghost" size="icon" className="h-7 w-7" asChild title="Tyres & Axle Matrix">
+                            <Link to={`/fleet/tyres?vehicle=${m.id}&tab=chassis`}>
+                              <CircleDot className="h-3.5 w-3.5 text-primary" />
+                            </Link>
+                          </Button>
                           {canWrite && (
                             <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => { setEditing(m); setOpen(true); }} title="Edit">
                               <Pencil className="h-3.5 w-3.5" />
@@ -1140,6 +1146,11 @@ export default function Vehicles() {
                             title="Asset QR Code"
                           >
                             <QrCode className="h-4 w-4 text-primary" />
+                          </Button>
+                          <Button variant="ghost" size="icon" asChild title="Tyres & Axle Matrix">
+                            <Link to={`/fleet/tyres?vehicle=${m.id}&tab=chassis`}>
+                              <CircleDot className="h-4 w-4 text-primary" />
+                            </Link>
                           </Button>
                           {canWrite && (
                             <Button variant="ghost" size="icon" asChild title={t.fleet.newJobCard}>

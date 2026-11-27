@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useSearchParams, Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useUserRole } from "@/hooks/useUserRole";
@@ -37,6 +38,7 @@ import {
   TrendingUp,
   BarChart3,
   History,
+  Wrench,
 } from "lucide-react";
 import { toast } from "sonner";
 import { formatDate, formatNumber } from "@/lib/format";
@@ -183,6 +185,7 @@ export default function Tyres() {
   const { canWrite } = useUserRole();
   const { t, currentLang } = useI18n();
   const isSwahili = currentLang === "sw";
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const [loading, setLoading] = useState(true);
   const [machines, setMachines] = useState<Machine[]>([]);
@@ -201,6 +204,24 @@ export default function Tyres() {
   const [rotatingTyre, setRotatingTyre] = useState<Tyre | null>(null);
   const [retiringTyre, setRetiringTyre] = useState<Tyre | null>(null);
   const [walkaroundOpen, setWalkaroundOpen] = useState(false);
+
+  const handleSelectMachine = (machId: string) => {
+    setSelectedMachine(machId);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.set("vehicle", machId);
+      return next;
+    }, { replace: true });
+  };
+
+  const handleTabChange = (tabVal: string) => {
+    setActiveTab(tabVal);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.set("tab", tabVal);
+      return next;
+    }, { replace: true });
+  };
 
   const load = async () => {
     if (!profile) return;
@@ -226,12 +247,39 @@ export default function Tyres() {
     load();
   }, [profile]);
 
-  // Set default machine and auto-detect layout
+  // Set default machine and auto-detect layout, respecting URL search params
   useEffect(() => {
-    if (!selectedMachine && machines.length > 0) {
+    const paramVehicle = searchParams.get("vehicle") || searchParams.get("machine");
+    if (paramVehicle && machines.some((m) => m.id === paramVehicle)) {
+      if (selectedMachine !== paramVehicle) {
+        setSelectedMachine(paramVehicle);
+      }
+    } else if (!selectedMachine && machines.length > 0) {
       setSelectedMachine(machines[0].id);
     }
-  }, [machines, selectedMachine]);
+
+    const paramTab = searchParams.get("tab");
+    if (paramTab && ["chassis", "inventory", "alerts", "analytics"].includes(paramTab)) {
+      setActiveTab(paramTab);
+    }
+
+    const paramSlot = searchParams.get("slot") || searchParams.get("position");
+    if (paramSlot) {
+      setSelectedPosition(normalizePosition(paramSlot));
+    }
+
+    const paramSearch = searchParams.get("search") || searchParams.get("serial");
+    if (paramSearch) {
+      setSerialSearchQuery(paramSearch);
+      setActiveTab("inventory");
+    }
+
+    const paramFit = searchParams.get("fit");
+    if (paramFit) {
+      setFitPosition(normalizePosition(paramFit));
+      setFitOpen(true);
+    }
+  }, [machines, searchParams]);
 
   const currentMachine = useMemo(
     () => machines.find((m) => m.id === selectedMachine),
@@ -524,7 +572,7 @@ export default function Tyres() {
             )}
           </div>
 
-          <Select value={selectedMachine} onValueChange={setSelectedMachine}>
+          <Select value={selectedMachine} onValueChange={handleSelectMachine}>
             <SelectTrigger className="w-80 h-10">
               <SelectValue placeholder="Pick a vehicle or trailer" />
             </SelectTrigger>
@@ -575,7 +623,7 @@ export default function Tyres() {
               </span>
             </div>
             <button
-              onClick={() => setActiveTab("alerts")}
+              onClick={() => handleTabChange("alerts")}
               className="text-xs font-medium text-amber-800 dark:text-amber-300 underline hover:no-underline"
             >
               {isSwahili ? "Angalia yote" : "View all alerts"} →
@@ -609,7 +657,7 @@ export default function Tyres() {
       )}
 
       {/* ── TABS NAVIGATION ── */}
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
+      <Tabs value={activeTab} onValueChange={handleTabChange} className="space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-2">
           <TabsList className="bg-muted/80">
             <TabsTrigger value="chassis" className="flex items-center gap-2 text-xs">
@@ -942,7 +990,7 @@ export default function Tyres() {
                       inventoryStatusFilter === "removed" ? "bg-background font-semibold shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"
                     }`}
                   >
-                    Removed ({history.length})
+                    Removed ({tyres.filter((t) => !!t.removed_at).length})
                   </button>
                 </div>
 
@@ -1144,8 +1192,9 @@ export default function Tyres() {
                                 variant="outline"
                                 size="sm"
                                 onClick={() => {
-                                  setSelectedMachine(t.machine_id);
+                                  handleSelectMachine(t.machine_id);
                                   setSelectedPosition(normalizePosition(t.position));
+                                  handleTabChange("chassis");
                                 }}
                                 className="h-7 px-2 text-xs"
                               >
@@ -1280,6 +1329,28 @@ export default function Tyres() {
                         >
                           <Gauge className="mr-1 h-3.5 w-3.5 text-primary" /> Inspect Now
                         </Button>
+                        {canWrite && (
+                          <Button
+                            size="sm"
+                            asChild
+                            className="h-8 text-xs gap-1 border-amber-500/30 text-amber-700 dark:text-amber-300 hover:bg-amber-500/10"
+                            variant="outline"
+                          >
+                            <Link
+                              to={`/work-orders/new?machine=${tyre.machine_id}&subsystem=Tyres%20%26%20Wheels&priority=urgent&reason=${encodeURIComponent(
+                                `Tyre Alert on ${m?.plate_number || m?.name} at ${normalizePosition(tyre.position)}${
+                                  tyre.serial ? ` (S/N: ${tyre.serial})` : ""
+                                }: ${
+                                  tyre.current_tread_mm != null && tyre.current_tread_mm <= TYRE_MIN_TREAD_MM
+                                    ? `Critical tread depth ${tyre.current_tread_mm}mm (below ${TYRE_MIN_TREAD_MM}mm legal threshold). `
+                                    : ""
+                                }${lowPressure ? `Low cold pressure ${tyre.pressure_psi} PSI (below ${TRUCK_TYRE_MIN_PSI} PSI minimum).` : ""}`
+                              )}`}
+                            >
+                              <Wrench className="h-3.5 w-3.5" /> Job Card
+                            </Link>
+                          </Button>
+                        )}
                       </div>
                     </div>
                   );
@@ -1541,6 +1612,7 @@ export default function Tyres() {
         onOpenChange={(v) => !v && setSelectedPosition(null)}
         position={selectedPosition}
         tyre={selectedTyre}
+        machine={currentMachine ?? null}
         positionHistory={selectedPositionHistory}
         currentOdo={currentMachine?.current_odometer_km ?? null}
         canWrite={canWrite}
@@ -1770,6 +1842,7 @@ function PositionDetailDialog({
   onOpenChange,
   position,
   tyre,
+  machine,
   positionHistory,
   currentOdo,
   canWrite,
@@ -1782,6 +1855,7 @@ function PositionDetailDialog({
   onOpenChange: (v: boolean) => void;
   position: string | null;
   tyre: Tyre | null;
+  machine?: FleetVehicle | null;
   positionHistory: Tyre[];
   currentOdo: number | null;
   canWrite: boolean;
@@ -1902,16 +1976,65 @@ function PositionDetailDialog({
 
             {/* Quick Actions Bar */}
             {canWrite && (
-              <div className="grid grid-cols-3 gap-2 pt-2">
-                <Button variant="outline" size="sm" onClick={onInspect} className="text-xs h-9">
-                  <Gauge className="mr-1 h-3.5 w-3.5 text-primary" /> Inspect
-                </Button>
-                <Button variant="outline" size="sm" onClick={onRotate} className="text-xs h-9">
-                  <ArrowLeftRight className="mr-1 h-3.5 w-3.5 text-blue-600" /> Rotate
-                </Button>
-                <Button variant="destructive" size="sm" onClick={onRetire} className="text-xs h-9">
-                  <Trash2 className="mr-1 h-3.5 w-3.5" /> Remove
-                </Button>
+              <div className="space-y-2 pt-2">
+                <div className="grid grid-cols-3 gap-2">
+                  <Button variant="outline" size="sm" onClick={onInspect} className="text-xs h-9">
+                    <Gauge className="mr-1 h-3.5 w-3.5 text-primary" /> Inspect
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={onRotate} className="text-xs h-9">
+                    <ArrowLeftRight className="mr-1 h-3.5 w-3.5 text-blue-600" /> Rotate
+                  </Button>
+                  <Button variant="destructive" size="sm" onClick={onRetire} className="text-xs h-9">
+                    <Trash2 className="mr-1 h-3.5 w-3.5" /> Remove
+                  </Button>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    asChild
+                    className="text-xs h-8 border-amber-500/30 text-amber-700 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/30"
+                  >
+                    <Link
+                      to={`/work-orders/new?machine=${tyre.machine_id}&subsystem=Tyres%20%26%20Wheels&reason=${encodeURIComponent(
+                        `Tyre Maintenance at Position ${normalizePosition(tyre.position)}${
+                          tyre.serial ? ` (S/N: ${tyre.serial})` : ""
+                        } - ${tyre.brand || "Tyre"} (${tyre.size || "315/80R22.5"}): Current tread ${
+                          tyre.current_tread_mm != null ? `${tyre.current_tread_mm}mm` : "not measured"
+                        }, cold pressure ${
+                          tyre.pressure_psi != null ? `${tyre.pressure_psi} PSI` : "not recorded"
+                        }.`
+                      )}&priority=${
+                        (tyre.current_tread_mm != null && tyre.current_tread_mm <= TYRE_MIN_TREAD_MM) ||
+                        (tyre.pressure_psi != null && tyre.pressure_psi < TRUCK_TYRE_MIN_PSI)
+                          ? "urgent"
+                          : "normal"
+                      }`}
+                    >
+                      <Wrench className="mr-1.5 h-3.5 w-3.5" /> Raise Job Card
+                    </Link>
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    asChild
+                    className="text-xs h-8 border-blue-500/30 text-blue-700 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/30"
+                  >
+                    <Link
+                      to={`/fleet/approvals?new=1&type=tyre_replacement&title=${encodeURIComponent(
+                        `Tyre Requisition for ${machine?.plate_number || machine?.name || "Vehicle"} (${normalizePosition(tyre.position)})`
+                      )}&vehicle=${encodeURIComponent(
+                        machine?.plate_number || ""
+                      )}&reason=${encodeURIComponent(
+                        `Tyre replacement requisition for position ${normalizePosition(tyre.position)}${
+                          tyre.serial ? ` (Current S/N: ${tyre.serial})` : ""
+                        }. Current tread: ${tyre.current_tread_mm != null ? `${tyre.current_tread_mm}mm` : "worn"}.`
+                      )}&priority=urgent`}
+                    >
+                      <ShieldAlert className="mr-1.5 h-3.5 w-3.5" /> Requisition
+                    </Link>
+                  </Button>
+                </div>
               </div>
             )}
           </div>
@@ -2044,6 +2167,17 @@ function FitTyreDialog({
       target_replace_km: form.target_replace_km === "" ? null : Number(form.target_replace_km),
       notes: encodedNotes,
     };
+
+    // Auto-retire any existing active tyre in this position on this vehicle
+    await supabase
+      .from("tyres")
+      .update({
+        removed_at: form.fitted_at || new Date().toISOString().slice(0, 10),
+        removed_reason: `Replaced by fitment of S/N ${form.serial.trim().toUpperCase()}`,
+      })
+      .eq("machine_id", machineId)
+      .eq("position", position)
+      .is("removed_at", null);
 
     const { error } = await supabase.from("tyres").insert(payload);
     setSubmitting(false);
