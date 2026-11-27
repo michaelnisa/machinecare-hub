@@ -18,6 +18,11 @@ import {
   FileSpreadsheet,
   AlertCircle,
   RefreshCw,
+  Route,
+  MapPin,
+  Sparkles,
+  CheckSquare,
+  Square,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -39,6 +44,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
+import {
+  CROSS_BORDER_CORRIDORS,
+  type CrossBorderCorridor,
+  type CorridorExpenseItem,
+} from "@/services/crossBorderCorridors";
 
 export interface DailyBudgetEntry {
   id: string;
@@ -48,6 +58,7 @@ export interface DailyBudgetEntry {
   category: string;
   truck_no: string;
   vehicle_id?: string | null;
+  trip_id?: string | null;
   amount_usd: number;
   paid_usd: number;
   balance_usd: number;
@@ -65,14 +76,37 @@ export const BUDGET_CATEGORIES = [
   "Fuel & Lubricants",
   "Workshop & Repairs",
   "Tyres & Tubes",
-  "Driver Posho & Allowance",
+  "Driver & Turnboy Posho",
   "Tolls & Weighbridges",
   "Border Clearance & Transit",
-  "Permits & Regulatory",
-  "Escort & Security",
+  "COMESA & Regional Road Permits",
+  "Customs Bonds & Clearing Fees",
+  "Port Demurrage & Yard Parking",
+  "Emergency Roadside Field Rescue",
+  "Casual Stevedoring & Offloading (Kibarua)",
+  "Escort & Convoy Security",
+  "AdBlue / DEF & Lubricants",
   "Overhead & Admin",
   "Contingency / Other",
 ];
+
+export function mapCorridorCategoryToBudget(cat?: string, title?: string): string {
+  const t = (title || "").toLowerCase();
+  const c = (cat || "").toLowerCase();
+  if (t.includes("fuel") || t.includes("diesel") || c === "fuel") return "Fuel & Lubricants";
+  if (t.includes("posho") || t.includes("allowance") || t.includes("driver") || t.includes("turnboy")) return "Driver & Turnboy Posho";
+  if (t.includes("weighbridge") || t.includes("toll") || c === "toll") return "Tolls & Weighbridges";
+  if (t.includes("clearance") || t.includes("customs") || t.includes("border") || t.includes("transit") || c === "receipt") return "Border Clearance & Transit";
+  if (t.includes("comesa") || t.includes("permit") || t.includes("carbon")) return "COMESA & Regional Road Permits";
+  if (t.includes("bond")) return "Customs Bonds & Clearing Fees";
+  if (t.includes("parking") || t.includes("yard") || t.includes("demurrage") || c === "parking") return "Port Demurrage & Yard Parking";
+  if (t.includes("tyre") || t.includes("tire") || t.includes("tube")) return "Tyres & Tubes";
+  if (t.includes("escort") || t.includes("security") || t.includes("convoy")) return "Escort & Convoy Security";
+  if (t.includes("repair") || t.includes("rescue") || t.includes("breakdown") || c === "repair") return "Emergency Roadside Field Rescue";
+  if (t.includes("adblue") || t.includes("def") || t.includes("oil")) return "AdBlue / DEF & Lubricants";
+  if (t.includes("kibarua") || t.includes("offload") || t.includes("load") || t.includes("stevedoring")) return "Casual Stevedoring & Offloading (Kibarua)";
+  return "Tolls & Weighbridges";
+}
 
 const DEFAULT_SAMPLE_ENTRIES: Omit<DailyBudgetEntry, "id">[] = [
   {
@@ -164,6 +198,16 @@ export function DailyBudgetLedger({
   const [searchTerm, setSearchTerm] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
 
+  // Active Trips for linking
+  const [activeTrips, setActiveTrips] = useState<{ id: string; origin: string; destination: string; machine_name?: string }[]>([]);
+
+  // Corridor Template modal state
+  const [corridorModalOpen, setCorridorModalOpen] = useState(false);
+  const [selectedCorridorId, setSelectedCorridorId] = useState<string>(CROSS_BORDER_CORRIDORS[0]?.id || "");
+  const [templateTruckNo, setTemplateTruckNo] = useState<string>("");
+  const [templateTripId, setTemplateTripId] = useState<string>("");
+  const [selectedFeeIds, setSelectedFeeIds] = useState<Record<string, boolean>>({});
+
   // Modal State
   const [modalOpen, setModalOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -171,6 +215,7 @@ export function DailyBudgetLedger({
     description: "",
     category: BUDGET_CATEGORIES[0],
     truck_no: "",
+    trip_id: "",
     amount_usd: "",
     paid_usd: "",
     amount_tzs: "",
@@ -208,6 +253,38 @@ export function DailyBudgetLedger({
     fetchVehicles();
   }, []);
 
+  // Load Active Trips for linking
+  useEffect(() => {
+    async function fetchTrips() {
+      if (!orgId) return;
+      try {
+        const { data, error } = await (supabase as any)
+          .from("trips")
+          .select("id, origin, destination, machines:machines(plate_number, name)")
+          .eq("organisation_id", orgId)
+          .order("start_at", { ascending: false })
+          .limit(40);
+        if (!error && data) {
+          setActiveTrips(
+            data.map((t: any) => {
+              const mObj = Array.isArray(t.machines) ? t.machines[0] : t.machines;
+              const mName = mObj?.plate_number || mObj?.name || "";
+              return {
+                id: t.id,
+                origin: t.origin || "Origin",
+                destination: t.destination || "Destination",
+                machine_name: mName,
+              };
+            })
+          );
+        }
+      } catch (err) {
+        console.warn("Failed to fetch active trips:", err);
+      }
+    }
+    fetchTrips();
+  }, [orgId]);
+
   // Load daily budget entries
   const loadEntries = async () => {
     setLoading(true);
@@ -230,6 +307,7 @@ export function DailyBudgetLedger({
             category: d.category || "other",
             truck_no: d.truck_no || "--",
             vehicle_id: d.vehicle_id,
+            trip_id: d.trip_id || null,
             amount_usd: Number(d.amount_usd || 0),
             paid_usd: Number(d.paid_usd || 0),
             balance_usd: Number(d.balance_usd ?? (Number(d.amount_usd || 0) - Number(d.paid_usd || 0))),
@@ -314,6 +392,7 @@ export function DailyBudgetLedger({
             description: formData.description.trim(),
             category: formData.category,
             truck_no: formData.truck_no.trim() || "--",
+            trip_id: formData.trip_id.trim() || null,
             amount_usd: amtUsd,
             paid_usd: paidUsd,
             balance_usd: balUsd,
@@ -341,6 +420,7 @@ export function DailyBudgetLedger({
               description: formData.description.trim(),
               category: formData.category,
               truck_no: formData.truck_no.trim() || null,
+              trip_id: formData.trip_id.trim() || null,
               amount_usd: amtUsd,
               paid_usd: paidUsd,
               balance_usd: balUsd,
@@ -370,6 +450,7 @@ export function DailyBudgetLedger({
         description: formData.description.trim(),
         category: formData.category,
         truck_no: formData.truck_no.trim() || "--",
+        trip_id: formData.trip_id.trim() || null,
         amount_usd: amtUsd,
         paid_usd: paidUsd,
         balance_usd: balUsd,
@@ -394,6 +475,7 @@ export function DailyBudgetLedger({
               description: newEntry.description,
               category: newEntry.category,
               truck_no: newEntry.truck_no === "--" ? null : newEntry.truck_no,
+              trip_id: newEntry.trip_id,
               amount_usd: newEntry.amount_usd,
               paid_usd: newEntry.paid_usd,
               balance_usd: newEntry.balance_usd,
@@ -454,6 +536,7 @@ export function DailyBudgetLedger({
       description: entry.description,
       category: entry.category,
       truck_no: entry.truck_no === "--" ? "" : entry.truck_no,
+      trip_id: entry.trip_id || "",
       amount_usd: entry.amount_usd ? String(entry.amount_usd) : "",
       paid_usd: entry.paid_usd ? String(entry.paid_usd) : "",
       amount_tzs: entry.amount_tzs ? String(entry.amount_tzs) : "",
@@ -472,6 +555,7 @@ export function DailyBudgetLedger({
       description: "",
       category: BUDGET_CATEGORIES[0],
       truck_no: "",
+      trip_id: "",
       amount_usd: "",
       paid_usd: "",
       amount_tzs: "",
@@ -481,6 +565,86 @@ export function DailyBudgetLedger({
       voucher_no: "",
       notes: "",
     });
+  };
+
+  // Corridor Template Auto-Fill Insert
+  const handleInsertCorridorTemplate = async () => {
+    const corridor = CROSS_BORDER_CORRIDORS.find((c) => c.id === selectedCorridorId);
+    if (!corridor) {
+      toast.error("Please select a corridor template");
+      return;
+    }
+
+    const truck = templateTruckNo.trim() || vehicles[0]?.plate_number || "--";
+    const newItems: DailyBudgetEntry[] = [];
+    const storageKey = `mc_daily_budget_${orgId || "default"}_${date}`;
+
+    corridor.expenses.forEach((item, idx) => {
+      if (selectedFeeIds[item.id] !== false) {
+        const amtUsd = Number(item.defaultAmountUsd || 0);
+        const amtTzs = Number(item.defaultAmountTzs || 0);
+        const cat = mapCorridorCategoryToBudget(item.category, item.title);
+        const newId = `corridor-${Date.now()}-${idx}`;
+
+        newItems.push({
+          id: newId,
+          organisation_id: orgId,
+          budget_date: date,
+          description: `${item.title} (${corridor.name.split("(")[0].trim()})`,
+          category: cat,
+          truck_no: truck,
+          trip_id: templateTripId || null,
+          amount_usd: amtUsd,
+          paid_usd: amtUsd,
+          balance_usd: 0,
+          amount_tzs: amtTzs,
+          paid_tzs: amtTzs,
+          balance_tzs: 0,
+          received_by: item.countryStage ? `${item.countryStage} Authority / Agent` : "Corridor Clearing Agent",
+          payment_method: "cash",
+          voucher_no: `COR-${item.id.slice(0, 6).toUpperCase()}`,
+          notes: item.notes || `Auto-filled from ${corridor.name}`,
+          created_at: new Date().toISOString(),
+        });
+      }
+    });
+
+    if (newItems.length === 0) {
+      toast.info("No corridor items selected");
+      return;
+    }
+
+    if (orgId) {
+      try {
+        const payload = newItems.map((n) => ({
+          organisation_id: orgId,
+          budget_date: date,
+          description: n.description,
+          category: n.category,
+          truck_no: n.truck_no === "--" ? null : n.truck_no,
+          trip_id: n.trip_id,
+          amount_usd: n.amount_usd,
+          paid_usd: n.paid_usd,
+          balance_usd: n.balance_usd,
+          amount_tzs: n.amount_tzs,
+          paid_tzs: n.paid_tzs,
+          balance_tzs: n.balance_tzs,
+          received_by: n.received_by === "--" ? null : n.received_by,
+          payment_method: n.payment_method,
+          voucher_no: n.voucher_no || null,
+          notes: n.notes || null,
+        }));
+        await (supabase as any).from("finance_daily_budget_entries").insert(payload);
+      } catch (err) {
+        console.warn("Could not batch insert to Supabase:", err);
+      }
+    }
+
+    const updated = [...entries, ...newItems];
+    setEntries(updated);
+    localStorage.setItem(storageKey, JSON.stringify(updated));
+    toast.success(`Inserted ${newItems.length} corridor statutory budget items for ${corridor.name}`);
+    setCorridorModalOpen(false);
   };
 
   // Filter entries
@@ -632,6 +796,20 @@ export function DailyBudgetLedger({
           >
             <Printer className="h-3.5 w-3.5" />
             Print Voucher
+          </Button>
+
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              setSelectedFeeIds({});
+              setCorridorModalOpen(true);
+            }}
+            className="h-8 text-xs font-semibold gap-1.5 border-emerald-500/30 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/20"
+            title="Auto-fill corridor statutory fees and route tolls"
+          >
+            <Route className="h-3.5 w-3.5 text-emerald-600" />
+            Apply Corridor Template
           </Button>
 
           <Button
@@ -838,7 +1016,15 @@ export function DailyBudgetLedger({
                   <tr key={row.id} className="hover:bg-muted/30 transition-colors group">
                     {/* 1. DESCRIPTION */}
                     <td className="py-2.5 px-3">
-                      <div className="font-semibold text-foreground">{row.description}</div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-semibold text-foreground">{row.description}</span>
+                        {row.trip_id && (
+                          <Badge variant="outline" className="text-[9px] font-mono border-primary/30 text-primary bg-primary/5 py-0 px-1.5 gap-1">
+                            <Route className="h-2.5 w-2.5" />
+                            Trip Linked
+                          </Badge>
+                        )}
+                      </div>
                       {row.notes && <div className="text-[11px] text-muted-foreground mt-0.5">{row.notes}</div>}
                     </td>
 
@@ -1111,8 +1297,8 @@ export function DailyBudgetLedger({
               />
             </div>
 
-            {/* 2. Category & Truck No */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {/* 2. Category, Truck No & Link Active Trip */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div className="space-y-1.5">
                 <Label className="text-xs font-bold">Category</Label>
                 <Select
@@ -1150,6 +1336,26 @@ export function DailyBudgetLedger({
                     ))}
                   </datalist>
                 </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-xs font-bold">LINK ACTIVE TRIP (OPTIONAL)</Label>
+                <Select
+                  value={formData.trip_id || "none"}
+                  onValueChange={(val) => setFormData({ ...formData, trip_id: val === "none" ? "" : val })}
+                >
+                  <SelectTrigger className="text-xs">
+                    <SelectValue placeholder="Not linked to trip" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">-- General Fleet (No Trip) --</SelectItem>
+                    {activeTrips.map((t) => (
+                      <SelectItem key={t.id} value={t.id}>
+                        {t.machine_name ? `${t.machine_name}: ` : ""}{t.origin} → {t.destination}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
 
@@ -1305,6 +1511,227 @@ export function DailyBudgetLedger({
               </Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Apply Corridor Template Dialog */}
+      <Dialog open={corridorModalOpen} onOpenChange={setCorridorModalOpen}>
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-base font-bold">
+              <Route className="h-5 w-5 text-emerald-600" />
+              Auto-Fill Corridor Statutory & Route Budget
+            </DialogTitle>
+            <DialogDescription className="text-xs">
+              Select a cross-border or domestic freight corridor to automatically pre-fill standardized statutory tolls, border clearing, weighbridges, and driver posho into the Daily Budget Ledger.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-2">
+            {/* Corridor Selector */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <div className="space-y-1.5 md:col-span-1">
+                <Label className="text-xs font-bold">Transit Corridor Route</Label>
+                <Select
+                  value={selectedCorridorId}
+                  onValueChange={(val) => {
+                    setSelectedCorridorId(val);
+                    setSelectedFeeIds({});
+                  }}
+                >
+                  <SelectTrigger className="text-xs">
+                    <SelectValue placeholder="Select Corridor" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {CROSS_BORDER_CORRIDORS.map((c) => (
+                      <SelectItem key={c.id} value={c.id} className="text-xs">
+                        {c.flag} {c.name.split("(")[0].trim()} ({c.expenses.length} fees)
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-xs font-bold">Assign to Truck / Vehicle</Label>
+                <Input
+                  placeholder="e.g. T 482 DXK"
+                  value={templateTruckNo}
+                  onChange={(e) => setTemplateTruckNo(e.target.value)}
+                  className="text-xs"
+                  list="template-trucks-datalist"
+                />
+                <datalist id="template-trucks-datalist">
+                  {vehicles.map((v) => (
+                    <option key={v.id} value={v.plate_number}>
+                      {v.name}
+                    </option>
+                  ))}
+                </datalist>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-xs font-bold">Link Active Trip (Optional)</Label>
+                <Select
+                  value={templateTripId || "none"}
+                  onValueChange={(val) => setTemplateTripId(val === "none" ? "" : val)}
+                >
+                  <SelectTrigger className="text-xs">
+                    <SelectValue placeholder="Not linked to trip" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">-- General Fleet (No Trip) --</SelectItem>
+                    {activeTrips.map((t) => (
+                      <SelectItem key={t.id} value={t.id}>
+                        {t.machine_name ? `${t.machine_name}: ` : ""}{t.origin} → {t.destination}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            {/* Selected Corridor Overview */}
+            {(() => {
+              const corridor = CROSS_BORDER_CORRIDORS.find((c) => c.id === selectedCorridorId);
+              if (!corridor) return null;
+
+              const totalSelectedUsd = corridor.expenses.reduce(
+                (sum, exp) => (selectedFeeIds[exp.id] !== false ? sum + (exp.defaultAmountUsd || 0) : sum),
+                0
+              );
+              const totalSelectedTzs = corridor.expenses.reduce(
+                (sum, exp) => (selectedFeeIds[exp.id] !== false ? sum + (exp.defaultAmountTzs || 0) : sum),
+                0
+              );
+
+              return (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between p-3 rounded-lg bg-muted/50 border border-border">
+                    <div>
+                      <div className="text-xs font-bold flex items-center gap-1.5">
+                        <MapPin className="h-3.5 w-3.5 text-primary" />
+                        {corridor.name}
+                      </div>
+                      <div className="text-[11px] text-muted-foreground mt-0.5">
+                        Border Post: {corridor.borderPost} · Est. Roundtrip: {corridor.estimatedRoundtripHours} hrs
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-xs font-bold font-mono text-emerald-600 dark:text-emerald-400">
+                        ${totalSelectedUsd.toFixed(2)} USD
+                      </div>
+                      <div className="text-[11px] font-bold font-mono text-blue-600 dark:text-blue-400">
+                        {Math.round(totalSelectedTzs).toLocaleString()} TZS
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Checklist of corridor fees */}
+                  <div className="border border-border rounded-lg overflow-hidden">
+                    <div className="flex items-center justify-between bg-muted/70 px-3 py-2 text-xs font-bold border-b border-border">
+                      <div className="flex items-center gap-2">
+                        <span>Corridor Statutory Line Items ({corridor.expenses.length})</span>
+                      </div>
+                      <div className="flex items-center gap-2 text-[11px]">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const all: Record<string, boolean> = {};
+                            corridor.expenses.forEach((e) => (all[e.id] = true));
+                            setSelectedFeeIds(all);
+                          }}
+                          className="text-primary hover:underline font-semibold"
+                        >
+                          Select All
+                        </button>
+                        <span>·</span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const none: Record<string, boolean> = {};
+                            corridor.expenses.forEach((e) => (none[e.id] = false));
+                            setSelectedFeeIds(none);
+                          }}
+                          className="text-muted-foreground hover:underline font-semibold"
+                        >
+                          Deselect All
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="max-h-64 overflow-y-auto divide-y divide-border text-xs">
+                      {corridor.expenses.map((fee) => {
+                        const isChecked = selectedFeeIds[fee.id] !== false;
+                        return (
+                          <label
+                            key={fee.id}
+                            className={cn(
+                              "flex items-center justify-between p-2.5 hover:bg-muted/30 cursor-pointer transition-colors",
+                              isChecked ? "bg-card" : "opacity-50"
+                            )}
+                          >
+                            <div className="flex items-center gap-2.5">
+                              <input
+                                type="checkbox"
+                                checked={isChecked}
+                                onChange={(e) =>
+                                  setSelectedFeeIds({ ...selectedFeeIds, [fee.id]: e.target.checked })
+                                }
+                                className="h-4 w-4 rounded text-primary focus:ring-primary"
+                              />
+                              <div>
+                                <span className="font-semibold text-foreground">{fee.title}</span>
+                                <div className="text-[10px] text-muted-foreground flex items-center gap-1.5 mt-0.5">
+                                  <Badge variant="outline" className="text-[9px] py-0 px-1 font-mono">
+                                    {fee.category.toUpperCase()}
+                                  </Badge>
+                                  {fee.countryStage && <span>Stage: {fee.countryStage}</span>}
+                                  {fee.notes && <span>· {fee.notes}</span>}
+                                </div>
+                              </div>
+                            </div>
+                            <div className="text-right font-mono text-xs font-semibold whitespace-nowrap">
+                              {fee.defaultAmountUsd > 0 && (
+                                <span className="text-emerald-700 dark:text-emerald-400 block">
+                                  ${fee.defaultAmountUsd.toFixed(2)}
+                                </span>
+                              )}
+                              {fee.defaultAmountTzs > 0 && (
+                                <span className="text-blue-700 dark:text-blue-400 block text-[11px]">
+                                  {Math.round(fee.defaultAmountTzs).toLocaleString()} TZS
+                                </span>
+                              )}
+                            </div>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
+
+            <DialogFooter className="pt-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setCorridorModalOpen(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                onClick={handleInsertCorridorTemplate}
+                className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold gap-1.5"
+              >
+                <Sparkles className="h-3.5 w-3.5" />
+                Insert Selected Corridor Items into Ledger
+              </Button>
+            </DialogFooter>
+          </div>
         </DialogContent>
       </Dialog>
     </div>

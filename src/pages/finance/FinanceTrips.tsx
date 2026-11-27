@@ -30,8 +30,12 @@ import {
   Clock,
   FileText,
   Layers,
+  Wallet,
+  ShieldCheck,
+  FileCheck2,
 } from "lucide-react";
 import { toast } from "sonner";
+import { SafariFloatSurrenderDialog, parseTripRecord, type Trip } from "@/pages/fleet/Trips";
 
 interface TripFinancialRecord {
   id: string;
@@ -50,6 +54,11 @@ interface TripFinancialRecord {
   marginPct: number;
   kmDriven: number;
   isInvoiced: boolean;
+  safariFloat?: any;
+  podStatus?: "verified" | "submitted" | "pending";
+  driverName?: string;
+  driverPhone?: string;
+  rawTrip?: any;
 }
 
 export default function FinanceTrips() {
@@ -61,6 +70,10 @@ export default function FinanceTrips() {
   const [selectedTripIds, setSelectedTripIds] = useState<string[]>([]);
   const [consolidatedModalOpen, setConsolidatedModalOpen] = useState(false);
   const [rawTrips, setRawTrips] = useState<any[]>([]);
+
+  // Safari Float Surrender Dialog state
+  const [surrenderTrip, setSurrenderTrip] = useState<Trip | null>(null);
+  const [surrenderDriver, setSurrenderDriver] = useState<any>(null);
 
   const loadData = async () => {
     if (!organisation?.id) return;
@@ -86,7 +99,9 @@ export default function FinanceTrips() {
             end_odo,
             fuel_used_l,
             machine_id,
-            machines:machines(id, name, plate_number)
+            driver_id,
+            machines:machines(id, name, plate_number),
+            drivers:drivers(id, full_name, phone)
           `)
           .eq("organisation_id", organisation.id)
           .order("start_at", { ascending: false }),
@@ -194,6 +209,16 @@ export default function FinanceTrips() {
         const netMargin = revenue - totalExpenses;
         const marginPct = revenue > 0 ? Math.round((netMargin / revenue) * 100) : 0;
 
+        const driverObj = Array.isArray(t.drivers) ? t.drivers[0] : t.drivers;
+
+        // POD status determination
+        let podStatus: "verified" | "submitted" | "pending" = "pending";
+        if (meta?.pod_verified || meta?.pod_status === "verified" || t.cargo_description?.includes("[POD_VERIFIED]")) {
+          podStatus = "verified";
+        } else if (meta?.pod_submitted || meta?.pod_url || meta?.pod_status === "submitted" || t.cargo_description?.includes("[POD_SUBMITTED]")) {
+          podStatus = "submitted";
+        }
+
         return {
           id: t.id,
           origin: t.origin || "Origin",
@@ -211,6 +236,11 @@ export default function FinanceTrips() {
           marginPct,
           kmDriven: km,
           isInvoiced: invoicedTripSet.has(t.id) || !!meta?.invoice_id || !!meta?.invoice_number,
+          safariFloat: sFloat || (t as any).safari_float || null,
+          podStatus,
+          driverName: driverObj?.full_name || undefined,
+          driverPhone: driverObj?.phone || undefined,
+          rawTrip: t,
         };
       });
 
@@ -464,6 +494,8 @@ export default function FinanceTrips() {
                   <th className="py-3 px-4 font-semibold text-right">Disbursements</th>
                   <th className="py-3 px-4 font-semibold text-right">Net Margin</th>
                   <th className="py-3 px-4 font-semibold text-right">Margin %</th>
+                  <th className="py-3 px-3 font-semibold text-center">Float Imprest</th>
+                  <th className="py-3 px-3 font-semibold text-center">POD Status</th>
                   <th className="py-3 px-4 font-semibold text-center">Billing</th>
                   <th className="py-3 px-4 font-semibold text-center">Status</th>
                   <th className="py-3 px-4 font-semibold text-right">Actions</th>
@@ -530,6 +562,76 @@ export default function FinanceTrips() {
                           {r.marginPct}%
                         </span>
                       </td>
+
+                      {/* Safari Float / Imprest Status & Action */}
+                      <td className="py-3.5 px-3 text-center whitespace-nowrap">
+                        {r.safariFloat ? (
+                          r.safariFloat.surrendered ? (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-6 px-2 text-[10px] font-semibold gap-1 border-emerald-500/30 text-emerald-700 dark:text-emerald-300 bg-emerald-500/5 hover:bg-emerald-500/15"
+                              title="Safari Float Reconciled - Click to view liquidation voucher"
+                              onClick={() => {
+                                setSurrenderTrip(parseTripRecord(r.rawTrip));
+                                setSurrenderDriver({ id: r.rawTrip.driver_id, full_name: r.driverName, phone: r.driverPhone });
+                              }}
+                            >
+                              <Wallet className="h-3 w-3 text-emerald-600" />
+                              Reconciled
+                            </Button>
+                          ) : (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-6 px-2 text-[10px] font-bold gap-1 border-amber-500/40 text-amber-700 dark:text-amber-400 bg-amber-500/10 hover:bg-amber-500/20"
+                              title="Float Dispatched - Driver Surrender & Reconciliation Due"
+                              onClick={() => {
+                                setSurrenderTrip(parseTripRecord(r.rawTrip));
+                                setSurrenderDriver({ id: r.rawTrip.driver_id, full_name: r.driverName, phone: r.driverPhone });
+                              }}
+                            >
+                              <Wallet className="h-3 w-3 text-amber-600" />
+                              Surrender Due
+                            </Button>
+                          )
+                        ) : (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-6 px-1.5 text-[10px] text-muted-foreground hover:text-foreground gap-1"
+                            title="Manage or dispatch safari trip float"
+                            onClick={() => {
+                              setSurrenderTrip(parseTripRecord(r.rawTrip));
+                              setSurrenderDriver({ id: r.rawTrip.driver_id, full_name: r.driverName, phone: r.driverPhone });
+                            }}
+                          >
+                            <Wallet className="h-2.5 w-2.5" />
+                            No Float
+                          </Button>
+                        )}
+                      </td>
+
+                      {/* Proof of Delivery (POD) Status */}
+                      <td className="py-3.5 px-3 text-center whitespace-nowrap">
+                        {r.podStatus === "verified" ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-600 border border-emerald-500/20" title="Signed Proof of Delivery Verified & Approved">
+                            <ShieldCheck className="h-3 w-3" />
+                            POD Verified
+                          </span>
+                        ) : r.podStatus === "submitted" ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-sky-500/10 text-sky-600 border border-sky-500/20" title="Physical POD Attached - Pending Final Audit">
+                            <FileCheck2 className="h-3 w-3" />
+                            POD Attached
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-muted text-muted-foreground border border-border" title="Awaiting Physical / Stamped Delivery Note">
+                            <Clock className="h-3 w-3" />
+                            Awaiting POD
+                          </span>
+                        )}
+                      </td>
+
                       <td className="py-3.5 px-4 text-center whitespace-nowrap">
                         {r.isInvoiced ? (
                           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-500/10 text-emerald-600 border border-emerald-500/20">
@@ -639,6 +741,19 @@ export default function FinanceTrips() {
         }}
         preselectedTripIds={selectedTripIds}
       />
+
+      {/* Safari Float / Trip Imprest Surrender & Liquidation Dialog */}
+      {surrenderTrip && (
+        <SafariFloatSurrenderDialog
+          open={!!surrenderTrip}
+          onOpenChange={(v) => !v && setSurrenderTrip(null)}
+          trip={surrenderTrip}
+          driver={surrenderDriver}
+          onSaved={async () => {
+            await loadData();
+          }}
+        />
+      )}
     </div>
   );
 }

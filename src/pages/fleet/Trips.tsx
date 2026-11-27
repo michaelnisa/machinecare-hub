@@ -98,7 +98,7 @@ type ExpenseSummary = {
   count: number;
 };
 
-type Trip = {
+export type Trip = {
   id: string;
   machine_id: string;
   driver_id: string | null;
@@ -150,7 +150,7 @@ const TAB_LABELS: Record<(typeof TABS)[number], string> = {
   cancelled: "Cancelled",
 };
 
-function parseTripRecord(raw: any): Trip {
+export function parseTripRecord(raw: any): Trip {
   let client_name = raw.client_name ?? null;
   let client_order_no = raw.client_order_no ?? null;
   let roundtrip_hours_est = raw.roundtrip_hours_est ?? null;
@@ -2927,7 +2927,7 @@ function TripDetailDialog({
   );
 }
 
-function SafariFloatSurrenderDialog({
+export function SafariFloatSurrenderDialog({
   open,
   onOpenChange,
   trip,

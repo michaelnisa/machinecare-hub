@@ -25,6 +25,7 @@ import {
   Check,
   ArrowRight,
   TrendingUp,
+  SlidersHorizontal,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -92,6 +93,15 @@ export interface OvertimeLog {
   created_at?: string;
 }
 
+export interface WorkerDeductionBreakdown {
+  fuel_shortage_deduction_tzs: number;
+  traffic_fine_deduction_tzs: number;
+  salary_advance_deduction_tzs: number;
+  statutory_deductions_tzs: number;
+  other_deductions_tzs?: number;
+  notes?: string;
+}
+
 export interface PayrollRecord {
   id: string;
   worker_id: string;
@@ -106,6 +116,11 @@ export interface PayrollRecord {
   overtime_pay_tzs: number;
   allowances_tzs: number;
   deductions_tzs: number;
+  fuel_shortage_deduction_tzs?: number;
+  traffic_fine_deduction_tzs?: number;
+  salary_advance_deduction_tzs?: number;
+  statutory_deductions_tzs?: number;
+  other_deductions_tzs?: number;
   net_salary_tzs: number;
   payment_status: "draft" | "pending_approval" | "approved" | "paid";
   payment_method: string;
@@ -321,13 +336,40 @@ export function FinancePayroll() {
   const currentDate = new Date();
   const [selectedMonth, setSelectedMonth] = useState<number>(currentDate.getMonth() + 1);
   const [selectedYear, setSelectedYear] = useState<number>(currentDate.getFullYear());
-  const [payrollDeductions, setPayrollDeductions] = useState<Record<string, number>>({});
+  const [payrollDeductions, setPayrollDeductions] = useState<Record<string, WorkerDeductionBreakdown | number>>({});
   const [payrollAllowances, setPayrollAllowances] = useState<Record<string, number>>({});
+
+  // Itemized Deductions Modal
+  const [deductionModalOpen, setDeductionModalOpen] = useState(false);
+  const [selectedWorkerForDeduction, setSelectedWorkerForDeduction] = useState<PayrollRecord | null>(null);
+  const [deductionForm, setDeductionForm] = useState<WorkerDeductionBreakdown>({
+    fuel_shortage_deduction_tzs: 0,
+    traffic_fine_deduction_tzs: 0,
+    salary_advance_deduction_tzs: 0,
+    statutory_deductions_tzs: 0,
+    other_deductions_tzs: 0,
+    notes: "",
+  });
 
   // Payslip Modal
   const [payslipModalOpen, setPayslipModalOpen] = useState(false);
   const [activePayslip, setActivePayslip] = useState<PayrollRecord | null>(null);
   const payslipPrintRef = useRef<HTMLDivElement>(null);
+
+  // Load month-specific deductions from localStorage
+  useEffect(() => {
+    const key = `mc_payroll_deductions_${orgId || "default"}_${selectedYear}_${selectedMonth}`;
+    try {
+      const raw = localStorage.getItem(key);
+      if (raw) {
+        setPayrollDeductions(JSON.parse(raw));
+      } else {
+        setPayrollDeductions({});
+      }
+    } catch {
+      setPayrollDeductions({});
+    }
+  }, [orgId, selectedYear, selectedMonth]);
 
   // Load Workers
   const loadWorkers = async () => {
@@ -882,8 +924,15 @@ export function FinancePayroll() {
       const totalOtPay = workerOtLogs.reduce((sum, l) => sum + (l.overtime_amount_tzs || 0), 0);
 
       const allowances = payrollAllowances[worker.id] ?? (worker.daily_posho_tzs > 0 ? worker.daily_posho_tzs * 4 : 0);
-      const deductions = payrollDeductions[worker.id] ?? 0;
-      const netPay = (worker.base_salary_tzs || 0) + totalOtPay + allowances - deductions;
+      const deductionData = payrollDeductions[worker.id];
+      const fuelDeduction = typeof deductionData === "object" && deductionData !== null ? (deductionData.fuel_shortage_deduction_tzs || 0) : 0;
+      const fineDeduction = typeof deductionData === "object" && deductionData !== null ? (deductionData.traffic_fine_deduction_tzs || 0) : 0;
+      const advanceDeduction = typeof deductionData === "object" && deductionData !== null ? (deductionData.salary_advance_deduction_tzs || 0) : 0;
+      const statutoryDeduction = typeof deductionData === "object" && deductionData !== null ? (deductionData.statutory_deductions_tzs || 0) : 0;
+      const otherDeduction = typeof deductionData === "number" ? deductionData : (typeof deductionData === "object" && deductionData !== null ? (deductionData.other_deductions_tzs || 0) : 0);
+      const totalDeductions = fuelDeduction + fineDeduction + advanceDeduction + statutoryDeduction + otherDeduction;
+
+      const netPay = (worker.base_salary_tzs || 0) + totalOtPay + allowances - totalDeductions;
 
       return {
         id: `pay-${worker.id}-${selectedYear}-${selectedMonth}`,
@@ -898,7 +947,12 @@ export function FinancePayroll() {
         overtime_hours_total: totalOtHours,
         overtime_pay_tzs: totalOtPay,
         allowances_tzs: allowances,
-        deductions_tzs: deductions,
+        deductions_tzs: totalDeductions,
+        fuel_shortage_deduction_tzs: fuelDeduction,
+        traffic_fine_deduction_tzs: fineDeduction,
+        salary_advance_deduction_tzs: advanceDeduction,
+        statutory_deductions_tzs: statutoryDeduction,
+        other_deductions_tzs: otherDeduction,
         net_salary_tzs: Math.max(0, netPay),
         payment_status: "approved",
         payment_method: worker.payment_method,
@@ -933,7 +987,11 @@ export function FinancePayroll() {
       "OT HOURS",
       "OVERTIME PAY TZS",
       "ALLOWANCES TZS",
-      "DEDUCTIONS TZS",
+      "STATUTORY DEDUCTIONS TZS",
+      "SALARY ADVANCE TZS",
+      "FUEL SHORTAGE PENALTY TZS",
+      "TRAFFIC FINE TZS",
+      "TOTAL DEDUCTIONS TZS",
       "NET PAY TZS",
       "PAYMENT METHOD",
       "MONTH",
@@ -949,6 +1007,10 @@ export function FinancePayroll() {
       r.overtime_hours_total.toFixed(1),
       Math.round(r.overtime_pay_tzs),
       Math.round(r.allowances_tzs),
+      Math.round(r.statutory_deductions_tzs || 0),
+      Math.round(r.salary_advance_deduction_tzs || 0),
+      Math.round(r.fuel_shortage_deduction_tzs || 0),
+      Math.round(r.traffic_fine_deduction_tzs || 0),
       Math.round(r.deductions_tzs),
       Math.round(r.net_salary_tzs),
       r.payment_method,
@@ -972,6 +1034,55 @@ export function FinancePayroll() {
   const handleOpenPayslip = (record: PayrollRecord) => {
     setActivePayslip(record);
     setPayslipModalOpen(true);
+  };
+
+  const handleOpenDeductionModal = (record: PayrollRecord) => {
+    setSelectedWorkerForDeduction(record);
+    const existing = payrollDeductions[record.worker_id];
+    if (typeof existing === "object" && existing !== null) {
+      setDeductionForm({
+        fuel_shortage_deduction_tzs: existing.fuel_shortage_deduction_tzs || 0,
+        traffic_fine_deduction_tzs: existing.traffic_fine_deduction_tzs || 0,
+        salary_advance_deduction_tzs: existing.salary_advance_deduction_tzs || 0,
+        statutory_deductions_tzs: existing.statutory_deductions_tzs || 0,
+        other_deductions_tzs: existing.other_deductions_tzs || 0,
+        notes: existing.notes || "",
+      });
+    } else if (typeof existing === "number") {
+      setDeductionForm({
+        fuel_shortage_deduction_tzs: 0,
+        traffic_fine_deduction_tzs: 0,
+        salary_advance_deduction_tzs: 0,
+        statutory_deductions_tzs: 0,
+        other_deductions_tzs: existing || 0,
+        notes: "",
+      });
+    } else {
+      setDeductionForm({
+        fuel_shortage_deduction_tzs: 0,
+        traffic_fine_deduction_tzs: 0,
+        salary_advance_deduction_tzs: 0,
+        statutory_deductions_tzs: 0,
+        other_deductions_tzs: 0,
+        notes: "",
+      });
+    }
+    setDeductionModalOpen(true);
+  };
+
+  const handleSaveDeductions = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedWorkerForDeduction) return;
+
+    const key = `mc_payroll_deductions_${orgId || "default"}_${selectedYear}_${selectedMonth}`;
+    const updated: Record<string, WorkerDeductionBreakdown> = {
+      ...(payrollDeductions as Record<string, WorkerDeductionBreakdown>),
+      [selectedWorkerForDeduction.worker_id]: { ...deductionForm },
+    };
+    setPayrollDeductions(updated);
+    localStorage.setItem(key, JSON.stringify(updated));
+    toast.success(`Deductions updated for ${selectedWorkerForDeduction.worker_name}`);
+    setDeductionModalOpen(false);
   };
 
   return (
@@ -1508,7 +1619,7 @@ export function FinancePayroll() {
                     <th className="py-3 px-3 text-right">Posho / Allowances</th>
                     <th className="py-3 px-3 text-right">Deductions</th>
                     <th className="py-3 px-3 text-right font-black text-foreground">Net Pay (TZS)</th>
-                    <th className="py-3 px-3 text-center">Payslip</th>
+                    <th className="py-3 px-3 text-center">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border font-sans">
@@ -1532,22 +1643,42 @@ export function FinancePayroll() {
                       <td className="py-2.5 px-3 text-right font-mono text-blue-600 dark:text-blue-400">
                         {row.allowances_tzs > 0 ? Math.round(row.allowances_tzs).toLocaleString() : "-"}
                       </td>
-                      <td className="py-2.5 px-3 text-right font-mono text-rose-600 dark:text-rose-400">
-                        {row.deductions_tzs > 0 ? Math.round(row.deductions_tzs).toLocaleString() : "-"}
+                      <td className="py-2.5 px-3 text-right font-mono">
+                        <button
+                          type="button"
+                          onClick={() => handleOpenDeductionModal(row)}
+                          className="text-rose-600 dark:text-rose-400 hover:underline inline-flex items-center gap-1 font-semibold group cursor-pointer"
+                          title="Click to adjust operational deductions (fuel shortage, traffic fines, salary advance, statutory)"
+                        >
+                          {row.deductions_tzs > 0 ? `-${Math.round(row.deductions_tzs).toLocaleString()}` : "-"}
+                          <SlidersHorizontal className="h-2.5 w-2.5 opacity-60 group-hover:opacity-100" />
+                        </button>
                       </td>
                       <td className="py-2.5 px-3 text-right font-mono font-black text-emerald-600 dark:text-emerald-400">
                         TZS {Math.round(row.net_salary_tzs).toLocaleString()}
                       </td>
                       <td className="py-2.5 px-3 text-center">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="h-6 px-2 text-[10px] font-bold gap-1"
-                          onClick={() => handleOpenPayslip(row)}
-                        >
-                          <Printer className="h-3 w-3" />
-                          Slip
-                        </Button>
+                        <div className="flex items-center justify-center gap-1.5">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-6 px-2 text-[10px] font-bold gap-1 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-900/50 hover:bg-rose-50 dark:hover:bg-rose-950/40"
+                            onClick={() => handleOpenDeductionModal(row)}
+                            title="Adjust operational penalties & deductions"
+                          >
+                            <SlidersHorizontal className="h-3 w-3" />
+                            Deductions
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-6 px-2 text-[10px] font-bold gap-1"
+                            onClick={() => handleOpenPayslip(row)}
+                          >
+                            <Printer className="h-3 w-3" />
+                            Slip
+                          </Button>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -1966,14 +2097,60 @@ export function FinancePayroll() {
                       </span>
                     </div>
                   )}
-                  {activePayslip.deductions_tzs > 0 && (
+                  {/* Itemized Deductions */}
+                  {activePayslip.statutory_deductions_tzs ? (
                     <div className="flex justify-between py-1.5 text-rose-600 dark:text-rose-400">
-                      <span>Statutory / Cash Advances Deductions</span>
+                      <span>Statutory NSSF & PAYE</span>
                       <span className="font-mono font-bold">
-                        - TZS {Math.round(activePayslip.deductions_tzs).toLocaleString()}
+                        - TZS {Math.round(activePayslip.statutory_deductions_tzs).toLocaleString()}
                       </span>
                     </div>
-                  )}
+                  ) : null}
+                  {activePayslip.salary_advance_deduction_tzs ? (
+                    <div className="flex justify-between py-1.5 text-rose-600 dark:text-rose-400">
+                      <span>Mid-Month Salary Advance / Loan</span>
+                      <span className="font-mono font-bold">
+                        - TZS {Math.round(activePayslip.salary_advance_deduction_tzs).toLocaleString()}
+                      </span>
+                    </div>
+                  ) : null}
+                  {activePayslip.fuel_shortage_deduction_tzs ? (
+                    <div className="flex justify-between py-1.5 text-amber-700 dark:text-amber-400 font-semibold">
+                      <span>Fuel Shortage / Siphoning Loss Penalty</span>
+                      <span className="font-mono font-bold">
+                        - TZS {Math.round(activePayslip.fuel_shortage_deduction_tzs).toLocaleString()}
+                      </span>
+                    </div>
+                  ) : null}
+                  {activePayslip.traffic_fine_deduction_tzs ? (
+                    <div className="flex justify-between py-1.5 text-rose-700 dark:text-rose-400 font-semibold">
+                      <span>Police / Weighbridge Traffic Fine Surcharge</span>
+                      <span className="font-mono font-bold">
+                        - TZS {Math.round(activePayslip.traffic_fine_deduction_tzs).toLocaleString()}
+                      </span>
+                    </div>
+                  ) : null}
+                  {activePayslip.other_deductions_tzs ? (
+                    <div className="flex justify-between py-1.5 text-rose-600 dark:text-rose-400">
+                      <span>Other Operational Deductions</span>
+                      <span className="font-mono font-bold">
+                        - TZS {Math.round(activePayslip.other_deductions_tzs).toLocaleString()}
+                      </span>
+                    </div>
+                  ) : null}
+                  {activePayslip.deductions_tzs > 0 &&
+                    !activePayslip.statutory_deductions_tzs &&
+                    !activePayslip.salary_advance_deduction_tzs &&
+                    !activePayslip.fuel_shortage_deduction_tzs &&
+                    !activePayslip.traffic_fine_deduction_tzs &&
+                    !activePayslip.other_deductions_tzs && (
+                      <div className="flex justify-between py-1.5 text-rose-600 dark:text-rose-400">
+                        <span>Statutory / Cash Advances Deductions</span>
+                        <span className="font-mono font-bold">
+                          - TZS {Math.round(activePayslip.deductions_tzs).toLocaleString()}
+                        </span>
+                      </div>
+                    )}
                 </div>
 
                 {/* Net Pay */}
@@ -2015,6 +2192,197 @@ export function FinancePayroll() {
               Print Payslip
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Itemized Operational Deductions Modal */}
+      <Dialog open={deductionModalOpen} onOpenChange={setDeductionModalOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-rose-700 dark:text-rose-400">
+              <SlidersHorizontal className="h-5 w-5" />
+              Adjust Deductions & Penalties
+            </DialogTitle>
+            <DialogDescription>
+              {selectedWorkerForDeduction && (
+                <span>
+                  Configure operational fines, fuel siphoning recovery, advances, and statutory deductions for{" "}
+                  <strong>{selectedWorkerForDeduction.worker_name}</strong> ({selectedWorkerForDeduction.employee_id}) -{" "}
+                  {MONTH_NAMES[selectedMonth - 1]} {selectedYear}.
+                </span>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+
+          {selectedWorkerForDeduction && (
+            <form onSubmit={handleSaveDeductions} className="space-y-4 pt-2">
+              <div className="rounded-lg bg-muted/50 p-3 border border-border text-xs space-y-1">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Base Salary + Overtime + Allowances:</span>
+                  <span className="font-mono font-bold">
+                    TZS{" "}
+                    {Math.round(
+                      selectedWorkerForDeduction.base_salary_tzs +
+                        selectedWorkerForDeduction.overtime_pay_tzs +
+                        selectedWorkerForDeduction.allowances_tzs
+                    ).toLocaleString()}
+                  </span>
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <div className="space-y-1">
+                  <Label className="text-xs font-semibold flex items-center justify-between">
+                    <span>Statutory NSSF & PAYE (TZS)</span>
+                    <span className="text-[10px] text-muted-foreground font-normal">Social security & taxes</span>
+                  </Label>
+                  <Input
+                    type="number"
+                    min="0"
+                    placeholder="0"
+                    value={deductionForm.statutory_deductions_tzs || ""}
+                    onChange={(e) =>
+                      setDeductionForm({
+                        ...deductionForm,
+                        statutory_deductions_tzs: Math.max(0, parseFloat(e.target.value) || 0),
+                      })
+                    }
+                    className="font-mono"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <Label className="text-xs font-semibold flex items-center justify-between">
+                    <span>Mid-Month Salary Advance / Loan (TZS)</span>
+                    <span className="text-[10px] text-muted-foreground font-normal">Direct cash advance</span>
+                  </Label>
+                  <Input
+                    type="number"
+                    min="0"
+                    placeholder="0"
+                    value={deductionForm.salary_advance_deduction_tzs || ""}
+                    onChange={(e) =>
+                      setDeductionForm({
+                        ...deductionForm,
+                        salary_advance_deduction_tzs: Math.max(0, parseFloat(e.target.value) || 0),
+                      })
+                    }
+                    className="font-mono"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <Label className="text-xs font-semibold flex items-center justify-between text-amber-700 dark:text-amber-400">
+                    <span>Fuel Shortage / Siphoning Loss (TZS)</span>
+                    <span className="text-[10px] text-muted-foreground font-normal">Trip fuel variance penalty</span>
+                  </Label>
+                  <Input
+                    type="number"
+                    min="0"
+                    placeholder="0"
+                    value={deductionForm.fuel_shortage_deduction_tzs || ""}
+                    onChange={(e) =>
+                      setDeductionForm({
+                        ...deductionForm,
+                        fuel_shortage_deduction_tzs: Math.max(0, parseFloat(e.target.value) || 0),
+                      })
+                    }
+                    className="font-mono border-amber-300 dark:border-amber-800"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <Label className="text-xs font-semibold flex items-center justify-between text-rose-700 dark:text-rose-400">
+                    <span>Police / Weighbridge Traffic Fine Surcharge (TZS)</span>
+                    <span className="text-[10px] text-muted-foreground font-normal">Driver traffic violation</span>
+                  </Label>
+                  <Input
+                    type="number"
+                    min="0"
+                    placeholder="0"
+                    value={deductionForm.traffic_fine_deduction_tzs || ""}
+                    onChange={(e) =>
+                      setDeductionForm({
+                        ...deductionForm,
+                        traffic_fine_deduction_tzs: Math.max(0, parseFloat(e.target.value) || 0),
+                      })
+                    }
+                    className="font-mono border-rose-300 dark:border-rose-800"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <Label className="text-xs font-semibold">Other Deductions / Disciplinary (TZS)</Label>
+                  <Input
+                    type="number"
+                    min="0"
+                    placeholder="0"
+                    value={deductionForm.other_deductions_tzs || ""}
+                    onChange={(e) =>
+                      setDeductionForm({
+                        ...deductionForm,
+                        other_deductions_tzs: Math.max(0, parseFloat(e.target.value) || 0),
+                      })
+                    }
+                    className="font-mono"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <Label className="text-xs font-semibold">Deduction Reason / Notes</Label>
+                  <Input
+                    placeholder="e.g. Tank dip shortage at Tunduma, overspeeding fine"
+                    value={deductionForm.notes || ""}
+                    onChange={(e) =>
+                      setDeductionForm({
+                        ...deductionForm,
+                        notes: e.target.value,
+                      })
+                    }
+                  />
+                </div>
+              </div>
+
+              {/* Total Summary */}
+              {(() => {
+                const totalDed =
+                  (deductionForm.statutory_deductions_tzs || 0) +
+                  (deductionForm.salary_advance_deduction_tzs || 0) +
+                  (deductionForm.fuel_shortage_deduction_tzs || 0) +
+                  (deductionForm.traffic_fine_deduction_tzs || 0) +
+                  (deductionForm.other_deductions_tzs || 0);
+                const gross =
+                  selectedWorkerForDeduction.base_salary_tzs +
+                  selectedWorkerForDeduction.overtime_pay_tzs +
+                  selectedWorkerForDeduction.allowances_tzs;
+                const net = Math.max(0, gross - totalDed);
+
+                return (
+                  <div className="rounded-lg bg-rose-50 dark:bg-rose-950/30 p-3 border border-rose-200 dark:border-rose-900/50 space-y-1 text-xs">
+                    <div className="flex justify-between text-rose-700 dark:text-rose-400 font-bold">
+                      <span>Total Deductions:</span>
+                      <span className="font-mono">- TZS {Math.round(totalDed).toLocaleString()}</span>
+                    </div>
+                    <div className="flex justify-between text-foreground font-black pt-1 border-t border-rose-200/50 dark:border-rose-900/40">
+                      <span>Resulting Net Pay:</span>
+                      <span className="font-mono text-emerald-600 dark:text-emerald-400">
+                        TZS {Math.round(net).toLocaleString()}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              <DialogFooter className="pt-2">
+                <Button type="button" variant="outline" size="sm" onClick={() => setDeductionModalOpen(false)}>
+                  Cancel
+                </Button>
+                <Button type="submit" size="sm" className="bg-rose-600 hover:bg-rose-700 text-white font-bold">
+                  Save Deductions
+                </Button>
+              </DialogFooter>
+            </form>
+          )}
         </DialogContent>
       </Dialog>
     </div>
