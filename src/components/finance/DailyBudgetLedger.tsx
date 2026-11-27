@@ -68,6 +68,10 @@ export interface DailyBudgetEntry {
   received_by: string;
   payment_method?: string;
   voucher_no?: string;
+  wht_applicable?: boolean;
+  wht_rate_pct?: number;
+  wht_amount_tzs?: number;
+  gross_amount_tzs?: number;
   notes?: string;
   created_at?: string;
 }
@@ -86,6 +90,12 @@ export const BUDGET_CATEGORIES = [
   "Casual Stevedoring & Offloading (Kibarua)",
   "Escort & Convoy Security",
   "AdBlue / DEF & Lubricants",
+  "Bank Finance Costs & Loan Interest",
+  "Withholding Tax (WHT) Remittances",
+  "Depot, Workshop & Yard Rent",
+  "GPS Telematics & Airtime Subscriptions",
+  "Transit Insurance & Regulatory Compliance",
+  "Statutory Levies (SDL & WCF Remittances)",
   "Overhead & Admin",
   "Contingency / Other",
 ];
@@ -223,6 +233,8 @@ export function DailyBudgetLedger({
     received_by: "",
     payment_method: "cash",
     voucher_no: "",
+    wht_applicable: false,
+    wht_rate_pct: "10",
     notes: "",
   });
 
@@ -378,8 +390,22 @@ export function DailyBudgetLedger({
     const balUsd = amtUsd - paidUsd;
 
     const amtTzs = parseFloat(formData.amount_tzs) || 0;
-    const paidTzs = parseFloat(formData.paid_tzs) || 0;
+    const whtRate = formData.wht_applicable ? parseFloat(formData.wht_rate_pct) || 0 : 0;
+    const whtAmount = formData.wht_applicable ? Math.round((amtTzs * whtRate) / 100) : 0;
+    const netDisbursedTzs = formData.wht_applicable ? Math.max(0, amtTzs - whtAmount) : amtTzs;
+
+    let paidTzs = parseFloat(formData.paid_tzs);
+    if (isNaN(paidTzs)) {
+      paidTzs = formData.wht_applicable ? netDisbursedTzs : 0;
+    }
     const balTzs = amtTzs - paidTzs;
+
+    let finalNotes = formData.notes.trim();
+    if (formData.wht_applicable && whtAmount > 0 && !finalNotes.includes("WHT Withheld")) {
+      finalNotes = finalNotes
+        ? `${finalNotes} | [WHT Withheld: TZS ${whtAmount.toLocaleString()} (${whtRate}% TRA Payable)]`
+        : `[WHT Withheld: TZS ${whtAmount.toLocaleString()} (${whtRate}% TRA Payable)]`;
+    }
 
     const storageKey = `mc_daily_budget_${orgId || "default"}_${date}`;
 
@@ -402,7 +428,11 @@ export function DailyBudgetLedger({
             received_by: formData.received_by.trim() || "--",
             payment_method: formData.payment_method,
             voucher_no: formData.voucher_no.trim(),
-            notes: formData.notes.trim(),
+            wht_applicable: formData.wht_applicable,
+            wht_rate_pct: whtRate,
+            wht_amount_tzs: whtAmount,
+            gross_amount_tzs: amtTzs,
+            notes: finalNotes,
           };
         }
         return entry;
@@ -460,7 +490,11 @@ export function DailyBudgetLedger({
         received_by: formData.received_by.trim() || "--",
         payment_method: formData.payment_method,
         voucher_no: formData.voucher_no.trim(),
-        notes: formData.notes.trim(),
+        wht_applicable: formData.wht_applicable,
+        wht_rate_pct: whtRate,
+        wht_amount_tzs: whtAmount,
+        gross_amount_tzs: amtTzs,
+        notes: finalNotes,
         created_at: new Date().toISOString(),
       };
 
@@ -544,6 +578,8 @@ export function DailyBudgetLedger({
       received_by: entry.received_by === "--" ? "" : entry.received_by,
       payment_method: entry.payment_method || "cash",
       voucher_no: entry.voucher_no || "",
+      wht_applicable: entry.wht_applicable || false,
+      wht_rate_pct: entry.wht_rate_pct ? String(entry.wht_rate_pct) : "10",
       notes: entry.notes || "",
     });
     setModalOpen(true);
@@ -563,6 +599,8 @@ export function DailyBudgetLedger({
       received_by: "",
       payment_method: "cash",
       voucher_no: "",
+      wht_applicable: false,
+      wht_rate_pct: "10",
       notes: "",
     });
   };
@@ -1453,6 +1491,69 @@ export function DailyBudgetLedger({
                   </div>
                 </div>
               </div>
+            </div>
+
+            {/* 9B. Statutory Withholding Tax (WHT) Helper */}
+            <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-3 space-y-2">
+              <div className="flex items-center justify-between">
+                <div>
+                  <label className="text-xs font-bold text-foreground flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={formData.wht_applicable}
+                      onChange={(e) => setFormData({ ...formData, wht_applicable: e.target.checked })}
+                      className="rounded border-border text-primary focus:ring-primary h-3.5 w-3.5"
+                    />
+                    <span>Apply Statutory Withholding Tax (WHT)</span>
+                  </label>
+                  <p className="text-[10px] text-muted-foreground">
+                    Auto-withhold tax for TRA remittance (e.g. 10% on Yard/Depot Rent, 5% on Outside Workshop & Labour).
+                  </p>
+                </div>
+                {formData.wht_applicable && (
+                  <div className="flex items-center gap-1">
+                    <Select
+                      value={formData.wht_rate_pct}
+                      onValueChange={(val) => setFormData({ ...formData, wht_rate_pct: val })}
+                    >
+                      <SelectTrigger className="h-7 text-xs w-28 font-mono bg-background">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="10">10% (Rent)</SelectItem>
+                        <SelectItem value="5">5% (Services)</SelectItem>
+                        <SelectItem value="2">2% (Goods)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+              </div>
+
+              {formData.wht_applicable && formData.amount_tzs && (
+                <div className="pt-2 border-t border-amber-500/20 grid grid-cols-3 gap-2 text-[11px] font-mono">
+                  <div>
+                    <span className="text-muted-foreground block text-[9px] uppercase">Gross Expense:</span>
+                    <span className="font-bold text-foreground">
+                      TZS {Math.round(parseFloat(formData.amount_tzs) || 0).toLocaleString()}
+                    </span>
+                  </div>
+                  <div className="text-amber-700 dark:text-amber-400">
+                    <span className="text-muted-foreground block text-[9px] uppercase">WHT ({formData.wht_rate_pct}% TRA):</span>
+                    <span className="font-bold">
+                      - TZS {Math.round(((parseFloat(formData.amount_tzs) || 0) * (parseFloat(formData.wht_rate_pct) || 0)) / 100).toLocaleString()}
+                    </span>
+                  </div>
+                  <div className="text-emerald-700 dark:text-emerald-400">
+                    <span className="text-muted-foreground block text-[9px] uppercase">Net Disbursed:</span>
+                    <span className="font-bold">
+                      TZS {Math.round(
+                        (parseFloat(formData.amount_tzs) || 0) -
+                        ((parseFloat(formData.amount_tzs) || 0) * (parseFloat(formData.wht_rate_pct) || 0)) / 100
+                      ).toLocaleString()}
+                    </span>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* 10. RECEIVED BY & Extra */}

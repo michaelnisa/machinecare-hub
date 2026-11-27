@@ -356,6 +356,9 @@ export function FinancePayroll() {
   const [activePayslip, setActivePayslip] = useState<PayrollRecord | null>(null);
   const payslipPrintRef = useRef<HTMLDivElement>(null);
 
+  // Statutory Remittance Modal
+  const [statutoryModalOpen, setStatutoryModalOpen] = useState(false);
+
   // Load month-specific deductions from localStorage
   useEffect(() => {
     const key = `mc_payroll_deductions_${orgId || "default"}_${selectedYear}_${selectedMonth}`;
@@ -968,13 +971,45 @@ export function FinancePayroll() {
         acc.overtime += cur.overtime_pay_tzs;
         acc.allowances += cur.allowances_tzs;
         acc.deductions += cur.deductions_tzs;
+        acc.statutoryDeductions += cur.statutory_deductions_tzs || 0;
         acc.net += cur.net_salary_tzs;
         acc.totalOtHours += cur.overtime_hours_total;
         return acc;
       },
-      { base: 0, overtime: 0, allowances: 0, deductions: 0, net: 0, totalOtHours: 0 }
+      { base: 0, overtime: 0, allowances: 0, deductions: 0, statutoryDeductions: 0, net: 0, totalOtHours: 0 }
     );
   }, [monthlyPayrollRegister]);
+
+  // Statutory Employer Liabilities (Calculated dynamically, no hardcoded or client figures)
+  const employerStatutoryLiabilities = useMemo(() => {
+    const grossWages = payrollTotals.base + payrollTotals.overtime;
+    // Standard TRA Skills & Development Levy (3.5% employer)
+    const sdlTzs = Math.round(grossWages * 0.035);
+    // Standard Workers Compensation Fund (0.5% private sector employer)
+    const wcfTzs = Math.round(grossWages * 0.005);
+    // Standard Employer NSSF (10% employer matching)
+    const employerNssfTzs = Math.round(grossWages * 0.10);
+    // Standard Employee NSSF (10% portion)
+    const employeeNssfTzs = Math.round(grossWages * 0.10);
+    // Estimated PAYE tax withheld from statutory deductions
+    const estimatedPayeTzs = Math.max(0, payrollTotals.statutoryDeductions - employeeNssfTzs);
+
+    const totalEmployerOnCost = sdlTzs + wcfTzs + employerNssfTzs;
+    const totalCompanyPayrollBurden = grossWages + payrollTotals.allowances + totalEmployerOnCost;
+
+    return {
+      grossWages,
+      sdlTzs,
+      wcfTzs,
+      employerNssfTzs,
+      employeeNssfTzs,
+      totalNssfRemittance: employerNssfTzs + employeeNssfTzs,
+      estimatedPayeTzs,
+      totalTraRemittance: estimatedPayeTzs + sdlTzs,
+      totalEmployerOnCost,
+      totalCompanyPayrollBurden,
+    };
+  }, [payrollTotals]);
 
   // Export Payroll to CSV
   const handleExportPayrollCSV = () => {
@@ -1547,6 +1582,15 @@ export function FinancePayroll() {
               <Button
                 variant="outline"
                 size="sm"
+                onClick={() => setStatutoryModalOpen(true)}
+                className="h-8 text-xs font-semibold gap-1.5 text-purple-700 dark:text-purple-300 border-purple-200 dark:border-purple-900/50 hover:bg-purple-50 dark:hover:bg-purple-950/40"
+              >
+                <Building2 className="h-3.5 w-3.5" />
+                TRA & Statutory Remittances
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
                 onClick={handleExportPayrollCSV}
                 className="h-8 text-xs font-semibold gap-1.5"
               >
@@ -1566,7 +1610,7 @@ export function FinancePayroll() {
           </div>
 
           {/* Monthly Totals Breakdown Cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
             <div className="rounded-xl border border-border bg-card p-3 shadow-xs">
               <span className="text-[10px] font-bold text-muted-foreground uppercase">Base Monthly Wages</span>
               <div className="mt-1 text-lg font-black font-mono text-foreground">
@@ -1597,10 +1641,29 @@ export function FinancePayroll() {
             </div>
 
             <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3 shadow-xs">
-              <span className="text-[10px] font-bold text-emerald-800 dark:text-emerald-300 uppercase">Total Net Disbursement</span>
+              <span className="text-[10px] font-bold text-emerald-800 dark:text-emerald-300 uppercase">Net Disbursement</span>
               <div className="mt-1 text-lg font-black font-mono text-emerald-950 dark:text-emerald-100">
                 TZS {Math.round(payrollTotals.net).toLocaleString()}
               </div>
+            </div>
+
+            <div
+              className="rounded-xl border border-purple-500/25 bg-purple-500/5 p-3 shadow-xs cursor-pointer hover:bg-purple-500/10 transition-colors"
+              onClick={() => setStatutoryModalOpen(true)}
+              title="Click to view full TRA (SDL/PAYE), NSSF, and WCF Remittances"
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-bold text-purple-700 dark:text-purple-300 uppercase">
+                  Employer Statutory
+                </span>
+                <Building2 className="h-3.5 w-3.5 text-purple-600 dark:text-purple-400" />
+              </div>
+              <div className="mt-1 text-lg font-black font-mono text-purple-950 dark:text-purple-200">
+                TZS {Math.round(employerStatutoryLiabilities.totalEmployerOnCost).toLocaleString()}
+              </div>
+              <span className="text-[10px] text-purple-600 dark:text-purple-400 font-medium underline">
+                SDL, WCF & NSSF (10%)
+              </span>
             </div>
           </div>
 
@@ -2383,6 +2446,140 @@ export function FinancePayroll() {
               </DialogFooter>
             </form>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Statutory Remittance & Employer Burden Modal */}
+      <Dialog open={statutoryModalOpen} onOpenChange={setStatutoryModalOpen}>
+        <DialogContent className="max-w-xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-purple-800 dark:text-purple-300 text-base font-bold">
+              <Building2 className="h-5 w-5" />
+              Monthly Statutory Remittance Schedule & Employer On-Costs
+            </DialogTitle>
+            <DialogDescription className="text-xs">
+              Statutory payroll taxes, pension contributions, and occupational funds for {MONTH_NAMES[selectedMonth - 1]} {selectedYear}.
+              Calculated dynamically from the active payroll register according to standard statutory rates.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-2 text-xs">
+            {/* Total Company Payroll Cost */}
+            <div className="rounded-lg bg-purple-50 dark:bg-purple-950/40 border border-purple-200 dark:border-purple-900/50 p-3 space-y-1">
+              <div className="flex justify-between items-center text-purple-900 dark:text-purple-200 font-extrabold text-sm">
+                <span>TOTAL COMPANY PAYROLL BURDEN:</span>
+                <span className="font-mono text-base">
+                  TZS {Math.round(employerStatutoryLiabilities.totalCompanyPayrollBurden).toLocaleString()}
+                </span>
+              </div>
+              <p className="text-[10px] text-muted-foreground">
+                Includes Gross Taxable Wages (TZS {Math.round(employerStatutoryLiabilities.grossWages).toLocaleString()}) + Posho Allowances (TZS {Math.round(payrollTotals.allowances).toLocaleString()}) + Employer Statutory Overheads (TZS {Math.round(employerStatutoryLiabilities.totalEmployerOnCost).toLocaleString()}).
+              </p>
+            </div>
+
+            {/* Statutory Agency Remittance Schedule */}
+            <div className="space-y-3">
+              <div className="text-xs font-bold text-foreground uppercase tracking-wider">
+                Monthly Remittance Breakdown by Agency
+              </div>
+
+              {/* 1. TRA Remittance */}
+              <div className="rounded-lg border border-border bg-card p-3 space-y-2">
+                <div className="flex justify-between items-center font-bold text-foreground">
+                  <div className="flex items-center gap-1.5">
+                    <div className="h-2 w-2 rounded-full bg-blue-600" />
+                    <span>Tanzania Revenue Authority (TRA) Monthly Return</span>
+                  </div>
+                  <span className="font-mono text-blue-700 dark:text-blue-400 font-extrabold">
+                    TZS {Math.round(employerStatutoryLiabilities.totalTraRemittance).toLocaleString()}
+                  </span>
+                </div>
+                <div className="divide-y divide-border/60 text-[11px] pt-1">
+                  <div className="flex justify-between py-1 text-muted-foreground">
+                    <span>Skills & Development Levy (SDL - 3.5% Employer):</span>
+                    <span className="font-mono text-foreground font-semibold">
+                      TZS {Math.round(employerStatutoryLiabilities.sdlTzs).toLocaleString()}
+                    </span>
+                  </div>
+                  <div className="flex justify-between py-1 text-muted-foreground">
+                    <span>Pay-As-You-Earn (Estimated Employee PAYE Withheld):</span>
+                    <span className="font-mono text-foreground font-semibold">
+                      TZS {Math.round(employerStatutoryLiabilities.estimatedPayeTzs).toLocaleString()}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* 2. NSSF Remittance */}
+              <div className="rounded-lg border border-border bg-card p-3 space-y-2">
+                <div className="flex justify-between items-center font-bold text-foreground">
+                  <div className="flex items-center gap-1.5">
+                    <div className="h-2 w-2 rounded-full bg-emerald-600" />
+                    <span>NSSF Social Security Remittance (20% Combined)</span>
+                  </div>
+                  <span className="font-mono text-emerald-700 dark:text-emerald-400 font-extrabold">
+                    TZS {Math.round(employerStatutoryLiabilities.totalNssfRemittance).toLocaleString()}
+                  </span>
+                </div>
+                <div className="divide-y divide-border/60 text-[11px] pt-1">
+                  <div className="flex justify-between py-1 text-muted-foreground">
+                    <span>Employer Mandatory Contribution (10%):</span>
+                    <span className="font-mono text-foreground font-semibold">
+                      TZS {Math.round(employerStatutoryLiabilities.employerNssfTzs).toLocaleString()}
+                    </span>
+                  </div>
+                  <div className="flex justify-between py-1 text-muted-foreground">
+                    <span>Employee Withheld Contribution (10%):</span>
+                    <span className="font-mono text-foreground font-semibold">
+                      TZS {Math.round(employerStatutoryLiabilities.employeeNssfTzs).toLocaleString()}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* 3. WCF Remittance */}
+              <div className="rounded-lg border border-border bg-card p-3 space-y-2">
+                <div className="flex justify-between items-center font-bold text-foreground">
+                  <div className="flex items-center gap-1.5">
+                    <div className="h-2 w-2 rounded-full bg-amber-600" />
+                    <span>Workers Compensation Fund (WCF - 0.5% Employer)</span>
+                  </div>
+                  <span className="font-mono text-amber-700 dark:text-amber-400 font-extrabold">
+                    TZS {Math.round(employerStatutoryLiabilities.wcfTzs).toLocaleString()}
+                  </span>
+                </div>
+                <p className="text-[10px] text-muted-foreground">
+                  Mandatory occupational health, accident, and injury compensation scheme remitted monthly.
+                </p>
+              </div>
+            </div>
+
+            {/* Signatures for Accounts */}
+            <div className="grid grid-cols-2 gap-4 pt-4 border-t border-dashed border-border text-[10px] text-center">
+              <div>
+                <p className="font-bold">Prepared By (Payroll Accountant)</p>
+                <div className="mt-4 border-b border-border w-2/3 mx-auto" />
+              </div>
+              <div>
+                <p className="font-bold">Approved By (Chief Financial Officer)</p>
+                <div className="mt-4 border-b border-border w-2/3 mx-auto" />
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter className="pt-2">
+            <Button variant="outline" size="sm" onClick={() => setStatutoryModalOpen(false)}>
+              Close
+            </Button>
+            <Button
+              size="sm"
+              onClick={() => window.print()}
+              className="bg-purple-700 hover:bg-purple-800 text-white font-bold gap-1.5"
+            >
+              <Printer className="h-3.5 w-3.5" />
+              Print Remittance Schedule
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
