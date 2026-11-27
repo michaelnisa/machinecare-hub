@@ -533,6 +533,19 @@ export default function ExecutiveReports() {
             </button>
           </div>
 
+          {/* Truck Alerts Report (Trakzee Telematics & Safety Breaches) */}
+          <Link to="/fleet/truck-alerts">
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-1.5 text-xs font-semibold border-rose-500/30 text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/20"
+              title="View Trakzee Truck Telematics Alerts & Safety Incidents"
+            >
+              <AlertTriangle className="h-3.5 w-3.5 text-rose-600" />
+              Truck Alerts Report
+            </Button>
+          </Link>
+
           {/* Clean All Test Data */}
           <Button
             variant="outline"

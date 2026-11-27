@@ -135,6 +135,7 @@ const FleetApprovals = lazy(() => import("./pages/fleet/Approvals"));
 const WorkshopDashboard = lazy(() => import("./pages/fleet/WorkshopDashboard"));
 const ProcurementDashboard = lazy(() => import("./pages/fleet/ProcurementDashboard"));
 const ExecutiveReports = lazy(() => import("./pages/fleet/ExecutiveReports"));
+const TruckAlertsReport = lazy(() => import("./pages/fleet/TruckAlertsReport"));
 const DriverPortal = lazy(() => import("./pages/fleet/DriverPortal"));
 const FieldAppHub = lazy(() => import("./pages/fleet/FieldAppHub"));
 const GarageCustomers = lazy(() => import("./pages/garage/Customers"));
@@ -282,6 +283,8 @@ const App = () => (
                   <Route path="/fleet/workshop" element={<WorkshopDashboard />} />
                   <Route path="/fleet/procurement" element={<ProcurementDashboard />} />
                   <Route path="/fleet/reports" element={<ExecutiveReports />} />
+                  <Route path="/fleet/truck-alerts" element={<TruckAlertsReport />} />
+                  <Route path="/reports/truck-alerts" element={<TruckAlertsReport />} />
                   <Route path="/fleet/documents" element={<FleetDocuments />} />
                   <Route path="/fleet/technicians" element={<FleetTechnicians />} />
                   <Route path="/maintenance/technicians" element={<FleetTechnicians />} />

@@ -466,25 +466,42 @@ export async function getGpsAlerts(
   try {
     const { data: machines } = await (supabase as any)
       .from("machines")
-      .select("id, name, plate_number, telematics_speed, telematics_battery_volt, telematics_last_at, telematics_latitude, telematics_longitude")
+      .select("id, name, plate_number, notes, telematics_speed, telematics_battery_volt, telematics_last_at, telematics_latitude, telematics_longitude")
       .eq("organisation_id", organisationId);
 
     const syntheticAlerts: GpsAlert[] = [];
     (machines || []).forEach((m: any) => {
-      const spd = Number(m.telematics_speed || 0);
-      const batt = Number(m.telematics_battery_volt || 0);
+      let spd = Number(m.telematics_speed || 0);
+      let batt = Number(m.telematics_battery_volt || 0);
+      let lat = m.telematics_latitude ? Number(m.telematics_latitude) : null;
+      let lng = m.telematics_longitude ? Number(m.telematics_longitude) : null;
+      let lastAt = m.telematics_last_at || new Date().toISOString();
+
+      if (m.notes && typeof m.notes === "string" && m.notes.startsWith("{")) {
+        try {
+          const parsed = JSON.parse(m.notes);
+          if (parsed.telematics) {
+            if (!spd && parsed.telematics.speed) spd = Number(parsed.telematics.speed);
+            if (!batt && parsed.telematics.battery_volt) batt = Number(parsed.telematics.battery_volt);
+            if (!lat && parsed.telematics.latitude) lat = Number(parsed.telematics.latitude);
+            if (!lng && parsed.telematics.longitude) lng = Number(parsed.telematics.longitude);
+            if (parsed.telematics.last_at) lastAt = parsed.telematics.last_at;
+          }
+        } catch (_) {}
+      }
+
       if (spd > 80) {
         syntheticAlerts.push({
           id: `syn-overspeed-${m.id}`,
           organisation_id: organisationId,
           vehicle_id: m.id,
           alert_type: "overspeed",
-          severity: "high",
+          severity: spd >= 95 ? "critical" : "warning",
           title: `Overspeed Alert (${Math.round(spd)} km/h)`,
           message: `${m.name} (${m.plate_number || "No Plate"}) exceeded speed threshold with ${Math.round(spd)} km/h`,
-          latitude: m.telematics_latitude ? Number(m.telematics_latitude) : null,
-          longitude: m.telematics_longitude ? Number(m.telematics_longitude) : null,
-          event_time: m.telematics_last_at || new Date().toISOString(),
+          latitude: lat,
+          longitude: lng,
+          event_time: lastAt,
           is_acknowledged: false,
           vehicle: { id: m.id, name: m.name, plate_number: m.plate_number },
         });
@@ -495,12 +512,12 @@ export async function getGpsAlerts(
           organisation_id: organisationId,
           vehicle_id: m.id,
           alert_type: "low_battery",
-          severity: "medium",
+          severity: "warning",
           title: "Low Battery Voltage",
           message: `${m.name} tracker battery dropped to ${batt.toFixed(1)}V`,
-          latitude: m.telematics_latitude ? Number(m.telematics_latitude) : null,
-          longitude: m.telematics_longitude ? Number(m.telematics_longitude) : null,
-          event_time: m.telematics_last_at || new Date().toISOString(),
+          latitude: lat,
+          longitude: lng,
+          event_time: lastAt,
           is_acknowledged: false,
           vehicle: { id: m.id, name: m.name, plate_number: m.plate_number },
         });

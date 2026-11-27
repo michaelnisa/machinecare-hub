@@ -936,6 +936,196 @@ serve(async (req) => {
       );
     }
 
+    if (action === "sync_alerts") {
+      const targetOrgId = sanitizeString(body.organisation_id || "df6b0c4b-e56b-4694-838a-0381eb480043");
+
+      // 1. Fetch organization settings
+      let org: any = null;
+      try {
+        const { data: fullOrg } = await supabase
+          .from("organisations")
+          .select("id, name, trakzee_enabled, trakzee_server_url, trakzee_username, trakzee_password, trakzee_company_name, trakzee_project_id")
+          .eq("id", targetOrgId)
+          .maybeSingle();
+        if (fullOrg) org = fullOrg;
+      } catch (_) {}
+
+      const rawServerUrl = sanitizeString(body.server_url || org?.trakzee_server_url || "https://trakzee.uffizio.com/webservice", 200);
+      const username = sanitizeString(body.username || org?.trakzee_username || "mdhfrancis@gmail.com");
+      const password = body.password ? String(body.password).trim() : (org?.trakzee_password?.trim() || "Mdh@2023");
+      const companyName = sanitizeString(body.company_name || org?.trakzee_company_name || "LOGISTIXWARE");
+      const projectId = sanitizeString(body.project_id || org?.trakzee_project_id || "37", 20);
+
+      const { url: serverUrl } = await resolveBestServerUrl(rawServerUrl);
+
+      // 2. Login to Trakzee
+      const loginRes = await fetch(`${serverUrl}?token=generateAccessToken`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, password }),
+        signal: AbortSignal.timeout(15000),
+      });
+
+      const loginParsed = await safeParseJson(loginRes);
+      const token = loginParsed.data?.data?.token;
+      if (!token) {
+        return new Response(
+          JSON.stringify({ success: false, error: "Failed to authenticate with Trakzee API for alerts" }),
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      // 3. Fetch machines for targetOrgId only
+      const { data: machines } = await supabase
+        .from("machines")
+        .select("id, name, plate_number, notes")
+        .eq("organisation_id", targetOrgId);
+
+      const parsedAlerts: any[] = [];
+      const nowIso = new Date().toISOString();
+
+      // 4. Try getAlertData
+      try {
+        const alertRes = await fetch(`${serverUrl}?token=getAlertData`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "auth-code": token },
+          body: JSON.stringify({ username, password, access_token: token, format: "json", company_names: companyName }),
+          signal: AbortSignal.timeout(15000),
+        });
+        const alertParsed = await safeParseJson(alertRes);
+        const alertList: any[] = alertParsed.data?.data || alertParsed.data?.AlertData || [];
+
+        for (const item of alertList) {
+          const rawPlate = String(item.vehicle_no || item.vehicle_name || "").trim();
+          const normPlate = normalizePlate(rawPlate);
+          const imei = sanitizeString(item.imei);
+
+          const match = (machines || []).find((m: any) => {
+            let mImei = "";
+            try {
+              if (m.notes && m.notes.startsWith("{")) {
+                mImei = normalizePlate(JSON.parse(m.notes).telematics_imei);
+              }
+            } catch (_) {}
+            if (imei && mImei && mImei === normalizePlate(imei)) return true;
+            if (normPlate && m.plate_number && normalizePlate(m.plate_number) === normPlate) return true;
+            return false;
+          });
+
+          if (!match) continue;
+
+          parsedAlerts.push({
+            organisation_id: targetOrgId,
+            vehicle_id: match.id,
+            alert_type: "overspeed",
+            severity: "warning",
+            title: `Trakzee Alert: ${item.alert_type || "Notice"}`,
+            message: String(item.alert_info || item.description || "Alert reported by vehicle tracker"),
+            latitude: item.latitude ? Number(item.latitude) : null,
+            longitude: item.longitude ? Number(item.longitude) : null,
+            event_time: item.alert_generation ? new Date(item.alert_generation).toISOString() : nowIso,
+            is_acknowledged: false,
+            notes: JSON.stringify({
+              source: "trakzee_api",
+              raw: item,
+            }),
+          });
+        }
+      } catch (_) {}
+
+      // 5. Also check live fleet data
+      try {
+        const liveRes = await fetch(`${serverUrl}?token=getTokenBaseLiveData&ProjectId=${encodeURIComponent(projectId)}`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "auth-code": token },
+          body: JSON.stringify({ company_names: companyName, format: "json" }),
+          signal: AbortSignal.timeout(15000),
+        });
+        const liveParsed = await safeParseJson(liveRes);
+        const liveList = liveParsed.data?.root?.VehicleData || liveParsed.data?.VehicleData || [];
+
+        for (const tVehicle of liveList) {
+          const rawPlate = String(tVehicle.Vehicle_No || tVehicle.Vehicle_Name || "").trim();
+          const normPlate = normalizePlate(rawPlate);
+          const imei = sanitizeString(tVehicle.Imeino);
+
+          const match = (machines || []).find((m: any) => {
+            let mImei = "";
+            try {
+              if (m.notes && m.notes.startsWith("{")) {
+                mImei = normalizePlate(JSON.parse(m.notes).telematics_imei);
+              }
+            } catch (_) {}
+            if (imei && mImei && mImei === normalizePlate(imei)) return true;
+            if (normPlate && m.plate_number && normalizePlate(m.plate_number) === normPlate) return true;
+            return false;
+          });
+
+          if (!match) continue;
+
+          const speed = Number(tVehicle.Speed || 0);
+          const volt = tVehicle.ExternalVolt && tVehicle.ExternalVolt !== "--" ? Number(tVehicle.ExternalVolt) : null;
+          const status = String(tVehicle.Status || "");
+
+          if (speed > 80 || status.toLowerCase().includes("speed")) {
+            parsedAlerts.push({
+              organisation_id: targetOrgId,
+              vehicle_id: match.id,
+              alert_type: "overspeed",
+              severity: speed >= 95 ? "critical" : "warning",
+              title: `Live Over Speed Alert (${Math.round(speed)} km/h)`,
+              message: `Truck ${match.plate_number || match.name} recorded speed of ${Math.round(speed)} km/h exceeding 80 km/h highway threshold.`,
+              latitude: tVehicle.Latitude ? Number(tVehicle.Latitude) : null,
+              longitude: tVehicle.Longitude ? Number(tVehicle.Longitude) : null,
+              event_time: tVehicle.GPSActualTime ? new Date(tVehicle.GPSActualTime).toISOString() : nowIso,
+              is_acknowledged: false,
+              notes: JSON.stringify({
+                source: "trakzee_live_telematics",
+                speed_kmh: speed,
+                location: tVehicle.Location || null,
+              }),
+            });
+          }
+
+          if (volt !== null && volt === 0) {
+            parsedAlerts.push({
+              organisation_id: targetOrgId,
+              vehicle_id: match.id,
+              alert_type: "power_cut",
+              severity: "critical",
+              title: "Tracker Power Disconnection Alert",
+              message: `External power supply cut (0V) on truck ${match.plate_number || match.name}. Unit operating on internal emergency battery.`,
+              latitude: tVehicle.Latitude ? Number(tVehicle.Latitude) : null,
+              longitude: tVehicle.Longitude ? Number(tVehicle.Longitude) : null,
+              event_time: tVehicle.GPSActualTime ? new Date(tVehicle.GPSActualTime).toISOString() : nowIso,
+              is_acknowledged: false,
+              notes: JSON.stringify({
+                source: "trakzee_live_telematics",
+                voltage: volt,
+              }),
+            });
+          }
+        }
+      } catch (_) {}
+
+      // 6. Ingest into gps_alerts
+      let inserted = 0;
+      if (parsedAlerts.length > 0) {
+        const { error: insErr } = await supabase.from("gps_alerts").insert(parsedAlerts);
+        if (!insErr) inserted = parsedAlerts.length;
+      }
+
+      return new Response(
+        JSON.stringify({
+          success: true,
+          alerts_found: parsedAlerts.length,
+          alerts_inserted: inserted,
+          alerts: parsedAlerts,
+        }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
     return new Response(
       JSON.stringify({ success: false, error: `Unknown action: ${action}` }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }

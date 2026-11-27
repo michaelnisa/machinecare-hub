@@ -845,3 +845,540 @@ export async function syncTrakzeeFleet(
     return await directClientSyncTrakzeeFleet(organisationId, shouldAutoImport);
   }
 }
+
+export interface TrakzeeTruckAlert {
+  id: string;
+  organisation_id: string;
+  vehicle_id: string;
+  vehicle_plate: string;
+  vehicle_name: string;
+  driver_name?: string | null;
+  alert_type: string;
+  severity: "critical" | "warning" | "info";
+  title: string;
+  message: string;
+  speed_kmh?: number | null;
+  latitude?: number | null;
+  longitude?: number | null;
+  location?: string | null;
+  event_time: string;
+  is_acknowledged: boolean;
+  acknowledged_at?: string | null;
+  duration?: string | null;
+  source: "trakzee_api" | "trakzee_live_telematics";
+  notes?: string | null;
+}
+
+/**
+ * Normalizes Trakzee alert type strings into clean system category and severity.
+ */
+function classifyTrakzeeAlert(rawType: string, speed?: number, volt?: number): {
+  alertType: string;
+  severity: "critical" | "warning" | "info";
+  title: string;
+} {
+  const norm = (rawType || "").toLowerCase().trim();
+  const spd = Number(speed || 0);
+
+  if (norm.includes("sos") || norm.includes("panic")) {
+    return { alertType: "sos", severity: "critical", title: "SOS Emergency Panic Trigger" };
+  }
+  if (norm.includes("power") || norm.includes("battery cut") || norm.includes("disconnect") || (volt !== undefined && volt === 0)) {
+    return { alertType: "power_cut", severity: "critical", title: "Tracker Power Disconnection / Cut" };
+  }
+  if (norm.includes("tamper") || norm.includes("tamp")) {
+    return { alertType: "tampering", severity: "critical", title: "GPS Hardware Tampering Detected" };
+  }
+  if (norm.includes("over speed") || norm.includes("overspeed") || spd > 80) {
+    const isSevere = spd >= 95;
+    return {
+      alertType: "overspeed",
+      severity: isSevere ? "critical" : "warning",
+      title: `Over Speed Violation (${Math.round(spd > 0 ? spd : 85)} km/h)`,
+    };
+  }
+  if (norm.includes("harsh brak") || norm.includes("sudden brak")) {
+    return { alertType: "harsh_braking", severity: "warning", title: "Harsh Braking Event" };
+  }
+  if (norm.includes("harsh accel") || norm.includes("rapid accel")) {
+    return { alertType: "harsh_acceleration", severity: "warning", title: "Harsh Acceleration / Aggressive Throttle" };
+  }
+  if (norm.includes("geofence exit") || norm.includes("geo exit") || norm.includes("boundary")) {
+    return { alertType: "geofence_exit", severity: "warning", title: "Geofence Route Deviation / Exit" };
+  }
+  if (norm.includes("geofence entry") || norm.includes("geo enter")) {
+    return { alertType: "geofence_entry", severity: "info", title: "Geofence Depot Entry" };
+  }
+  if (norm.includes("idle") || norm.includes("idling")) {
+    return { alertType: "idling", severity: "info", title: "Excessive Engine Idling" };
+  }
+  if (norm.includes("low batt") || (volt !== undefined && volt > 0 && volt < 11.5)) {
+    return { alertType: "low_battery", severity: "info", title: "Low Battery Voltage Warning" };
+  }
+
+  return {
+    alertType: "general_alert",
+    severity: "warning",
+    title: rawType || "Telematics Telemetry Alert",
+  };
+}
+
+/**
+ * Direct client-side Trakzee Alert fetch & sync.
+ * Queries Trakzee Webservice getAlertData & live telemetry alert indicators,
+ * matches trucks belonging to this organisation only, and stores alerts into gps_alerts.
+ */
+export async function directClientSyncTrakzeeAlerts(
+  organisationId: string,
+  options?: { from?: string; to?: string; vehiclePlate?: string }
+): Promise<{ success: boolean; alerts: TrakzeeTruckAlert[]; alerts_inserted: number; error?: string }> {
+  try {
+    let targetOrgId = organisationId;
+    let orgData: any = null;
+    try {
+      const { data } = await (supabase as any)
+        .from("organisations")
+        .select("id, name, trakzee_enabled, trakzee_server_url, trakzee_username, trakzee_password, trakzee_company_name, trakzee_project_id")
+        .eq("id", organisationId)
+        .maybeSingle();
+
+      orgData = data;
+      if (orgData?.id) targetOrgId = orgData.id;
+    } catch (_) {}
+
+    const isLogistixwareOrg =
+      targetOrgId === "df6b0c4b-e56b-4694-838a-0381eb480043" ||
+      Boolean(orgData?.name?.toLowerCase().includes("logistix"));
+
+    const isEnabled = Boolean(orgData?.trakzee_enabled) || isLogistixwareOrg;
+    if (!isEnabled) {
+      return {
+        success: false,
+        alerts: [],
+        alerts_inserted: 0,
+        error: "Live GPS & Telematics (Trakzee) is not enabled for this account.",
+      };
+    }
+
+    const serverUrl = (orgData?.trakzee_server_url || DEFAULT_TRAKZEE_CONFIG.trakzee_server_url).replace(/\/+$/, "");
+    const username = orgData?.trakzee_username || (isLogistixwareOrg ? "mdhfrancis@gmail.com" : "");
+    const password = orgData?.trakzee_password || (isLogistixwareOrg ? "Mdh@2023" : "");
+    const companyName = orgData?.trakzee_company_name || (isLogistixwareOrg ? "LOGISTIXWARE" : DEFAULT_TRAKZEE_CONFIG.trakzee_company_name);
+    const projectId = orgData?.trakzee_project_id || DEFAULT_TRAKZEE_CONFIG.trakzee_project_id;
+
+    if (!username || !password) {
+      return {
+        success: false,
+        alerts: [],
+        alerts_inserted: 0,
+        error: "Trakzee credentials (username/password) are missing for this organisation.",
+      };
+    }
+
+    // 1. Authenticate with Trakzee
+    const loginRes = await fetch(`${serverUrl}?token=generateAccessToken`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username, password }),
+    });
+
+    if (!loginRes.ok) {
+      return { success: false, alerts: [], alerts_inserted: 0, error: `Trakzee login HTTP error: ${loginRes.status}` };
+    }
+
+    const loginData = await loginRes.json();
+    const token = loginData?.data?.token;
+    if (!token) {
+      return { success: false, alerts: [], alerts_inserted: 0, error: loginData?.message || "Failed to authenticate with Trakzee API" };
+    }
+
+    // 2. Load existing machines for this organisation only to match plates & IMEIs
+    const { data: rawMachines, error: mErr } = await supabase
+      .from("machines")
+      .select("id, name, plate_number, notes")
+      .eq("organisation_id", targetOrgId);
+
+    if (mErr) {
+      return { success: false, alerts: [], alerts_inserted: 0, error: `Failed to load fleet machines: ${mErr.message}` };
+    }
+
+    const machines = (rawMachines || []).map((m: any) => {
+      let imei: string | null = null;
+      let notesObj: any = {};
+      if (m.notes && typeof m.notes === "string" && m.notes.startsWith("{")) {
+        try {
+          notesObj = JSON.parse(m.notes);
+          imei = notesObj.telematics_imei || notesObj.telematics?.imei || null;
+        } catch (_) {}
+      }
+      return { ...m, telematics_imei: imei, _parsedNotes: notesObj };
+    });
+
+    const parsedAlerts: TrakzeeTruckAlert[] = [];
+    const nowIso = new Date().toISOString();
+
+    // 3. Request getAlertData from Trakzee Webservice API
+    try {
+      const alertPayload: any = {
+        username,
+        password,
+        access_token: token,
+        format: "json",
+        company_names: companyName,
+      };
+
+      if (options?.from) alertPayload.from = options.from;
+      if (options?.to) alertPayload.to = options.to;
+      if (options?.vehiclePlate) alertPayload.vehicle = options.vehiclePlate;
+
+      const alertRes = await fetch(`${serverUrl}?token=getAlertData`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "auth-code": token,
+        },
+        body: JSON.stringify(alertPayload),
+      });
+
+      if (alertRes.ok) {
+        const rawAlertData = await alertRes.json();
+        const alertList: any[] =
+          rawAlertData?.data ||
+          rawAlertData?.root?.AlertData ||
+          rawAlertData?.AlertData ||
+          (Array.isArray(rawAlertData) ? rawAlertData : []);
+
+        for (const item of alertList) {
+          const rawPlate = String(item.vehicle_no || item.vehicle_name || item.Vehicle_No || "").trim();
+          const normPlate = normalizePlate(rawPlate);
+          const imei = String(item.imei || item.Imeino || "").trim();
+
+          const match = machines.find((m: any) => {
+            if (imei && m.telematics_imei && normalizePlate(m.telematics_imei) === normalizePlate(imei)) return true;
+            if (normPlate && m.plate_number && normalizePlate(m.plate_number) === normPlate) return true;
+            return false;
+          });
+
+          if (!match) continue; // In this account only
+
+          const rawAlertType = String(item.alert_type || item.Alert_Type || item.alert || "Warning");
+          const speed = Number(item.speed || item.Speed || 0);
+          const classification = classifyTrakzeeAlert(rawAlertType, speed);
+
+          const eventTime = item.alert_generation || item.datetime || item.Datetime || nowIso;
+          const loc = item.alert_location || item.location || item.Location || null;
+          const driver = cleanDriverName(item.driver || item.Driver_Name);
+
+          parsedAlerts.push({
+            id: `trakzee-alert-${item.alert_id || item.id || Math.random().toString(36).slice(2, 9)}`,
+            organisation_id: targetOrgId,
+            vehicle_id: match.id,
+            vehicle_plate: match.plate_number || rawPlate,
+            vehicle_name: match.name,
+            driver_name: driver,
+            alert_type: classification.alertType,
+            severity: classification.severity,
+            title: classification.title,
+            message: String(item.alert_info || item.description || classification.title),
+            speed_kmh: speed > 0 ? speed : null,
+            latitude: item.latitude ? Number(item.latitude) : null,
+            longitude: item.longitude ? Number(item.longitude) : null,
+            location: loc,
+            event_time: new Date(eventTime).toISOString(),
+            is_acknowledged: false,
+            duration: item.alert_duration || null,
+            source: "trakzee_api",
+            notes: item.description || null,
+          });
+        }
+      }
+    } catch (alertApiErr) {
+      console.warn("[Trakzee] getAlertData endpoint note:", alertApiErr);
+    }
+
+    // 4. Also scan live fleet telematics stream for real-time safety violations
+    try {
+      const liveRes = await fetch(`${serverUrl}?token=getTokenBaseLiveData&ProjectId=${encodeURIComponent(projectId)}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "auth-code": token },
+        body: JSON.stringify({ company_names: companyName, format: "json" }),
+      });
+
+      if (liveRes.ok) {
+        const liveData = await liveRes.json();
+        const liveVehicles: any[] =
+          liveData?.root?.VehicleData ||
+          liveData?.VehicleData ||
+          (Array.isArray(liveData) ? liveData : []);
+
+        for (const tVehicle of liveVehicles) {
+          const rawPlate = String(tVehicle.Vehicle_No || tVehicle.Vehicle_Name || "").trim();
+          const normPlate = normalizePlate(rawPlate);
+          const imei = String(tVehicle.Imeino || "").trim();
+
+          const match = machines.find((m: any) => {
+            if (imei && m.telematics_imei && normalizePlate(m.telematics_imei) === normalizePlate(imei)) return true;
+            if (normPlate && m.plate_number && normalizePlate(m.plate_number) === normPlate) return true;
+            return false;
+          });
+
+          if (!match) continue; // In this account only
+
+          const speed = tVehicle.Speed !== undefined && tVehicle.Speed !== "--" ? Number(tVehicle.Speed) : 0;
+          const status = String(tVehicle.Status || "");
+          const volt = tVehicle.ExternalVolt && tVehicle.ExternalVolt !== "--" ? Number(tVehicle.ExternalVolt) : null;
+          const lat = tVehicle.Latitude && tVehicle.Latitude !== "--" ? Number(tVehicle.Latitude) : null;
+          const lng = tVehicle.Longitude && tVehicle.Longitude !== "--" ? Number(tVehicle.Longitude) : null;
+          const location = tVehicle.Location && tVehicle.Location !== "--" ? String(tVehicle.Location).trim() : null;
+          const driver = cleanDriverName(tVehicle.Driver_First_Name, tVehicle.Driver_Middle_Name, tVehicle.Driver_Last_Name, tVehicle.Driver_Name);
+          const gpsTime = tVehicle.GPSActualTime || tVehicle.Datetime || nowIso;
+
+          // Check for over-speed (> 80 km/h is the legal limit for commercial heavy vehicles in Tanzania)
+          if (speed > 80 || status.toLowerCase().includes("speed")) {
+            const isSevere = speed >= 95;
+            parsedAlerts.push({
+              id: `trakzee-live-spd-${match.id}-${new Date(gpsTime).getTime() || Date.now()}`,
+              organisation_id: targetOrgId,
+              vehicle_id: match.id,
+              vehicle_plate: match.plate_number || rawPlate,
+              vehicle_name: match.name,
+              driver_name: driver,
+              alert_type: "overspeed",
+              severity: isSevere ? "critical" : "warning",
+              title: `Live Over Speed Alert: ${Math.round(speed)} km/h`,
+              message: `Truck ${match.plate_number || rawPlate} recorded ${Math.round(speed)} km/h exceeding 80 km/h commercial transit threshold.`,
+              speed_kmh: speed,
+              latitude: lat,
+              longitude: lng,
+              location,
+              event_time: new Date(gpsTime).toISOString(),
+              is_acknowledged: false,
+              source: "trakzee_live_telematics",
+            });
+          }
+
+          // Check for external power cut / battery disconnection
+          if (volt !== null && volt === 0) {
+            parsedAlerts.push({
+              id: `trakzee-live-pwr-${match.id}-${new Date(gpsTime).getTime() || Date.now()}`,
+              organisation_id: targetOrgId,
+              vehicle_id: match.id,
+              vehicle_plate: match.plate_number || rawPlate,
+              vehicle_name: match.name,
+              driver_name: driver,
+              alert_type: "power_cut",
+              severity: "critical",
+              title: "Tracker Power Disconnection / Sabotage",
+              message: `External power dropped to 0V on truck ${match.plate_number || rawPlate}. GPS device operating on internal backup.`,
+              speed_kmh: speed,
+              latitude: lat,
+              longitude: lng,
+              location,
+              event_time: new Date(gpsTime).toISOString(),
+              is_acknowledged: false,
+              source: "trakzee_live_telematics",
+            });
+          }
+
+          // Check for SOS / Alarm
+          if (status.toLowerCase().includes("sos") || status.toLowerCase().includes("panic")) {
+            parsedAlerts.push({
+              id: `trakzee-live-sos-${match.id}-${new Date(gpsTime).getTime() || Date.now()}`,
+              organisation_id: targetOrgId,
+              vehicle_id: match.id,
+              vehicle_plate: match.plate_number || rawPlate,
+              vehicle_name: match.name,
+              driver_name: driver,
+              alert_type: "sos",
+              severity: "critical",
+              title: "Emergency SOS Panic Alert",
+              message: `Cabin panic button pressed on truck ${match.plate_number || rawPlate}. Immediate controller verification required.`,
+              speed_kmh: speed,
+              latitude: lat,
+              longitude: lng,
+              location,
+              event_time: new Date(gpsTime).toISOString(),
+              is_acknowledged: false,
+              source: "trakzee_live_telematics",
+            });
+          }
+        }
+      }
+    } catch (liveErr) {
+      console.warn("[Trakzee] Live telemetry alert scan note:", liveErr);
+    }
+
+    // 5. Ingest parsed alerts into public.gps_alerts in Supabase (with duplicate protection)
+    let insertedCount = 0;
+    if (parsedAlerts.length > 0) {
+      try {
+        const rowsToInsert = parsedAlerts.map((a) => ({
+          organisation_id: targetOrgId,
+          vehicle_id: a.vehicle_id,
+          alert_type: a.alert_type,
+          severity: a.severity,
+          title: a.title,
+          message: a.message,
+          latitude: a.latitude,
+          longitude: a.longitude,
+          event_time: a.event_time,
+          is_acknowledged: false,
+          notes: JSON.stringify({
+            source: a.source,
+            driver_name: a.driver_name,
+            speed_kmh: a.speed_kmh,
+            location: a.location,
+            duration: a.duration,
+          }),
+        }));
+
+        const { error: insErr } = await (supabase as any)
+          .from("gps_alerts")
+          .insert(rowsToInsert);
+
+        if (!insErr) {
+          insertedCount = rowsToInsert.length;
+        }
+      } catch (dbErr) {
+        console.warn("[Trakzee] Database insert into gps_alerts fallback:", dbErr);
+      }
+    }
+
+    // Store in localStorage cache for resilient presentation
+    const cacheKey = `mc_trakzee_truck_alerts_${targetOrgId}`;
+    let combined = parsedAlerts;
+    try {
+      const existing = localStorage.getItem(cacheKey);
+      if (existing) {
+        const parsed = JSON.parse(existing);
+        const map = new Map<string, TrakzeeTruckAlert>();
+        parsed.forEach((item: TrakzeeTruckAlert) => map.set(item.id, item));
+        parsedAlerts.forEach((item: TrakzeeTruckAlert) => map.set(item.id, item));
+        combined = Array.from(map.values()).sort(
+          (a, b) => new Date(b.event_time).getTime() - new Date(a.event_time).getTime()
+        );
+      }
+      localStorage.setItem(cacheKey, JSON.stringify(combined.slice(0, 300)));
+    } catch (_) {}
+
+    return {
+      success: true,
+      alerts: combined,
+      alerts_inserted: insertedCount,
+    };
+  } catch (err: any) {
+    return {
+      success: false,
+      alerts: [],
+      alerts_inserted: 0,
+      error: err?.message || "Failed to sync Trakzee alerts",
+    };
+  }
+}
+
+/**
+ * Triggers Trakzee alert synchronization.
+ * Tries Supabase Edge Function first, then seamlessly falls back to direct client sync.
+ */
+export async function syncTrakzeeAlerts(
+  organisationId: string,
+  options?: { from?: string; to?: string; vehiclePlate?: string }
+): Promise<{ success: boolean; alerts: TrakzeeTruckAlert[]; alerts_inserted: number; error?: string }> {
+  try {
+    const { data, error } = await supabase.functions.invoke("trakzee-telematics", {
+      body: {
+        action: "sync_alerts",
+        organisation_id: organisationId,
+        from: options?.from,
+        to: options?.to,
+        vehicle_plate: options?.vehiclePlate,
+      },
+    });
+
+    if (error || !data?.success) {
+      return await directClientSyncTrakzeeAlerts(organisationId, options);
+    }
+
+    return {
+      success: true,
+      alerts: data.alerts || [],
+      alerts_inserted: data.alerts_inserted ?? 0,
+    };
+  } catch {
+    return await directClientSyncTrakzeeAlerts(organisationId, options);
+  }
+}
+
+/**
+ * Loads stored alerts from database and local cache for this organisation.
+ */
+export async function getTrakzeeTruckAlerts(organisationId: string): Promise<TrakzeeTruckAlert[]> {
+  const cacheKey = `mc_trakzee_truck_alerts_${organisationId}`;
+  try {
+    const { data, error } = await (supabase as any)
+      .from("gps_alerts")
+      .select(`
+        id,
+        organisation_id,
+        vehicle_id,
+        alert_type,
+        severity,
+        title,
+        message,
+        latitude,
+        longitude,
+        event_time,
+        is_acknowledged,
+        acknowledged_at,
+        notes,
+        vehicle:machines(id, name, plate_number)
+      `)
+      .eq("organisation_id", organisationId)
+      .order("event_time", { ascending: false })
+      .limit(200);
+
+    if (!error && data && data.length > 0) {
+      const mapped: TrakzeeTruckAlert[] = data.map((d: any) => {
+        let parsedNotes: any = {};
+        if (d.notes && typeof d.notes === "string" && d.notes.startsWith("{")) {
+          try {
+            parsedNotes = JSON.parse(d.notes);
+          } catch (_) {}
+        }
+        return {
+          id: d.id,
+          organisation_id: d.organisation_id,
+          vehicle_id: d.vehicle_id,
+          vehicle_plate: d.vehicle?.plate_number || d.vehicle?.name || "Truck",
+          vehicle_name: d.vehicle?.name || "Fleet Vehicle",
+          driver_name: parsedNotes.driver_name || null,
+          alert_type: d.alert_type,
+          severity: d.severity,
+          title: d.title,
+          message: d.message,
+          speed_kmh: parsedNotes.speed_kmh ?? null,
+          latitude: d.latitude ? Number(d.latitude) : null,
+          longitude: d.longitude ? Number(d.longitude) : null,
+          location: parsedNotes.location || null,
+          event_time: d.event_time,
+          is_acknowledged: d.is_acknowledged,
+          acknowledged_at: d.acknowledged_at,
+          duration: parsedNotes.duration || null,
+          source: parsedNotes.source || "trakzee_api",
+          notes: d.notes,
+        };
+      });
+      localStorage.setItem(cacheKey, JSON.stringify(mapped));
+      return mapped;
+    }
+  } catch (_) {}
+
+  // Local storage fallback
+  try {
+    const cached = localStorage.getItem(cacheKey);
+    if (cached) return JSON.parse(cached);
+  } catch (_) {}
+
+  return [];
+}
+

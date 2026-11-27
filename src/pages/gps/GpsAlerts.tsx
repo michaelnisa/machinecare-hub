@@ -4,6 +4,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { PageLoader, EmptyState } from "@/components/PageLoader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { cn } from "@/lib/utils";
 import {
   Select,
   SelectContent,
@@ -25,6 +26,7 @@ import {
   acknowledgeGpsAlert,
   GpsAlert,
 } from "@/services/gpsService";
+import { syncTrakzeeAlerts } from "@/services/trakzeeService";
 import { formatDate } from "@/lib/format";
 import {
   AlertTriangle,
@@ -39,6 +41,8 @@ import {
   ZapOff,
   Gauge,
   Target,
+  RefreshCw,
+  FileText,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -55,6 +59,25 @@ export default function GpsAlerts() {
   const [selectedAlert, setSelectedAlert] = useState<GpsAlert | null>(null);
   const [ackNotes, setAckNotes] = useState("");
   const [submittingAck, setSubmittingAck] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+
+  const handleSyncTrakzee = async () => {
+    if (!organisation?.id) return;
+    setSyncing(true);
+    try {
+      const res = await syncTrakzeeAlerts(organisation.id);
+      if (res.synced > 0) {
+        toast.success(`Synced ${res.synced} new Trakzee truck alert${res.synced === 1 ? "" : "s"}`);
+        await loadData();
+      } else {
+        toast.info("Trakzee sync complete. No new alerts detected.");
+      }
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to sync Trakzee alerts");
+    } finally {
+      setSyncing(false);
+    }
+  };
 
   const loadData = async () => {
     if (!organisation?.id) return;
@@ -150,6 +173,32 @@ export default function GpsAlerts() {
           <p className="text-xs text-muted-foreground mt-0.5 ml-7">
             Real-time feed of fleet speed violations, battery disconnects, geofence breaches, and device tampering.
           </p>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <Link to="/fleet/truck-alerts">
+            <Button variant="outline" className="gap-2">
+              <FileText className="h-4 w-4 text-primary" />
+              Truck Alerts Report
+            </Button>
+          </Link>
+          <Button
+            onClick={handleSyncTrakzee}
+            disabled={syncing}
+            className="gap-2 bg-rose-600 hover:bg-rose-700 text-white"
+          >
+            <RefreshCw className={cn("h-4 w-4", syncing && "animate-spin")} />
+            {syncing ? "Syncing..." : "Sync Trakzee Alerts"}
+          </Button>
+          <Button
+            variant="outline"
+            onClick={loadData}
+            disabled={loading}
+            className="gap-2"
+          >
+            <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} />
+            Refresh
+          </Button>
         </div>
       </div>
 
