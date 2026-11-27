@@ -1486,7 +1486,7 @@ export default function Tyres() {
             <div className="rounded-lg bg-muted/40 p-3 text-xs text-muted-foreground flex items-start gap-2 border border-border/60">
               <Sparkles className="h-4 w-4 text-primary shrink-0 mt-0.5" />
               <span>
-                <strong>Procurement Insight:</strong> Premium brands (Michelin, Bridgestone) achieve 2.1x greater durability and 40% lower wear rate, delivering lower lifecycle CPK ($\le 8.90\text{ TZS/km}$) when paired with cold retreading compared to budget tires.
+                <strong>Procurement Insight:</strong> Premium brands (Michelin, Bridgestone) achieve 2.1x greater durability and 40% lower wear rate, delivering lower lifecycle CPK (≤ 8.90 TZS/km) when paired with cold retreading compared to budget tires.
               </span>
             </div>
           </div>

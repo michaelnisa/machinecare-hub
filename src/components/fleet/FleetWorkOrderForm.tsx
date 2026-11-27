@@ -248,6 +248,7 @@ export function FleetWorkOrderForm({
   const [dueDate, setDueDate] = useState(addDays(new Date(), 7));
   const [selectedTechnicianId, setSelectedTechnicianId] = useState("");
   const [pmTasksList, setPmTasksList] = useState<string[]>([...STANDARD_PM_TASKS]);
+  const [selectedTasks, setSelectedTasks] = useState<string[]>([...STANDARD_PM_TASKS]);
   const [newCustomTask, setNewCustomTask] = useState("");
   const [remarks, setRemarks] = useState("");
   const [componentSystem, setComponentSystem] = useState<string>(initialComponent ?? "Brake System");
