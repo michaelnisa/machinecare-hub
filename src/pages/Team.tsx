@@ -27,7 +27,9 @@ import {
   CheckCircle2,
   Truck,
   Building2,
+  Banknote,
 } from "lucide-react";
+import { Link } from "react-router-dom";
 import { toast } from "sonner";
 import { formatDate, initials } from "@/lib/format";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
@@ -177,11 +179,18 @@ export default function Team() {
               : "Invite mechanics, managers, and viewers to your organisation."}
           </p>
         </div>
-        {isManager && (
-          <Button onClick={() => setInviteOpen(true)}>
-            <UserPlus className="mr-2 h-4 w-4" /> Invite member
-          </Button>
-        )}
+        <div className="flex items-center gap-2">
+          <Link to="/finance/payroll">
+            <Button variant="outline" className="gap-2 shadow-xs cursor-pointer">
+              <Banknote className="h-4 w-4" /> Staff Payroll & Overtime
+            </Button>
+          </Link>
+          {isManager && (
+            <Button onClick={() => setInviteOpen(true)}>
+              <UserPlus className="mr-2 h-4 w-4" /> Invite member
+            </Button>
+          )}
+        </div>
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">

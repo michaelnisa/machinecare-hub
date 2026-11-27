@@ -65,6 +65,7 @@ import {
   BarChart3,
   Smartphone,
   PiggyBank,
+  Banknote,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { initials } from "@/lib/format";
@@ -134,6 +135,7 @@ export function Sidebar() {
         { to: "/finance/trips", label: "Trip Revenue & Costs", icon: Route },
         { to: "/finance/invoices", label: "Customers & Invoicing", icon: FileText },
         { to: "/finance/budgeting", label: "Budgeting", icon: PiggyBank },
+        { to: "/finance/payroll", label: "Staff Payroll & Overtime", icon: Banknote },
         { to: "/finance/suppliers", label: "Supplier Payments", icon: Building2 },
         { to: "/finance/ap-ar", label: "AP & AR Aging", icon: Calendar },
         { to: "/finance/cash-flow", label: "Cash Flow", icon: Wallet },
@@ -155,6 +157,7 @@ export function Sidebar() {
         { to: "/finance/inventory-valuation", label: "Inventory Valuation", icon: Package },
         { to: "/finance/invoices", label: "Customers & Invoicing", icon: FileText },
         { to: "/finance/budgeting", label: "Plant Budgeting", icon: PiggyBank },
+        { to: "/finance/payroll", label: "Staff Payroll & Overtime", icon: Banknote },
         { to: "/finance/suppliers", label: "Supplier Payments", icon: Building2 },
         { to: "/finance/ap-ar", label: "AP & AR Aging", icon: Calendar },
         { to: "/finance/cash-flow", label: "Cash Flow", icon: Wallet },
@@ -500,6 +503,7 @@ export function Sidebar() {
           { to: "/finance/fuel", label: "Fuel Reconciliation", icon: Fuel },
           { to: "/finance/vehicle-profitability", label: "Chassis Profit & Loss", icon: TrendingUp },
           { to: "/finance/budgeting", label: "Fleet & Depots Budget", icon: PiggyBank },
+          { to: "/finance/payroll", label: "Staff Payroll & Overtime", icon: Banknote },
           { to: "/finance/suppliers", label: "Supplier AP & Bills", icon: Building2 },
           { to: "/finance/invoices", label: "Customer Billing & AR", icon: FileText },
           { to: "/finance/reports", label: "Cost & Audit Statements", icon: BarChart3 },

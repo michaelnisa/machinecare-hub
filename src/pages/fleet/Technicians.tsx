@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { PageLoader, EmptyState } from "@/components/PageLoader";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
+import { Link } from "react-router-dom";
 import { 
   UserCog, 
   Plus, 
@@ -22,7 +23,8 @@ import {
   Search, 
   ClipboardList,
   ShieldCheck,
-  Tag
+  Tag,
+  Banknote,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -170,11 +172,18 @@ export default function FleetTechnicians() {
           </p>
         </div>
 
-        {canWrite && (
-          <Button onClick={() => { setEditing(null); setFormOpen(true); }} className="gap-2 shadow-xs cursor-pointer">
-            <Plus className="h-4 w-4" /> Register Technician
-          </Button>
-        )}
+        <div className="flex items-center gap-2">
+          <Link to="/finance/payroll">
+            <Button variant="outline" className="gap-2 shadow-xs cursor-pointer">
+              <Banknote className="h-4 w-4" /> Salaries & Overtime
+            </Button>
+          </Link>
+          {canWrite && (
+            <Button onClick={() => { setEditing(null); setFormOpen(true); }} className="gap-2 shadow-xs cursor-pointer">
+              <Plus className="h-4 w-4" /> Register Technician
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* KPI Stats */}

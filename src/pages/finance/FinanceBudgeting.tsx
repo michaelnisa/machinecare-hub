@@ -24,6 +24,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { FinanceNavHeader } from "./FinanceNavHeader";
+import { DailyBudgetLedger } from "@/components/finance/DailyBudgetLedger";
 import { getFinancialOverview } from "@/services/financeService";
 import { toast } from "sonner";
 import html2canvas from "html2canvas";
@@ -1548,13 +1549,20 @@ export default function FinanceBudgeting() {
         )}
       </div>
 
-      {/* In Daily Mode: Today's Actual Expenses Breakdown */}
+      {/* In Daily Mode: Today's Actual Expenses Breakdown & Exact 10-Column Disbursement Ledger */}
       {activeTab === "daily" && (
-        <div className="space-y-3 pt-2">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-base font-bold text-foreground">
-                Actual Expenses for {selectedDate}
+        <div className="space-y-6 pt-2">
+          {/* Exact 10-Column Daily Budget Ledger */}
+          <DailyBudgetLedger
+            selectedDate={selectedDate}
+            onDateChange={setSelectedDate}
+          />
+
+          <div className="space-y-3 pt-4 border-t border-border">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-base font-bold text-foreground">
+                  Automated Fleet Telematics & Trip Expenses ({selectedDate})
               </h2>
               <p className="text-xs text-muted-foreground">
                 Live fuel fill-ups, driver posho, toll fees, and workshop vouchers recorded on this date.
@@ -1613,7 +1621,8 @@ export default function FinanceBudgeting() {
             </div>
           )}
         </div>
-      )}
+      </div>
+    )}
 
       {/* Edit / Create Budget Modal */}
       <Dialog open={modalOpen} onOpenChange={setModalOpen}>
