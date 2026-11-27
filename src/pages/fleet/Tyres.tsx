@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PageLoader, EmptyState } from "@/components/PageLoader";
 import { StatusBadge } from "@/components/StatusBadge";
+import { Badge } from "@/components/ui/badge";
 import { 
   CircleDot, 
   Plus, 
@@ -682,7 +683,7 @@ export default function Tyres() {
             </TabsTrigger>
             <TabsTrigger value="analytics" className="flex items-center gap-2 text-xs">
               <Sparkles className="h-3.5 w-3.5 text-amber-500" />
-              {isSwahili ? "Uchambuzi & Rekodi (Slide 18)" : "Tire Life, Cost & Movements (Slide 18)"}
+              {isSwahili ? "Uchambuzi & Rekodi ya Matairi" : "Tire Life, Cost & Movements"}
             </TabsTrigger>
           </TabsList>
 
@@ -1425,7 +1426,7 @@ export default function Tyres() {
               <div>
                 <h3 className="font-bold text-sm text-foreground flex items-center gap-2">
                   <DollarSign className="h-4 w-4 text-emerald-600" />
-                  Tire Cost Analysis & CPK by Brand (Slide 18)
+                  Tire Cost Analysis & CPK by Brand
                 </h3>
                 <p className="text-xs text-muted-foreground mt-0.5">
                   Cost-per-Kilometer (CPK) comparison across procurement tire brands and axle tread patterns to maximize fleet ROI.
@@ -1496,7 +1497,7 @@ export default function Tyres() {
               <div>
                 <h3 className="font-bold text-sm text-foreground flex items-center gap-2">
                   <History className="h-4 w-4 text-primary" />
-                  Tire Movement Records & Fitment History (Slide 18)
+                  Tire Movement Records & Fitment History
                 </h3>
                 <p className="text-xs text-muted-foreground mt-0.5">
                   Complete audit trail tracking tire rotations, axle fitments, rim changes, and removals per vehicle.

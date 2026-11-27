@@ -227,7 +227,7 @@ export function DriverComplaintModal({
             </div>
             <div>
               <DialogTitle className="text-lg font-bold">
-                Driver Defect & Breakdown Report (Slide 10)
+                Driver Defect & Breakdown Report
               </DialogTitle>
               <DialogDescription className="text-xs text-muted-foreground">
                 Capture defects, abnormal vehicle conditions, and corridor breakdowns with attachments
@@ -333,7 +333,7 @@ export function DriverComplaintModal({
             <div className="space-y-1.5">
               <Label className="text-xs font-semibold flex items-center gap-1.5">
                 <Layers className="h-3.5 w-3.5 text-purple-600" />
-                <span>11 Subsystem Classification (Slide 11) *</span>
+                <span>11 Subsystem Classification *</span>
               </Label>
               <select
                 value={subsystem}

@@ -994,7 +994,7 @@ export default function DriverPortal() {
                           {isSwahili ? "Ripoti Hitilafu au Uharibifu (Breakdown)" : "Report Breakdown / Vehicle Defect"}
                         </span>
                         <span className="text-[10px] text-muted-foreground">
-                          {isSwahili ? "Slide 10: Tuma taarifa ya ufundi na picha mara moja" : "Slide 10: Defects, abnormal conditions & breakdown rescue"}
+                          {isSwahili ? "Tuma taarifa ya ufundi na picha mara moja" : "Defects, abnormal conditions & breakdown rescue"}
                         </span>
                       </div>
                     </div>

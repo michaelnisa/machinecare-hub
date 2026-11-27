@@ -136,7 +136,7 @@ export function ExecutiveReportDocument({
             </h3>
           </div>
           <span className="text-[10px] font-mono text-muted-foreground print:text-slate-600">
-            Slide 17 Cost Modeling
+            Cost & Lifecycle Modeling
           </span>
         </div>
 
@@ -216,7 +216,7 @@ export function ExecutiveReportDocument({
             </h3>
           </div>
           <span className="text-[10px] font-mono text-muted-foreground print:text-slate-600">
-            Slide 11 & 17 Standard
+            Component Failure Standard
           </span>
         </div>
 
@@ -269,7 +269,7 @@ export function ExecutiveReportDocument({
             </h3>
           </div>
           <span className="text-[10px] font-mono text-muted-foreground print:text-slate-600">
-            Slide 15 Stores Governance
+            Stores & Inventory Governance
           </span>
         </div>
 
@@ -327,7 +327,7 @@ export function ExecutiveReportDocument({
             </h3>
           </div>
           <span className="text-[10px] font-mono text-muted-foreground print:text-slate-600">
-            Slide 20 Warranty Radar
+            Warranty & Coverage Radar
           </span>
         </div>
 

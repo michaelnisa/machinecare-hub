@@ -358,7 +358,7 @@ export default function Inspections() {
             }}
           >
             <Zap className="h-3.5 w-3.5 text-amber-500" />
-            Smart Parts Finder (Slide 14)
+            Smart Parts Finder
           </Button>
 
           {/* Report Breakdown / Defect Button (Slide 10) */}
@@ -389,7 +389,7 @@ export default function Inspections() {
         <TabsList className="grid grid-cols-3 w-full sm:w-[680px] bg-muted/60 p-1">
           <TabsTrigger value="complaints" className="gap-2 text-xs font-semibold">
             <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />
-            Driver Complaints (Slide 10)
+            Driver Complaints
             {complaints.filter((c) => c.status === "open").length > 0 && (
               <Badge variant="destructive" className="ml-1 h-4 px-1 text-[10px]">
                 {complaints.filter((c) => c.status === "open").length}
@@ -399,7 +399,7 @@ export default function Inspections() {
 
           <TabsTrigger value="recurring" className="gap-2 text-xs font-semibold">
             <TrendingUp className="h-3.5 w-3.5 text-primary" />
-            Recurring Failures (Slide 11)
+            Recurring Failures
             {recurringAlerts.length > 0 && (
               <Badge className="ml-1 h-4 px-1 text-[10px] bg-red-600 text-white">
                 {recurringAlerts.length}
@@ -660,7 +660,7 @@ export default function Inspections() {
                       <div className="flex items-center justify-between">
                         <span className="font-bold uppercase tracking-wider text-[10px] text-muted-foreground flex items-center gap-1">
                           <Wrench className="h-3 w-3 text-primary" />
-                          Workshop Inspection Findings & Recommendations (Slide 10)
+                          Workshop Inspection Findings & Recommendations
                         </span>
                         <Button
                           size="sm"
@@ -760,7 +760,7 @@ export default function Inspections() {
           <div className="p-4 rounded-xl border border-primary/30 bg-primary/5 space-y-1">
             <h3 className="font-bold text-sm text-foreground flex items-center gap-1.5">
               <TrendingUp className="h-4 w-4 text-primary" />
-              Component-Based Maintenance Tracking & Trend Analytics (Slide 11)
+              Component-Based Maintenance Tracking & Trend Analytics
             </h3>
             <p className="text-xs text-muted-foreground">
               Automated failure detection across all 11 subsystems: Engine, Fuel, Brake, Suspension, Steering, Transmission, Electrical, Electronics, Air, Body Works, and Accident Repairs. Identifies chronic recurring breakdowns (≥2 incidents within 90 days) to prevent repeat downtime.
@@ -1005,7 +1005,7 @@ export default function Inspections() {
                               <Link
                                 to={`/work-orders/new?machine=${e.machine_id}&reason=${encodeURIComponent(e.defect_notes || "Pre-trip inspection defect flagged by driver")}&priority=urgent&source=pre_trip_inspection`}
                                 className="inline-flex items-center gap-1 rounded bg-red-500/10 hover:bg-red-500/20 px-2 py-0.5 text-[11px] font-semibold text-red-600 dark:text-red-400 transition-colors"
-                                title="Raise Digital Job Card for this inspection defect (Slide 10)"
+                                title="Raise Digital Job Card for this inspection defect"
                               >
                                 <Wrench className="h-3 w-3" />
                                 Raise Job Card
@@ -1060,7 +1060,7 @@ export default function Inspections() {
           <DialogHeader>
             <DialogTitle className="text-base font-bold flex items-center gap-2">
               <Wrench className="h-4 w-4 text-primary" />
-              Workshop Findings & Defect Analysis (Slide 10)
+              Workshop Findings & Defect Analysis
             </DialogTitle>
             <DialogDescription className="text-xs text-muted-foreground">
               Document root-cause analysis, defect findings, and preventive recommendations for {selectedComplaint?.vehicle_plate}.
@@ -1082,7 +1082,7 @@ export default function Inspections() {
 
             <div>
               <label className="font-semibold text-muted-foreground block mb-1">
-                Root-Cause Defect Analysis (Slide 10)
+                Root-Cause Defect Analysis
               </label>
               <Textarea
                 rows={3}
@@ -1095,7 +1095,7 @@ export default function Inspections() {
 
             <div>
               <label className="font-semibold text-muted-foreground block mb-1">
-                Engineering Recommendations (Slide 10)
+                Engineering Recommendations
               </label>
               <Textarea
                 rows={2}

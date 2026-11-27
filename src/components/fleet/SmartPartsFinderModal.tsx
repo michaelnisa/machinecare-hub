@@ -193,7 +193,7 @@ export function SmartPartsFinderModal({
             <div>
               <DialogTitle className="text-xl font-bold flex items-center gap-2">
                 <Zap className="h-5 w-5 text-amber-500" />
-                Smart Parts Identification & Compatibility (Slide 14)
+                Smart Parts Identification & Compatibility
               </DialogTitle>
               <DialogDescription className="text-sm text-muted-foreground mt-1">
                 Vehicle model-compatible spare parts matching, bin locations, interchange cross-references, and stores availability.
@@ -236,7 +236,7 @@ export function SmartPartsFinderModal({
           {/* Subsystem Category Select */}
           <div className="space-y-1">
             <label className="text-xs font-semibold text-muted-foreground flex items-center gap-1">
-              <Layers className="h-3.5 w-3.5" /> Subsystem Category (Slide 11)
+              <Layers className="h-3.5 w-3.5" /> Subsystem Category
             </label>
             <Select value={selectedSubsystem} onValueChange={setSelectedSubsystem}>
               <SelectTrigger className="h-9 bg-background">

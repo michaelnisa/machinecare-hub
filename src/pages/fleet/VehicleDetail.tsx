@@ -416,7 +416,7 @@ export default function FleetVehicleDetail() {
       {
         unit: "GEN-01",
         name: "Cummins 500kVA Standby Generator",
-        category: "Workshop Plant (Slide 19)",
+        category: "Workshop Plant",
         provider: "Cummins Tanzania Ltd",
         startDate: "2024-03-01",
         expiryDate: "2026-03-01",
@@ -425,7 +425,7 @@ export default function FleetVehicleDetail() {
       {
         unit: "COMP-02",
         name: "Atlas Copco GA-75 Air Compressor",
-        category: "Workshop Plant (Slide 19)",
+        category: "Workshop Plant",
         provider: "Atlas Copco Eastern Africa",
         startDate: "2024-08-10",
         expiryDate: "2026-08-10",
@@ -1158,7 +1158,7 @@ export default function FleetVehicleDetail() {
                   <h3 className="font-semibold text-base text-foreground flex items-center gap-2">
                     <Building2 className="h-4 w-4 text-emerald-600" /> Installation & Maintenance Setup
                   </h3>
-                  <span className="text-xs text-muted-foreground">Slide 19 Plant Specs</span>
+                  <span className="text-xs text-muted-foreground">Plant & Equipment Specs</span>
                 </div>
 
                 <div className="space-y-3 text-sm">
@@ -1793,7 +1793,7 @@ export default function FleetVehicleDetail() {
                   <Package className="h-4 w-4 text-primary" /> Stores Spares Consumed & Issued
                 </h3>
                 <p className="text-xs text-muted-foreground mt-0.5">
-                  Audit log of spare parts issued by Stores against Job Cards for this vehicle chassis (Slide 15)
+                  Audit log of spare parts issued by Stores against Job Cards for this vehicle chassis
                 </p>
               </div>
               <Button size="sm" variant="outline" asChild className="gap-1.5 h-8 text-xs">
@@ -2056,7 +2056,7 @@ export default function FleetVehicleDetail() {
                   onClick={() => setSmartPartsModalOpen(true)}
                   className="gap-1.5 border-primary/30 text-primary hover:bg-primary/5 text-xs font-semibold"
                 >
-                  <Zap className="h-3.5 w-3.5 text-amber-500 fill-amber-500" /> Compatible Spare Parts (Slide 14)
+                  <Zap className="h-3.5 w-3.5 text-amber-500 fill-amber-500" /> Compatible Spare Parts
                 </Button>
                 {canWrite && (
                   <Button
@@ -2064,7 +2064,7 @@ export default function FleetVehicleDetail() {
                     onClick={() => setComplaintModalOpen(true)}
                     className="gap-1.5 text-xs font-semibold shadow-2xs"
                   >
-                    <Plus className="h-3.5 w-3.5" /> Report Defect / Breakdown (Slide 10)
+                    <Plus className="h-3.5 w-3.5" /> Report Defect / Breakdown
                   </Button>
                 )}
               </div>
@@ -2078,7 +2078,7 @@ export default function FleetVehicleDetail() {
                     <AlertTriangle className="h-4 w-4 text-destructive shrink-0 animate-bounce" />
                     <div>
                       <h4 className="text-xs font-bold text-destructive">
-                        Slide 11: Recurring Component Failures Detected ({vehicleRecurringAlerts.length})
+                        Recurring Component Failures Detected ({vehicleRecurringAlerts.length})
                       </h4>
                       <p className="text-[11px] text-muted-foreground">
                         Identifies chronic breakdown trends (≥2 incidents on identical subsystem within 90 days).
@@ -2130,7 +2130,7 @@ export default function FleetVehicleDetail() {
                     <CheckCircle2 className="h-5 w-5 text-emerald-600 dark:text-emerald-400 shrink-0" />
                     <div>
                       <div className="text-xs font-bold text-foreground">
-                        Slide 11: Normal Subsystem Health (Zero Repeat Failures)
+                        Normal Subsystem Health (Zero Repeat Failures)
                       </div>
                       <div className="text-[11px] text-muted-foreground">
                         All 11 vehicle subsystems are operating within normal reliability thresholds with no repeat breakdowns in the last 90 days.
@@ -2150,7 +2150,7 @@ export default function FleetVehicleDetail() {
                     <div className="flex items-center gap-2">
                       <ShieldCheck className="h-4 w-4 text-primary" />
                       <h4 className="text-xs font-bold text-foreground">
-                        Slide 20: OEM Dealer Warranty Coverage
+                        OEM Dealer Warranty Coverage
                       </h4>
                     </div>
                     {vehicleWarranty.status === "expired" ? (
@@ -2196,7 +2196,7 @@ export default function FleetVehicleDetail() {
                 <div className="rounded-xl border border-border/60 bg-muted/10 p-3 flex items-center justify-between text-xs">
                   <div className="flex items-center gap-2 text-muted-foreground">
                     <ShieldCheck className="h-4 w-4 text-primary" />
-                    <span>Slide 20: Standard OEM 24-Month / 200,000 km Commercial Policy. Verify dealer coverage before raising local store parts requests.</span>
+                    <span>Standard OEM 24-Month / 200,000 km Commercial Policy. Verify dealer coverage before raising local store parts requests.</span>
                   </div>
                   <Button size="sm" variant="ghost" onClick={() => setDocModalOpen(true)} className="h-6 text-[11px] text-primary">
                     + Attach Warranty Policy
@@ -2211,7 +2211,7 @@ export default function FleetVehicleDetail() {
             <div className="flex items-center justify-between pb-3 border-b border-border">
               <div>
                 <h4 className="text-sm font-semibold text-foreground flex items-center gap-2">
-                  <FileText className="h-4 w-4 text-primary" /> Slide 10: Driver Complaints & Inspection Reports ({complaints.length})
+                  <FileText className="h-4 w-4 text-primary" /> Driver Complaints & Inspection Reports ({complaints.length})
                 </h4>
                 <p className="text-xs text-muted-foreground mt-0.5">
                   Workshop triage, root-cause defect analysis, recommendations, and evidence attachments

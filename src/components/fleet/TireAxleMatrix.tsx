@@ -128,7 +128,7 @@ export function TireAxleMatrix({ vehicle, tyres, className = "" }: TireAxleMatri
           <div className="flex items-center gap-2">
             <Layers className="h-5 w-5 text-primary" />
             <h3 className="text-base font-bold text-foreground">
-              Commercial Axle Matrix &amp; Tread Lifecycle (Slide 18)
+              Commercial Axle Matrix &amp; Tread Lifecycle
             </h3>
             <Badge variant="outline" className="font-mono text-xs">
               {layout.name}

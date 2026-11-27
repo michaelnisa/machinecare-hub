@@ -341,7 +341,6 @@ export function Sidebar() {
             label: "Fleet Dashboard",
             icon: LayoutDashboard,
           },
-          { to: "/live", label: "Live TV", icon: Tv },
           { to: "/notifications", label: t.nav.notifications, icon: Bell },
         ],
       },
@@ -351,6 +350,7 @@ export function Sidebar() {
         items: [
           { to: "/fleet/vehicles", label: "Vehicles", icon: Truck },
           { to: "/fleet/live-map", label: "Live GPS Fleet", icon: MapPin },
+          { to: "/live", label: "Live TV", icon: Tv },
           { to: "/fleet/drivers", label: "Drivers", icon: Contact },
           { to: "/fleet/trips", label: "Trips", icon: Route },
           { to: "/fleet/approvals", label: "Approvals", icon: ShieldCheck },
@@ -440,6 +440,7 @@ export function Sidebar() {
           { to: "/dashboard", label: "Fleet Dashboard", icon: LayoutDashboard },
           { to: "/fleet/vehicles", label: "Vehicles & Assets", icon: Truck },
           { to: "/fleet/live-map", label: "Live Telematics & GPS", icon: MapPin },
+          { to: "/live", label: "Live TV", icon: Tv },
           { to: "/fleet/drivers", label: "Driver Management", icon: Contact },
           { to: "/fleet/trips", label: "Trips & Dispatch", icon: Route },
           { to: "/fuel", label: "Fuel & Bowser Logs", icon: Fuel },
@@ -513,7 +514,6 @@ export function Sidebar() {
           { to: "/fleet/reports", label: "Executive Reporting Center", icon: FileBarChart },
           { to: "/reports", label: "Monthly Maintenance Reports", icon: FileText },
           { to: "/fleet/insights", label: "KPIs & Telematics Trends", icon: Gauge },
-          { to: "/live", label: "Depot Command Live TV", icon: Tv },
         ],
       },
       {
@@ -1079,14 +1079,6 @@ export function Sidebar() {
                 return <div className="text-[11px] font-semibold uppercase tracking-wider text-sky-500 truncate">GPS Tracking</div>;
               }
               if (isFleet || organisation?.industry_profile === "fleet_logistics") {
-                if (isEnterpriseFleet(organisation)) {
-                  return (
-                    <div className="flex items-center gap-1.5 truncate">
-                      <span className="text-[11px] font-semibold uppercase tracking-wider text-primary truncate">Fleet & Logistics</span>
-                      <span className="inline-flex items-center rounded px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30">Enterprise</span>
-                    </div>
-                  );
-                }
                 return <div className="text-[11px] font-semibold uppercase tracking-wider text-primary truncate">Fleet & Logistics</div>;
               }
               if (isGarage || organisation?.industry_profile === "garage") {

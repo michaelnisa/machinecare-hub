@@ -323,7 +323,7 @@ export default function InventoryDashboard() {
             <Zap className="h-4 w-4 text-amber-500" />
             <div>
               <h2 className="text-sm font-bold text-foreground">
-                Fast-Moving Items & Stock Velocity (Slide 21)
+                Fast-Moving Items & Stock Velocity
               </h2>
               <p className="text-xs text-muted-foreground">
                 High-turnover spare parts and consumables ranked by monthly consumption frequency.

@@ -979,7 +979,7 @@ export function FleetWorkOrderForm({
                   </div>
                   <div>
                     <h3 className="text-xs font-semibold text-foreground">
-                      Workshop Stores & Smart Parts Requisition (Slide 15)
+                      Workshop Stores & Smart Parts Requisition
                     </h3>
                     <p className="text-[11px] text-muted-foreground">
                       Compatible parts for {selectedMachine.make || ""} {selectedMachine.model || "Vehicle"}. Stock decrements upon creation.

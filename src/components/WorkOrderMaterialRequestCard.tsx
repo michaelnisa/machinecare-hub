@@ -11,6 +11,13 @@ import { formatNumber } from "@/lib/format";
 import { IssueConfirmDialog } from "@/components/IssueConfirmDialog";
 import { Link } from "react-router-dom";
 import { SmartPartsFinderModal } from "@/components/fleet/SmartPartsFinderModal";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
 
 interface Props {
   wo: any;
@@ -115,7 +122,7 @@ export function WorkOrderMaterialRequestCard({ wo, machine, onSaved }: Props) {
             onClick={() => setSmartPartsOpen(true)}
             className="gap-1.5 border-primary/30 text-primary hover:bg-primary/5 text-xs font-semibold"
           >
-            <Zap className="h-3.5 w-3.5 text-amber-500 fill-amber-500" /> Smart Spares (Slide 14)
+            <Zap className="h-3.5 w-3.5 text-amber-500 fill-amber-500" /> Smart Spares
           </Button>
           <Button size="sm" variant="outline" onClick={() => setOpen(true)} className="text-xs">
             <Plus className="mr-1.5 h-3.5 w-3.5" /> Request parts

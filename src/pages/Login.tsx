@@ -8,7 +8,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Wrench, Loader2, ArrowLeft } from "lucide-react";
+import { Wrench, Loader2, ArrowLeft, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 import { useI18n } from "@/i18n/I18nProvider";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
@@ -123,6 +123,13 @@ export default function Login() {
           <p className="mb-6 text-sm text-muted-foreground">
             {t.auth.welcomeSub}
           </p>
+
+          {next.startsWith("/accept-invite/") && (
+            <div className="mb-4 rounded-xl border border-primary/30 bg-primary/10 p-3.5 text-xs text-primary flex items-center gap-2">
+              <ShieldCheck className="h-4 w-4 shrink-0" />
+              <span>Sign in to accept your team invitation and access your new organisation.</span>
+            </div>
+          )}
 
           {unconfirmedEmail && (
             <div className="mb-4 rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-xs text-amber-900 dark:text-amber-200 animate-fade-in">

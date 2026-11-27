@@ -678,7 +678,7 @@ export default function FleetDashboard() {
     csvRows.push(`"--- EXECUTIVE SUMMARY METRICS ---"`);
     csvRows.push(`"Total Fleet Assets","${machines.length + workshopPlantCount}"`);
     csvRows.push(`"Commercial Vehicles & Trailers","${machines.length}"`);
-    csvRows.push(`"Workshop Plant Units (Slide 19)","${workshopPlantCount}"`);
+    csvRows.push(`"Workshop Plant Units","${workshopPlantCount}"`);
     csvRows.push(`"Active Drivers","${drivers.length}"`);
     csvRows.push(`"PM Service Compliance Rate","${pmComplianceRate}%"`);
     csvRows.push(`"Estimated Cost-per-Kilometer (CPK)","TZS ${costPerKm.toLocaleString()} / km"`);
@@ -696,7 +696,7 @@ export default function FleetDashboard() {
     }
     csvRows.push("");
 
-    csvRows.push(`"--- STORES & SPARE PARTS HEALTH (SLIDE 15) ---"`);
+    csvRows.push(`"--- STORES & SPARE PARTS HEALTH ---"`);
     csvRows.push(`"Part Number","Description","System","Stock Qty","Min Reorder Level","Bin Location","Unit Price (TZS)"`);
     for (const p of smartSpares) {
       csvRows.push(
@@ -1047,7 +1047,7 @@ export default function FleetDashboard() {
                     {workshopPlantCount > 0 ? `${workshopPlantCount} Units` : "Ready"}
                   </div>
                   <div className="mt-1 text-xs text-muted-foreground">
-                    Generators, lifts & air plant (Slide 19)
+                    Generators, lifts & air plant
                   </div>
                 </div>
                 <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-500/10 text-blue-600 dark:text-blue-400">
@@ -1101,7 +1101,7 @@ export default function FleetDashboard() {
                 <div className="flex items-center gap-2">
                   <BarChart3 className="h-4 w-4 text-purple-600 dark:text-purple-400" />
                   <h3 className="text-sm font-semibold tracking-tight text-foreground">
-                    Component Failure Distribution & Maintenance Trends (Slide 11)
+                    Component Failure Distribution & Maintenance Trends
                   </h3>
                 </div>
                 <span className="text-xs text-muted-foreground">11 Heavy Vehicle Subsystems</span>
@@ -1139,7 +1139,7 @@ export default function FleetDashboard() {
                 <div className="flex items-center gap-2 mb-1">
                   <Wrench className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
                   <h3 className="text-sm font-semibold tracking-tight text-foreground">
-                    Maintenance Source Tracking (Slide 12)
+                    Maintenance Source Tracking
                   </h3>
                 </div>
                 <p className="text-xs text-muted-foreground mb-4">
@@ -1171,7 +1171,7 @@ export default function FleetDashboard() {
 
                   <div className="p-3 rounded-lg border border-purple-500/20 bg-purple-500/5 flex items-center justify-between">
                     <div>
-                      <div className="text-xs font-semibold text-purple-700 dark:text-purple-300">Contractor Outsourced (Slide 12)</div>
+                      <div className="text-xs font-semibold text-purple-700 dark:text-purple-300">Contractor Outsourced</div>
                       <div className="text-[11px] text-muted-foreground">Specialized chassis & engine rebuilds</div>
                     </div>
                     <div className="text-right">
@@ -1660,7 +1660,7 @@ export default function FleetDashboard() {
             {/* Subsystems Breakdown Table */}
             <div className="rounded-xl border border-border overflow-hidden">
               <div className="bg-muted px-4 py-2 font-semibold text-xs flex items-center justify-between">
-                <span>11 Component System Failure Classification (Slide 11)</span>
+                <span>11 Component System Failure Classification</span>
                 <span>Incident Distribution</span>
               </div>
               <div className="p-4 grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
@@ -1676,7 +1676,7 @@ export default function FleetDashboard() {
             {/* Maintenance Source Tracking Table */}
             <div className="rounded-xl border border-border overflow-hidden">
               <div className="bg-muted px-4 py-2 font-semibold text-xs flex items-center justify-between">
-                <span>Maintenance Source & Location Distribution (Slide 12)</span>
+                <span>Maintenance Source & Location Distribution</span>
                 <span>Work Order Share</span>
               </div>
               <div className="p-4 grid grid-cols-3 gap-3 text-center text-xs">
@@ -1701,7 +1701,7 @@ export default function FleetDashboard() {
             {/* Spares Inventory Summary */}
             <div className="rounded-xl border border-border overflow-hidden">
               <div className="bg-muted px-4 py-2 font-semibold text-xs flex items-center justify-between">
-                <span>Stores & Spare Parts Inventory (Slide 13-15)</span>
+                <span>Stores & Spare Parts Inventory</span>
                 <span>{smartSpares.length} SKUs Tracked</span>
               </div>
               <div className="p-4 text-xs space-y-2">

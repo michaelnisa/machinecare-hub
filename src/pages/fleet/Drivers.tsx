@@ -57,6 +57,7 @@ import {
   type FleetDriver,
 } from "@/lib/fleet-metadata";
 import { syncTrakzeeDrivers } from "@/services/trakzeeService";
+import { MonthlyDriverRoster } from "@/components/fleet/MonthlyDriverRoster";
 
 type Driver = FleetDriver;
 
@@ -117,7 +118,7 @@ export default function Drivers() {
   const [search, setSearch] = useState("");
   const [syncingLiveDrivers, setSyncingLiveDrivers] = useState(false);
 
-  const [viewMode, setViewMode] = useState<"table" | "cards">("table");
+  const [viewMode, setViewMode] = useState<"table" | "cards" | "roster">("table");
 
   const handleSyncDrivers = async () => {
     const orgId = profile?.organisation_id;
@@ -302,6 +303,17 @@ export default function Drivers() {
           <div className="flex flex-wrap items-center gap-2">
             <Button
               variant="outline"
+              onClick={() => setViewMode(viewMode === "roster" ? "table" : "roster")}
+              className={`gap-2 shadow-xs cursor-pointer ${
+                viewMode === "roster" ? "bg-primary text-primary-foreground hover:bg-primary/90" : ""
+              }`}
+              title="Plan and print monthly driver shift roster"
+            >
+              <Calendar className="h-4 w-4" />
+              Monthly Roster
+            </Button>
+            <Button
+              variant="outline"
               onClick={handleSyncDrivers}
               disabled={syncingLiveDrivers}
               className="gap-2 shadow-xs cursor-pointer"
@@ -387,10 +399,25 @@ export default function Drivers() {
           >
             <LayoutGrid className="h-3.5 w-3.5" /> Badges
           </Button>
+          <Button
+            type="button"
+            variant={viewMode === "roster" ? "secondary" : "ghost"}
+            size="sm"
+            className="h-8 px-2.5 text-xs gap-1.5 cursor-pointer"
+            onClick={() => setViewMode("roster")}
+            title="Monthly Duty Roster & Print View"
+          >
+            <Calendar className="h-3.5 w-3.5" /> Monthly Roster
+          </Button>
         </div>
       </div>
 
-      {drivers.length === 0 ? (
+      {viewMode === "roster" ? (
+        <MonthlyDriverRoster
+          drivers={drivers}
+          onClose={() => setViewMode("table")}
+        />
+      ) : drivers.length === 0 ? (
         <EmptyState
           icon={<Contact className="h-5 w-5" />}
           title="No drivers yet"

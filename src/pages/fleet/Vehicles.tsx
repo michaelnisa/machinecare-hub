@@ -378,7 +378,7 @@ export default function Vehicles() {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Vehicles & Assets</h1>
           <p className="text-sm text-muted-foreground">
-            Complete registry of commercial fleet vehicles, trailers, and stationary workshop assets (Slide 19).
+            Complete registry of commercial fleet vehicles, trailers, and stationary workshop assets.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -418,7 +418,7 @@ export default function Vehicles() {
                   setOpen(true);
                 }}
                 className="gap-1.5 text-xs text-emerald-700 dark:text-emerald-400 border-emerald-500/40 hover:bg-emerald-500/10 shadow-2xs font-medium"
-                title="Register Non-Vehicle Workshop Assets (Generators, Compressors, Pumps, Lifts - Slide 19)"
+                title="Register Non-Vehicle Workshop Assets (Generators, Compressors, Pumps, Lifts)"
               >
                 <Wrench className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" /> + Add Plant / Equipment
               </Button>
@@ -1679,7 +1679,7 @@ export function VehicleDialog({
                       }));
                     }}
                   >
-                    <Wrench className="h-4 w-4" /> Workshop & Plant (Slide 19)
+                    <Wrench className="h-4 w-4" /> Workshop & Plant
                   </Button>
                 )}
               </div>
@@ -1731,7 +1731,7 @@ export function VehicleDialog({
                 <div className="space-y-1.5 sm:col-span-2 rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-3">
                   <div className="flex items-center justify-between mb-1.5">
                     <Label className="text-xs font-semibold text-emerald-800 dark:text-emerald-400 flex items-center gap-1.5">
-                      <Wrench className="h-4 w-4 text-emerald-600 dark:text-emerald-400" /> Plant Equipment Subtype (Slide 19) *
+                      <Wrench className="h-4 w-4 text-emerald-600 dark:text-emerald-400" /> Plant Equipment Subtype *
                     </Label>
                     <span className="text-[11px] text-muted-foreground">Stationary & workshop asset registration</span>
                   </div>

@@ -30,6 +30,7 @@ import {
   ArrowUpRight,
   Zap,
   Trash2,
+  LayoutDashboard,
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -386,42 +387,42 @@ export default function ExecutiveReports() {
     rows.push(`"Generated At","${new Date().toLocaleString()}"`);
     rows.push("");
 
-    rows.push(`"--- FINANCIAL MAINTENANCE SUMMARY (SLIDE 17) ---"`);
+    rows.push(`"--- FINANCIAL MAINTENANCE SUMMARY ---"`);
     rows.push(`"Total Operating & Maintenance Cost","TZS ${totalFleetCost.total.toLocaleString()}"`);
     rows.push(`"Direct Workshop & Contractor Maintenance","TZS ${totalFleetCost.maintenance.toLocaleString()}"`);
     rows.push(`"Commercial Fleet Fuel Spend","TZS ${totalFleetCost.fuel.toLocaleString()}"`);
     rows.push(`"Fleetwide Benchmark Cost-per-Kilometer (CPK)","TZS 1,850 / km"`);
     rows.push("");
 
-    rows.push(`"--- COST-PER-KILOMETER (CPK) PER VEHICLE (SLIDE 17) ---"`);
+    rows.push(`"--- COST-PER-KILOMETER (CPK) PER VEHICLE ---"`);
     rows.push(`"Vehicle Plate","Vehicle Name / Model","Operating Mileage (km)","Maintenance Spend (TZS)","Fuel Spend (TZS)","Total Spend (TZS)","CPK (TZS/km)","Rating"`);
     for (const v of cpkVehicleAnalytics) {
       rows.push(`"${v.plate}","${v.model}","${v.odoKm}","${v.maintSpend}","${v.fuelSpend}","${v.totalSpend}","${v.cpk}","${v.rating.toUpperCase()}"`);
     }
     rows.push("");
 
-    rows.push(`"--- 11 COMPONENT SUBSYSTEM FAILURE BREAKDOWN (SLIDE 11 & 17) ---"`);
+    rows.push(`"--- 11 COMPONENT SUBSYSTEM FAILURE BREAKDOWN ---"`);
     rows.push(`"Component Subsystem","Incident Count","Total Spend (TZS)","Share (%)","Monthly Delta"`);
     for (const c of componentDistribution) {
       rows.push(`"${c.name}","${c.jobs}","${c.cost}","${c.pct}%","${c.delta}"`);
     }
     rows.push("");
 
-    rows.push(`"--- PARTS ISSUED PER TECHNICIAN REPORT (SLIDE 15) ---"`);
+    rows.push(`"--- PARTS ISSUED PER TECHNICIAN REPORT ---"`);
     rows.push(`"Technician Name","Specialization","Parts Count Issued","Total Spend (TZS)","Job Cards Serviced"`);
     for (const t of technicianPartsIssuance) {
       rows.push(`"${t.name}","${t.specialization}","${t.partsCount}","${t.totalSpend}","${Array.from(t.jobCards).join("; ")}"`);
     }
     rows.push("");
 
-    rows.push(`"--- MONTHLY SPARES CONSUMPTION REPORT (SLIDE 15) ---"`);
+    rows.push(`"--- MONTHLY SPARES CONSUMPTION REPORT ---"`);
     rows.push(`"Month","Vehicle Model / Plant","Subsystem","Part Description","Part Number","Quantity Issued","Total Spend (TZS)"`);
     for (const s of monthlySparesConsumption) {
       rows.push(`"${s.month}","${s.model}","${s.category}","${s.partName}","${s.partNumber}","${s.qty}","${s.totalSpend}"`);
     }
     rows.push("");
 
-    rows.push(`"--- ASSET & VEHICLE WARRANTY EXPIRY TRACKING (SLIDE 20) ---"`);
+    rows.push(`"--- ASSET & VEHICLE WARRANTY EXPIRY TRACKING ---"`);
     rows.push(`"Unit Plate / Asset Tag","Equipment Name","Category","OEM Provider","Expiry Date","Days Remaining","Status","Coverage"`);
     for (const w of warrantyRegistry) {
       rows.push(`"${w.unit}","${w.name}","${w.category}","${w.provider}","${w.expiryDate}","${w.daysRemaining}","${w.status.toUpperCase()}","${w.coverage}"`);
@@ -550,7 +551,7 @@ export default function ExecutiveReports() {
             size="sm"
             onClick={handleSimulateScheduledDigest}
             className="gap-1.5 text-xs font-semibold border-primary/30 text-primary hover:bg-primary/5"
-            title="Slide 23: Generate scheduled automated report dispatch"
+            title="Generate scheduled automated report dispatch"
           >
             <Send className="h-3.5 w-3.5" />
             Scheduled Digest
@@ -623,7 +624,7 @@ export default function ExecutiveReports() {
               </div>
             </div>
             <div className="p-4 rounded-xl border border-border bg-card space-y-1 shadow-xs">
-              <div className="text-xs uppercase font-semibold text-muted-foreground">Stock Movement (Slide 15)</div>
+              <div className="text-xs uppercase font-semibold text-muted-foreground">Stock Movement</div>
               <div className="text-2xl font-bold text-foreground">
                 {partsIssuanceHistory.reduce((acc, r) => acc + (Number(r.quantity) || 0), 0)} SKUs Issued
               </div>
@@ -706,7 +707,7 @@ export default function ExecutiveReports() {
             <Gauge className="h-5 w-5 text-emerald-600" />
             <div>
               <h3 className="font-bold text-sm text-foreground">
-                Cost per Kilometer (CPK) Analytics by Vehicle (Slide 17)
+                Cost per Kilometer (CPK) Analytics by Vehicle
               </h3>
               <p className="text-xs text-muted-foreground">
                 Financial efficiency index: Maintenance Spend + Fuel Spend divided by operating telematics mileage.
@@ -794,7 +795,7 @@ export default function ExecutiveReports() {
             <Wrench className="h-5 w-5 text-purple-600" />
             <div>
               <h3 className="font-bold text-sm text-foreground">
-                11-Component Subsystem Failure & Cost Allocation Matrix (Slide 11 & 17)
+                11-Component Subsystem Failure & Cost Allocation Matrix
               </h3>
               <p className="text-xs text-muted-foreground">
                 Component-based maintenance tracking: monitors spend and failure share to identify recurring breakdowns.
@@ -853,7 +854,7 @@ export default function ExecutiveReports() {
             <div className="flex items-center gap-2">
               <UserCheck className="h-4 w-4 text-primary" />
               <h3 className="font-bold text-sm text-foreground">
-                Parts Issued per Technician (Slide 15)
+                Parts Issued per Technician
               </h3>
             </div>
             <Badge variant="outline" className="text-xs">
@@ -908,7 +909,7 @@ export default function ExecutiveReports() {
             <div className="flex items-center gap-2">
               <Layers className="h-4 w-4 text-amber-500" />
               <h3 className="font-bold text-sm text-foreground">
-                Monthly Spares Consumption (Slide 15)
+                Monthly Spares Consumption
               </h3>
             </div>
             <Badge variant="outline" className="text-xs text-amber-600 border-amber-500/30">
@@ -966,7 +967,7 @@ export default function ExecutiveReports() {
             <ShieldAlert className="h-5 w-5 text-blue-600" />
             <div>
               <h3 className="font-bold text-sm text-foreground">
-                Asset & Vehicle Warranty Expiry Radar (Slide 20)
+                Asset & Vehicle Warranty Expiry Radar
               </h3>
               <p className="text-xs text-muted-foreground">
                 Automated alerts: monitors OEM warranty coverage for road haulers and auxiliary plant to prevent paying for warrantied repairs.
@@ -1044,7 +1045,7 @@ export default function ExecutiveReports() {
             <div className="flex items-center gap-2">
               <Building2 className="h-4 w-4 text-primary" />
               <h3 className="font-bold text-sm text-foreground">
-                Repair Location & Source Tracking (Slide 12)
+                Repair Location & Source Tracking
               </h3>
             </div>
             <Badge variant="outline" className="text-xs">
@@ -1081,7 +1082,7 @@ export default function ExecutiveReports() {
             <div className="flex items-center gap-2">
               <Award className="h-4 w-4 text-purple-600" />
               <h3 className="font-bold text-sm text-foreground">
-                Contractor Performance & SLA (Slide 12)
+                Contractor Performance & SLA
               </h3>
             </div>
             <Badge variant="outline" className="text-xs text-purple-600 border-purple-500/30">

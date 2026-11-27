@@ -105,7 +105,7 @@ export default function ProcurementDashboard() {
                   Procurement Department
                 </h1>
                 <Badge className="bg-purple-500/15 text-purple-700 dark:text-purple-300 border-purple-500/30">
-                  Slide 16
+                  Enterprise Procurement
                 </Badge>
               </div>
               <p className="text-xs text-muted-foreground mt-0.5">
@@ -188,7 +188,7 @@ export default function ProcurementDashboard() {
                 {tenderRequisitions.length} Active
               </div>
               <div className="mt-1 text-xs text-purple-600 font-medium">
-                Competitive bid evaluation (Slide 16)
+                Competitive bid evaluation
               </div>
             </div>
             <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-purple-500/10 text-purple-600 dark:text-purple-400">
@@ -227,7 +227,7 @@ export default function ProcurementDashboard() {
               <div className="flex items-center gap-2">
                 <Award className="h-4 w-4 text-purple-600" />
                 <h3 className="font-semibold text-sm text-foreground">
-                  3-Vendor Quotation Tender Matrix (Slide 16 Requirement)
+                  3-Vendor Quotation Tender Matrix
                 </h3>
               </div>
               <Badge variant="outline" className="text-xs text-purple-600 border-purple-500/30">
@@ -315,7 +315,7 @@ export default function ProcurementDashboard() {
               <div className="flex items-center gap-2">
                 <FileText className="h-4 w-4 text-primary" />
                 <h3 className="font-semibold text-sm text-foreground">
-                  Recent Requisitions & Approval Status (Slide 16)
+                  Recent Requisitions & Approval Status
                 </h3>
               </div>
               <Link
@@ -395,7 +395,7 @@ export default function ProcurementDashboard() {
               <div className="flex items-center gap-2">
                 <AlertTriangle className="h-4 w-4 text-red-600" />
                 <h3 className="font-semibold text-sm text-foreground">
-                  Stores Low-Stock Queue (Slide 13)
+                  Stores Low-Stock Queue
                 </h3>
               </div>
               <Badge variant="destructive" className="text-[10px]">
@@ -459,7 +459,7 @@ export default function ProcurementDashboard() {
               <div className="flex items-center gap-2">
                 <Building2 className="h-4 w-4 text-primary" />
                 <h3 className="font-semibold text-sm text-foreground">
-                  Approved Suppliers (Slide 16)
+                  Approved Suppliers
                 </h3>
               </div>
               <Link

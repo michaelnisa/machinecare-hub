@@ -205,8 +205,8 @@ export default function WorkshopDashboard() {
                 <h1 className="text-2xl font-bold tracking-tight text-foreground">
                   Workshop Maintenance Department
                 </h1>
-                <Badge className="bg-orange-500/15 text-orange-700 dark:text-orange-300 border-orange-500/30">
-                  Slide 7-12, 18, 19
+                <Badge variant="outline" className="bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/30 font-medium">
+                  Central Depot Operations
                 </Badge>
               </div>
               <p className="text-xs text-muted-foreground mt-0.5">
@@ -333,7 +333,7 @@ export default function WorkshopDashboard() {
                 {plantAssets.length} Units
               </div>
               <div className="mt-0.5 text-[11px] text-muted-foreground">
-                Gensets, compressors, lifts (Slide 19)
+                Gensets, compressors, lifts
               </div>
             </div>
             <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
@@ -352,7 +352,7 @@ export default function WorkshopDashboard() {
               <div className="flex items-center gap-2">
                 <ClipboardList className="h-4 w-4 text-primary" />
                 <h3 className="font-semibold text-sm text-foreground">
-                  Active Workshop Job Cards (Slide 9)
+                  Active Workshop Job Cards
                 </h3>
               </div>
               <Link
@@ -445,7 +445,7 @@ export default function WorkshopDashboard() {
               <div className="flex items-center gap-2">
                 <BarChart3 className="h-4 w-4 text-purple-600" />
                 <h3 className="font-semibold text-sm text-foreground">
-                  Component-Based Maintenance Tracking (Slide 11)
+                  Component-Based Maintenance Tracking
                 </h3>
               </div>
               <span className="text-xs text-muted-foreground">11 Heavy Vehicle Subsystems</span>
@@ -480,12 +480,12 @@ export default function WorkshopDashboard() {
 
         {/* Right 1 Col: Technicians Roster, Plant Assets, Location Tracking */}
         <div className="space-y-4">
-          {/* Maintenance Source Tracking (Slide 12) */}
+          {/* Maintenance Source Tracking */}
           <div className="rounded-xl border border-border bg-card p-5 space-y-4">
             <div className="flex items-center gap-2">
               <MapPin className="h-4 w-4 text-emerald-600" />
               <h3 className="font-semibold text-sm text-foreground">
-                Maintenance Source Tracking (Slide 12)
+                Maintenance Source Tracking
               </h3>
             </div>
             <div className="space-y-2.5 text-xs">
@@ -524,13 +524,13 @@ export default function WorkshopDashboard() {
             </div>
           </div>
 
-          {/* Workshop Plant Assets (Slide 19) */}
+          {/* Workshop Plant Assets */}
           <div className="rounded-xl border border-border bg-card p-5 space-y-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Cpu className="h-4 w-4 text-blue-600" />
                 <h3 className="font-semibold text-sm text-foreground">
-                  Workshop Plant Assets (Slide 19)
+                  Workshop Plant Assets
                 </h3>
               </div>
               <Link
@@ -572,7 +572,7 @@ export default function WorkshopDashboard() {
               <div className="flex items-center gap-2">
                 <UserCog className="h-4 w-4 text-primary" />
                 <h3 className="font-semibold text-sm text-foreground">
-                  Technician Utilization & Roster (Slide 21)
+                  Technician Utilization & Roster
                 </h3>
               </div>
               <Link

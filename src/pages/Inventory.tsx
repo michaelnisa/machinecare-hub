@@ -175,9 +175,9 @@ export default function Inventory() {
             variant="outline"
             className="border-amber-500/30 bg-amber-500/5 hover:bg-amber-500/10 text-amber-700 dark:text-amber-400 font-semibold text-xs"
             onClick={() => setSmartPartsOpen(true)}
-            title="Identify compatible spare parts by vehicle model (Slide 14)"
+            title="Identify compatible spare parts by vehicle model"
           >
-            <Zap className="mr-1.5 h-3.5 w-3.5 text-amber-500" /> Smart Parts Finder (Slide 14)
+            <Zap className="mr-1.5 h-3.5 w-3.5 text-amber-500" /> Smart Parts Finder
           </Button>
           <Button
             variant="outline"

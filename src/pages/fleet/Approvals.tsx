@@ -860,7 +860,7 @@ export default function FleetApprovals() {
                     <div className="flex items-center gap-2">
                       <FileCheck className="h-4 w-4 text-purple-600 dark:text-purple-400" />
                       <span className="text-xs font-bold text-foreground">
-                        Procurement 3-Vendor Tender Evaluation (Slide 16)
+                        Procurement 3-Vendor Tender Evaluation
                       </span>
                     </div>
                     <span className="rounded-md border border-purple-500/40 px-2 py-0.5 text-[10px] font-mono text-purple-700 dark:text-purple-300">
@@ -1360,7 +1360,7 @@ export default function FleetApprovals() {
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-semibold text-foreground flex items-center gap-1.5">
                       <FileCheck className="h-4 w-4 text-purple-600" />
-                      Procurement 3-Vendor Quotation Tender (Slide 16)
+                      Procurement 3-Vendor Quotation Tender
                     </span>
                     <span className="text-[10px] text-muted-foreground uppercase font-mono">
                       Competitive Bidding
