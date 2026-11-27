@@ -256,7 +256,6 @@ export default function FinanceExpenses() {
         )
           return false;
         if (categoryFilter === "trip" && e.category !== "trip_expense") return false;
-        if (categoryFilter === "finance" && e.category !== "bank_finance_interest") return false;
         if (categoryFilter === "facility" && e.category !== "depot_yard_rent") return false;
         if (categoryFilter === "telematics" && e.category !== "telematics_subscription") return false;
         if (categoryFilter === "insurance" && e.category !== "transit_insurance") return false;
@@ -472,7 +471,6 @@ export default function FinanceExpenses() {
               <SelectItem value="fuel">Fuel & Lubricants</SelectItem>
               <SelectItem value="maintenance">Repairs & Parts</SelectItem>
               <SelectItem value="trip">Trip & Driver Exps</SelectItem>
-              <SelectItem value="finance">Bank Finance & Interest</SelectItem>
               <SelectItem value="facility">Depot & Yard Rent</SelectItem>
               <SelectItem value="telematics">GPS Telematics Subscriptions</SelectItem>
               <SelectItem value="insurance">Transit Insurance & Permits</SelectItem>
@@ -623,7 +621,6 @@ export default function FinanceExpenses() {
                     <SelectItem value="fuel">Fuel & Lubricants</SelectItem>
                     <SelectItem value="tyres">Tyres & Wheel Service</SelectItem>
                     <SelectItem value="trip_expense">Trip / Driver Allowance</SelectItem>
-                    <SelectItem value="bank_finance_interest">Bank Finance Costs & Loan Interest</SelectItem>
                     <SelectItem value="depot_yard_rent">Depot, Workshop & Yard Rent</SelectItem>
                     <SelectItem value="telematics_subscription">GPS Telematics & Airtime Subscriptions</SelectItem>
                     <SelectItem value="transit_insurance">Transit Insurance & Regulatory Compliance</SelectItem>

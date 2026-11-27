@@ -90,7 +90,6 @@ export const BUDGET_CATEGORIES = [
   "Casual Stevedoring & Offloading (Kibarua)",
   "Escort & Convoy Security",
   "AdBlue / DEF & Lubricants",
-  "Bank Finance Costs & Loan Interest",
   "Withholding Tax (WHT) Remittances",
   "Depot, Workshop & Yard Rent",
   "GPS Telematics & Airtime Subscriptions",
