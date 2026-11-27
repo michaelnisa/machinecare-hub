@@ -151,6 +151,7 @@ const TAB_LABELS: Record<(typeof TABS)[number], string> = {
 };
 
 export function parseTripRecord(raw: any): Trip {
+  if (!raw) return {} as Trip;
   let client_name = raw.client_name ?? null;
   let client_order_no = raw.client_order_no ?? null;
   let roundtrip_hours_est = raw.roundtrip_hours_est ?? null;

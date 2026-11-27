@@ -2585,3 +2585,5 @@ export function FinancePayroll() {
     </div>
   );
 }
+
+export default FinancePayroll;

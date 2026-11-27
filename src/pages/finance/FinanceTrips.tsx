@@ -574,7 +574,7 @@ export default function FinanceTrips() {
                               title="Safari Float Reconciled - Click to view liquidation voucher"
                               onClick={() => {
                                 setSurrenderTrip(parseTripRecord(r.rawTrip));
-                                setSurrenderDriver({ id: r.rawTrip.driver_id, full_name: r.driverName, phone: r.driverPhone });
+                                setSurrenderDriver({ id: r.rawTrip?.driver_id || "", full_name: r.driverName || "Driver", phone: r.driverPhone || "" });
                               }}
                             >
                               <Wallet className="h-3 w-3 text-emerald-600" />
@@ -588,7 +588,7 @@ export default function FinanceTrips() {
                               title="Float Dispatched - Driver Surrender & Reconciliation Due"
                               onClick={() => {
                                 setSurrenderTrip(parseTripRecord(r.rawTrip));
-                                setSurrenderDriver({ id: r.rawTrip.driver_id, full_name: r.driverName, phone: r.driverPhone });
+                                setSurrenderDriver({ id: r.rawTrip?.driver_id || "", full_name: r.driverName || "Driver", phone: r.driverPhone || "" });
                               }}
                             >
                               <Wallet className="h-3 w-3 text-amber-600" />
@@ -603,7 +603,7 @@ export default function FinanceTrips() {
                             title="Manage or dispatch safari trip float"
                             onClick={() => {
                               setSurrenderTrip(parseTripRecord(r.rawTrip));
-                              setSurrenderDriver({ id: r.rawTrip.driver_id, full_name: r.driverName, phone: r.driverPhone });
+                              setSurrenderDriver({ id: r.rawTrip?.driver_id || "", full_name: r.driverName || "Driver", phone: r.driverPhone || "" });
                             }}
                           >
                             <Wallet className="h-2.5 w-2.5" />

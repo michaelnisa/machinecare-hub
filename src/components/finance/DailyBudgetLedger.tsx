@@ -147,7 +147,7 @@ const DEFAULT_SAMPLE_ENTRIES: Omit<DailyBudgetEntry, "id">[] = [
   {
     budget_date: new Date().toISOString().slice(0, 10),
     description: "Driver trip posho allowance (4 days Dar - Kasumbalesa)",
-    category: "Driver Posho & Allowance",
+    category: "Driver & Turnboy Posho",
     truck_no: "T 915 DBM",
     amount_usd: 120,
     paid_usd: 60,
@@ -328,6 +328,10 @@ export function DailyBudgetLedger({
             received_by: d.received_by || "",
             payment_method: d.payment_method || "cash",
             voucher_no: d.voucher_no || "",
+            wht_applicable: d.wht_applicable || false,
+            wht_rate_pct: d.wht_rate_pct ? Number(d.wht_rate_pct) : undefined,
+            wht_amount_tzs: d.wht_amount_tzs ? Number(d.wht_amount_tzs) : undefined,
+            gross_amount_tzs: d.gross_amount_tzs ? Number(d.gross_amount_tzs) : undefined,
             notes: d.notes || "",
             created_at: d.created_at,
           }));
